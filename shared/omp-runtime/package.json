@@ -20,5 +20,8 @@
   "packageManager": "bun@1.4.2",
   "engines": {
     "bun": ">=1.4.2"
+  },
+  "patchedDependencies": {
+    "@oh-my-pi/pi-catalog@18.12.6": "patches/@oh-my-pi%2Fpi-catalog@18.12.6.patch"
   }
 }

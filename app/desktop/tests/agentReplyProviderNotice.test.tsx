@@ -118,7 +118,7 @@ test('an older reply whose whole text is the notice still reads as a failure', (
 });
 
 test('a failed reply whose text is its error shows the error once', () => {
-  const sentence = 'The selected model is unavailable for this account. Choose another model.';
+  const sentence = 'The provider is busy or rate-limited. Try again shortly.';
   const failed = { deliveryState: 'failed', error: sentence };
   const { mapped, markup } = renderTurn(agentReply({ contentText: sentence, status: 'failed', content: failed }));
   assert.equal(mapped.turn?.assistantText, '');

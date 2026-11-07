@@ -21,6 +21,10 @@ pub(super) fn cloud_agent_failure_response_text(
         "missing_provider_auth" => "No provider configured yet.",
         // Clients match the code to offer Reconnect to the agent's owner.
         "provider_auth_rejected" => "Your AI provider connection expired.",
+        // Trying again will not help; another model will.
+        "model_unavailable" => {
+            "This model isn't available with your AI provider account. Choose another model."
+        }
         "model_provider_error" => {
             "Cloud fallback could not complete this request because the configured provider/model failed."
         }
@@ -64,6 +68,7 @@ mod tests {
     fn support_failures_never_describe_local_fallback_or_user_provider_setup() {
         for code in [
             "model_provider_error",
+            "model_unavailable",
             "sandbox_error",
             "provider_auth_rejected",
             "missing_provider_auth",
@@ -85,6 +90,7 @@ mod tests {
         for code in [
             "missing_provider_auth",
             "provider_auth_rejected",
+            "model_unavailable",
             "model_provider_error",
             "sandbox_error",
             "unknown",
@@ -125,5 +131,29 @@ mod tests {
             true,
         ));
         assert_eq!(unknown["failureCode"], "failed");
+    }
+
+    #[test]
+    fn a_refused_model_tells_only_the_owner_to_choose_another() {
+        let own = reply(&encode_failed_cloud_agent_response_body(
+            "msg_request",
+            "model_unavailable",
+            false,
+            false,
+        ));
+        assert_eq!(
+            own["text"],
+            "This model isn't available with your AI provider account. Choose another model."
+        );
+        assert_eq!(own["failureCode"], "model_unavailable");
+
+        let shared = reply(&encode_failed_cloud_agent_response_body(
+            "msg_request",
+            "model_unavailable",
+            false,
+            true,
+        ));
+        assert_eq!(shared["text"], "The agent couldn't reply.");
+        assert_eq!(shared["failureCode"], "model_unavailable");
     }
 }

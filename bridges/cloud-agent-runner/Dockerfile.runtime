@@ -26,6 +26,8 @@ FROM docker.io/oven/bun:1.4.2 AS omp-builder
 ARG TARGETARCH
 WORKDIR /workspace/shared/omp-runtime
 COPY shared/omp-runtime/package.json shared/omp-runtime/bun.lock ./
+# Bun applies the reviewed dependency patches while installing.
+COPY shared/omp-runtime/patches ./patches
 RUN bun install --frozen-lockfile
 COPY shared/omp-runtime ./
 COPY legal/distribution /workspace/legal/distribution

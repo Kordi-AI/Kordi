@@ -286,3 +286,17 @@ fn agent_communication_requires_server_capability_and_owner_authority() {
     run.subsession_id = Some("child".into());
     assert!(!advertised(&run));
 }
+
+#[test]
+fn a_refused_model_is_its_own_failure() {
+    use kordi_omp_runtime::RuntimeError;
+    for code in ["provider_model_unavailable", "model_unavailable"] {
+        let error = omp_run_error(&RuntimeError::Worker(code.into()));
+        assert!(
+            matches!(error, ModelLoopError::ModelUnavailable(_)),
+            "{code}"
+        );
+    }
+    let error = omp_run_error(&RuntimeError::Worker("provider_http_429".into()));
+    assert!(matches!(error, ModelLoopError::Provider(_)));
+}

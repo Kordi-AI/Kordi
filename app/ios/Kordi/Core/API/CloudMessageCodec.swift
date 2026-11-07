@@ -545,7 +545,7 @@ enum AgentFailurePresentation {
         case "missing_provider_auth":
             return "No provider configured yet. [Connect](\(authenticationLink))"
         case "model_unavailable":
-            return "This model is not available for the selected account."
+            return "This model isn't available with your AI provider account. Choose another model."
         case "model_provider_error":
             return "The provider failed while Kordi was replying. Try again in a moment."
         case "sandbox_error":
@@ -565,7 +565,7 @@ enum AgentFailurePresentation {
         }
         if normalized == "reconnect your account to run your agent." { return "hosted_credentials_unavailable" }
         if normalized == "no provider configured yet." { return "missing_provider_auth" }
-        if normalized == "this model is not available for the selected account." { return "model_unavailable" }
+        if normalized.hasPrefix("this model is") && normalized.contains("available") { return "model_unavailable" }
         return nil
     }
 

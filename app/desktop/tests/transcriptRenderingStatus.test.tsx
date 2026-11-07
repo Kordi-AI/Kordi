@@ -243,7 +243,7 @@ test('unknown-model failures render as a model notice without the authentication
     onOpenAuthSettings: () => undefined,
   }));
 
-  assert.match(markup, /This model is not available for the selected account\./);
+  assert.match(markup, /This model isn&#x27;t available with your AI provider account\. Choose another model\./);
   assert.doesNotMatch(markup, /No provider configured yet/);
   assert.doesNotMatch(markup, />Sign in</);
   assert.doesNotMatch(markup, /Unknown model: openai\/gpt-5\.4/);

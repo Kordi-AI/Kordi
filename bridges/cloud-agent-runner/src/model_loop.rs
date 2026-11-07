@@ -41,6 +41,9 @@ pub enum ModelLoopError {
     /// The model ended the run after a failed tool call, with no reply.
     #[error("the run ended after a failed {0} call with no reply")]
     ToolFailed(String),
+    /// The provider refused the route's model for this account.
+    #[error("provider error: {0}")]
+    ModelUnavailable(String),
 }
 
 #[async_trait]
