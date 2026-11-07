@@ -135,10 +135,10 @@ async fn stray_requests_are_refused_and_the_redirect_still_arrives() {
     )
     .await;
     assert!(response.starts_with("HTTP/1.1 200 OK"));
-    assert!(response.contains("<h1>Signed in.</h1>"));
-    assert!(response.contains("You can return to Kordi."));
+    assert!(response.contains("<h1>You’re signed in</h1>"));
+    assert!(response.contains("You can close this tab and return to Kordi."));
     assert!(response.contains("<div class=\"brand\" aria-label=\"Kordi\">"));
-    assert!(response.contains("<footer>&copy; Kordi 2026</footer>"));
+    assert!(!response.contains("<footer>"));
     assert!(
         !response.contains("test-code"),
         "the browser page must not echo the code"
@@ -173,7 +173,7 @@ async fn a_provider_error_gets_a_distinct_handoff_page() {
     )
     .await;
     assert!(response.starts_with("HTTP/1.1 200 OK"));
-    assert!(response.contains("<h1>Sign-in wasn’t completed.</h1>"));
+    assert!(response.contains("<h1>Sign-in wasn’t completed</h1>"));
     assert!(response.contains("Return to Kordi to review the result or try again."));
     assert!(!response.contains("access_denied"));
     assert_eq!(

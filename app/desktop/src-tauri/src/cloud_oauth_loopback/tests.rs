@@ -22,7 +22,7 @@ mod completion_page_tests {
         assert!(html.contains(KORDI_FAVICON_DATA_URL));
         assert!(html.contains("mask='url(#kordi-bird-cut)'"));
         assert!(!html.contains("<circle cx=\"18\" cy=\"10\""));
-        assert!(html.contains("&copy; Kordi 2026"));
+        assert!(!html.contains("<footer>"));
         assert!(!html.contains("state-marker"));
 
         // All three copy blocks are pre-rendered so the swap between them is
@@ -44,13 +44,12 @@ mod completion_page_tests {
         let html = completion_page_html("cloud_oauth_abc123");
 
         assert!(!html.contains("KORDI LOGIN"));
-        assert!(html.contains("Completing sign-in"));
-        assert!(html.contains("Signed in"));
+        assert!(html.contains("Signing in"));
+        assert!(html.contains("You’re signed in"));
         assert!(html.contains("Couldn’t sign in"));
-        assert!(html
-            .contains("Your account is connected. You can close this window and return to Kordi."));
-        assert!(html.contains("Finishing the secure browser handoff to Kordi."));
-        assert!(html.contains("Return to Kordi and try signing in again."));
+        assert!(html.contains("You can close this tab and return to Kordi."));
+        assert!(html.contains("Finishing sign-in with Kordi."));
+        assert!(html.contains("Return to Kordi and try again."));
         assert!(!html.contains("Kordi is ready in the app"));
         assert!(!html.contains("This window will update automatically"));
         assert!(!html.contains("No account changes were made"));
@@ -87,17 +86,17 @@ mod completion_page_tests {
     fn page_carries_brand_palette_and_dark_mode_support() {
         let html = completion_page_html("cloud_oauth_palette");
 
-        // The callback uses the same warm paper, ink, rules, and simple
-        // header/content/footer structure as Kordi's public web surfaces.
+        // The callback uses the same paper and ink as the kordi.ai sign-in
+        // pages: logo top left, one centered title and line, no footer.
         assert!(
-            html.contains("--paper: #faf9f7"),
+            html.contains("--paper: #fcfaf8"),
             "light mode should use the Kordi paper surface"
         );
         assert!(
             html.contains("--paper: #191814"),
             "dark mode should use the Kordi dark paper surface"
         );
-        assert!(html.contains("grid-template-rows: auto 1fr auto"));
+        assert!(html.contains("flex-direction: column"));
         assert!(html.contains("text-align: center"));
         assert!(
             html.contains("prefers-color-scheme: dark"),
@@ -117,20 +116,20 @@ mod completion_page_tests {
             "body copy should use the platform system stack"
         );
         assert!(
-            html.contains("\"Iowan Old Style\", \"Palatino Linotype\", Palatino, Georgia, serif"),
-            "display copy should use the self-contained Kordi serif stack"
+            !html.contains("Iowan Old Style"),
+            "display copy should use the sans system stack like kordi.ai"
         );
         assert!(
             !html.contains("text-transform: uppercase"),
             "callback label should not force the kordi wordmark into capitals"
         );
         assert!(
-            html.contains("font-size: clamp(48px, 8vw, 72px);"),
-            "callback title should use the approved Kordi display scale"
+            html.contains("font-size: clamp(2.125rem, 1.5rem + 1.6vw, 2.75rem);"),
+            "callback title should use the kordi.ai sign-in title scale"
         );
         assert!(
-            html.contains("font-size: 15px;"),
-            "callback subtitle should use the shared compact callback scale"
+            html.contains("font-size: 1.0625rem;"),
+            "callback subtitle should use the kordi.ai sign-in line scale"
         );
         assert!(
             !html.contains("Avenir Next"),
