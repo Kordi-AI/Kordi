@@ -43,12 +43,16 @@ test('the fallback onto a ChatGPT sign-in runs a model in its namespace', () => 
   );
 });
 
-test('the fallback leaves the route alone unless the send gate would block', () => {
+test('the fallback leaves the route alone while the account is present, lists load or the route is not configurable', () => {
   assert.equal(routeAccountFallbackDecision({ ...base, selection: { ...removed, authChoice: 'cloud-login:work' } }), null, 'account present');
   assert.equal(routeAccountFallbackDecision({ ...base, accountListsLoaded: false }), null, 'lists loading');
-  assert.equal(routeAccountFallbackDecision({ ...base, paneKind: 'human' }), null, 'people chat');
-  assert.equal(routeAccountFallbackDecision({ ...base, paneKind: null }), null, 'no pane kind');
   assert.equal(routeAccountFallbackDecision({ ...base, canConfigureModelRoute: false }), null, 'route not configurable');
+});
+
+test('a group chat route also moves to the clear replacement, although sending is never blocked there', () => {
+  assert.equal(routeAccountFallbackDecision({ ...base, paneKind: 'human' })?.providerOption?.value, work.value, 'group chat');
+  assert.equal(routeAccountFallbackDecision({ ...base, paneKind: null })?.providerOption?.value, work.value, 'no pane kind');
+  assert.equal(routeAccountFallbackDecision({ ...base, paneKind: 'human', providerOptions: [work, { ...work, value: 'openai-codex::profile:other', hosted: false }, claude] })?.providerOption?.value, work.value, 'same provider first');
 });
 
 test('an account this Mac or Kordi Cloud still lists never falls back, nor does a route before models load', () => {

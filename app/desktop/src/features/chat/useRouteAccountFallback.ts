@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
+  isRouteAccountUnavailable,
   unavailableAccountReplacement,
   type ComposerModelOption,
   type ComposerModelSelection,
@@ -19,13 +20,16 @@ export type RouteAccountFallbackInput = ComposerSendGateInput & {
 export const ROUTE_ACCOUNT_FALLBACK_SETTLE_MS = 600;
 
 /**
- * The route that replaces an account this device no longer has, under the
- * same conditions that block sending: a usable account with a model and
- * thinking level it offers. Null when the account is present, the lists have
- * not arrived, or no single usable account is clear; then the owner picks.
+ * The route that replaces an account this device no longer has: a usable
+ * account with a model and thinking level it offers. It applies in every chat
+ * whose route the owner can configure, including group chats, where sending is
+ * never blocked but the agent's turn would still fail. Null when the account
+ * is present, the lists have not arrived, or no single usable account is
+ * clear; then the owner picks.
  */
 export function routeAccountFallbackDecision(input: RouteAccountFallbackInput): ComposerRoute | null {
-  if (!composerSendGate(input).blocked || input.modelOptions.length === 0) return null;
+  if (!input.canConfigureModelRoute || !input.accountListsLoaded || input.modelOptions.length === 0) return null;
+  if (!isRouteAccountUnavailable(input.selection, input.providerOptions)) return null;
   // The provider options leave out accounts whose models have not loaded; only a removed account falls back.
   const choice = input.selection.authChoice?.trim();
   if (choice && input.knownAccountChoices?.has(choice)) return null;
