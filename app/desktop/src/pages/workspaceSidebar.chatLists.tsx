@@ -14,7 +14,8 @@ import { primaryAgentForConversation } from '@/features/chat/participantSpaces';
 import { AgentSidebarRow } from '@/pages/workspaceSidebar.agentRows';
 import { PersonalAgentStatusEntry } from '@/features/personalAgent/PersonalAgentStatusEntry';
 import { closePersonalAgentPage, usePersonalAgentPageOpen } from '@/features/personalAgent/personalAgentPageState';
-import { emptyPersonalAgentSessionIds } from '@/features/personalAgent/personalAgentSidebarRows';
+import { PersonalAgentSidebarRow } from '@/features/personalAgent/PersonalAgentSidebarRow';
+import { personalAgentIdFromRowKey, personalAgentSidebarRows } from '@/features/personalAgent/personalAgentSidebarRows';
 import { usePersonalAgentEntries, usePersonalAgentListLoaded } from '@/features/personalAgent/personalAgentStore';
 import type { ContactSidebarRowActions } from '@/pages/workspaceSidebar.contactRows';
 import { ContactSidebarRow } from '@/pages/workspaceSidebar.contactRows';
@@ -62,11 +63,10 @@ export function WorkspaceChatLists({
   ), [model.agentSessionRowsById, model.pinnedSessionIds]);
   const personalAgents = usePersonalAgentEntries();
   const personalAgentsLoaded = usePersonalAgentListLoaded();
-  // A personal agent is the entry under New; its session joins the list once it has messages.
-  const personal = useMemo(() => (model.showArchived ? undefined : {
-    rows: [],
-    sessionIds: emptyPersonalAgentSessionIds(personalAgents, model.allSidebarSessionRowsById, { markerFallback: !personalAgentsLoaded }),
-  }), [model.allSidebarSessionRowsById, model.showArchived, personalAgents, personalAgentsLoaded]);
+  // Each personal agent's chat is a row under the Personal agent entry, and only there.
+  const personal = useMemo(() => (model.showArchived ? undefined : personalAgentSidebarRows(
+    personalAgents, model.allSidebarSessionRowsById, model.chatSearch, { markerFallback: !personalAgentsLoaded },
+  )), [model.allSidebarSessionRowsById, model.chatSearch, model.showArchived, personalAgents, personalAgentsLoaded]);
   // The Personal agent page replaces the chat pane: no chat row is selected under it.
   const personalPageOpen = usePersonalAgentPageOpen();
   const selectedConvId = personalPageOpen ? '' : activeConvId;
@@ -193,7 +193,7 @@ export function WorkspaceChatLists({
         renderRow={(descriptor) => descriptor.kind === 'space' ? (
           descriptor.spaceId.startsWith('section:') ? (
             <ProjectSidebarHeading
-              section={descriptor.spaceId.slice(8) as 'personal' | 'pinned' | 'projects' | 'recents'}
+              section={descriptor.spaceId.slice(8) as 'pinned' | 'projects' | 'recents'}
               first={grouped.rows[0]?.key === descriptor.key}
               expanded={!collapsed.has(descriptor.spaceId)}
               onToggle={() => toggle(descriptor.spaceId)}
@@ -238,6 +238,15 @@ export function WorkspaceChatLists({
               {locateError?.id === descriptor.spaceId ? <ErrorLine className="chat-project-locate-error">{locateError.message}</ErrorLine> : null}
             </div>
           )
+        ) : personalAgentIdFromRowKey(descriptor.key) ? (
+          <PersonalAgentSidebarRow
+            entry={personal?.entriesByAgentId.get(personalAgentIdFromRowKey(descriptor.key) ?? '')}
+            row={descriptor.kind === 'session' ? model.allSidebarSessionRowsById.get(descriptor.sessionId) : undefined}
+            model={model}
+            activeConvId={selectedConvId}
+            onSelectChatSession={selectChat}
+            onOpenSessionContextMenu={contactActions.onOpenSessionContextMenu}
+          />
         ) : (
           <AgentSidebarRow
             descriptor={descriptor}

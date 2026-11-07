@@ -3,13 +3,13 @@ import { ChevronRight, Plus } from 'lucide-react';
 export function ProjectSidebarHeading({
   section, first, expanded, onToggle, onCreateProject,
 }: {
-  section: 'personal' | 'pinned' | 'projects' | 'recents';
+  section: 'pinned' | 'projects' | 'recents';
   first: boolean;
   expanded: boolean;
   onToggle: () => void;
   onCreateProject?: () => void;
 }) {
-  const label = section === 'personal' ? 'Personal agent' : section === 'pinned' ? 'Pinned' : section === 'projects' ? 'Projects' : 'Recents';
+  const label = section === 'pinned' ? 'Pinned' : section === 'projects' ? 'Projects' : 'Recents';
   const collapsible = section !== 'pinned';
   return <div className="chat-project-section-heading" data-first-section={first || undefined}>
     {collapsible ? <button type="button" className="chat-project-section-toggle"

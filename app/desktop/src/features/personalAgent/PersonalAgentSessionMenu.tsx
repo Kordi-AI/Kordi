@@ -1,4 +1,4 @@
-import { Bell, BellOff, CheckCircle2, Mail, Settings } from 'lucide-react';
+import { Bell, BellOff, CheckCircle2, Mail } from 'lucide-react';
 import type { SessionContextMenuTarget } from '@/pages/SessionActionOverlays';
 
 const ROW_CLASS = 'app-dense-menu-row';
@@ -8,15 +8,13 @@ const ROW_CLASS = 'app-dense-menu-row';
  * moved, archived or deleted; only its read state and mute change here.
  */
 export function PersonalAgentSessionMenu({
-  target, onClose, onSetMuted, onSetUnread, onOpenAgentSettings,
+  target, onClose, onSetMuted, onSetUnread,
 }: {
   target: SessionContextMenuTarget & { personalAgent: NonNullable<SessionContextMenuTarget['personalAgent']> };
   onClose: () => void;
   onSetMuted: (sessionId: string, muted: boolean) => void;
   onSetUnread: (sessionId: string, unread: boolean) => void;
-  onOpenAgentSettings?: (localAgentId: string) => void;
 }) {
-  const { localAgentId } = target.personalAgent;
   const run = (action: () => void) => {
     onClose();
     action();
@@ -29,7 +27,7 @@ export function PersonalAgentSessionMenu({
         className="app-transient-surface app-dense-menu app-context-menu absolute"
         style={{
           left: Math.max(12, Math.min(target.x, window.innerWidth - 232)),
-          top: Math.max(12, Math.min(target.y, window.innerHeight - 160)),
+          top: Math.max(12, Math.min(target.y, window.innerHeight - 112)),
         }}
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -47,13 +45,6 @@ export function PersonalAgentSessionMenu({
             : <BellOff aria-hidden="true" />}
           {target.muted ? 'Unmute' : 'Mute'}
         </button>
-        {onOpenAgentSettings && localAgentId ? (
-          <button type="button" role="menuitem" data-session-context-action="agent-settings" className={ROW_CLASS}
-            onClick={() => run(() => onOpenAgentSettings(localAgentId))}>
-            <Settings aria-hidden="true" />
-            Agent settings
-          </button>
-        ) : null}
       </div>
     </div>
   );

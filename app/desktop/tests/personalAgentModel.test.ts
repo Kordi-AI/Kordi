@@ -10,11 +10,10 @@ import {
   personalAgentMarker,
 } from '../src/features/personalAgent/personalAgentEntries';
 import { planPersonalAgentSessions } from '../src/features/personalAgent/personalAgentSessions';
-import { emptyPersonalAgentSessionIds } from '../src/features/personalAgent/personalAgentSidebarRows';
+import { personalAgentIdFromRowKey, personalAgentSidebarRows } from '../src/features/personalAgent/personalAgentSidebarRows';
 import { normalizePersonalAgentStatus } from '../src/features/personalAgent/personalAgentClient';
 import { personalAgentPageStatus, personalAgentStatusLine } from '../src/features/personalAgent/personalAgentStatus';
 import { getPersonalAgentEntries, isPersonalAgentSession, setPersonalAgentEntries, subscribePersonalAgentEntries, type PersonalAgentEntry } from '../src/features/personalAgent/personalAgentStore';
-import { pendingAgentBlueprintRequest, requestAgentBlueprint } from '../src/features/personalAgent/agentBlueprintRequest';
 import { projectChatGroups } from '../src/features/projects/projectChatGroups';
 import type { Agent, CanonicalSessionState, Conversation } from '../src/kordi-app/types';
 import type { ChatSidebarRow } from '../src/pages/sidebar/chatSidebarRows';
@@ -159,50 +158,67 @@ function sessionRow(id: string, title: string, preview: string, metadata?: unkno
   return [id, { session: { id, canonicalSessionId: id, title, preview, conversation }, space: { title: 'Agent chats', participants: [{ name: 'Me' }, { name: agentName }] } }] as const;
 }
 
-function withMessage([id, row]: ReturnType<typeof sessionRow>) {
-  return [id, { ...row, session: { ...row.session, conversation: { ...row.session.conversation, messages: [{ role: 'owned-agent', sender: "Alex's Kordi", text: row.session.preview, time: '14:40' }] } } }] as const;
-}
-
-test('a personal session joins the chat list once it has messages; an empty one stays out', () => {
+test('every personal agent is a row first, and its session stays out of Pinned, Projects and Recents', () => {
   const entries = joinPersonalAgents(sessions, [kordi, research], ACCOUNT);
   const sessionRows = new Map([
-    withMessage(sessionRow(DEFAULT_SESSION, "Alex's Kordi", 'Lab sync moved to 10 am Thursday.')),
+    sessionRow(DEFAULT_SESSION, "Alex's Kordi", 'Lab sync moved to 10 am Thursday.'),
+    // Research agent's session is empty; the unknown agent has none on this Mac yet.
     sessionRow(RESEARCH_SESSION, 'Research agent', '', undefined, 'Research agent'),
     sessionRow('session:other', 'Figure script fix', 'Patched it'),
   ]);
-  const hidden = emptyPersonalAgentSessionIds(entries, sessionRows);
-  // The default agent wrote, so its session is an ordinary chat.
-  assert.equal(hidden.has(DEFAULT_SESSION), false);
-  assert.equal(hidden.has('conv-kordi'), false);
-  // Research agent has an empty session, the unknown agent none on this Mac yet.
-  assert.ok(hidden.has(RESEARCH_SESSION));
-  assert.ok(hidden.has('session:unknown'));
-  assert.equal(hidden.has('session:other'), false);
+  const personal = personalAgentSidebarRows(entries, sessionRows);
+  assert.deepEqual(personal.rows.map((entry) => entry.key), [`personal:${DEFAULT_ID}`, 'personal:cloud_agent_research', 'personal:cloud_agent_unknown']);
+  assert.deepEqual([...personal.sessionIds].sort(), [DEFAULT_SESSION, RESEARCH_SESSION, 'conv-kordi', 'conv-research', 'conv-unknown', 'session:unknown'].sort());
+  assert.equal(personal.rows[2]!.kind === 'session' && personal.rows[2]!.sessionId, 'session:unknown');
+  assert.equal(personal.rows[0]!.estimatedHeight, 50);
+  assert.equal(personalAgentIdFromRowKey(personal.rows[1]!.key), 'cloud_agent_research');
+  assert.equal(personalAgentIdFromRowKey('recent:session:x'), null);
 
-  const grouped = projectChatGroups([row(DEFAULT_SESSION), row(RESEARCH_SESSION), row('session:other')], [], new Set(), false, {
-    pinnedSessionIds: new Set(), personal: { rows: [], sessionIds: hidden },
-  });
+  // Pinned before, and assigned to a project: still only under the entry, with no heading of its own.
+  const project = { id: 'project-kordi', name: 'kordi', root: '/tmp/kordi', sessions: [{ id: RESEARCH_SESSION }, { id: 'session:in-project' }] };
+  const grouped = projectChatGroups(
+    [row(DEFAULT_SESSION), row(RESEARCH_SESSION), row('session:saved'), row('session:in-project'), row('session:other')],
+    [project] as never, new Set(), false, { pinnedSessionIds: new Set([DEFAULT_SESSION, 'session:saved']), personal },
+  );
   assert.deepEqual(grouped.rows.map((entry) => entry.key), [
-    'agent-section:recents', `recent:session:${DEFAULT_SESSION}`, 'recent:session:session:other',
+    `personal:${DEFAULT_ID}`, 'personal:cloud_agent_research', 'personal:cloud_agent_unknown',
+    'agent-section:pinned', 'pinned:session:session:saved',
+    'agent-section:projects', 'project-group:project-kordi', 'project:project-kordi:session:session:in-project',
+    'agent-section:recents', 'recent:session:session:other',
   ]);
+  assert.equal(grouped.rows.some((entry) => entry.key === 'agent-section:personal'), false);
 });
 
-test('a session with a preview or a message count counts as written before its transcript loads', () => {
-  const entries = joinPersonalAgents(sessions, [kordi, research], ACCOUNT);
-  const [id, base] = sessionRow(DEFAULT_SESSION, "Alex's Kordi", 'Lab sync moved.');
-  assert.equal(emptyPersonalAgentSessionIds(entries, new Map([[id, base]])).has(DEFAULT_SESSION), false);
-  const counted = { ...base, session: { ...base.session, preview: '', conversation: { ...base.session.conversation, canonicalMessageCount: 3 } } };
-  assert.equal(emptyPersonalAgentSessionIds(entries, new Map([[id, counted]])).has(DEFAULT_SESSION), false);
-  const blank = { ...base, session: { ...base.session, preview: '' } };
-  assert.ok(emptyPersonalAgentSessionIds(entries, new Map([[id, blank]])).has(DEFAULT_SESSION));
-});
-
-test('before a list loads, a marked empty session stays out; afterwards only listed agents count', () => {
+test('an unloaded listed agent shows with the session name; a marked session counts only before a list loads', () => {
+  const entries = joinPersonalAgents(sessions, [kordi], ACCOUNT);
   const sessionRows = new Map([
-    sessionRow('session:marked-only', 'Inbox', '', { personalAgent: { agentId: 'cloud_agent_inbox' } }, 'Inbox helper'),
+    sessionRow(RESEARCH_SESSION, 'Two new papers', 'Two new papers cite your draft.', { personalAgent: { agentId: 'cloud_agent_research' } }, 'Research agent'),
+    sessionRow('session:marked-only', 'Inbox', 'Nothing new.', { personalAgent: { agentId: 'cloud_agent_inbox' } }, 'Inbox helper'),
   ]);
-  assert.ok(emptyPersonalAgentSessionIds([], sessionRows, { markerFallback: true }).has('session:marked-only'));
-  assert.equal(emptyPersonalAgentSessionIds([], sessionRows).has('session:marked-only'), false);
+  const personal = personalAgentSidebarRows(entries, sessionRows);
+  assert.deepEqual(personal.rows.map((entry) => entry.key), [`personal:${DEFAULT_ID}`, 'personal:cloud_agent_research', 'personal:cloud_agent_unknown']);
+  assert.equal(personal.entriesByAgentId.get('cloud_agent_research')?.name, 'Research agent');
+  // Inbox helper is not listed: its old session goes back to the other sections.
+  assert.equal(personal.sessionIds.has('session:marked-only'), false);
+  const beforeList = personalAgentSidebarRows([], sessionRows, '', { markerFallback: true });
+  assert.deepEqual(beforeList.rows.map((entry) => entry.key), ['personal:cloud_agent_research', 'personal:cloud_agent_inbox']);
+  assert.equal(beforeList.entriesByAgentId.get('cloud_agent_inbox')?.name, 'Inbox helper');
+  assert.ok(beforeList.sessionIds.has('session:marked-only'));
+});
+
+test('searching keeps a personal row whose session or agent name matches', () => {
+  const entries = joinPersonalAgents(sessions, [kordi, research], ACCOUNT);
+  const sessionRows = new Map([
+    sessionRow(DEFAULT_SESSION, 'Conference travel', 'Lab sync moved to 10 am Thursday.'),
+    sessionRow(RESEARCH_SESSION, 'Reading list', 'Two new papers.', undefined, 'Research agent'),
+  ]);
+  const keys = (search: string) => personalAgentSidebarRows(entries, sessionRows, search).rows.map((entry) => entry.key);
+  assert.deepEqual(keys('conference'), [`personal:${DEFAULT_ID}`]);
+  assert.deepEqual(keys('lab sync'), [`personal:${DEFAULT_ID}`]);
+  assert.deepEqual(keys('research'), ['personal:cloud_agent_research']);
+  assert.deepEqual(keys('nothing matches'), []);
+  // Searching does not let a personal session reach the other sections.
+  assert.ok(personalAgentSidebarRows(entries, sessionRows, 'nothing matches').sessionIds.has(DEFAULT_SESSION));
 });
 
 test('the status reads Not set up without a connector, Off, or what the agent watches', () => {
@@ -268,13 +284,6 @@ test('the entries store notifies only on a change', () => {
   unsubscribe();
 });
 
-test('an Agent settings request waits for the Agents page', () => {
-  requestAgentBlueprint(' cloud-agent:cloud_agent_research ');
-  assert.equal(pendingAgentBlueprintRequest(), 'cloud-agent:cloud_agent_research');
-  requestAgentBlueprint('');
-  assert.equal(pendingAgentBlueprintRequest(), null);
-});
-
 test('messages sent in a Factory agent personal session target that agent', async () => {
   const { cloudAgentTargetsBySessionId, cloudSyncedLocalAgentSessionIds } = await import('../src/features/cloud/cloudSelfAgentSessionIdentity');
   const entries = joinPersonalAgents(sessions, [kordi, research], ACCOUNT);
@@ -292,15 +301,4 @@ test('messages sent in a Factory agent personal session target that agent', asyn
   assert.deepEqual(targets.get(RESEARCH_SESSION), { targetAgentId: 'cloud_agent_research', targetAgentName: 'Research agent' });
   // The default agent's session goes to the owner's own agent, which needs no explicit target.
   assert.equal(targets.has(DEFAULT_SESSION), false);
-});
-
-test('the Personal agent section folds like Recents and a search shows its matches while folded', () => {
-  const personalRow = (agentId: string): ChatSidebarRow => ({ kind: 'session', key: `personal:${agentId}`, sessionId: `session:${agentId}`, spaceId: 'personal', depth: 0, activePath: false, estimatedHeight: 50 });
-  const personal = { rows: [personalRow('a'), personalRow('b')], sessionIds: new Set(['session:a', 'session:b']) };
-  const keys = (collapsed: Set<string>, showWhileCollapsed = false) => projectChatGroups([row('session:other')], [], collapsed, false, { personal: { ...personal, showWhileCollapsed } })
-    .rows.map((entry) => entry.key);
-  assert.deepEqual(keys(new Set()), ['agent-section:personal', 'personal:a', 'personal:b', 'agent-section:recents', 'recent:session:session:other']);
-  // Folded: the heading stays, its rows hide, the other sections are untouched.
-  assert.deepEqual(keys(new Set(['section:personal'])), ['agent-section:personal', 'agent-section:recents', 'recent:session:session:other']);
-  assert.deepEqual(keys(new Set(['section:personal']), true), ['agent-section:personal', 'personal:a', 'personal:b', 'agent-section:recents', 'recent:session:session:other']);
 });

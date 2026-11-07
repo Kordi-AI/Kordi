@@ -1,40 +1,68 @@
 import type { Conversation } from '@/kordi-app/types';
+import type { ChatSidebarRow } from '@/pages/sidebar/chatSidebarRows';
+import { sidebarSessionMatchesSearch } from '@/pages/sidebar/sidebarSessionSearch';
 import { personalAgentEntryForConversation } from './personalAgentEntries';
 import type { PersonalAgentEntry } from './personalAgentStore';
 
 type SessionRow = {
-  session: { id: string; canonicalSessionId?: string | null; preview?: string; conversation: Conversation };
+  session: { id: string; canonicalSessionId?: string | null; title: string; preview: string; conversation: Conversation };
+  space: { title: string; participants: ReadonlyArray<{ name: string }> };
 };
 
+const PERSONAL_AGENT_ROW_KEY_PREFIX = 'personal:';
+
+/** A personal agent row's height: avatar, name and preview, like Saved messages. */
+const PERSONAL_AGENT_ROW_HEIGHT = 50;
+
 /**
- * The personal sessions the chat list leaves out: those with no messages
- * yet. A personal agent shows as the Personal agent entry, never as an empty
- * chat; once it or its owner has written, its session is an ordinary chat in
- * the list. Sessions this Mac does not have yet are left out too.
+ * The personal agent rows under the Personal agent entry, from every sidebar
+ * session (unfiltered): one per agent in the current list, in the server's
+ * order, joined with the local session when this Mac has it. Until a list
+ * loads, marked sessions count too. A row shows whether or not its session
+ * has messages or has synced yet. `sessionIds` are every personal session,
+ * kept out of Pinned, Projects and Recents. While searching, a row stays
+ * when its session matches like any other sidebar session, or when the
+ * agent's name matches.
  */
-export function emptyPersonalAgentSessionIds(
+export function personalAgentSidebarRows(
   entries: readonly PersonalAgentEntry[],
   sessionRows: ReadonlyMap<string, SessionRow>,
+  search = '',
   /** No list has loaded yet: a session's own marker also counts. */
   { markerFallback = false }: { markerFallback?: boolean } = {},
 ) {
-  const withMessages = new Set<string>();
-  const empty = new Set<string>();
+  const sessionIds = new Set(entries.flatMap((entry) => [entry.sessionId, entry.conversationId].filter(Boolean)));
+  const listed = new Map(entries.map((entry) => [entry.agentId, entry]));
+  const local = new Map<string, { entry: PersonalAgentEntry; sessionId: string }>();
   for (const [sessionId, row] of sessionRows) {
     const { conversation } = row.session;
+    // The match also names an agent the local list does not hold, from the conversation.
     const entry = personalAgentEntryForConversation(entries, {
       ...conversation, id: conversation.id || row.session.id,
       canonicalSessionId: row.session.canonicalSessionId ?? conversation.canonicalSessionId,
     }, { markerFallback });
     if (!entry) continue;
-    // A transcript that is not loaded yet still has its count and preview.
-    const written = conversation.messages.length > 0 || (conversation.canonicalMessageCount ?? 0) > 0 || Boolean(row.session.preview?.trim());
-    if (written) withMessages.add(entry.agentId);
-    else empty.add(sessionId);
+    sessionIds.add(sessionId);
+    if (!local.has(entry.agentId) || sessionId === entry.sessionId) local.set(entry.agentId, { entry, sessionId });
   }
-  for (const entry of entries) {
-    if (withMessages.has(entry.agentId)) continue;
-    for (const id of [entry.sessionId, entry.conversationId]) if (id) empty.add(id);
-  }
-  return empty;
+  const query = search.trim().toLowerCase();
+  const entriesByAgentId = new Map<string, PersonalAgentEntry>();
+  const agentIds = [...listed.keys(), ...[...local.keys()].filter((agentId) => !listed.has(agentId))];
+  const rows: ChatSidebarRow[] = agentIds.flatMap((agentId) => {
+    const found = local.get(agentId);
+    const entry = found?.entry ?? listed.get(agentId)!;
+    const sessionId = found?.sessionId ?? entry.sessionId;
+    const row = sessionRows.get(sessionId);
+    if (query && !entry.name.toLowerCase().includes(query) && !(row && sidebarSessionMatchesSearch(row, query))) return [];
+    entriesByAgentId.set(agentId, entry);
+    return [{
+      kind: 'session', key: `${PERSONAL_AGENT_ROW_KEY_PREFIX}${agentId}`, sessionId, spaceId: 'personal',
+      depth: 0, activePath: false, estimatedHeight: PERSONAL_AGENT_ROW_HEIGHT,
+    }];
+  });
+  return { rows, sessionIds, entriesByAgentId };
+}
+
+export function personalAgentIdFromRowKey(key: string) {
+  return key.startsWith(PERSONAL_AGENT_ROW_KEY_PREFIX) ? key.slice(PERSONAL_AGENT_ROW_KEY_PREFIX.length) : null;
 }

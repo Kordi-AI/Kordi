@@ -97,8 +97,8 @@ function Fixture() {
         onClose={noop} onSetPinned={noop} onSetMuted={noop} onMarkRead={noop} onArchive={noop} onRestore={noop} />
     </Slot>
     <Slot name="personal" label="Personal agent chat" style={{ left: 820, top: 16 }}>
-      <PersonalAgentSessionMenu target={{ sessionId: 's3', sessionName: 'Kordi', x: 820, y: 40, personalAgent: { agentId: 'a1', localAgentId: 'local-a1' } }}
-        onClose={noop} onSetMuted={noop} onSetUnread={noop} onOpenAgentSettings={noop} />
+      <PersonalAgentSessionMenu target={{ sessionId: 's3', sessionName: 'Kordi', x: 820, y: 40, personalAgent: { agentId: 'a1' } }}
+        onClose={noop} onSetMuted={noop} onSetUnread={noop} />
     </Slot>
     <Slot name="attachment" label="Image actions" style={{ left: 1080, top: 16 }}>
       <AttachmentContextMenu state={{ attachment: image, x: 1080, y: 40 }} onClose={noop} />

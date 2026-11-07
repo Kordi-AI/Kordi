@@ -322,10 +322,12 @@ run (`digest_`, `import_`, `pip_`, `cg_`, `proactive_eval_`,
   (Settings › Connectors) with the switch disabled; otherwise the switch,
   the status line with the last check, `Watching` (the granted connectors,
   `Manage connectors`) and `Recent` (shares, each opening the agent's
-  chat). A personal session is an ordinary chat row once it has messages
-  and is left out of the list while empty; its context menu stays
-  restricted (Mark as read/unread, Mute, `Agent settings`; no Rename, Pin,
-  Archive, Delete).
+  chat). Directly under the entry, as on iPhone, one row per personal
+  agent in the list's order: avatar, name and the latest message, or
+  "No messages yet" while the session is empty or not on this Mac yet. A
+  personal session is listed only there, never in `Pinned`, `Projects` or
+  `Recents`, and the rows have no heading of their own. Their context menu
+  is Mark as read/unread and Mute only (no Rename, Pin, Archive, Delete).
 - iPhone Agents tab: a `Personal agent` section above `Pinned` and
   `Recents`, one row per personal agent from
   `GET /v1/cloud/personal-agents` or the `personal_agent` marker.

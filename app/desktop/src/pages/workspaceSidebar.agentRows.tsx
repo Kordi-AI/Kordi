@@ -129,7 +129,7 @@ export function AgentSidebarRow({
           // A personal session listed here (its row not yet in the section) keeps the restricted menu.
           const personal = personalAgentEntryForConversation(getPersonalAgentEntries(), conversation, { markerFallback: !isPersonalAgentListLoaded() });
           onOpenSessionContextMenu(personal
-            ? { ...target, canRename: false, personalAgent: { agentId: personal.agentId, localAgentId: personal.localAgentId } }
+            ? { ...target, canRename: false, personalAgent: { agentId: personal.agentId } }
             : { ...target, canChooseProject: canChooseChatProject(conversation) && !sessionRunsOnAnotherMac(session.id) });
         }}
         className={cn(

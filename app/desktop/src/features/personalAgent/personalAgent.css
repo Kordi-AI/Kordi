@@ -1,4 +1,4 @@
-/* The Personal agent entry under New in Agent Chats, its page, and the personal session header. */
+/* The Personal agent entry under New in Agent Chats, its agent rows, its page, and the personal session header. */
 .app-personal-agent-entry-row { flex-shrink: 0; padding: 0 4px 6px; }
 .app-personal-agent-entry {
   display: flex;
@@ -110,3 +110,16 @@
 /* Keep the status and title centered on the same native titlebar row. */
 .app-native-titlebar-title .app-personal-agent-header h2 { font-size: 13px; line-height: 20px; }
 .app-native-titlebar-title .app-personal-agent-header-status { font-size: 11px; }
+
+/* Personal agent rows under the entry: the Saved messages row layout. */
+.app-workspace-sidebar .app-agent-session-row.app-personal-agent-row {
+  grid-template-columns: auto minmax(0, 1fr) max-content;
+  min-height: 3.125rem;
+}
+.app-workspace-sidebar .app-personal-agent-row .app-agent-session-side {
+  display: grid;
+  align-self: stretch;
+  align-content: space-between;
+  justify-items: end;
+  gap: 0.2rem;
+}
