@@ -12,7 +12,7 @@ struct ChatProjectPicker: View {
     var body: some View {
         NavigationStack {
             List {
-                if let conversation, let device = model.projectDevices.first(where: { $0.projects.contains { $0.sessions.contains(conversation.sessionId) } }) {
+                if let conversation, let device = currentDevice(for: conversation) {
                     Section {
                         PickerRow(title: "No project", systemImage: "folder.badge.minus", showsDivider: false) {
                             assign(nil, device: device)
@@ -20,7 +20,7 @@ struct ChatProjectPicker: View {
                     }
                     .listSectionSeparator(.hidden)
                 }
-                ForEach(model.projectDevices) { device in
+                ForEach(ChatProjectGroup.pickerDevices(model.projectDevices)) { device in
                     Section {
                         ForEach(device.projects.filter { conversation != nil && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }) { project in
                             PickerRow(
@@ -92,6 +92,12 @@ struct ChatProjectPicker: View {
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(24)
         .interactiveDismissDisabled(busy)
+    }
+
+    /// The Mac that holds the session's project, an online one first.
+    private func currentDevice(for conversation: ConversationSummary) -> ChatProjectDevice? {
+        let devices = model.projectDevices.filter { $0.projects.contains { $0.sessions.contains(conversation.sessionId) } }
+        return devices.first(where: \.online) ?? devices.first
     }
 
     private func assign(_ project: ChatProject?, device: ChatProjectDevice) {

@@ -56,10 +56,11 @@ const LISTED_DEVICE_IDLE_HOURS: i64 = 48;
 /// Lists the caller's account devices for the "Active sessions" screen.
 ///
 /// A non-revoked device row is returned only when it is the caller's current
-/// device, is online in presence, or holds at least one live session token and
-/// was active within the last [`LISTED_DEVICE_IDLE_HOURS`]. Rows whose tokens
-/// have all expired or been revoked can no longer access the account and are
-/// omitted.
+/// device, is online in presence, holds at least one live session token and
+/// was active within the last [`LISTED_DEVICE_IDLE_HOURS`], or still has an
+/// entry in the project catalog. Listing project Macs, even idle ones, lets the
+/// owner revoke a Mac whose projects still appear on other devices. Other rows
+/// whose tokens have all expired or been revoked are omitted.
 pub(super) async fn list_devices(
     State(state): State<Arc<ServerState>>,
     Extension(session): Extension<CloudSession>,
@@ -70,7 +71,7 @@ pub(super) async fn list_devices(
     let now = Utc::now();
     let presence_cutoff =
         crate::presence::stale_presence_cutoff(now, crate::presence::presence_timeout());
-    let rows: Vec<DeviceListRow> = match query_as(
+    let rows: Vec<DeviceListRow> = match query_as(concat!(
         "SELECT device_id, device_name, device_platform, os_version, app_version, \
                 created_at, last_seen_at, authorization_state, protocol_version, \
                 last_ack_seq, last_sync_at, session_expires_at, approximate_location, \
@@ -99,8 +100,11 @@ pub(super) async fn list_devices(
          ) devices \
          WHERE device_id = $2 OR online \
             OR (session_count > 0 AND last_seen_at >= $5) \
-         ORDER BY (device_id = $2) DESC, last_seen_at DESC, created_at DESC",
-    )
+            OR EXISTS (SELECT 1 FROM cloud_project_devices p \
+                       WHERE p.device_id = devices.device_id AND p.account_id = $1 AND ",
+        crate::projects::listed_project_device!(),
+        ") ORDER BY (device_id = $2) DESC, last_seen_at DESC, created_at DESC",
+    ))
     .bind(&session.account_id)
     .bind(&session.device_id)
     .bind(now.to_rfc3339())

@@ -465,6 +465,8 @@ mod terminal_backfill;
 #[path = "cloud_agent_runtime_e2e/attachment_backfill.rs"]
 mod attachment_backfill;
 
+#[path = "cloud_agent_runtime_e2e/project_removal.rs"]
+mod project_removal;
 #[path = "cloud_agent_runtime_e2e/project_routing.rs"]
 mod project_routing;
 #[path = "cloud_agent_runtime_e2e/projects.rs"]

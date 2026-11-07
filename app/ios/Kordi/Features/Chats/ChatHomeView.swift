@@ -630,23 +630,7 @@ struct ChatHomeView: View {
     private func projectSessionSection(_ section: ChatProjectSessionSection) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if let project = section.project {
-                Button {
-                    if !collapsedProjectIDs.insert(section.id).inserted { collapsedProjectIDs.remove(section.id) }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: collapsedProjectIDs.contains(section.id) ? "chevron.right" : "chevron.down")
-                            .font(.footnote.weight(.semibold)).foregroundStyle(.secondary).frame(width: 16)
-                        Image(systemName: "folder").font(.system(size: 20)).foregroundStyle(.tint)
-                        Text(project.name).font(.body.weight(.semibold)).lineLimit(1)
-                        Spacer()
-                        if section.device?.online == false { Text("Offline").font(.footnote).foregroundStyle(.secondary) }
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityValue(collapsedProjectIDs.contains(section.id) ? "Collapsed" : "Expanded")
+                ChatProjectSectionHeader(section: section, project: project, isCollapsed: sectionCollapsedBinding(section.id), activeSwipeRowID: $activeSwipeRowID)
             } else {
                 agentSectionToggle("Recents", id: section.id)
             }
@@ -1456,7 +1440,7 @@ private struct ChatPullOffsetPreferenceKey: PreferenceKey {
     }
 }
 
-private struct ChatCircularSwipeAction: Identifiable {
+struct ChatCircularSwipeAction: Identifiable {
     let id: String
     let label: String
     let systemImage: String
@@ -1659,7 +1643,7 @@ private struct ChatCircularSwipeActionsModifier: ViewModifier {
     }
 }
 
-private extension View {
+extension View {
     func circularChatSwipeActions(
         rowID: String,
         activeRowID: Binding<String?>,

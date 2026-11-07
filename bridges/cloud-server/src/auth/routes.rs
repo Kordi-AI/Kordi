@@ -127,6 +127,7 @@ use web_session_handlers::*;
 pub(crate) use contact_acceptance::{direct_person_session_id, open_direct_conversation};
 pub(crate) use contact_removal::delete_contact_pair;
 pub(crate) use contact_send::{send_request, ContactOutcome};
+pub(crate) use device_handlers::revoke_devices;
 pub(crate) use group_invitation_handlers::{
     audit_join, group_invitation_link_in_transaction, redeem_group_invitation_by_id, LinkOutcome,
     LinkRequest, Redemption, ROOM_GROUP_MIN_MEMBERS,

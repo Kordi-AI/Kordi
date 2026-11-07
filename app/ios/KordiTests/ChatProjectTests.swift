@@ -26,7 +26,7 @@ struct ChatProjectTests {
             .init(id: "project", name: "App", sessions: [pinned.sessionId]),
         ])
         let sections = ChatProjectSections.build(conversations: [pinned, recent], devices: [device], search: "", collapsedForks: [], pinned: [pinned.sessionId])
-        #expect(sections.map(\.id) == ["pinned", "mac:project", "recents"])
+        #expect(sections.map(\.id) == ["pinned", "project:project", "recents"])
         #expect(sections[0].sessions.map(\.id) == [pinned.id])
         #expect(sections[1].sessions.map(\.id) == [pinned.id])
         #expect(sections[2].sessions.map(\.id) == [recent.id])
@@ -78,5 +78,73 @@ struct ChatProjectTests {
         let detached = ChatProjectSections.build(conversations: [first, second], devices: [moved], search: "", collapsedForks: [], pinned: [])
         #expect(detached[0].sessions.isEmpty)
         #expect(detached[1].sessions.count == 2)
+    }
+
+    @Test func macProfilesPublishingOneFolderShowAsOneProject() {
+        let first = AgentSessionFactory.makeDefault(ownAccountId: "owner", randomId: "first")
+        let second = AgentSessionFactory.makeDefault(ownAccountId: "owner", randomId: "second")
+        let folder = "trust-folder"
+        let devices = [
+            ChatProjectDevice(id: "profile-a", name: "Studio Mac", online: false, projects: [.init(id: folder, name: "trust", sessions: [first.sessionId])]),
+            ChatProjectDevice(id: "profile-b", name: "Studio Mac", online: false, projects: [.init(id: folder, name: "trust", sessions: [first.sessionId, second.sessionId])]),
+            ChatProjectDevice(id: "profile-c", name: "Studio Mac", online: true, projects: [.init(id: folder, name: "kordi-trust", sessions: [])]),
+            // Same name, other folder: never merged by name.
+            ChatProjectDevice(id: "laptop", name: "Laptop", online: false, projects: [.init(id: "other-folder", name: "kordi-trust", sessions: [])]),
+        ]
+        let sections = ChatProjectSections.build(conversations: [first, second], devices: devices, search: "", collapsedForks: [], pinned: [])
+        #expect(sections.map(\.id) == ["project:\(folder)", "project:other-folder"])
+        let merged = sections[0]
+        #expect(merged.project?.name == "kordi-trust")
+        #expect(merged.project?.sessions == [first.sessionId, second.sessionId])
+        #expect(Set(merged.sessions.map(\.id)) == [first.id, second.id])
+        #expect(merged.devices.map(\.id) == ["profile-c", "profile-a", "profile-b"])
+        #expect(merged.online)
+        #expect(!merged.removable)
+        #expect(!sections[1].online)
+        #expect(sections[1].removable)
+    }
+
+    @Test func projectWithOnlyOfflineMacsIsRemovable() {
+        let devices = [
+            ChatProjectDevice(id: "profile-a", name: "Studio Mac", online: false, projects: [.init(id: "folder", name: "trust", sessions: [])]),
+            ChatProjectDevice(id: "profile-b", name: "Studio Mac", online: false, projects: [.init(id: "folder", name: "trust", sessions: [])]),
+        ]
+        let sections = ChatProjectSections.build(conversations: [], devices: devices, search: "", collapsedForks: [], pinned: [])
+        #expect(sections.count == 1)
+        #expect(!sections[0].online)
+        #expect(sections[0].removable)
+        #expect(sections[0].devices.map(\.id) == ["profile-a", "profile-b"])
+        let recents = ChatProjectSessionSection(id: "recents", project: nil, devices: [], sessions: [])
+        #expect(!recents.removable)
+    }
+
+    @Test func pickerListsEachFolderOnceUnderAnOnlineMac() {
+        let devices = [
+            ChatProjectDevice(id: "old-profile", name: "Studio Mac", online: false, projects: [
+                .init(id: "folder", name: "trust", sessions: ["one"]),
+                .init(id: "only-here", name: "notes", sessions: []),
+            ]),
+            ChatProjectDevice(id: "gone-profile", name: "Studio Mac", online: false, projects: [.init(id: "folder", name: "trust", sessions: ["two"])]),
+            ChatProjectDevice(id: "current", name: "Studio Mac", online: true, projects: [.init(id: "folder", name: "trust", sessions: [])]),
+        ]
+        let picker = ChatProjectGroup.pickerDevices(devices)
+        #expect(picker.map(\.id) == ["old-profile", "current"])
+        #expect(picker[0].projects.map(\.id) == ["only-here"])
+        #expect(picker[1].projects.map(\.id) == ["folder"])
+        #expect(picker[1].projects[0].sessions == ["one", "two"])
+    }
+
+    @Test @MainActor func removingAnOfflineProjectSendsItsSessionsToRecents() async throws {
+        let model = AppModel(previewMode: true)
+        let conversation = try #require(model.conversations.first { $0.kind == .agent && !$0.isAgentLaunchTemplate })
+        model.projectDevices = [
+            .init(id: "profile-a", name: "Studio Mac", online: false, projects: [.init(id: "folder", name: "trust", sessions: [conversation.sessionId])]),
+            .init(id: "profile-b", name: "Studio Mac", online: false, projects: [.init(id: "folder", name: "trust", sessions: [])]),
+        ]
+        let section = try #require(ChatProjectSections.build(conversations: [conversation], devices: model.projectDevices, search: "", collapsedForks: [], pinned: []).first)
+        try await model.removeOfflineProject(section)
+        #expect(model.projectDevices.allSatisfy { $0.projects.isEmpty })
+        let after = ChatProjectSections.build(conversations: [conversation], devices: model.projectDevices, search: "", collapsedForks: [], pinned: [])
+        #expect(after.map(\.id) == ["recents"])
     }
 }
