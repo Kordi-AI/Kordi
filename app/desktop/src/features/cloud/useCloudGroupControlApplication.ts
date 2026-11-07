@@ -3,6 +3,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -33,6 +34,7 @@ import type {
   CloudAgentDefinition,
 } from './cloudAgents';
 import { CloudAgentTurnCoordinator } from './cloudAgentTurnCoordinator';
+import { CloudGroupDeferredMentions } from './cloudGroupDeferredMentions';
 import type {
   CloudSessionActivityStore,
 } from './cloudSessionActivity';
@@ -258,6 +260,9 @@ export function useCloudGroupControlApplication({
     [account?.accountId],
   );
   useEffect(() => () => turnCoordinator.dispose(), [turnCoordinator]);
+  const [deferredMentions] = useState(() => new CloudGroupDeferredMentions());
+  // Kept mentions belong to the account that received them.
+  useEffect(() => () => deferredMentions.clear(), [account?.accountId, deferredMentions]);
   const sessionPreparationCacheRef = useRef<{
     accountId: string | null;
     entries: CloudGroupSessionPreparationCache;
@@ -300,6 +305,7 @@ export function useCloudGroupControlApplication({
     client,
     turnCoordinator,
     ready: runtimeReady,
+    deferMention: (requestId, retry) => deferredMentions.defer(requestId, retry),
     messageIndex: () => messageIndexRef.current,
     sessionActivity: () => sessionActivityRef.current,
     setSessionActivity,
@@ -323,6 +329,7 @@ export function useCloudGroupControlApplication({
     agentDefinitionsById,
     client,
     defaultRoute,
+    deferredMentions,
     mergeMessage,
     messageIndexRef,
     processedRequestIdsRef,
@@ -336,6 +343,10 @@ export function useCloudGroupControlApplication({
     turnCoordinator,
     turnIdsByRequestIdRef,
   ]);
+  // Mentions skipped while the runtime was not ready are claimed once it is.
+  useEffect(() => {
+    if (runtimeReady) deferredMentions.applyAll(agentRuntime());
+  }, [agentRuntime, deferredMentions, runtimeReady]);
   const agentPolicy = useMemo<CloudGroupAgentPolicy>(() => ({
     isRecentMention: isRecentCloudAgentMention,
     messageTargetsLocalAgent: cloudGroupMessageTargetsLocalAgent,

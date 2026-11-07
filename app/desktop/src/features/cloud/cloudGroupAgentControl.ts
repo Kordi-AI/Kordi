@@ -34,8 +34,7 @@ export function applyCloudGroupAgentControl(
   } = context;
   const message = envelope.message;
   if (
-    runtime.ready === false
-    || !message
+    !message
     || !policy.messageTargetsLocalAgent(
       message,
       account,
@@ -44,6 +43,14 @@ export function applyCloudGroupAgentControl(
     || !policy.isRecentMention(cloudMessage.createdAt)
     || runtime.processedMentionIds.has(message.id)
   ) return;
+  // The server holds a mention for an online Mac; once the runtime is ready
+  // again it claims the mention, and only an acquired claim runs it.
+  if (runtime.ready === false) {
+    runtime.deferMention?.(message.id, (readyRuntime) => {
+      applyCloudGroupAgentControl({ ...input, runtime: readyRuntime });
+    });
+    return;
+  }
 
   const replaySpan = beginChatPerformanceSpan('cloud-group-replay');
   const currentRows = runtime.messageIndex().groupRows;

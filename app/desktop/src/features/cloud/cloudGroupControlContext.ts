@@ -72,6 +72,11 @@ export type CloudGroupCanonicalRuntime = {
 
 export type CloudGroupAgentRuntime = {
   ready?: boolean;
+  /**
+   * Keeps a mention for this Mac's agent that arrived while the runtime was
+   * not ready; `retry` applies it again once it is ready.
+   */
+  deferMention?(requestId: string, retry: (runtime: CloudGroupAgentRuntime) => void): void;
   client: CloudAuthClient;
   turnCoordinator: CloudAgentTurnCoordinator;
   messageIndex(): CloudMessageIndex;
