@@ -1,6 +1,6 @@
 //! A ready owner Mac gets the first chance at requests for both local and
-//! hosted accounts. Cloud runs them once the Mac's capability or presence
-//! expires.
+//! hosted accounts. Cloud runs them once the Mac is no longer online and its
+//! readiness has expired.
 
 use super::*;
 
@@ -148,6 +148,18 @@ async fn hosted_account_waits_for_the_ready_owner_mac_then_falls_back() {
         "UPDATE cloud_agent_desktop_capabilities SET updated_at=now()-interval '2 minutes' WHERE agent_id=$1",
     )
     .bind(format!("cloud-agent:{}", owner.account_id))
+    .execute(&pool)
+    .await
+    .unwrap();
+    // Lapsed readiness alone keeps the hold while the Mac is still online.
+    let still_held = claim(&hosted_request, "cloud-api-key:work").await.unwrap();
+    assert_eq!(still_held.status(), StatusCode::OK);
+    let still_held = read_json(still_held).await;
+    assert!(!runner_can_lease(&router, still_held["runId"].as_str().unwrap()).await);
+    sqlx_core::query::query(
+        "UPDATE cloud_device_presence SET state='offline', last_offline_at=now()::text WHERE account_id=$1",
+    )
+    .bind(&owner.account_id)
     .execute(&pool)
     .await
     .unwrap();

@@ -20,6 +20,11 @@ pub(crate) async fn agent_desktop_ready(
 const DESKTOP_READY_GRACE_TIMEOUTS: i32 = 2;
 
 /// Whether a request should wait for a Mac of its agent's owner first.
+///
+/// Mac-first: while the owner's Mac is online it gets every request first,
+/// whatever account the request names and whichever conversation it comes
+/// from. The hold lasts one presence timeout; the cloud runner answers when
+/// no Mac claims the run by then.
 pub(in crate::cloud_agent_runtime) async fn prefer_ready_desktop(
     pool: &PgPool,
     input: &ClaimRunRequest,
@@ -30,7 +35,34 @@ pub(in crate::cloud_agent_runtime) async fn prefer_ready_desktop(
     let timeout = crate::presence::presence_timeout();
     let grace = timeout * DESKTOP_READY_GRACE_TIMEOUTS;
     let owner = &input.owner_account_id;
-    Ok(agent_desktop_recently_ready(pool, owner, &agent, timeout, grace).await?)
+    if agent_desktop_recently_ready(pool, owner, &agent, timeout, grace).await? {
+        return Ok(true);
+    }
+    // The Mac withdraws its readiness while its runtime reloads, for example
+    // right after the owner picks another model or account, and publishes it
+    // again moments later. An online Mac still goes first meanwhile.
+    Ok(owner_desktop_online(pool, owner, timeout).await?)
+}
+
+/// Whether a Mac of `owner` is online now: a non-revoked desktop whose
+/// presence is `online` with a heartbeat within `timeout`, as every client
+/// shows it ([`crate::presence::account_presence_status`]).
+async fn owner_desktop_online(
+    pool: &PgPool,
+    owner: &str,
+    timeout: chrono::Duration,
+) -> Result<bool, sqlx_core::Error> {
+    let row: (bool,) = query_as(
+        "SELECT EXISTS(SELECT 1 FROM cloud_devices d JOIN cloud_device_presence p USING(device_id) \
+         WHERE d.account_id=$1 AND d.revoked_at IS NULL \
+           AND lower(trim(d.device_platform)) IN ('macos','desktop') AND p.state='online' \
+           AND p.last_heartbeat_at::timestamptz > now() - make_interval(secs => $2))",
+    )
+    .bind(owner)
+    .bind(timeout.num_milliseconds() as f64 / 1000.0)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
 }
 
 /// Whether a Mac of `owner` was ready to run `agent` within `grace`, the
