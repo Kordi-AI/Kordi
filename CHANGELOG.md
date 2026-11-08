@@ -38,6 +38,7 @@ This file records notable user-facing changes to Kordi for macOS and iOS.
 - Fixed the message fork chip wrapping in narrow panels ([#2391]), duplicate
   projects, and missing Personal agent rows ([#2386]).
 - Fixed agent memory files showing their file header in Grounding ([#2402]).
+- Fixed the tour highlight sitting off-center on sidebar icons.
 
 ## [0.0.2-beta.7] - 2026-11-06
 
