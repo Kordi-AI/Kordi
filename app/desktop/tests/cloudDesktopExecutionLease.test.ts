@@ -124,3 +124,37 @@ test('a refused admission or an unreachable server past the deadline still fails
     await pending;
   } finally { refused.dispose(); unreachable.dispose(); mock.timers.reset(); }
 });
+
+test('a timed-out claim is sent again with the same claim id', async () => {
+  const identity = { requestId: 'request', agentId: 'agent', ownerAccountId: 'owner', requesterAccountId: 'owner', agentName: 'Kordi' };
+  const claims: Record<string, unknown>[] = [];
+  const client = {
+    desktopAgentExecution: async (_token: string, action: string, body: Record<string, unknown>) => {
+      assert.equal(action, 'claim');
+      claims.push(body);
+      if (claims.length === 1) throw new CloudAuthError('network_error', 'Cloud request timed out. Check your connection and try again.', 0);
+      return { acquired: true, runId: 'run', turnIdentity: identity };
+    },
+  } as unknown as Pick<CloudAuthClient, 'desktopAgentExecution'>;
+  const input = { requestMessageId: 'request', sessionId: 'session', ownerAccountId: 'owner', requesterAccountId: 'owner', prompt: 'hello', idempotencyKey: 'request' };
+  const lease = await acquireDesktopExecutionLease(client, 'fixture-token', input, { claimRetryMs: 0 });
+  assert.ok(lease);
+  try {
+    assert.equal(claims.length, 2);
+    // The server answers a resent claim with the lease the first one took.
+    assert.equal(claims[1]?.claimId, claims[0]?.claimId);
+    assert.equal(lease.claimId, claims[0]?.claimId);
+  } finally { lease.dispose(); }
+});
+
+test('a refused claim is not sent again and a slow server gives up after two tries', async () => {
+  const input = { requestMessageId: 'request', sessionId: 'session', ownerAccountId: 'owner', requesterAccountId: 'owner', prompt: 'hello', idempotencyKey: 'request' };
+  let refusedCalls = 0;
+  const refused = { desktopAgentExecution: async () => { refusedCalls += 1; throw new CloudAuthError('desktop_execution_denied', 'Denied', 403); } } as unknown as Pick<CloudAuthClient, 'desktopAgentExecution'>;
+  await assert.rejects(acquireDesktopExecutionLease(refused, 'fixture-token', input, { claimRetryMs: 0 }), /Denied/);
+  assert.equal(refusedCalls, 1);
+  let slowCalls = 0;
+  const slow = { desktopAgentExecution: async () => { slowCalls += 1; throw new CloudAuthError('network_error', 'Cloud request timed out. Check your connection and try again.', 0); } } as unknown as Pick<CloudAuthClient, 'desktopAgentExecution'>;
+  await assert.rejects(acquireDesktopExecutionLease(slow, 'fixture-token', input, { claimRetryMs: 0 }), /timed out/);
+  assert.equal(slowCalls, 2);
+});
