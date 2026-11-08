@@ -33,7 +33,7 @@ type Result<T> = std::result::Result<T, sqlx_core::Error>;
 /// The readiness row a Mac publishes when it can run digests.
 pub const CAPABILITY: &str = "digest";
 /// Seconds a desktop claim holds the run before it must renew, as for chat.
-const LEASE_SECONDS: i64 = 45;
+const LEASE_SECONDS: i64 = crate::cloud_agent_runtime::DESKTOP_LEASE_SECONDS;
 /// The Mac registers the observation tools under these names, because the
 /// plain names belong to its own session tools.
 const MAC_TOOL_PREFIX: &str = "digest_";

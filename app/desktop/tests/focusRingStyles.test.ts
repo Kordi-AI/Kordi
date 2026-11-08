@@ -111,6 +111,12 @@ test('focus.css loads last and every legacy focus-ring token is neutral', () => 
   assert.match(focus, /--app-focus-border:\s*color-mix\(in oklab, var\(--app-transient-text, currentColor\)/);
   assert.match(focus, /--app-focus-fill:\s*color-mix\(in oklab, var\(--app-transient-text, currentColor\)/);
   assert.doesNotMatch(focus.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media \(forced-colors: active\)[\s\S]*$/, ''), /accent|Highlight/);
+  // Focusable regions (scroll panes, copy surfaces, tables) never draw a focus
+  // frame: a click focuses them and WebKit can match :focus-visible there.
+  for (const rule of cssRules(focus)) {
+    if (rule.atRules.length || !focusSelector.test(rule.selector)) continue;
+    assert.doesNotMatch(rule.selector, /\[tabindex\]|role='(?:region|log|status|tabpanel|listbox|grid|separator)'/, rule.selector);
+  }
 
   const tokenCss = files(join(desktopRoot, 'src'), /\.css$/).map((path) => readFileSync(path, 'utf8')).join('\n');
   const definitions = [...tokenCss.matchAll(/(--app-(?:[\w-]*focus-ring[\w-]*|cloud-login-focus-border|cloud-signin-focus|update-focus)):\s*([^;]+);/g)];

@@ -44,11 +44,12 @@ for (const theme of ['light', 'dark'] as const) {
     await page.mouse.move(0, 0);
     await shot(page, `${theme}-3-stopping`);
 
-    // Stopped: no Stop, "Stopped" with the elapsed time.
+    // Stopped with partial text: no Stop; the header reports the work done and the footer says it was stopped.
     const stopped = row('Stopped');
     await expect(stopped.locator('[data-agent-request-stop]')).toHaveCount(0);
-    await expect(stopped.locator('.app-turn-status-text')).toHaveText('Stopped');
+    await expect(stopped.locator('.app-turn-status-text')).toHaveText('Worked for');
     await expect(stopped.locator('.app-turn-progress-time')).toHaveText(/^\d+s$/);
+    await expect(stopped.locator('[data-reply-ending="stopped"]')).toHaveText('Stopped');
     await shot(page, `${theme}-4-stopped`);
 
     // Finished: Fork shows beside the name while the pointer is over the row.

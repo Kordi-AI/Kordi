@@ -56,6 +56,15 @@ extension AgentExecutionSnapshot {
         return active.count > 1 ? "\(action) · \(active.count) active" : action
     }
 
+    /// The header label of a turn. A reply that ended early keeps its text and
+    /// its caption says how it ended, so the header reports the work done
+    /// rather than a second status.
+    func progressLabel(ending: AgentReplyEnding?) -> String {
+        let endedEarly = completed && ending != nil
+        if (endedEarly || (completed && phase == .complete)) && startedAtMs == nil { return "Activity" }
+        return endedEarly ? "Worked for" : progressLabel
+    }
+
     func elapsedLabel(at date: Date) -> String? {
         guard let start = startedAtMs, start.isFinite else { return nil }
         let end = completed ? updatedAtMs : date.timeIntervalSince1970 * 1_000

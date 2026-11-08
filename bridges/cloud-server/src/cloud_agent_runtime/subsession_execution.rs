@@ -58,8 +58,8 @@ pub(super) async fn claim(
     let eligible:(bool,)=query_as("SELECT EXISTS(SELECT 1 FROM cloud_agent_subsessions s JOIN cloud_agent_subsession_chat c ON c.subsession_id=s.subsession_id JOIN cloud_agent_fallback_runs r ON r.run_id=c.run_id WHERE s.subsession_id=$1 AND c.message_id=$2 AND s.owner_account_id=$3 AND s.publisher_device_id=$4 AND s.execution_backend='desktop' AND r.status='queued' AND s.status<>'running' AND EXISTS(SELECT 1 FROM cloud_chat_conversation_members m WHERE m.conversation_id=s.parent_conversation_id AND m.account_id=c.sender_account_id AND m.membership_state='active') AND EXISTS(SELECT 1 FROM cloud_chat_conversation_members m WHERE m.conversation_id=s.parent_conversation_id AND m.account_id=s.owner_account_id AND m.membership_state='active') AND EXISTS(SELECT 1 FROM cloud_agent_desktop_capabilities ready WHERE ready.device_id=$4 AND ready.agent_id=s.agent_id AND ready.updated_at>now()-interval '35 seconds') AND NOT EXISTS(SELECT 1 FROM cloud_agent_subsession_chat earlier JOIN cloud_agent_fallback_runs e ON e.run_id=earlier.run_id WHERE earlier.subsession_id=s.subsession_id AND earlier.sequence<c.sequence AND e.status IN ('queued','leased','running')))")
         .bind(id).bind(message).bind(&session.account_id).bind(&session.device_id).fetch_one(&mut *tx).await?;
     if eligible.0 {
-        query("UPDATE cloud_agent_fallback_runs SET execution_backend='desktop',status='leased',claimed_by=$2,lease_expires_at=(now()+interval '45 seconds')::text,updated_at=now()::text WHERE run_id=$1 AND status='queued'")
-            .bind(&run).bind(executor).execute(&mut *tx).await?;
+        query("UPDATE cloud_agent_fallback_runs SET execution_backend='desktop',status='leased',claimed_by=$2,lease_expires_at=(now()+make_interval(secs=>$3))::text,updated_at=now()::text WHERE run_id=$1 AND status='queued'")
+            .bind(&run).bind(executor).bind(super::DESKTOP_LEASE_SECONDS as f64).execute(&mut *tx).await?;
     }
     tx.commit().await?;
     let identity = if eligible.0 {
@@ -68,7 +68,7 @@ pub(super) async fn claim(
         None
     };
     Ok(Some(
-        json!({"runId":run,"acquired":eligible.0,"leaseSeconds":45,"turnIdentity":identity}),
+        json!({"runId":run,"acquired":eligible.0,"leaseSeconds":super::DESKTOP_LEASE_SECONDS,"turnIdentity":identity}),
     ))
 }
 

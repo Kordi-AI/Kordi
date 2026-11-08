@@ -17,7 +17,7 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-test('desktop release metadata is set for V0.0.2.beta7 and iOS 0.0.2 build 9', () => {
+test('desktop release metadata is set for V0.0.2.beta7 and iOS 0.0.2 build 10', () => {
   const pkg = readJson('../package.json');
   const packageLock = readJson('../package-lock.json');
   const tauri = readJson('../src-tauri/tauri.conf.json');
@@ -49,7 +49,7 @@ test('desktop release metadata is set for V0.0.2.beta7 and iOS 0.0.2 build 9', (
   assert.match(iosProject, /deploymentTarget:\n    iOS: "17\.0"/);
   assert.match(iosProject, /IPHONEOS_DEPLOYMENT_TARGET: 17\.0/);
   assert.match(iosProject, /MARKETING_VERSION: 0\.0\.2/);
-  assert.match(iosProject, /CURRENT_PROJECT_VERSION: 9\n/);
+  assert.match(iosProject, /CURRENT_PROJECT_VERSION: 10\n/);
   assert.ok(releaseEntryMatch, `CHANGELOG.md must contain a dated ${appVersion} entry`);
   assert.match(
     releaseEntryMatch[1],

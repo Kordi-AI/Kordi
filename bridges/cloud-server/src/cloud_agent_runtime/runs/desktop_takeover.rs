@@ -17,8 +17,7 @@ use sqlx_postgres::PgPool;
 use super::claims::runtime_route_for_desktop_claim;
 use super::{ClaimRunRequest, CloudAgentRunResponse, RunResult};
 
-/// Seconds a desktop claim holds the run before it must renew.
-const DESKTOP_LEASE_SECONDS: i64 = 45;
+use crate::cloud_agent_runtime::DESKTOP_LEASE_SECONDS;
 
 /// Marks a run a Mac handed back; [`take`] never moves it to a Mac again.
 /// A completed run clears it, a failed one replaces it with its own code.

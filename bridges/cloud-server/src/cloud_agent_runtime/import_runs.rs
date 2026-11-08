@@ -27,7 +27,7 @@ type Result<T> = std::result::Result<T, sqlx_core::Error>;
 /// same literal.
 pub(crate) const RUN_PREFIX: &str = "import_";
 /// Seconds a Mac holds an import before it must renew, as for chat.
-pub(crate) const LEASE_SECONDS: i64 = 45;
+pub(crate) const LEASE_SECONDS: i64 = super::DESKTOP_LEASE_SECONDS;
 /// An import still open this long after it started has failed.
 const MAX_AGE_MINUTES: i32 = 10;
 const TIMEOUT_ERROR_CODE: &str = "import_timeout";
