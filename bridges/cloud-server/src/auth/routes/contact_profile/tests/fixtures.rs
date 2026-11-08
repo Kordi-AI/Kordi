@@ -151,10 +151,38 @@ pub(super) async fn card(pool: &PgPool, account: &str, sharing: bool) {
     .bind(&profile_id)
     .bind(json!({
         "workingOn": ["Tabletop manipulation", "Sim-to-real", "Secret plan", "Grasping", "Tactile", "Sixth"],
+        "interests": ["Secret plan", "Bouldering"],
         "canHelp": ["Grant writing"],
         "lookingFor": ["Robot datasets"],
     }))
     .bind(sharing)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// `owner` stops `viewer` from seeing their card, or allows it again.
+pub(super) async fn card_access(pool: &PgPool, owner: &str, viewer: &str, allowed: bool) {
+    query(
+        "INSERT INTO cloud_contact_permissions (owner_account_id, subject_account_id, card_access) \
+         VALUES ($1, $2, $3) ON CONFLICT (owner_account_id, subject_account_id) \
+         DO UPDATE SET card_access = EXCLUDED.card_access",
+    )
+    .bind(owner)
+    .bind(viewer)
+    .bind(allowed)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// `blocker` blocks `blocked`, leaving their contact rows in place.
+pub(super) async fn block(pool: &PgPool, blocker: &str, blocked: &str) {
+    query(
+        "INSERT INTO cloud_account_blocks (blocker_account_id, blocked_account_id) VALUES ($1, $2)",
+    )
+    .bind(blocker)
+    .bind(blocked)
     .execute(pool)
     .await
     .unwrap();

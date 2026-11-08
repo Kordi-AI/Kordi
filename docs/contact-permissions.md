@@ -45,6 +45,10 @@ Every agent has an **Access** setting, the default Kordi agent included: the def
 - **Data.** Factory agents: `cloud_agent_definitions.access_scope`. Default agent: `cloud_default_agent_profiles.access_scope` (migration 0186); `NULL` means `participant_conversations`.
 - **Mac.** The Factory shows the default agent's real Access with the same menu as Factory agents and publishes it through the route above.
 
+## What "See my card" on shows
+
+On the owner's contact profile, an accepted contact sees the owner's card while the owner shares it: the profile linked through their most recent pairing or room, else the owner's default profile. No pairing or room is needed, and the contact needs no card of their own. Hidden topics stay hidden, a block in either direction hides the card, and the match still needs both cards. The Grounding person page (`people/:id`) still needs a pairing or room.
+
 ## What "See my card" off hides
 
 Every Common ground read path: `people/:id`, match detail and Recent, room lobbies (`hasCard: false`) and room results and themes, pairing results, the Common ground card on the contact profile, Nearby lists, person pages and alerts, and Add, Chat and Meet through Grounding. Group intros and joined lines quote no topics when anyone they name has restricted another of them.

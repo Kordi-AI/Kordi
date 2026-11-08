@@ -81,10 +81,11 @@ async fn sharing_off_hides_a_pairing_both_ways() {
         follow_through(&app, &priya_token, &alex).await,
         vec![own_off(); 3]
     );
-    assert_eq!(
-        contact_grounding(&app, &priya_token, &alex).await,
-        Value::Null
-    );
+    // As his contact she still sees his card on his profile, without the
+    // match, which needs both cards.
+    let grounding = contact_grounding(&app, &priya_token, &alex).await;
+    assert_eq!(grounding["workingOn"], json!(["Agent memory"]));
+    assert_eq!(grounding["match"], Value::Null);
 
     // Back on, the pairing shows both cards again.
     set_sharing(&app, &priya_token, None, true).await;
