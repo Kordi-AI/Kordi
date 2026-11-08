@@ -33,7 +33,7 @@ export function commonGroundBuildRequest(choices: CgBuildChoices): CgBuildReques
     links: choices.links,
     notes: choices.notes,
   };
-  if (choices.useAgents && choices.agentFiles?.length) request.agents = choices.agentFiles;
+  if (choices.useAgents && choices.agentFiles?.length) request.agents = choices.agentFiles.map(({ label, text }) => ({ label, text }));
   if (choices.picks) {
     request.connectorProviders = choices.connectors;
     request.documents = choices.documents ?? [];
@@ -51,7 +51,7 @@ export function canBuildProfile(choices: CgBuildChoices): boolean {
 /** "AGENTS.md, CLAUDE.md +3", from the file names. */
 export function agentFilesSummary(files: CgAgentFile[] | null): string {
   if (files === null) return 'Reading…';
-  const names = files.map((file) => file.label.split('/').pop() ?? file.label);
+  const names = files.map((file) => (file.path ?? file.label).split('/').pop() ?? file.label);
   if (!names.length) return 'No agent files found';
   const head = names.slice(0, 2).join(', ');
   return names.length > 2 ? `${head} +${names.length - 2}` : head;
