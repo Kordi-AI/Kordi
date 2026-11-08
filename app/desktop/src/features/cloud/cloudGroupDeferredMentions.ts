@@ -2,6 +2,9 @@ import type { CloudGroupAgentRuntime } from './cloudGroupControlContext';
 
 type Retry = (runtime: CloudGroupAgentRuntime) => void;
 
+/** Most mentions kept at once; the oldest goes first, since the server's hold ends for it first. */
+export const MAX_DEFERRED_MENTIONS = 50;
+
 /**
  * Mentions of this Mac's agent that arrived while its runtime was not ready,
  * for example while it reloaded after the owner picked another model. The
@@ -13,7 +16,14 @@ export class CloudGroupDeferredMentions {
   private readonly retries = new Map<string, Retry>();
 
   defer(requestId: string, retry: Retry): void {
-    if (requestId.trim()) this.retries.set(requestId, retry);
+    if (!requestId.trim()) return;
+    this.retries.delete(requestId);
+    this.retries.set(requestId, retry);
+    while (this.retries.size > MAX_DEFERRED_MENTIONS) {
+      const oldest = this.retries.keys().next().value;
+      if (oldest === undefined) break;
+      this.retries.delete(oldest);
+    }
   }
 
   /** Applies every kept mention again with a ready runtime. */

@@ -5,7 +5,7 @@ import { applyCloudGroupAgentControl } from '../src/features/cloud/cloudGroupAge
 import type { ApplyCloudGroupAgentControlInput } from '../src/features/cloud/cloudGroupAgentControl.types';
 import type { CloudAgentTurnCoordinator } from '../src/features/cloud/cloudAgentTurnCoordinator';
 import type { CloudGroupAgentRuntime } from '../src/features/cloud/cloudGroupControlContext';
-import { CloudGroupDeferredMentions } from '../src/features/cloud/cloudGroupDeferredMentions';
+import { CloudGroupDeferredMentions, MAX_DEFERRED_MENTIONS } from '../src/features/cloud/cloudGroupDeferredMentions';
 
 const OWNER = 'acct_owner';
 const GROUP = 'session:group:new-group';
@@ -108,4 +108,15 @@ test('kept mentions of a previous account are dropped', () => {
   deferred.clear();
   deferred.applyAll(runtime(true));
   assert.equal(jobs.length, 0);
+});
+
+test('kept mentions are bounded, the oldest dropped first', () => {
+  const kept = new CloudGroupDeferredMentions();
+  const applied: string[] = [];
+  for (let index = 0; index < MAX_DEFERRED_MENTIONS + 5; index += 1) {
+    kept.defer(`msg_${index}`, () => applied.push(`msg_${index}`));
+  }
+  kept.applyAll({ ready: true } as CloudGroupAgentRuntime);
+  assert.equal(applied.length, MAX_DEFERRED_MENTIONS);
+  assert.equal(applied[0], 'msg_5');
 });

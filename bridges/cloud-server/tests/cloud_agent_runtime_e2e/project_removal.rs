@@ -176,13 +176,42 @@ async fn offline_project_entries_are_removed_and_signed_out_macs_are_revoked() {
     .unwrap()
     .is_none());
 
-    // Without a live session, removing the Mac's entry also revokes the Mac.
+    // Without a live session, removing one of several projects keeps the
+    // Mac and its other projects.
     execute(
         &pool,
         "UPDATE cloud_refresh_tokens SET revoked_at=now()::text WHERE device_id=$1",
         &old_device,
     )
     .await;
+    let kept = "f".repeat(64);
+    execute(
+        &pool,
+        &format!(
+            "UPDATE cloud_project_devices SET projects=projects || '[{{\"id\":\"{kept}\",\"name\":\"Notes\",\"sessions\":[]}}]'::jsonb WHERE device_id=$1"
+        ),
+        &old_device,
+    )
+    .await;
+    let (status, body) = remove(
+        &router,
+        &owner.token,
+        &format!("/v1/cloud/projects/devices/{old_device}/projects/{other_project}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["deviceRevoked"], false);
+    let devices = catalog(&router, &owner.token).await;
+    let old = devices
+        .iter()
+        .find(|d| d["id"] == old_device.as_str())
+        .unwrap();
+    assert_eq!(
+        old["projects"],
+        json!([{"id": kept, "name": "Notes", "sessions": []}])
+    );
+
+    // Removing the Mac's whole entry then revokes the Mac.
     let (status, body) = remove(&router, &owner.token, &whole).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["deviceRevoked"], true);

@@ -1,8 +1,10 @@
 //! Removing project catalog entries of Macs that are gone.
 //!
 //! A removed entry only leaves the catalog: project files stay on the Mac. A
-//! Mac that can still sign in publishes its catalog again when Kordi opens; one
-//! without a live session is revoked so that it cannot return silently.
+//! Mac that can still sign in publishes its catalog again when Kordi opens.
+//! Once a Mac without a live session has no entry left, it is revoked so that
+//! it cannot return silently; revoking it earlier would also drop the
+//! projects the owner kept.
 use super::{database_error, error, PROJECT_DEVICE_ONLINE_SECONDS};
 use crate::{auth::routes::CloudSession, server::ServerState};
 use axum::{
@@ -21,7 +23,7 @@ const LIVE_SESSION: &str = "EXISTS(SELECT 1 FROM cloud_refresh_tokens t WHERE t.
 enum Removal {
     NotFound,
     Online,
-    Removed { live_session: bool },
+    Removed { revoke_device: bool },
 }
 
 /// `DELETE /v1/cloud/projects/devices/:device_id`: the Mac's whole entry.
@@ -56,8 +58,8 @@ async fn remove(
         project_id.as_deref(),
     )
     .await;
-    let live_session = match removal {
-        Ok(Removal::Removed { live_session }) => live_session,
+    let revoke_device = match removal {
+        Ok(Removal::Removed { revoke_device }) => revoke_device,
         Ok(Removal::NotFound) => return error(StatusCode::NOT_FOUND, "Project not found."),
         Ok(Removal::Online) => {
             return (
@@ -72,7 +74,7 @@ async fn remove(
         Err(e) => return database_error(e),
     };
     let mut device_revoked = false;
-    if !live_session && device_id != session.device_id {
+    if revoke_device && device_id != session.device_id {
         let response = crate::auth::routes::revoke_devices(
             state,
             session,
@@ -149,7 +151,7 @@ async fn remove_entry(
         .await?;
     tx.commit().await?;
     Ok(Removal::Removed {
-        live_session: live.0,
+        revoke_device: whole_entry && !live.0,
     })
 }
 

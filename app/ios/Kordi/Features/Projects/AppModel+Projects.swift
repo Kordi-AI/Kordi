@@ -57,8 +57,14 @@ extension AppModel {
             return
         }
         let (api, token, accountID) = try projectContext()
-        for device in section.devices {
-            try await api.removeProject(token: token, deviceID: device.id, projectID: project.id)
+        do {
+            for device in section.devices {
+                try await api.removeProject(token: token, deviceID: device.id, projectID: project.id)
+            }
+        } catch {
+            // Earlier Macs may already be removed, so the list still refreshes.
+            if (try? projectContext().1) == token, account?.accountId == accountID { await refreshProjects() }
+            throw error
         }
         guard (try? projectContext().1) == token, account?.accountId == accountID else { return }
         await refreshProjects()

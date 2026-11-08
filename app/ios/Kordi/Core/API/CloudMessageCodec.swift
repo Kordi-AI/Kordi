@@ -565,7 +565,8 @@ enum AgentFailurePresentation {
         }
         if normalized == "reconnect your account to run your agent." { return "hosted_credentials_unavailable" }
         if normalized == "no provider configured yet." { return "missing_provider_auth" }
-        if normalized.hasPrefix("this model is") && normalized.contains("available") { return "model_unavailable" }
+        if normalized == "this model isn't available with your ai provider account. choose another model."
+            || normalized == "this model is not available for the selected account." { return "model_unavailable" }
         return nil
     }
 
