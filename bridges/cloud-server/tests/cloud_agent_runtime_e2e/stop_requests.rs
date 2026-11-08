@@ -145,7 +145,10 @@ async fn a_stop_reaches_the_desktop_holding_the_run() {
         ))
     };
     let before = read_json(renew().await.unwrap()).await;
-    assert_eq!(before, json!({"ok":true,"cancelRequested":false,"leaseSeconds":120}));
+    assert_eq!(
+        before,
+        json!({"ok":true,"cancelRequested":false,"leaseSeconds":120})
+    );
 
     // The requester stops it from their phone.
     let (status, body) = stop(
@@ -161,7 +164,10 @@ async fn a_stop_reaches_the_desktop_holding_the_run() {
 
     // The desktop's next renewal and admission carry the request.
     let after = read_json(renew().await.unwrap()).await;
-    assert_eq!(after, json!({"ok":true,"cancelRequested":true,"leaseSeconds":120}));
+    assert_eq!(
+        after,
+        json!({"ok":true,"cancelRequested":true,"leaseSeconds":120})
+    );
     let admitted = read_json(
         router
             .clone()

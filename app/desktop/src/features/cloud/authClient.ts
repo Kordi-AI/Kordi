@@ -246,8 +246,7 @@ export class CloudAuthClient {
   private async send<TResponse>(
     path: string,
     init: RequestInit,
-    fallbackMessage: string,
-    timeoutMs = this.requestTimeoutMs,
+    fallbackMessage: string, timeoutMs = this.requestTimeoutMs,
   ): Promise<TResponse> {
     let response: Response;
     const timeoutController = init.signal ? null : new AbortController();
@@ -578,8 +577,7 @@ export class CloudAuthClient {
     );
   }
 
-  /** `timeoutMs` overrides the default request timeout, such as for a lease renewal on a slow server. */
-  async desktopAgentExecution<T>(token: string, action: string, input: unknown, options: { timeoutMs?: number } = {}): Promise<T> {
+  async desktopAgentExecution<T>(token: string, action: string, input: unknown, options: { timeoutMs?: number /* e.g. a lease renewal on a slow server */ } = {}): Promise<T> {
     return this.send<T>(`/v1/cloud/agent-runs/desktop/${action}`, {
       method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
       body: JSON.stringify(input),
