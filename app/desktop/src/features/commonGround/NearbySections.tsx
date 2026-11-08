@@ -14,6 +14,7 @@ import type { CgProfile } from './types';
 import { personTitle } from './profiles';
 import { matchingCount, type CgNearbyStore } from './storeNearby';
 import type { CgNearbyEntry, CgNearbyResults, CgNearbySettings, CgNeed } from './typesNearby';
+import { useNearbyLocation } from './useNearby';
 
 const caret = <ChevronDown className="cg-nb-caret" aria-hidden="true" />;
 const same = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
@@ -109,11 +110,14 @@ export function NearbyPeople({ settings, results, nearby, unavailable, notice, o
 }) {
   const [refreshing, setRefreshing] = useState(false);
   const pendingRefresh = useRef(false);
+  const locating = useNearbyLocation(nearby).busy;
   const refresh = async () => {
     if (pendingRefresh.current) return;
     pendingRefresh.current = true;
     setRefreshing(true);
     nearby.set({ notice: null });
+    // A new fix too, at most once a minute; it refreshes again when it lands.
+    void nearby.locator.auto();
     try { await nearby.refresh(); } finally { pendingRefresh.current = false; setRefreshing(false); }
   };
   const rows = results?.people.filter((entry) => entry.status !== 'matching') ?? [];
@@ -157,6 +161,7 @@ export function NearbyPeople({ settings, results, nearby, unavailable, notice, o
               {unavailable === 'paused' ? <span className="cg-mrow-sub">Resume Nearby to see results.</span> : null}
             </span>
             {!unavailable && notice ? <button type="button" className="cg-link" disabled={refreshing} onClick={() => void refresh()}>Try again</button> : null}
+            {unavailable === 'location' ? <button type="button" className="cg-link" disabled={locating} onClick={() => void nearby.locator.locate()}>{locating ? 'Finding your location…' : 'Update location'}</button> : null}
           </div>
         </div>
       )}
