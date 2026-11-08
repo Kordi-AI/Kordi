@@ -1,6 +1,8 @@
 //! An owner can ask two agents to keep talking. Each continuation may send one
 //! more request carrying the earlier rounds, within the per-task limit.
 use super::*;
+use base64::Engine;
+use sqlx_core::query_as::query_as;
 const WAITING: &str = r#"{"agentExchangeOutcome":"waiting"}"#;
 
 impl Fixture {
@@ -80,6 +82,10 @@ async fn a_discussion_stops_at_the_task_limit() {
         let resume = f.answer(1, &format!("Answer {round}")).await;
         let resumed = data(&resume);
         assert_eq!(resumed["remainingRequests"], 7 - round);
+        assert!(resume["prompt"]
+            .as_str()
+            .unwrap()
+            .contains("always publish a short closing summary"));
         assert!(resumed["earlierRounds"].as_array().unwrap().len() <= 6);
         f.claim = f.claim(0, &resume).await;
         f.root = resume["runId"].as_str().unwrap().into();
@@ -96,4 +102,17 @@ async fn a_discussion_stops_at_the_task_limit() {
         .await
         .unwrap();
     assert_ne!(response.status(), StatusCode::OK);
+    // The final continuation closes the discussion with a visible summary.
+    let summary = "We agreed on a shared baseline.\nOpen: merge order.";
+    let run = f.root.clone();
+    f.finish(0, &run, f.claim, summary).await;
+    let (body,): (String,) = query_as("SELECT m.content #>> '{blocks,0,text}' FROM cloud_agent_fallback_runs r JOIN cloud_chat_messages m ON m.message_id::text=r.response_message_id WHERE r.run_id=$1")
+        .bind(&run).fetch_one(&f.pool).await.unwrap();
+    let wire: Value = serde_json::from_slice(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(body.split_once(':').unwrap().1)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(wire["message"]["text"], summary);
 }

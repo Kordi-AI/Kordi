@@ -40,7 +40,10 @@ An owner can ask agents to keep talking, discuss, or align. Each continuation
 may answer back with one new `reach_out` to the same agent and yield with
 `waiting` again; the next reply queues the next continuation. The discussion
 ends when its goal is reached, the other agent has nothing new, or the root's
-budget of eight exchanges is spent. The continuation prompt carries
+budget of eight exchanges is spent. The final continuation always publishes a
+short closing summary of two or three lines: what was agreed or found and
+anything left open. A continuation that asks again stays a quiet yield, and
+a single question still finishes silently. The continuation prompt carries
 `remainingRequests` and the earlier answered rounds of the task. A follow-up's
 recipient receives the earlier rounds with that same requester. Both are
 public messages of this conversation, sent as untrusted data and clipped to a
