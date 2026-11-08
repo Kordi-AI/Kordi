@@ -124,6 +124,18 @@ test('nearby locator: one request at a time and at most one automatic request a 
   assert.equal(counts().requests, 3);
 });
 
+test('nearby locator: an automatic denial stays quiet while another device has a fresh location', async () => {
+  const { locator, world, counts } = locatorWith({ phase: 'on', fail: () => nearbyNativeLocationError(new Error('location_denied')) });
+  locator.attach();
+  await locator.auto();
+  assert.deepEqual(locator.getSnapshot(), { busy: false, notice: null, settings: false, blocked: true });
+  world.now += NEARBY_LOCATE_EVERY_MS * 3;
+  await locator.auto(NEARBY_LOCATE_EVERY_MS);
+  assert.equal(counts().requests, 1, 'automatic requests still stop');
+  await locator.locate();
+  assert.equal(locator.getSnapshot().notice, 'Allow Kordi in Location Services, then try again.', 'a manual request still explains');
+});
+
 test('nearby locator: a denied permission stops automatic requests until a manual one succeeds', async () => {
   const { locator, world, posts, counts } = locatorWith({ fail: () => nearbyNativeLocationError(new Error('location_denied')) });
   locator.attach();

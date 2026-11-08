@@ -3,6 +3,7 @@
 // fix when the screen opens, when sharing turns on or resumes, on Refresh results, and every
 // 5 minutes after that, never more than once a minute and one request at a time. A denied
 // permission stops the automatic requests for the session; the manual action stays and retries.
+// Its notice shows only when no signed-in device has a fresh location.
 
 import { commonGroundErrorMessage, type CommonGroundClient } from './client';
 import type { CgNearbyPhase } from './nearbyFormat';
@@ -114,13 +115,17 @@ export class NearbyLocator {
         if (this.screens) await this.nearby.refresh();
       } catch (error) {
         const blocked = error instanceof NearbyLocationError && error.blocked;
-        // Automatic requests stay quiet unless they had to stop.
-        if (manual || blocked) {
+        // Automatic requests stay quiet unless they had to stop, and even then only while no other
+        // signed-in device has a fresh location: Nearby still works from that one.
+        const covered = this.nearby.phase(this.env.now()) === 'on';
+        if (manual || (blocked && !covered)) {
           this.set({
             notice: commonGroundErrorMessage(error),
             settings: error instanceof NearbyLocationError && error.settings,
             blocked: this.state.blocked || blocked,
           });
+        } else if (blocked) {
+          this.set({ blocked: true });
         }
       } finally {
         this.running = null;
