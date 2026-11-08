@@ -455,6 +455,26 @@ enum CloudAgentLifecycleProjector {
         }
     }
 
+    /// A reply replaces the agent's waiting rows and takes over the first
+    /// one's place in the timeline, so it stays under the request instead of
+    /// moving below messages sent while the agent worked. Keyed by message id;
+    /// a reply without an earlier row keeps its own sequence.
+    static func replySlotSequences(in messages: [CloudMessageDTO]) -> [String: Int64] {
+        let responses = messages.filter { !CloudMessageCodec.isAgentExecutionClaim($0.body) }
+        var slotByKey: [ResponseKey: Int64] = [:]
+        for message in responses {
+            guard let key = responseKey(for: message),
+                  let sequence = message.conversationSequence, sequence > 0 else { continue }
+            slotByKey[key] = min(slotByKey[key] ?? sequence, sequence)
+        }
+        var slotByMessageId: [String: Int64] = [:]
+        for message in responses {
+            guard let key = responseKey(for: message), let slot = slotByKey[key] else { continue }
+            slotByMessageId[message.messageId] = slot
+        }
+        return slotByMessageId
+    }
+
     static func activity(in messages: [CloudMessageDTO]) -> AgentActivity {
         let visible = visibleRows(messages)
         let latestRequest = visible

@@ -57,6 +57,7 @@ fn seed_identity_with_source(
     .expect("seed identity")
 }
 
+mod agent_reply_slot;
 mod desktop_sync;
 mod desktop_sync_blank_sessions;
 mod desktop_sync_failure;
