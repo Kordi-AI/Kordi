@@ -197,7 +197,7 @@ function StatusGlyph({ status }: { status: RelatedAgentSessionRunStatus }) {
   return <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
     <circle cx="7" cy="7" r="5.75" stroke="currentColor" strokeWidth="1.3" />
     {status === 'done' ? <path d="M4.6 7.2l1.6 1.6 3.2-3.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /> : null}
-    {status === 'stopped' ? <rect x="5" y="5" width="4" height="4" rx=".8" fill="currentColor" /> : null}
+    {status === 'stopped' ? <path d="M4.6 7h4.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /> : null}
     {status === 'failed' ? <><path d="M7 4.2v3.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /><circle cx="7" cy="9.7" r=".75" fill="currentColor" /></> : null}
   </svg>;
 }

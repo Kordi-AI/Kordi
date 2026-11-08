@@ -48,6 +48,9 @@ test('a single row has no fold chevron and keeps its status glyph on hover', () 
   assert.ok(menu);
   assert.doesNotMatch(menu, /(^|\s)hidden(\s|$)/);
   assert.doesNotMatch(one, /aria-label="Stop background agent session/);
+  // Stopped reads as a circle with a dash, not the circled square of a Stop button.
+  assert.match(one, /<path d="M4.6 7h4.8"/);
+  assert.doesNotMatch(one, /<rect/);
 });
 
 test('the chevron toggles the group and the choice is kept for that message', async () => {

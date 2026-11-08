@@ -26,6 +26,9 @@ test('the background session row keeps its place and controls at any transcript 
   await page.goto('/tests/visual/backgroundSessionRowWidths.html');
   await expect(page.locator('[data-related-agent-session-id]')).toHaveCount(4);
   await expect(page.locator('[data-related-agent-session-status="stopped"]')).toHaveCount(4);
+  // Stopped is a circle with a dash, so it never looks like a Stop button.
+  await expect(page.locator('[data-related-agent-session-status="stopped"] svg path[d="M4.6 7h4.8"]')).toHaveCount(4);
+  await expect(page.locator('[data-related-agent-session-status="stopped"] svg rect')).toHaveCount(0);
 
   const reference = await rowGeometry(page, 'wide', 'first-reply');
   // The title sits just right of the elbow, under the reply text.
