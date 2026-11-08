@@ -18,26 +18,34 @@ export const isTransientCloudFailure = (error: unknown) => error instanceof Clou
   && (error.status === 0 || error.status === 408 || error.status === 429 || error.status >= 500);
 const transientFailure = isTransientCloudFailure;
 const ADMIT_RETRY_MS = 1_000;
-// Two attempts fit within the watchdog, which counts from the first one.
-const CLAIM_ATTEMPTS = 2;
+// Mac first: while the owner's Mac is online the server holds the run for it
+// (about 35 s), so a slow claim keeps retrying through that hold. The window
+// stays inside the watchdog, which counts from the first attempt, and leaves
+// time for the first renewal.
+const CLAIM_RETRY_WINDOW_MS = 30_000;
+const CLAIM_RETRY_MAX_DELAY_MS = 5_000;
 
 /** `bindsProject`: this caller runs a project session in this Mac's folder of the project. */
-export async function acquireDesktopExecutionLease(client: Pick<CloudAuthClient, 'desktopAgentExecution'>, token: string, input: CloudAgentRunClaimInput, options: { bindsProject?: boolean; claimRetryMs?: number } = {}) {
+export async function acquireDesktopExecutionLease(client: Pick<CloudAuthClient, 'desktopAgentExecution'>, token: string, input: CloudAgentRunClaimInput, options: { bindsProject?: boolean; claimRetryMs?: number; claimRetryWindowMs?: number } = {}) {
   const claimId = crypto.randomUUID();
   const started = Date.now();
   type ClaimResult = {runId: string; acquired: boolean; contextSessionId?: string; turnIdentity?: Record<string, unknown>; connectorTools?: unknown[]; connectorAudience?: string; project?: unknown};
   const claimBody = { ...input, claimId, ...(options.bindsProject ? { bindsProject: true } : {}) };
   // A claim that timed out may still have reached the server. Resending it
   // with the same claim id is safe: the server answers with the lease it holds.
+  // Only a refusal or the end of the window stops it; then the cloud answers.
   let result: ClaimResult;
-  for (let attempt = 1; ; attempt += 1) {
+  const retryWindowMs = options.claimRetryWindowMs ?? CLAIM_RETRY_WINDOW_MS;
+  let retryDelayMs = options.claimRetryMs ?? ADMIT_RETRY_MS;
+  for (;;) {
     try {
       result = await client.desktopAgentExecution<ClaimResult>(token, 'claim', claimBody);
       break;
     } catch (error) {
-      if (!transientFailure(error) || attempt >= CLAIM_ATTEMPTS) throw error;
+      if (!transientFailure(error) || Date.now() + retryDelayMs - started >= retryWindowMs) throw error;
     }
-    await new Promise((resolve) => setTimeout(resolve, options.claimRetryMs ?? ADMIT_RETRY_MS));
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    retryDelayMs = Math.min(retryDelayMs * 2, CLAIM_RETRY_MAX_DELAY_MS);
   }
   if (!result.acquired) return null;
   if (!result.turnIdentity || result.turnIdentity.ownerAccountId !== input.ownerAccountId

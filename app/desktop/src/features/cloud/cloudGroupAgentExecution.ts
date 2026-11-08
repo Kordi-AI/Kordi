@@ -157,8 +157,9 @@ export async function respondToCloudGroupAgentMention(
       runtimeRoute: requestedRoute ? { defaultModel: requestedRoute.model, defaultAuthProvider: requestedRoute.authProvider, defaultAuthChoice: requestedRoute.authChoice, thinking: requestedRoute.thinking } : undefined,
     });
   } catch (error) {
-    // A slow server is no failure of the agent: the cloud answers a request
-    // this Mac did not claim, and takes over a claim it never renews.
+    // The claim was retried through the Mac-first hold. A server still too
+    // slow is no failure of the agent: the cloud answers a request this Mac
+    // did not claim, and takes over a claim it never renews.
     if (!isTransientCloudFailure(error)) throw error;
     runtime.reportFailure('local-response', error);
     void runtime.syncDiff();

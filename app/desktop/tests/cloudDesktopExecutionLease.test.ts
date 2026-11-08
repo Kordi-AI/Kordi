@@ -147,7 +147,7 @@ test('a timed-out claim is sent again with the same claim id', async () => {
   } finally { lease.dispose(); }
 });
 
-test('a refused claim is not sent again and a slow server gives up after two tries', async () => {
+test('a refused claim is not sent again and a slow server is retried through the Mac-first window', async () => {
   const input = { requestMessageId: 'request', sessionId: 'session', ownerAccountId: 'owner', requesterAccountId: 'owner', prompt: 'hello', idempotencyKey: 'request' };
   let refusedCalls = 0;
   const refused = { desktopAgentExecution: async () => { refusedCalls += 1; throw new CloudAuthError('desktop_execution_denied', 'Denied', 403); } } as unknown as Pick<CloudAuthClient, 'desktopAgentExecution'>;
@@ -155,6 +155,9 @@ test('a refused claim is not sent again and a slow server gives up after two tri
   assert.equal(refusedCalls, 1);
   let slowCalls = 0;
   const slow = { desktopAgentExecution: async () => { slowCalls += 1; throw new CloudAuthError('network_error', 'Cloud request timed out. Check your connection and try again.', 0); } } as unknown as Pick<CloudAuthClient, 'desktopAgentExecution'>;
-  await assert.rejects(acquireDesktopExecutionLease(slow, 'fixture-token', input, { claimRetryMs: 0 }), /timed out/);
-  assert.equal(slowCalls, 2);
+  const started = Date.now();
+  await assert.rejects(acquireDesktopExecutionLease(slow, 'fixture-token', input, { claimRetryMs: 1, claimRetryWindowMs: 60 }), /timed out/);
+  // Several attempts, and it stops at the end of the window.
+  assert.ok(slowCalls >= 3, `expected several claims, got ${slowCalls}`);
+  assert.ok(Date.now() - started < 1_000);
 });
