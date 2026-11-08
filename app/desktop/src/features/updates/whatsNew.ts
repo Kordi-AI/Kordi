@@ -40,6 +40,32 @@ export type WhatsNewRuntime = {
 };
 
 const CURATED_RELEASE_HIGHLIGHTS: Readonly<Record<string, readonly WhatsNewHighlight[]>> = {
+  '0.0.2-beta.8': [
+    {
+      category: 'Agents',
+      title: 'Agents reply reliably',
+      detail: 'Replies and long turns keep going when the server is slow.',
+      kind: 'general',
+    },
+    {
+      category: 'Agents',
+      title: 'Background sessions finish their work',
+      detail: 'A slow connection no longer stops a session on your Mac.',
+      kind: 'general',
+    },
+    {
+      category: 'Grounding',
+      title: 'Cards that read your links',
+      detail: 'Builds read pages like Google Scholar and say why they failed.',
+      kind: 'collaboration',
+    },
+    {
+      category: 'Grounding',
+      title: 'References and Interests',
+      detail: 'Topics show their references, and contacts see your Interests.',
+      kind: 'collaboration',
+    },
+  ],
   '0.0.2-beta.7': [
     {
       category: 'Web',

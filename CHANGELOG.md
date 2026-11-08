@@ -4,6 +4,42 @@ This file records notable user-facing changes to Kordi for macOS and iOS.
 
 ## [Unreleased]
 
+## [0.0.2-beta.8] - 2026-11-08
+
+### Added
+
+- Added reference chips in Grounding topics, contact profile Interests, and the
+  default-profile card for accepted contacts who have card access ([#2402]).
+- Added Grounding card builds that read the links you give, including Google
+  Scholar profiles, and show why a build failed with a retry ([#2396],
+  [#2402]).
+- Added automatic location for Nearby on Mac while the app is open, with a
+  quiet refusal when another device has a fresh location ([#2402]).
+
+### Changed
+
+- Agent replies in groups and chats now run on the owner's Mac whenever it is
+  online, and fall back to the cloud only when it is not ([#2386]).
+- A finished agent reply that was stopped or interrupted keeps its text and
+  shows how long it worked ([#2398]).
+- Clicking a list row, message, or panel no longer draws a gray focus frame
+  ([#2394]).
+
+### Fixed
+
+- Fixed agent replies that never arrived or showed "couldn't reply" when the
+  server was slow, in groups and in chats ([#2386], [#2390]).
+- Fixed long agent turns on Mac ending as "Interrupted" when the server was
+  slow to renew them ([#2398]).
+- Fixed background sessions on Mac stopping without a result when the cloud
+  was slow ([#2406]).
+- Fixed slow chat loading caused by unread checks on large conversations
+  ([#2388]).
+- Fixed the message fork chip wrapping in narrow panels ([#2391]), duplicate
+  projects, and missing Personal agent rows ([#2386]).
+- Fixed agent memory files showing their file header in Grounding ([#2402]).
+- Fixed the tour highlight sitting off-center on sidebar icons.
+
 ## [0.0.2-beta.7] - 2026-11-06
 
 ### Added
@@ -859,7 +895,8 @@ which were built but never released.
 This release is the comparison baseline for beta.8. See the
 [beta.7 release notes] for its packaged artifacts and release details.
 
-[Unreleased]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta7...HEAD
+[Unreleased]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta8...HEAD
+[0.0.2-beta.8]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta7...V0.0.2.beta8
 [0.0.2-beta.7]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta6...V0.0.2.beta7
 [0.0.2-beta.6]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta5.2...V0.0.2.beta6
 [0.0.2-beta.5.2]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta3...V0.0.2.beta5.2
@@ -1261,3 +1298,12 @@ This release is the comparison baseline for beta.8. See the
 [#2371]: https://github.com/Kordi-AI/Kordi/pull/2371
 [#2374]: https://github.com/Kordi-AI/Kordi/pull/2374
 [#2380]: https://github.com/Kordi-AI/Kordi/pull/2380
+[#2386]: https://github.com/Kordi-AI/Kordi/pull/2386
+[#2388]: https://github.com/Kordi-AI/Kordi/pull/2388
+[#2390]: https://github.com/Kordi-AI/Kordi/pull/2390
+[#2391]: https://github.com/Kordi-AI/Kordi/pull/2391
+[#2394]: https://github.com/Kordi-AI/Kordi/pull/2394
+[#2396]: https://github.com/Kordi-AI/Kordi/pull/2396
+[#2398]: https://github.com/Kordi-AI/Kordi/pull/2398
+[#2402]: https://github.com/Kordi-AI/Kordi/pull/2402
+[#2406]: https://github.com/Kordi-AI/Kordi/pull/2406
