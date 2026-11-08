@@ -11,8 +11,9 @@ type CommonGround = NonNullable<CloudContactProfile['commonGround']>;
 type Variant = 'pane' | 'compact';
 type Chip = { key: string; label: string; title: string };
 
-const OWN_ROWS: { key: 'workingOn' | 'canHelp' | 'lookingFor'; label: string }[] = [
+const OWN_ROWS: { key: 'workingOn' | 'interests' | 'canHelp' | 'lookingFor'; label: string }[] = [
   { key: 'workingOn', label: 'Working on' },
+  { key: 'interests', label: 'Interests' },
   { key: 'canHelp', label: 'Can help' },
   { key: 'lookingFor', label: 'Looking for' },
 ];
@@ -109,6 +110,7 @@ function TheirCard({ card }: { card: CommonGround }) {
  */
 export function CommonGroundCard({ card, variant = 'pane' }: { card: CommonGround; variant?: Variant }) {
   const hasOwn = OWN_ROWS.some((row) => card[row.key].length > 0);
+  if (!card.match && !hasOwn) return null;
   const body = (
     <div
       className={cn(
