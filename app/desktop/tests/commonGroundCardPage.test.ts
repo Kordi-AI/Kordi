@@ -52,6 +52,36 @@ test('card page: evidence cited again shows the same chip, with no "Same referen
   assert.equal(html.split(`<span>${diary}</span>`).length - 1, 3);
 });
 
+const scholar = 'https://scholar.google.com/citations?user=abc';
+const linksCard = withProfile({ workingOn: ['AI agent evaluation', 'Multi-agent collaboration'] }, {
+  topics: {
+    'AI agent evaluation': { refs: ['e1', 'e2'], firstSeen: '2026-11-01', lastSeen: '2026-11-01' },
+    'Multi-agent collaboration': { refs: ['e1', 'e2', 'e3'], firstSeen: '2026-11-01', lastSeen: '2026-11-01' },
+  },
+  evidence: {
+    e1: { source: 'Link', title: 'Jane Doe - Google Scholar', date: '2026-11-01', url: scholar, snippet: 'Jane Doe · Research interests: multi-agent systems' },
+    // The same page given twice is one source.
+    e2: { source: 'Link', title: 'Jane Doe - Google Scholar', date: '2026-11-01', url: `${scholar}/`, snippet: 'Jane Doe · Research interests: multi-agent systems' },
+    e3: { source: 'Link', title: 'Lab page', date: '2026-11-01', url: 'https://lab.example.test/', snippet: 'Our lab studies how teams of agents cooperate.' },
+  },
+});
+
+test('card page: a link cited again shows the same chip under each topic, each source once per topic', () => {
+  const html = render(linksCard);
+  assert.doesNotMatch(html, /Same (note|reference) as/);
+  // e1 and e2 are the same page, so each topic shows one Scholar chip.
+  assert.equal(html.split('title="Jane Doe - Google Scholar"').length - 1, 2);
+  assert.equal(html.split('title="Lab page"').length - 1, 1);
+});
+
+test('card page: a link the build could not read says so under Sources', () => {
+  const store = new CommonGroundStore(mockServer({}).client, { profiles: true });
+  const unreadLinks = [{ url: scholar, reason: 'blocked' }];
+  store.set({ profiles: [work], profileId: 'cgp_work', owner: owner({ card: linksCard, build: { status: 'idle', errorCode: null, unreadLinks } }) });
+  const html = renderToStaticMarkup(createElement(CardScreen, { state: store.getSnapshot(), store }));
+  assert.match(html, /<ul class="cg-unread-links"><li title="https:\/\/scholar\.google\.com\/citations\?user=abc">Couldn&#x27;t read scholar\.google\.com<\/li><\/ul>/);
+});
+
 const timelineCard = withProfile({ workingOn: ['Agent memory', 'Eval design'], interests: ['Speech'] }, {
   latest: ['Agent memory', 'Eval design'],
   earlier: ['Speech', 'Robotics'],

@@ -14,6 +14,8 @@ import type {
 } from './types';
 
 const REQUEST_TIMEOUT_MS = 15_000;
+/** Starting a build reads the linked pages first, so it may take longer than other calls. */
+export const BUILD_REQUEST_TIMEOUT_MS = 60_000;
 
 export class CommonGroundError extends Error {
   readonly status: number;
@@ -44,6 +46,15 @@ export function isRouteMissing(error: unknown): boolean {
   return error instanceof CommonGroundError && error.routeMissing;
 }
 
+/**
+ * A failure that says nothing about whether the server did the work: no answer (timeout or
+ * network), or a server error other than Grounding being unavailable.
+ */
+export function isTransientFailure(error: unknown): boolean {
+  if (!(error instanceof CommonGroundError)) return false;
+  return error.status === 0 || error.status === 408 || (error.status >= 500 && error.code !== 'common_ground_unavailable');
+}
+
 /** One line for a failed request; rate limits name the wait in minutes. */
 export function commonGroundErrorMessage(error: unknown): string {
   if (error instanceof CommonGroundError && error.status === 429) {
@@ -66,6 +77,7 @@ export type CommonGroundClientOptions = {
   fetchImpl?: () => typeof fetch;
   token?: () => Promise<string>;
   timeoutMs?: number;
+  buildTimeoutMs?: number;
 };
 
 export type CgResponse<T> = { status: number; body: T };
@@ -144,11 +156,12 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
   const fetchImpl = options.fetchImpl ?? (() => cloudFetchImpl());
   const token = options.token ?? sessionToken;
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  const buildTimeoutMs = options.buildTimeoutMs ?? BUILD_REQUEST_TIMEOUT_MS;
 
-  async function send<T>(method: string, path: string, body?: unknown): Promise<CgResponse<T>> {
+  async function send<T>(method: string, path: string, body?: unknown, timeout = timeoutMs): Promise<CgResponse<T>> {
     const bearer = await token();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeout);
     let response: Response;
     try {
       response = await fetchImpl()(`${baseUrl()}/v1/cloud/${path}`, {
@@ -175,7 +188,7 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
     }
     return { status: response.status, body: parsed as T };
   }
-  const data = async <T>(method: string, path: string, body?: unknown) => (await send<T>(method, path, body)).body;
+  const data = async <T>(method: string, path: string, body?: unknown, timeout?: number) => (await send<T>(method, path, body, timeout)).body;
   const cg = (path: string) => `common-ground/${path}`;
 
   return {
@@ -206,7 +219,9 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
       workingOn: topics.workingOn, interests: topics.interests, canHelp: topics.canHelp, lookingFor: topics.lookingFor,
     }),
     deleteCard: (profileId?: string | null) => data<CgOwnerView>('DELETE', cg(`card${profileQuery(profileId)}`)),
-    build: (request: CgBuildRequest, profileId?: string | null) => data<CgOwnerView>('POST', cg('card/build'), withProfileId(request, profileId)),
+    build: (request: CgBuildRequest, profileId?: string | null) => data<CgOwnerView>(
+      'POST', cg('card/build'), withProfileId(request, profileId), buildTimeoutMs,
+    ),
     setHidden: (hidden: string[], profileId?: string | null) => data<CgOwnerView>('PUT', cg('card/hidden'), withProfileId({ hidden }, profileId)),
     setSharing: (sharing: boolean, profileId?: string | null) => data<CgOwnerView>('PUT', cg('settings'), withProfileId({ sharing }, profileId)),
     rooms: async () => {

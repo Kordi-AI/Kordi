@@ -122,10 +122,14 @@ export type CgOwnCard = CgTopicLists & {
 
 export type CgBuildStatus = 'idle' | 'building' | 'failed';
 
+/** A link the last build could not read: `blocked`, `sign_in`, `not_found`, `unreachable` or `unreadable`. */
+export type CgUnreadLink = { url: string; reason: string };
+
 export type CgOwnerView = {
   card: CgOwnCard | null;
   sharing: boolean;
-  build: { status: CgBuildStatus; errorCode: string | null };
+  /** `unreadLinks` comes from newer servers. */
+  build: { status: CgBuildStatus; errorCode: string | null; unreadLinks?: CgUnreadLink[] };
   used?: string[];
   /** The profile this card belongs to; absent before profiles. */
   profile?: (CgProfileTag & { focus: string | null }) | null;

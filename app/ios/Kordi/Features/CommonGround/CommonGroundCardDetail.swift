@@ -157,6 +157,18 @@ struct CommonGroundCardDetail: View {
                 }
                 .padding(.horizontal, 16)
             }
+            if let unread = model.owner?.build.unreadLinks, !unread.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(unread, id: \.url) { link in
+                        Text(link.line)
+                    }
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(palette.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+            }
             actions(palette)
         }
         .padding(.bottom, 14)

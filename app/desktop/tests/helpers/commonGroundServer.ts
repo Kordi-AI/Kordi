@@ -12,7 +12,7 @@ export const SERVER_DESIGNS = [
 export type Call = { url: string; method: string; body: unknown; auth: string | null };
 export type Reply = { status: number; body?: unknown; headers?: Record<string, string> };
 
-/** A fetch that records calls and answers from a route table, in order per route. */
+/** A fetch that records calls and answers from a route table, in order per route; status 0 answers nothing. */
 export function mockServer(routes: Record<string, Reply | Reply[]>) {
   const calls: Call[] = [];
   const queues = new Map(Object.entries(routes).map(([key, value]) => [key, Array.isArray(value) ? [...value] : [value]]));
@@ -25,6 +25,8 @@ export function mockServer(routes: Record<string, Reply | Reply[]>) {
     const queue = queues.get(key);
     const reply = queue && (queue.length > 1 ? queue.shift()! : queue[0]);
     if (!reply) return new Response('', { status: 404 });
+    // Status 0 is no answer at all: a timeout or a dropped connection.
+    if (reply.status === 0) throw new TypeError('Failed to fetch');
     return new Response(reply.body === undefined ? null : JSON.stringify(reply.body), { status: reply.status, headers: reply.headers });
   }) as typeof fetch;
   const client = createCommonGroundClient({ baseUrl: () => 'https://cloud.test', fetchImpl: () => fetchImpl, token: async () => 'tok' });

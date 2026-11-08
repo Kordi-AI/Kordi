@@ -11,7 +11,7 @@ import { cardSources, cardTimeline, cardTopics, sourceLook } from './cardReferen
 import { CardNow, CardTimeline } from './CardTimeline';
 import { CardLookButton, CardLookPopover } from './CardLookPopover';
 import { useLookPopover } from './cardLook';
-import { CgButton, CgNotice } from './parts';
+import { CgButton, CgNotice, CgUnreadLinks } from './parts';
 import { CardGlyph } from './ProfileCard';
 import { DeleteProfileDialog } from './ProfileDialogs';
 import { PROFILE_FOCUS_MAX, PROFILE_NAME_MAX, renameError, renamePatch } from './profiles';
@@ -205,6 +205,7 @@ export function CardScreen({ state, store, memoryRouting = false, memoryCards = 
           </div>
         </>
       ) : null}
+      <CgUnreadLinks links={state.owner.build.unreadLinks ?? []} />
       <div data-help-target="grounding-sharing" className="cg-panel cg-cardpage-share">
         <div className="cg-mrow">
           <span className="cg-mrow-text"><span className="cg-mrow-title">Share my card</span></span>

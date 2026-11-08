@@ -31,6 +31,7 @@ final class CommonGroundTests: XCTestCase {
     """#
 
     static let buildingJSON = #"{"card":null,"sharing":true,"build":{"status":"building","errorCode":null}}"#
+    static let idleJSON = #"{"card":null,"sharing":true,"build":{"status":"idle","errorCode":null}}"#
 
     static let resultsJSON = #"""
     {
@@ -360,6 +361,53 @@ final class CommonGroundTests: XCTestCase {
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(post.body)) as? [String: Any])
         XCTAssertEqual(body["connectors"] as? Bool, true)
         XCTAssertEqual((body["device"] as? [[String: Any]])?.first?["source"] as? String, "iPhone Calendar")
+    }
+
+    func testABuildStartThatFailedFollowsTheBuildTheServerStarted() async throws {
+        let model = stubbedModel()
+        // A gateway error after the server saved the build: the card shows it running.
+        CommonGroundURLProtocol.stub("POST", "/v1/cloud/common-ground/card/build", [(502, "")])
+        CommonGroundURLProtocol.stub("GET", "/v1/cloud/common-ground/card", [(200, Self.idleJSON), (200, Self.buildingJSON)])
+
+        await model.build(CommonGroundBuildRequest(memory: false, connectors: false, device: [], links: "", notes: "Agents"), checkEvery: .milliseconds(1))
+        XCTAssertTrue(model.isBuilding)
+        XCTAssertNil(model.notice)
+        XCTAssertNil(model.busy)
+    }
+
+    func testABuildStartWithNoBuildOnTheCardSaysItDidNotStart() async throws {
+        let model = stubbedModel()
+        CommonGroundURLProtocol.stub("POST", "/v1/cloud/common-ground/card/build", [(504, "")])
+        CommonGroundURLProtocol.stub("GET", "/v1/cloud/common-ground/card", [(200, Self.idleJSON)])
+
+        await model.build(CommonGroundBuildRequest(memory: false, connectors: false, device: [], links: "", notes: "Agents"), checkEvery: .milliseconds(1))
+        XCTAssertFalse(model.isBuilding)
+        XCTAssertEqual(model.notice, CommonGroundModel.buildNotStarted)
+        XCTAssertEqual(CommonGroundURLProtocol.paths.filter { $0 == "GET /v1/cloud/common-ground/card" }.count, CommonGroundModel.buildStartChecks)
+    }
+
+    func testARunThatEndedWithoutACardSaysWhyAndNamesUnreadLinks() throws {
+        let json = #"{"card":null,"sharing":true,"build":{"status":"failed","errorCode":"build_timed_out","unreadLinks":[{"url":"https://scholar.google.com/citations?user=abc","reason":"blocked"}]}}"#
+        let view = try decode(CommonGroundOwnerView.self, json)
+        XCTAssertEqual(view.build.unreadLinks?.map(\.line), ["Couldn't read scholar.google.com"])
+        let model = stubbedModel()
+        model.apply(view)
+        XCTAssertEqual(model.buildFailureMessage, "Building took too long. Try again.")
+        // Older servers send no list.
+        XCTAssertNil(try decode(CommonGroundOwnerView.self, Self.buildingJSON).build.unreadLinks)
+    }
+
+    func testTheSameLinkCitedTwiceIsOneReference() throws {
+        let json = #"""
+        {"latest":[],"earlier":[],"timeline":[],
+         "topics":{"Agents":{"refs":["e1","e2","e3"]}},
+         "evidence":{
+           "e1":{"source":"Link","title":"Scholar","date":null,"url":"https://scholar.google.com/citations?user=abc","snippet":"x"},
+           "e2":{"source":"Link","title":"Scholar","date":null,"url":"https://scholar.google.com/citations?user=abc/","snippet":"x"},
+           "e3":{"source":"Notes","title":"Your notes","date":null,"url":null,"snippet":"Agents"}}}
+        """#
+        let profile = try decode(CommonGroundProfile.self, json)
+        XCTAssertEqual(profile.evidence(for: "Agents").map(\.id), ["e1", "e3"])
     }
 
     func testCanBuildOnlyWhenSomethingIsSent() {
