@@ -35,32 +35,20 @@ export function cardTopics(card: CgOwnCard): string[] {
   return CG_TOPIC_SECTIONS.flatMap(([key]) => card[key]);
 }
 
-/** For each cited item, the first topic on the page that cites it; later topics link back to it. */
-export function firstCiters(card: CgOwnCard): Map<string, string> {
-  const owners = new Map<string, string>();
-  for (const topic of cardTopics(card)) {
-    for (const { id } of topicRefs(card, topic)) if (!owners.has(id)) owners.set(id, topic);
-  }
-  return owners;
-}
-
 /** Notes are the default source; their rows carry no glyph and no title. */
 export function isNotesSource(source: string): boolean {
   return /^\s*(your\s+)?notes?\s*$/i.test(source);
 }
 
-/** The small line under a quote: the title when it says something, the source, the day. */
+/** A reference's detail lines: the title when it says something, then the source and the day. */
 export function refMeta(item: CgEvidence): { title: string; rest: string } {
   const title = item.title.trim();
   const showTitle = Boolean(title) && Boolean(item.snippet.trim()) && (Boolean(item.url) || !isNotesSource(item.source));
   return { title: showTitle ? title : '', rest: [item.source, shortDay(item.date)].filter(Boolean).join(' · ') };
 }
 
-/** Snippets longer than this get "Show more" under their two lines. */
-export const QUOTE_FOLD_CHARS = 140;
-
 /** A DOM id for a topic or a reference on the card page. */
-export function cardAnchor(kind: 'topic' | 'ref', key: string): string {
+export function cardAnchor(kind: 'topic', key: string): string {
   let hash = 5381;
   for (const char of key) hash = ((hash * 33) ^ char.charCodeAt(0)) >>> 0;
   return `cg-${kind}-${hash.toString(36)}`;

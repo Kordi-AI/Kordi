@@ -82,19 +82,21 @@ export function CardMemories({ memories, profiles, profileId, cardsEnabled = fal
                   {memory.everyProfile ? <span>· Every card</span> : null}
                 </span>
               </span>
-              {choices.length ? (
-                <button type="button" className="cg-line-act" data-cg-add-card="" aria-haspopup="menu" aria-expanded={open} onClick={() => setMenu(open ? null : memory.memoryId)}>
-                  <Plus className="h-[13px] w-[13px]" aria-hidden="true" />Add to card…
+              <span className="cg-mem-acts">
+                {choices.length ? (
+                  <button type="button" className="cg-line-act" data-cg-add-card="" aria-haspopup="menu" aria-expanded={open} onClick={() => setMenu(open ? null : memory.memoryId)}>
+                    <Plus className="h-[13px] w-[13px]" aria-hidden="true" />Add to card…
+                  </button>
+                ) : null}
+                {cardsEnabled ? (
+                  <button type="button" className="cg-line-act" data-cg-remove-card="" onClick={() => onRemoveFromCard(memory.memoryId)}>
+                    <Minus className="h-[13px] w-[13px]" aria-hidden="true" />Remove from card
+                  </button>
+                ) : null}
+                <button type="button" className="cg-line-act" data-cg-delete-memory="" onClick={() => setDeleting(memory)}>
+                  <Trash2 className="h-[13px] w-[13px]" aria-hidden="true" />Delete
                 </button>
-              ) : null}
-              {cardsEnabled ? (
-                <button type="button" className="cg-line-act" data-cg-remove-card="" onClick={() => onRemoveFromCard(memory.memoryId)}>
-                  <Minus className="h-[13px] w-[13px]" aria-hidden="true" />Remove from card
-                </button>
-              ) : null}
-              <button type="button" className="cg-line-act" data-cg-delete-memory="" onClick={() => setDeleting(memory)}>
-                <Trash2 className="h-[13px] w-[13px]" aria-hidden="true" />Delete
-              </button>
+              </span>
               {open ? (
                 <CardChecklist
                   choices={choices}

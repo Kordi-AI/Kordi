@@ -263,8 +263,9 @@ struct CommonGroundCardDetail: View {
 
     static func symbol(forSource source: String) -> String {
         let text = source.lowercased()
-        if text.contains("memory") { return "brain" }
+        if text.contains("memory") || text.contains("agent") { return "brain" }
         if text.contains("mail") { return "envelope" }
+        if text.contains("scholar") { return "doc.text" }
         if text.contains("calendar") { return "calendar" }
         if text.contains("paper") || text.contains("pdf") { return "doc.text" }
         if text.contains("health") { return "heart" }

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { cardAnchor, cardTimeline, firstCiters } from '../src/features/commonGround/cardReferences';
+import { cardAnchor, cardTimeline } from '../src/features/commonGround/cardReferences';
 import { CardScreen } from '../src/features/commonGround/CardScreen';
 import { CommonGroundStore } from '../src/features/commonGround/store';
 import type { CgOwnCard } from '../src/features/commonGround/types';
@@ -34,31 +34,22 @@ const refsCard = withProfile({ workingOn: ['Agent memory', 'Diary study'], inter
   },
 });
 
-test('card page: a note shows its own words with no icon tile and no generic title', () => {
+const chip = (label: string) => new RegExp(`<button type="button" class="cg-ref-chip" title="${label}" aria-expanded="false"><svg[^>]*cg-ref-glyph[^>]*>.*?</svg><span>${label}</span></button>`);
+
+test('card page: references are chips; a note uses its own words, not a generic title', () => {
   const html = render(refsCard);
-  assert.doesNotMatch(html, /cg-ref-icon/);
   assert.doesNotMatch(html, /Your notes/);
-  assert.match(html, new RegExp(`<q class="cg-ref-quote is-folded">${diary}</q>`));
-  assert.match(html, /<button type="button" class="cg-ref-more" aria-expanded="false">Show more<\/button>/);
-  // Notes carry no glyph; the line is just the source and the day.
-  assert.match(html, /<span class="cg-ref-meta"><span>Notes · 12 Oct<\/span><\/span>/);
+  assert.match(html, chip(diary));
+  assert.match(html, chip('memory-bench #7'));
+  // Nothing is open until a chip is clicked, and no raw quote sits on the page.
+  assert.doesNotMatch(html, /cg-ref-detail/);
+  assert.doesNotMatch(html, /Adds an episodic store/);
 });
 
-test('card page: other sources get a 12px glyph, and a URL makes the title a link', () => {
+test('card page: evidence cited again shows the same chip, with no "Same reference as" rows', () => {
   const html = render(refsCard);
-  assert.match(html, /<q class="cg-ref-quote">Adds an episodic store\.<\/q>/);
-  assert.match(html, /<span class="cg-ref-meta"><svg[^>]*class="lucide[^"]*cg-ref-glyph"/);
-  assert.match(html, /<a class="cg-ref-link" href="https:\/\/github\.com\/example\/memory-bench\/pull\/7"[^>]*target="_blank"[^>]*>memory-bench #7/);
-  assert.match(html, /GitHub · 3 Oct/);
-});
-
-test('card page: evidence cited again collapses to a link back to the first topic', () => {
-  const html = render(refsCard);
-  assert.equal(html.split(diary).length - 1, 1);
-  assert.equal(html.split(`id="${cardAnchor('ref', 'e1')}"`).length - 1, 1);
-  assert.match(html, /<button type="button" class="cg-ref-same">Same note as Agent memory<\/button>/);
-  assert.equal(html.split('Same note as Agent memory').length - 1, 2);
-  assert.deepEqual([...firstCiters(refsCard).entries()], [['e1', 'Agent memory'], ['e2', 'Agent memory']]);
+  assert.doesNotMatch(html, /Same (note|reference) as/);
+  assert.equal(html.split(`<span>${diary}</span>`).length - 1, 3);
 });
 
 const timelineCard = withProfile({ workingOn: ['Agent memory', 'Eval design'], interests: ['Speech'] }, {

@@ -7,7 +7,7 @@ import { SettingsSwitch } from '@/kordi-app/components/settingsLayout';
 import { profileDesign } from './cardDesign';
 import { AddTopic, CardLine } from './CardLines';
 import { CardMemories } from './CardMemories';
-import { cardSources, cardTimeline, cardTopics, firstCiters, sourceLook } from './cardReferences';
+import { cardSources, cardTimeline, cardTopics, sourceLook } from './cardReferences';
 import { CardNow, CardTimeline } from './CardTimeline';
 import { CardLookButton, CardLookPopover } from './CardLookPopover';
 import { useLookPopover } from './cardLook';
@@ -97,7 +97,6 @@ export function CardScreen({ state, store, memoryRouting = false, memoryCards = 
   const meta = [`${lineCount} ${lineCount === 1 ? 'line' : 'lines'}`, card.builtAt ? `built ${shortDay(card.builtAt)}` : ''].filter(Boolean).join(' · ');
   const fresh = memoryRouting ? newMemoriesLine(state.owner.memoriesSinceBuild) : null;
   const sources = cardSources(card);
-  const owners = firstCiters(card);
   const onCard = new Set(cardTopics(card));
   const timeline = cardTimeline(card);
   return (
@@ -160,7 +159,6 @@ export function CardScreen({ state, store, memoryRouting = false, memoryCards = 
                 key={topic}
                 card={card}
                 topic={topic}
-                owners={owners}
                 onHide={() => void store.toggleHidden(topic)}
                 onRemove={() => update(key, card[key].filter((item) => item !== topic))}
               />
