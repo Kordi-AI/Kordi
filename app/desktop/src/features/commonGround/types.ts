@@ -122,10 +122,14 @@ export type CgOwnCard = CgTopicLists & {
 
 export type CgBuildStatus = 'idle' | 'building' | 'failed';
 
+/** A link the last build could not read: `blocked`, `sign_in`, `not_found`, `unreachable` or `unreadable`. */
+export type CgUnreadLink = { url: string; reason: string };
+
 export type CgOwnerView = {
   card: CgOwnCard | null;
   sharing: boolean;
-  build: { status: CgBuildStatus; errorCode: string | null };
+  /** `unreadLinks` comes from newer servers. */
+  build: { status: CgBuildStatus; errorCode: string | null; unreadLinks?: CgUnreadLink[] };
   used?: string[];
   /** The profile this card belongs to; absent before profiles. */
   profile?: (CgProfileTag & { focus: string | null }) | null;
@@ -149,7 +153,8 @@ export type CgDeviceSource = 'calendar' | 'reminders';
 export type CgDeviceItem = { title: string; date: string | null };
 
 /** An agent instruction or memory file from this Mac; `label` is the path under the home directory. */
-export type CgAgentFile = { label: string; text: string };
+/** `label` is the title the card shows; `path` (home-relative) stays on this Mac and is never sent. */
+export type CgAgentFile = { label: string; path?: string; text: string };
 
 export type CgBuildRequest = {
   memory: boolean;

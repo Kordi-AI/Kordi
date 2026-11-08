@@ -32,6 +32,7 @@ export type CloudContactProfileGroup = {
 
 export type CloudContactProfileCommonGround = {
   workingOn: string[];
+  interests: string[];
   canHelp: string[];
   lookingFor: string[];
   /** The Grounding match between the two people; null when there is none or the server predates it. */
@@ -169,8 +170,14 @@ function normalizeGroups(value: unknown): CloudContactProfileGroup[] {
 function normalizeCommonGround(value: unknown): CloudContactProfileCommonGround | null {
   const row = record(value);
   if (!row) return null;
-  const card = { workingOn: textList(row.workingOn), canHelp: textList(row.canHelp), lookingFor: textList(row.lookingFor), match: normalizeContactMatch(row.match) };
-  return card.match || card.workingOn.length || card.canHelp.length || card.lookingFor.length ? card : null;
+  const card = {
+    workingOn: textList(row.workingOn),
+    interests: textList(row.interests),
+    canHelp: textList(row.canHelp),
+    lookingFor: textList(row.lookingFor),
+    match: normalizeContactMatch(row.match),
+  };
+  return card.match || card.workingOn.length || card.interests.length || card.canHelp.length || card.lookingFor.length ? card : null;
 }
 
 export function normalizeContactProfile(value: unknown): CloudContactProfile | null {
