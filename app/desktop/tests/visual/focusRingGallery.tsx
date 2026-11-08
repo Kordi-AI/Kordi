@@ -32,6 +32,13 @@ function Controls({ scope }: { scope: string }) {
       </Tabs>
       <button data-focus-kind={`${scope}:list-row`} type="button" className="app-settings-nav-item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px]">Profile</button>
       <button data-focus-kind={`${scope}:danger-row`} type="button" className="app-transient-row app-transient-row-danger rounded-lg border px-2.5 py-1.5 text-left text-[13px]">Delete</button>
+      {/* Focusable regions: the transcript scroller focuses itself on pointerdown. */}
+      <div data-focus-region={`${scope}:scroll-region`} role="region" aria-label={`${scope} messages`} tabIndex={0}
+        style={{ height: 60, overflow: 'auto' }}
+        onPointerDownCapture={(event) => event.currentTarget.focus({ preventScroll: true })}>
+        <p>Message text</p><div style={{ height: 120 }} />
+      </div>
+      <pre data-focus-region={`${scope}:copy-surface`} data-kordi-copy-surface="document" tabIndex={0} style={{ margin: 0 }}>Prompt text</pre>
       <div className="app-transient-surface app-dense-menu" role="menu" aria-label={`${scope} menu`}>
         <button data-focus-kind={`${scope}:menu-row`} type="button" role="menuitem" className="app-dense-menu-row"><span>Rename</span></button>
       </div>
