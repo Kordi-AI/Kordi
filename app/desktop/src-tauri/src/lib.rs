@@ -15,8 +15,10 @@ mod cloud_presence;
 mod cloud_session;
 mod cloud_session_organization;
 mod cloud_session_refresh;
+mod desktop_update;
 mod digest_calendar;
 mod digest_calendar_sync;
+mod external_open;
 mod link_preview;
 mod mac_local;
 mod media_permissions;
@@ -35,7 +37,6 @@ mod voice_message;
 mod window_backdrop;
 mod window_lifecycle;
 mod workspace;
-use std::process::Command;
 
 fn is_cloud_edition_context(
     kordi_edition: Option<&str>,
@@ -99,6 +100,8 @@ fn activate_stored_cloud_account_data_dir(is_cloud_edition: bool) {
 use auth::DesktopAuthManager;
 use chat::DesktopChatManager;
 use cloud_presence::{publish_stored_offline_on_exit, should_publish_offline_on_exit};
+pub(crate) use external_open::run_external_command;
+use external_open::{desktop_open_external_url, desktop_reveal_in_finder};
 use media_preview_window::{
     desktop_open_media_preview_window, desktop_reveal_media_preview_window,
 };
@@ -121,50 +124,6 @@ fn desktop_workspace_status() -> DesktopWorkspaceStatus {
 #[tauri::command]
 fn desktop_read_workspace_text_file(path: String) -> Result<String, String> {
     workspace::desktop_read_workspace_text_file(path)
-}
-
-fn run_external_command(command: &mut Command) -> Result<(), String> {
-    let status = command.status().map_err(|err| err.to_string())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("External open command failed with status {status}"))
-    }
-}
-#[tauri::command]
-fn desktop_open_external_url(url: String) -> Result<String, String> {
-    let trimmed = url.trim();
-    if trimmed.is_empty() {
-        return Err("URL is required".to_string());
-    }
-    if cfg!(target_os = "macos") {
-        run_external_command(Command::new("open").arg(trimmed))?;
-    } else if cfg!(target_os = "windows") {
-        run_external_command(Command::new("explorer").arg(trimmed))?;
-    } else {
-        run_external_command(Command::new("xdg-open").arg(trimmed))?;
-    }
-    Ok(trimmed.to_string())
-}
-
-#[tauri::command]
-fn desktop_reveal_in_finder(path: String) -> Result<String, String> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return Err("Path is required".to_string());
-    }
-    if cfg!(target_os = "macos") {
-        run_external_command(Command::new("open").arg("-R").arg(trimmed))?;
-    } else if cfg!(target_os = "windows") {
-        run_external_command(Command::new("explorer").arg(format!("/select,{trimmed}")))?;
-    } else {
-        let target = std::path::Path::new(trimmed)
-            .parent()
-            .map(std::path::Path::to_path_buf)
-            .unwrap_or_else(|| std::path::PathBuf::from(trimmed));
-        run_external_command(Command::new("xdg-open").arg(target))?;
-    }
-    Ok(trimmed.to_string())
 }
 
 pub fn run() {
@@ -191,6 +150,7 @@ pub fn run() {
         .manage(cloud_oauth_loopback::CloudOAuthLoopbackState::default())
         .manage(DesktopAuthManager::default())
         .manage(DesktopChatManager::default())
+        .manage(desktop_update::DesktopUpdateState::default())
         .setup(|app| {
             window_lifecycle::focus_main_window_on_deep_link(app.handle());
             let is_cloud_edition = is_cloud_edition_app(app);
@@ -223,6 +183,10 @@ pub fn run() {
             desktop_open_external_url,
             desktop_reveal_in_finder,
             desktop_relaunch_after_update,
+            desktop_update::desktop_update_check,
+            desktop_update::desktop_update_download,
+            desktop_update::desktop_update_install,
+            desktop_update::desktop_update_reveal_app,
             desktop_open_media_preview_window,
             desktop_reveal_media_preview_window,
             menu_bar::desktop_set_menu_bar_unread_count,
@@ -460,6 +424,7 @@ pub fn run() {
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Exit => {
             cloud_host_activity::exit();
+            desktop_update::install_downloaded_update_on_exit(app_handle);
         }
         tauri::RunEvent::ExitRequested { code, .. } if should_publish_offline_on_exit(code) => {
             publish_stored_offline_on_exit();

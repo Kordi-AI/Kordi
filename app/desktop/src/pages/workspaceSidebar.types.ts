@@ -73,6 +73,7 @@ export type WorkspaceSidebarLayout = {
   onRetryUpdate?: () => Promise<void | DesktopUpdaterState>;
   onSubscribeToUpdate?: (listener: (state: DesktopUpdaterState) => void) => () => void;
   onOpenUpdateUrl?: (url: string) => Promise<void> | void;
+  onRevealUpdateApp?: () => Promise<void> | void;
 };
 
 export type WorkspaceSidebarChats = {
