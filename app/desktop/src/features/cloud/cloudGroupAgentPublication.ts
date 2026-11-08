@@ -173,6 +173,7 @@ export async function publishCloudGroupAgentEnvelope({
   createdAtMs,
   signal,
   publisher,
+  clientMessageId,
 }: {
   runtime: CloudGroupAgentRuntime;
   token: string;
@@ -182,10 +183,14 @@ export async function publishCloudGroupAgentEnvelope({
   createdAtMs: number;
   signal?: AbortSignal;
   publisher?: Pick<CloudAuthClient, 'sendMessage'>;
-}): Promise<{ sentCount: number; failedCount: number }> {
+  /** A stable id for a chat send, so sending the same reply again is a no-op. */
+  clientMessageId?: string;
+}): Promise<{ sentCount: number; failedCount: number; firstError?: unknown }> {
   const sent = await Promise.allSettled(targetAccountIds.map((targetAccountId) => (
     (publisher ?? runtime.client).sendMessage(token, targetAccountId, body, {
-      ...(publisher ? { clientMessageId: cloudOperationUuid(`group-agent:${sessionId}:${parseCloudGroupControl(body)?.message?.id ?? createdAtMs}`) } : {}),
+      ...(publisher
+        ? { clientMessageId: cloudOperationUuid(`group-agent:${sessionId}:${parseCloudGroupControl(body)?.message?.id ?? createdAtMs}`) }
+        : clientMessageId ? { clientMessageId } : {}),
       sessionId,
       clientCreatedAt: new Date(createdAtMs).toISOString(),
       conversationKind: 'group',
@@ -197,8 +202,29 @@ export async function publishCloudGroupAgentEnvelope({
       runtime.mergeMessage(result.value);
     }
   });
+  const failures = sent.filter(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
   return {
-    sentCount: sent.filter((result) => result.status === 'fulfilled').length,
-    failedCount: sent.filter((result) => result.status === 'rejected').length,
+    sentCount: sent.length - failures.length,
+    failedCount: failures.length,
+    ...(failures.length > 0 ? { firstError: failures[0].reason } : {}),
   };
+}
+
+/**
+ * Publishes the processing placeholder. It only shows that the agent is
+ * working, so a failure is reported and never ends the turn: the terminal
+ * reply is published on its own, also when no placeholder reached the cloud.
+ */
+export async function publishCloudGroupAgentProcessingBestEffort(
+  input: Parameters<typeof publishCloudGroupAgentEnvelope>[0],
+  reportFailure: (error: unknown) => void,
+): Promise<void> {
+  try {
+    const result = await publishCloudGroupAgentEnvelope(input);
+    if (result.failedCount > 0) reportFailure(result.firstError);
+  } catch (error) {
+    reportFailure(error);
+  }
 }

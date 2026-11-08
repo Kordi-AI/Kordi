@@ -1,5 +1,6 @@
 import type { CloudAuthClient } from './authClient';
 import { CloudAuthError } from './cloudAuthError';
+import { isTransientCloudFailure } from './cloudDesktopExecutionLease';
 
 /** The part of a desktop execution lease a hand-back needs. */
 export type HandBackLease = {
@@ -34,8 +35,8 @@ export async function handBackDesktopRun(
       );
       return response?.released === true;
     } catch (error) {
-      // A refusal is final; a slow or failed request is retried.
-      if (error instanceof CloudAuthError && error.status < 500) return false;
+      // A refusal is final; a slow or failed request (a timeout has status 0) is retried.
+      if (error instanceof CloudAuthError && !isTransientCloudFailure(error)) return false;
       if (attempt >= HAND_BACK_ATTEMPTS) return false;
       await new Promise((resolve) => setTimeout(resolve, retryMs));
     }
