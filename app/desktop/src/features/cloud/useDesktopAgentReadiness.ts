@@ -20,6 +20,14 @@ import { withDeadline } from '@/lib/promiseDeadline';
  */
 export const DESKTOP_READINESS_PUBLICATION_DEADLINE_MS = 60_000;
 
+/**
+ * How long this Mac keeps publishing its last readiness while its runtime
+ * reloads, for example right after the owner picks another model or account
+ * and the new route is still resolving. Requests sent meanwhile stay held for
+ * this Mac instead of going to the cloud. Past it, the readiness is withdrawn.
+ */
+export const DESKTOP_READINESS_RELOAD_GRACE_MS = 30_000;
+
 /** How often this Mac renews its readiness while the server accepts it. */
 export const DESKTOP_READINESS_INTERVAL_MS = 10_000;
 /** Longest wait between retries while the server cannot be reached. */
@@ -56,25 +64,47 @@ export type CloudSelfAgentExecutionInput = {
   hydrateSessionPage?: (sessionId: string, options?: { force?: boolean }) => Promise<unknown>;
 };
 
+type PublishedCapabilities = { agentIds: string[]; digest: boolean; scheduled: boolean; proactive: boolean };
+
+const NO_CAPABILITIES = JSON.stringify({ agentIds: [], digest: false, scheduled: false, proactive: false } satisfies PublishedCapabilities);
+
 export function useDesktopAgentReadiness({
   account, client, runtimeReady = true, cloudAgentDefinitionsById, defaultRoute, reportWarning,
-}: Pick<CloudSelfAgentExecutionInput, 'account' | 'client' | 'runtimeReady' | 'cloudAgentDefinitionsById' | 'defaultRoute' | 'reportWarning'>) {
+  reloadGraceMs = DESKTOP_READINESS_RELOAD_GRACE_MS,
+}: Pick<CloudSelfAgentExecutionInput, 'account' | 'client' | 'runtimeReady' | 'cloudAgentDefinitionsById' | 'defaultRoute' | 'reportWarning'> & { reloadGraceMs?: number }) {
   const accountId = account?.accountId;
   // Only the Mac app runs agents; the browser app never announces readiness.
   const nativeShell = isNativeDesktopShell();
   useProjectSync(nativeShell && runtimeReady, accountId);
-  const agentIdsKey = JSON.stringify(runtimeReady && accountId
-    ? [...new Set([defaultCloudAgentId(accountId), ...Object.values(cloudAgentDefinitionsById ?? {})
-      .filter(agent => agent.ownerAccountId === accountId && agent.status !== 'archived')
-      .map(agent => agent.agentId)])].sort()
-    : []);
   // Digest runs and scheduled tasks wait for this Mac whenever it can run the
   // owner's default route, a hosted account included, as chat runs do.
-  const scheduled = Boolean(runtimeReady && accountId && macCanRunDigest(defaultRoute));
-  const digest = scheduled;
   // Proactive evaluations and allowed offers wait for this Mac on the same terms.
-  const proactive = digest;
-  const readinessKey = JSON.stringify([accountId, agentIdsKey, digest, scheduled, proactive]);
+  const canRunBackground = macCanRunDigest(defaultRoute);
+  const readyCapabilities = runtimeReady && accountId
+    ? JSON.stringify({
+      agentIds: [...new Set([defaultCloudAgentId(accountId), ...Object.values(cloudAgentDefinitionsById ?? {})
+        .filter(agent => agent.ownerAccountId === accountId && agent.status !== 'archived')
+        .map(agent => agent.agentId)])].sort(),
+      digest: canRunBackground,
+      scheduled: canRunBackground,
+      proactive: canRunBackground,
+    } satisfies PublishedCapabilities)
+    : null;
+  // A runtime that reloads for the same account keeps its last readiness for
+  // a bounded time; one that never became ready, or another account, has none.
+  const [lastReady, setLastReady] = useState<{ accountId: string; capabilities: string; expired: boolean } | null>(null);
+  if (accountId && readyCapabilities && (lastReady?.accountId !== accountId
+    || lastReady.capabilities !== readyCapabilities || lastReady.expired)) {
+    setLastReady({ accountId, capabilities: readyCapabilities, expired: false });
+  }
+  const reloading = !readyCapabilities && Boolean(accountId) && lastReady?.accountId === accountId && !lastReady?.expired;
+  useEffect(() => {
+    if (!reloading) return;
+    const timer = setTimeout(() => setLastReady(previous => previous && { ...previous, expired: true }), reloadGraceMs);
+    return () => clearTimeout(timer);
+  }, [reloadGraceMs, reloading]);
+  const capabilitiesKey = readyCapabilities ?? (reloading && lastReady ? lastReady.capabilities : NO_CAPABILITIES);
+  const readinessKey = JSON.stringify([accountId, capabilitiesKey]);
   const registration = useMemo(() => ({ readinessKey, client }), [readinessKey, client]);
   const publicationTail = useRef(Promise.resolve());
   const [acknowledged, setAcknowledged] = useState<typeof registration | null>(null);
@@ -99,7 +129,7 @@ export function useDesktopAgentReadiness({
             const session = await loadSession();
             if (!session?.token || session.accountId !== accountId || cancelled) return false;
             attempt.token = session.token;
-            await client.desktopAgentExecution(session.token, 'ready', { agentIds: JSON.parse(agentIdsKey) as string[], digest, scheduled, proactive });
+            await client.desktopAgentExecution(session.token, 'ready', JSON.parse(capabilitiesKey) as PublishedCapabilities);
             return true;
           })(), DESKTOP_READINESS_PUBLICATION_DEADLINE_MS, 'Desktop readiness did not finish in time.');
           if (published && !cancelled) setAcknowledged(registration);
@@ -128,9 +158,10 @@ export function useDesktopAgentReadiness({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [accountId, agentIdsKey, client, digest, nativeShell, proactive, registration, reportWarning, scheduled]);
+  }, [accountId, capabilitiesKey, client, nativeShell, registration, reportWarning]);
 
   // Presence alone does not grant a desktop execution lease. Admission must
-  // wait until the server has accepted this account's current capabilities.
+  // wait until the server has accepted this account's current capabilities,
+  // and a reloading runtime does not execute until it is ready again.
   return Boolean(accountId && runtimeReady && acknowledged === registration);
 }

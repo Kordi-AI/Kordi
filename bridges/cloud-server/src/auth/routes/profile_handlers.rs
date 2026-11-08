@@ -422,6 +422,7 @@ pub(super) async fn logout(
         }
     }
     crate::common_ground::forget_nearby_device(pool, &session.device_id).await;
+    crate::projects::forget_signed_out_device(pool, &session.account_id, &session.device_id).await;
     let _ = write_audit(
         pool,
         Some(&session.account_id),

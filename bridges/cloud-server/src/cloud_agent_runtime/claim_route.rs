@@ -279,7 +279,7 @@ pub(super) async fn claim_cloud_agent_run(
         );
     }
 
-    // The exact idempotency key is the durable admission boundary. A ready
+    // The exact idempotency key is the durable admission boundary. An online
     // owner Mac gets the first chance for one presence timeout; if no Mac
     // claims the run by then, the cloud runner answers it.
     let desktop_preferred_until = owner_desktop_online.then(|| now + route_timeout);

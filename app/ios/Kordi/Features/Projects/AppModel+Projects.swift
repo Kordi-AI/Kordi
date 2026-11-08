@@ -46,6 +46,30 @@ extension AppModel {
         return result
     }
 
+    /// Removes a project that only offline Macs publish. Its sessions fall back to Recents.
+    func removeOfflineProject(_ section: ChatProjectSessionSection) async throws {
+        guard section.removable, let project = section.project else { throw ChatProjectFailure(message: "Remove this project in Kordi on your Mac.") }
+        if isPreviewMode {
+            let removed = Set(section.devices.map(\.id))
+            for index in projectDevices.indices where removed.contains(projectDevices[index].id) {
+                projectDevices[index].projects.removeAll { $0.id == project.id }
+            }
+            return
+        }
+        let (api, token, accountID) = try projectContext()
+        do {
+            for device in section.devices {
+                try await api.removeProject(token: token, deviceID: device.id, projectID: project.id)
+            }
+        } catch {
+            // Earlier Macs may already be removed, so the list still refreshes.
+            if (try? projectContext().1) == token, account?.accountId == accountID { await refreshProjects() }
+            throw error
+        }
+        guard (try? projectContext().1) == token, account?.accountId == accountID else { return }
+        await refreshProjects()
+    }
+
     func canChooseProject(_ conversation: ConversationSummary) -> Bool {
         conversation.kind == .agent && conversation.subsessionId == nil
             && conversation.peerAccountId == account?.accountId

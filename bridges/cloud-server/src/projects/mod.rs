@@ -9,7 +9,7 @@ use axum::{
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Extension, Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,19 @@ use sqlx_postgres::PgPool;
 use std::{collections::BTreeMap, sync::Arc};
 use uuid::Uuid;
 
+/// SQL condition, over `cloud_project_devices p`, for a catalog entry that
+/// still counts: its Mac holds a live session or published within 30 days.
+/// Older entries of signed-out Macs are absent from the catalog and routing.
+macro_rules! listed_project_device {
+    () => {
+        "(p.updated_at>now()-interval '30 days' OR EXISTS(SELECT 1 FROM cloud_refresh_tokens t WHERE t.device_id=p.device_id AND t.account_id=p.account_id AND t.revoked_at IS NULL AND t.expires_at::timestamptz>now()))"
+    };
+}
+pub(crate) use listed_project_device;
+
+mod cleanup;
 mod route;
+pub(crate) use cleanup::{forget_devices, forget_signed_out_device};
 pub use route::{project_route, ProjectRoute};
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -77,6 +89,14 @@ pub fn routes(state: Arc<ServerState>) -> Router {
         .route("/v1/cloud/projects/commands", post(enqueue))
         .route("/v1/cloud/projects/commands/next", post(next))
         .route("/v1/cloud/projects/commands/:id", get(status).put(complete))
+        .route(
+            "/v1/cloud/projects/devices/:device_id",
+            delete(cleanup::remove_device),
+        )
+        .route(
+            "/v1/cloud/projects/devices/:device_id/projects/:project_id",
+            delete(cleanup::remove_device_project),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             cloud_session_middleware,
@@ -123,7 +143,7 @@ async fn catalog(
     State(state): State<Arc<ServerState>>,
     Extension(session): Extension<CloudSession>,
 ) -> Response {
-    let rows: Result<Vec<DeviceCatalogRow>, _> = query_as("SELECT p.device_id,d.device_name,p.projects,p.updated_at>now()-interval '25 seconds' FROM cloud_project_devices p JOIN cloud_devices d USING(device_id) WHERE p.account_id=$1 AND d.revoked_at IS NULL ORDER BY p.device_id")
+    let rows: Result<Vec<DeviceCatalogRow>, _> = query_as(concat!("SELECT p.device_id,d.device_name,p.projects,p.updated_at>now()-interval '25 seconds' FROM cloud_project_devices p JOIN cloud_devices d USING(device_id) WHERE p.account_id=$1 AND d.revoked_at IS NULL AND ", listed_project_device!(), " ORDER BY p.device_id"))
         .bind(&session.account_id).fetch_all(state.db_pool()).await;
     match rows {
         Ok(rows) => Json(json!({"devices":rows.into_iter().map(|(id,name,projects,online)|json!({"id":id,"name":name.unwrap_or_else(||"Mac".into()),"projects":projects,"online":online})).collect::<Vec<_>>()})).into_response(),
@@ -254,7 +274,7 @@ pub async fn project_session_binding(
     account: &str,
     session: &str,
 ) -> Result<Option<ProjectSessionBinding>, sqlx_core::Error> {
-    let row: Option<(String, String, bool)> = query_as("SELECT p.device_id,coalesce(project->>'name','Project'),EXISTS(SELECT 1 FROM cloud_devices d WHERE d.device_id=p.device_id AND d.revoked_at IS NULL) AND p.updated_at>now()-make_interval(secs=>$3) FROM cloud_project_devices p, jsonb_array_elements(p.projects) project WHERE p.account_id=$1 AND (project->'sessions') ? $2 ORDER BY p.updated_at DESC LIMIT 1")
+    let row: Option<(String, String, bool)> = query_as(concat!("SELECT p.device_id,coalesce(project->>'name','Project'),EXISTS(SELECT 1 FROM cloud_devices d WHERE d.device_id=p.device_id AND d.revoked_at IS NULL) AND p.updated_at>now()-make_interval(secs=>$3) FROM cloud_project_devices p, jsonb_array_elements(p.projects) project WHERE p.account_id=$1 AND (project->'sessions') ? $2 AND ", listed_project_device!(), " ORDER BY p.updated_at DESC LIMIT 1"))
         .bind(account).bind(session).bind(PROJECT_DEVICE_ONLINE_SECONDS as f64).fetch_optional(pool).await?;
     Ok(row.map(
         |(device_id, project_name, device_online)| ProjectSessionBinding {

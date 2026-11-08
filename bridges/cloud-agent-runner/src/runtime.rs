@@ -373,6 +373,7 @@ where
             let message = err.to_string();
             let code = match err {
                 crate::model_loop::ModelLoopError::ToolFailed(_) => "tool_error",
+                crate::model_loop::ModelLoopError::ModelUnavailable(_) => "model_unavailable",
                 _ => model_failure_code(&message),
             };
             client
@@ -401,9 +402,13 @@ where
 }
 
 /// A provider that refused the saved sign-in is something the owner can fix by
-/// signing in again, so it gets its own code instead of a generic failure.
+/// signing in again, so it gets its own code instead of a generic failure. So
+/// does a model the provider refuses for the account.
 fn model_failure_code(message: &str) -> &'static str {
     let lower = message.to_ascii_lowercase();
+    if lower.contains("model_not_found") || lower.contains("selected model is unavailable") {
+        return "model_unavailable";
+    }
     let rejected = [
         "sign-in needs attention",
         "401",
@@ -456,6 +461,19 @@ mod failure_code_tests {
         assert_eq!(
             code("provider error: The provider is busy or rate-limited."),
             "model_provider_error"
+        );
+    }
+
+    #[test]
+    fn refused_models_are_reported_as_unavailable() {
+        let code = super::model_failure_code;
+        assert_eq!(
+            code("provider error: The selected model is unavailable for this account. Choose another model."),
+            "model_unavailable"
+        );
+        assert_eq!(
+            code("provider error: 400 {\"code\":\"model_not_found\"}"),
+            "model_unavailable"
         );
     }
 }

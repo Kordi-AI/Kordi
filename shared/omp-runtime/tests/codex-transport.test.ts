@@ -2,8 +2,19 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { CODEX_CLIENT_VERSION } from '@oh-my-pi/pi-catalog/wire/codex';
 import { runTurn } from '../src/runtime';
 import type { RunRequest } from '../src/protocol';
+
+// The effective Codex client version must not fall below the latest official
+// Codex CLI release that patches/ pins.
+const MINIMUM_CODEX_CLIENT_VERSION = '0.167.0';
+const atLeast = (version: string | null, minimum: string) =>
+  (version ?? '').localeCompare(minimum, 'en', { numeric: true }) >= 0;
+
+test('Codex requests report the current Codex client version', () => {
+  expect(atLeast(CODEX_CLIENT_VERSION, MINIMUM_CODEX_CLIENT_VERSION)).toBe(true);
+});
 
 test('ChatGPT OAuth uses Codex transport with the selected account and streams a reply', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'kordi-codex-test-'));
@@ -12,7 +23,7 @@ test('ChatGPT OAuth uses Codex transport with the selected account and streams a
   const item = { id: 'msg_fixture', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Codex reply.', annotations: [] }] };
   const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
     if (request.method !== 'POST') return new Response('HTTP only', { status: 426 });
-    received.push({ path: new URL(request.url).pathname, account: request.headers.get('chatgpt-account-id'), authorization: request.headers.get('authorization'), body: await request.json() });
+    received.push({ path: new URL(request.url).pathname, version: request.headers.get('version'), account: request.headers.get('chatgpt-account-id'), authorization: request.headers.get('authorization'), body: await request.json() });
     const events = [
       { type: 'response.created', response: { id: 'resp_fixture', status: 'in_progress', output: [] } },
       { type: 'response.output_item.added', output_index: 0, item: { ...item, content: [] } },
@@ -36,6 +47,7 @@ test('ChatGPT OAuth uses Codex transport with the selected account and streams a
     expect(received).toHaveLength(1);
     expect(received[0].path).toBe('/backend-api/codex/responses');
     expect(received[0].account).toBe('synthetic-account');
+    expect(atLeast(received[0].version, MINIMUM_CODEX_CLIENT_VERSION)).toBe(true);
     expect(received[0].authorization).toBe(`Bearer ${token}`);
     expect(received[0].body.model).toBe('gpt-5.5');
     expect(events.some(event => event.kind === 'text_delta')).toBe(true);

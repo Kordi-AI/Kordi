@@ -947,10 +947,10 @@ final class CloudDirectMessageProjectorTests: XCTestCase {
             CloudMessageCodec.viewerText(shared, viewerOwnsAgent: true, agentName: "Pebble"),
             "Your AI provider connection expired. [Reconnect](kordi://settings/authentication)"
         )
-        XCTAssertEqual(
-            CloudMessageCodec.viewerText(shared, viewerOwnsAgent: false, agentName: "Pebble"),
-            "Pebble couldn't reply."
-        )
+        XCTAssertEqual(CloudMessageCodec.viewerText(shared, viewerOwnsAgent: false, agentName: "Pebble"), "Pebble couldn't reply.")
+        let model = try agentResponse(requestId: "msg_request", text: "Pebble couldn't reply.", deliveryState: "failed", failureCode: "model_unavailable")
+        XCTAssertEqual(CloudMessageCodec.viewerText(model, viewerOwnsAgent: true, agentName: "Pebble"), "This model isn't available with your AI provider account. Choose another model.")
+        XCTAssertEqual(CloudMessageCodec.viewerText(model, viewerOwnsAgent: false, agentName: "Pebble"), "Pebble couldn't reply.")
 
         // A line older builds stored without a code.
         let legacy = try agentResponse(

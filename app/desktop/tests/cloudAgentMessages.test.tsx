@@ -372,12 +372,13 @@ test('cloud agent no-provider detector recognizes sidecar auth failures', () => 
 });
 
 test('an unknown model is a model failure, not a missing provider', () => {
+  const NOTICE = "This model isn't available with your AI provider account. Choose another model.";
   const error = new Error('Unknown model: openai/gpt-5.4');
-  assert.equal(cloudAgentProviderFailureNotice(error), 'This model is not available for the selected account.');
+  assert.equal(cloudAgentProviderFailureNotice(error), NOTICE);
   assert.equal(cloudAgentProviderFailureNeedsAuthentication(error), false);
-  assert.equal(cloudAgentLocalFailureMessage(error), 'This model is not available for the selected account.');
+  assert.equal(cloudAgentLocalFailureMessage(error), NOTICE);
   // The notice is recognized again once it is stored as the failed reply text.
-  assert.equal(cloudAgentProviderFailureNotice('This model is not available for the selected account.'), 'This model is not available for the selected account.');
+  assert.equal(cloudAgentProviderFailureNotice(NOTICE), NOTICE);
   assert.equal(isCloudAgentStoredNoProviderFailure(error), true, 'history stored by older builds keeps its failed state');
 });
 

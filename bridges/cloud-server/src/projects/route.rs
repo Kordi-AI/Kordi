@@ -46,14 +46,15 @@ pub async fn project_route(
     session: &str,
     caller: Option<&str>,
 ) -> Result<Option<ProjectRoute>, sqlx_core::Error> {
-    let binding: Option<BindingRow> = query_as(
+    let binding: Option<BindingRow> = query_as(concat!(
         "SELECT p.device_id, coalesce(project->>'id',''), coalesce(project->>'name','Project'), \
                 project->'workspaces'->>$2, d.device_name, \
                 coalesce(d.revoked_at IS NULL, FALSE) AND p.updated_at>now()-make_interval(secs=>$3) \
          FROM cloud_project_devices p LEFT JOIN cloud_devices d USING(device_id), jsonb_array_elements(p.projects) project \
-         WHERE p.account_id=$1 AND (project->'sessions') ? $2 \
-         ORDER BY p.updated_at DESC LIMIT 1",
-    )
+         WHERE p.account_id=$1 AND (project->'sessions') ? $2 AND ",
+        listed_project_device!(),
+        " ORDER BY p.updated_at DESC LIMIT 1",
+    ))
     .bind(account)
     .bind(session)
     .bind(PROJECT_DEVICE_ONLINE_SECONDS as f64)

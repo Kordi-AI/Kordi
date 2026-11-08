@@ -159,7 +159,7 @@ async fn run_omp_with_config<C: CloudAgentRunClient + Sync>(
         .await
         .map_err(|error| {
             tracing::warn!(code = error.diagnostic_code(), "OMP run failed");
-            ModelLoopError::Provider(error.to_string())
+            omp_run_error(&error)
         })?;
     if result.context_messages.is_empty() {
         return Err(ModelLoopError::Provider(
@@ -179,6 +179,17 @@ async fn run_omp_with_config<C: CloudAgentRunClient + Sync>(
     };
     let outcomes = host.outcomes.into_inner().unwrap_or_default();
     Ok((run_reply_text(result.text, &outcomes)?, state))
+}
+
+/// A model the provider refuses for this account is its own failure: trying
+/// again will not help, choosing another model will.
+fn omp_run_error(error: &kordi_omp_runtime::RuntimeError) -> ModelLoopError {
+    match error.diagnostic_code() {
+        "provider_model_unavailable" | "model_unavailable" => {
+            ModelLoopError::ModelUnavailable(error.to_string())
+        }
+        _ => ModelLoopError::Provider(error.to_string()),
+    }
 }
 
 fn output_is_replayable(messages: &[Value]) -> bool {

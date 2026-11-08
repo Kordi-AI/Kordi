@@ -22,7 +22,7 @@ export type SessionContextMenuTarget = {
   pinned?: boolean;
   muted?: boolean;
   unread?: boolean;
-  /** An agent's personal session: read state, mute, and its agent's settings only. */ personalAgent?: { agentId: string; localAgentId: string | null };
+  /** An agent's personal session: read state and mute only. */ personalAgent?: { agentId: string };
   /** A group channel other than its first, for a group admin: it can be dissolved. */
   dissolvableChannel?: { groupSpaceId: string };
 };

@@ -121,7 +121,6 @@ export function WorkspaceSidebar({
     onDeleteChatSession,
     onDissolveChatGroup,
     onDissolveChatChannel,
-    onOpenAgentSettings,
   } = chats;
   const {
     onCreateProjectFromFolder,
@@ -352,7 +351,6 @@ export function WorkspaceSidebar({
           onClose={() => setSessionContextMenu(null)}
           onSetMuted={(sessionId, muted) => { void onSetChatSessionMuted(sessionId, muted); }}
           onSetUnread={(sessionId, unread) => { void onSetChatSessionUnread(sessionId, unread); }}
-          onOpenAgentSettings={onOpenAgentSettings}
         />
       ) : sessionContextMenu ? (
         <SessionContextMenu

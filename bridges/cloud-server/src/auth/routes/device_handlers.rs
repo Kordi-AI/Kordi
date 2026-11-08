@@ -272,7 +272,7 @@ pub(super) async fn revoke_other_devices(
     revoke_devices(state, session, request.client_operation_id, None).await
 }
 
-pub(super) async fn revoke_devices(
+pub(crate) async fn revoke_devices(
     state: Arc<ServerState>,
     session: CloudSession,
     operation_id: uuid::Uuid,
@@ -378,6 +378,9 @@ pub(super) async fn revoke_devices(
     if crate::common_ground::forget_nearby_devices(&mut transaction, &affected_ids)
         .await
         .is_err()
+        || crate::projects::forget_devices(&mut transaction, &affected_ids)
+            .await
+            .is_err()
     {
         return device_server_error("Could not revoke device sessions.");
     }

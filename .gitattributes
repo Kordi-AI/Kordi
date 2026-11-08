@@ -5,3 +5,4 @@ legal/native/*-THIRD-PARTY-NOTICES.txt -whitespace
 
 # Unified patch context preserves upstream blank lines.
 legal/runtime-patches/*.patch -whitespace
+shared/omp-runtime/patches/*.patch -whitespace

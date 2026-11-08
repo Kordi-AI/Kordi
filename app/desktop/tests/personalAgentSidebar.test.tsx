@@ -10,7 +10,6 @@ import { buildParticipantSpaces, filterParticipantSpaces } from '../src/features
 import { personalAgentSessionsFromSnapshots, type PersonalAgentStatus } from '../src/features/personalAgent/personalAgentClient';
 import { PersonalAgentPage } from '../src/features/personalAgent/PersonalAgentPage';
 import { __setDefaultPersonalAgentStatusForTests } from '../src/features/personalAgent/personalAgentStatus';
-import { useAgentBlueprintRequest, requestAgentBlueprint } from '../src/features/personalAgent/agentBlueprintRequest';
 import { setPersonalAgentEntries, getPersonalAgentEntries, type PersonalAgentEntry } from '../src/features/personalAgent/personalAgentStore';
 import { usePersonalAgentSync } from '../src/features/personalAgent/usePersonalAgentSync';
 import type { PersonalAgentSessionPlan } from '../src/features/personalAgent/personalAgentSessions';
@@ -67,22 +66,33 @@ function sidebarProps(overrides: Record<string, unknown> = {}, chatConversations
   });
 }
 
-test('Agent Chats shows the Personal agent entry under New, and personal chats with messages as ordinary rows', () => {
+test('Agent Chats lists each personal agent under the Personal agent entry, and nowhere else', () => {
   setPersonalAgentEntries(entries);
   __setDefaultPersonalAgentStatusForTests(watching);
   try {
-    const markup = renderToStaticMarkup(createElement(WorkspaceSidebar, sidebarProps() as never));
+    const markup = renderToStaticMarkup(createElement(WorkspaceSidebar, sidebarProps({
+      pinnedSessionIds: new Set([KORDI_SESSION]),
+    }) as never));
     const newRow = markup.indexOf('chat-sidebar-new-session"');
     const entry = markup.indexOf('data-testid="personal-agent-entry"');
     assert.ok(newRow >= 0 && entry > newRow, 'the entry follows New');
     assert.match(markup, /Watching 2 sources/);
-    assert.doesNotMatch(markup, /No messages yet/);
-    assert.doesNotMatch(markup, /data-personal-agent-row=/);
-    assert.doesNotMatch(markup, /chat-project-section-toggle[^>]*>[^<]*<[^>]*>Personal agent/);
-    // Sessions with messages are listed with the other chats; Inbox helper has none here.
-    assert.match(markup, new RegExp(`data-agent-session-row="${KORDI_SESSION}"`));
-    assert.match(markup, new RegExp(`data-agent-session-row="${RESEARCH_SESSION}"`));
-    assert.doesNotMatch(markup, new RegExp(`data-agent-session-row="${INBOX_SESSION}"`));
+    // One row per listed agent, in the list's order, right under the entry and before the other chats.
+    const rows = [...markup.matchAll(/data-personal-agent-row="([^"]+)"/g)].map((match) => match[1]);
+    assert.deepEqual(rows, [`cloud-agent:${ACCOUNT}`, 'cloud_agent_research', 'cloud_agent_inbox']);
+    const firstRow = markup.indexOf('data-personal-agent-row=');
+    const otherChat = markup.indexOf('data-agent-session-row="session:direct-agent:figure"');
+    assert.ok(firstRow > entry && otherChat > firstRow);
+    assert.match(markup, /aria-label="Alex&#x27;s Kordi, Online, unread\. Lab sync moved to 10 am Thursday\."/);
+    assert.match(markup, /data-personal-agent-row="cloud_agent_research"[^>]*data-session-preview="Two new papers cite your workshop draft\."/);
+    // Inbox helper has no session on this Mac yet.
+    assert.match(markup, /data-personal-agent-row="cloud_agent_inbox"[^>]*data-session-preview="No messages yet"/);
+    // Never also an ordinary row, even when pinned, and no heading of their own.
+    for (const session of [KORDI_SESSION, RESEARCH_SESSION, INBOX_SESSION]) {
+      assert.doesNotMatch(markup, new RegExp(`data-agent-session-row="${session}"`));
+    }
+    assert.doesNotMatch(markup, /data-session-sidebar-section="pinned"/);
+    assert.doesNotMatch(markup, /<span>Personal agent<\/span>/);
     assert.match(markup, /data-agent-session-row="session:direct-agent:figure"/);
   } finally {
     __setDefaultPersonalAgentStatusForTests(null);
@@ -90,7 +100,7 @@ test('Agent Chats shows the Personal agent entry under New, and personal chats w
   }
 });
 
-test('an empty personal session is not a chat row', () => {
+test('an empty personal session is a row that reads No messages yet', () => {
   setPersonalAgentEntries(entries);
   __setDefaultPersonalAgentStatusForTests(watching);
   try {
@@ -100,7 +110,42 @@ test('an empty personal session is not a chat row', () => {
     ]);
     const markup = renderToStaticMarkup(createElement(WorkspaceSidebar, props as never));
     assert.doesNotMatch(markup, new RegExp(`data-agent-session-row="${KORDI_SESSION}"`));
-    assert.doesNotMatch(markup, /No messages yet/);
+    assert.match(markup, new RegExp(`data-personal-agent-row="cloud-agent:${ACCOUNT}"[^>]*data-session-preview="No messages yet"`));
+  } finally {
+    __setDefaultPersonalAgentStatusForTests(null);
+    setPersonalAgentEntries([]);
+  }
+});
+
+test('before the status loads, the entry and the rows keep their places', () => {
+  setPersonalAgentEntries(entries);
+  __setDefaultPersonalAgentStatusForTests(null);
+  try {
+    const markup = renderToStaticMarkup(createElement(WorkspaceSidebar, sidebarProps() as never));
+    assert.match(markup, /data-testid="personal-agent-entry"/);
+    assert.equal([...markup.matchAll(/data-personal-agent-row=/g)].length, 3);
+  } finally {
+    setPersonalAgentEntries([]);
+  }
+});
+
+test('a personal agent row opens its chat, including one not on this Mac yet', async () => {
+  setPersonalAgentEntries(entries);
+  __setDefaultPersonalAgentStatusForTests(watching);
+  const selected: string[] = [];
+  try {
+    await withJsdomRoot(async (mount) => {
+      const props = (activeConvId: string) => sidebarProps({ activeConvId, onSelectChatSession: (id: string) => selected.push(id) }) as never;
+      let host = await mount(createElement(WorkspaceSidebar, props('session:direct-agent:figure')));
+      const personalRow = (agentId: string) => host.querySelector<HTMLButtonElement>(`[data-personal-agent-row="${agentId}"]`)!;
+      await act(async () => { personalRow('cloud_agent_research').click(); });
+      await act(async () => { personalRow('cloud_agent_inbox').click(); });
+      assert.deepEqual(selected, [RESEARCH_SESSION, INBOX_SESSION]);
+      host = await mount(createElement(WorkspaceSidebar, props(RESEARCH_SESSION)));
+      assert.equal(personalRow('cloud_agent_research').getAttribute('aria-current'), 'true');
+      assert.ok(personalRow('cloud_agent_research').classList.contains('app-session-row-active'));
+      assert.equal(personalRow(`cloud-agent:${ACCOUNT}`).getAttribute('aria-current'), null);
+    });
   } finally {
     __setDefaultPersonalAgentStatusForTests(null);
     setPersonalAgentEntries([]);
@@ -274,34 +319,17 @@ test('cached snapshots name personal sessions with the snake_case personal_agent
   assert.deepEqual(sessions, [{ agentId: 'cloud_agent_research', conversationId: 'conv-1', sessionId: RESEARCH_SESSION, proactive: true }]);
 });
 
-test('Agent settings opens the Blueprint once the Agents page has the agent', async () => {
-  const opened: string[] = [];
-  function Page({ agents }: { agents: Agent[] }) {
-    useAgentBlueprintRequest(agents, (agent) => opened.push(agent.id));
-    return null;
-  }
-  await withJsdomRoot(async (mount) => {
-    await mount(createElement(Page, { agents: [kordi] }));
-    await act(async () => { requestAgentBlueprint(research.id); });
-    assert.deepEqual(opened, []);
-    await mount(createElement(Page, { agents: [kordi, research] }));
-    assert.deepEqual(opened, [research.id]);
-    await mount(createElement(Page, { agents: [research, kordi] }));
-    assert.deepEqual(opened, [research.id]);
-  });
-});
-
-test('a personal session in the list keeps the restricted menu, from the list or, before it loads, its marker', async () => {
-  for (const [listed, actions] of [[entries, ['Mark as read', 'Mute', 'Agent settings']], [[], ['Mark as read', 'Mute']]] as const) {
+test('a personal agent row offers only read state and mute, from the list or, before it loads, its marker', async () => {
+  for (const listed of [entries, []]) {
     setPersonalAgentEntries(listed);
     try {
       await withJsdomRoot(async (mount) => {
-        const host = await mount(createElement(WorkspaceSidebar, sidebarProps({ onOpenAgentSettings: () => undefined }) as never));
+        const host = await mount(createElement(WorkspaceSidebar, sidebarProps() as never));
         await act(async () => {
-          host.querySelector(`[data-agent-session-row="${KORDI_SESSION}"]`)!
+          host.querySelector(`[data-personal-agent-row="cloud-agent:${ACCOUNT}"]`)!
             .dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 80 }));
         });
-        assert.deepEqual([...document.querySelectorAll('[data-session-context-action]')].map((item) => item.textContent?.trim()), actions);
+        assert.deepEqual([...document.querySelectorAll('[data-session-context-action]')].map((item) => item.textContent?.trim()), ['Mark as read', 'Mute']);
       });
     } finally {
       setPersonalAgentEntries([]);

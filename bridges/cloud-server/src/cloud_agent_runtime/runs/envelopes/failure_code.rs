@@ -15,6 +15,7 @@ pub(in crate::cloud_agent_runtime::runs) fn cloud_agent_failure_code(
     match error_code {
         "missing_provider_auth" => "missing_provider_auth",
         "provider_auth_rejected" => "provider_auth_rejected",
+        "model_unavailable" => "model_unavailable",
         "model_provider_error" => "model_provider_error",
         "sandbox_error" => "sandbox_error",
         _ => "failed",
@@ -85,6 +86,10 @@ mod tests {
         assert_eq!(
             cloud_agent_failure_code("missing_provider_auth"),
             "missing_provider_auth"
+        );
+        assert_eq!(
+            cloud_agent_failure_code("model_unavailable"),
+            "model_unavailable"
         );
         assert_eq!(cloud_agent_failure_code("runner_crashed"), "failed");
         assert_eq!(cloud_agent_failure_code(""), "failed");

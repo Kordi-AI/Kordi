@@ -427,6 +427,8 @@ mod group_owner_admission;
 mod group_target_admission;
 #[path = "cloud_agent_runtime_e2e/hosted_only_admission.rs"]
 mod hosted_only_admission;
+#[path = "cloud_agent_runtime_e2e/mac_first_new_groups.rs"]
+mod mac_first_new_groups;
 #[path = "cloud_agent_runtime_e2e/mac_first_routing.rs"]
 mod mac_first_routing;
 #[path = "cloud_agent_runtime_e2e/omp_state.rs"]
@@ -463,6 +465,8 @@ mod terminal_backfill;
 #[path = "cloud_agent_runtime_e2e/attachment_backfill.rs"]
 mod attachment_backfill;
 
+#[path = "cloud_agent_runtime_e2e/project_removal.rs"]
+mod project_removal;
 #[path = "cloud_agent_runtime_e2e/project_routing.rs"]
 mod project_routing;
 #[path = "cloud_agent_runtime_e2e/projects.rs"]

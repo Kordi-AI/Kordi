@@ -1,7 +1,7 @@
 use super::projects::put;
 use super::*;
 
-async fn signup_with_email(router: &axum::Router, email: &str) -> TestAccount {
+pub(super) async fn signup_with_email(router: &axum::Router, email: &str) -> TestAccount {
     let response = router
         .clone()
         .oneshot(post(
@@ -28,7 +28,7 @@ async fn signup_with_email(router: &axum::Router, email: &str) -> TestAccount {
 }
 
 /// Another signed-in Mac of the same account.
-async fn sign_in_another_mac(router: &axum::Router, email: &str) -> String {
+pub(super) async fn sign_in_another_mac(router: &axum::Router, email: &str) -> String {
     let body = read_json(
         router
             .clone()
@@ -43,7 +43,7 @@ async fn sign_in_another_mac(router: &axum::Router, email: &str) -> String {
     body["session"]["token"].as_str().unwrap().to_string()
 }
 
-async fn device_of(router: &axum::Router, token: &str) -> String {
+pub(super) async fn device_of(router: &axum::Router, token: &str) -> String {
     let body = read_json(
         router
             .clone()

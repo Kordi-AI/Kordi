@@ -88,8 +88,8 @@ button[aria-expanded="true"] > .chat-project-collapse-indicator { transform: rot
 .chat-project-session-list .app-session-meta-time { display: none; }
 .chat-project-session-list .app-session-meta-inline { min-width: 0; }
 .chat-project-session-list [data-session-sidebar-section="pinned"] .lucide-pin { display: none; }
-.chat-project-session-list .app-agent-session-row-saved { height: 50px; }
-.chat-project-session-list .app-agent-session-row-saved .app-agent-session-preview { display: flex; }
+.chat-project-session-list :is(.app-agent-session-row-saved, .app-personal-agent-row) { height: 50px; }
+.chat-project-session-list :is(.app-agent-session-row-saved, .app-personal-agent-row) .app-agent-session-preview { display: flex; }
 .chat-project-session-list .app-session-fork-children { margin-left: 0; padding-left: 0; border-left: 0; }
 
 @media (prefers-reduced-motion: reduce) {

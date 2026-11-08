@@ -62,7 +62,10 @@ export type {
 } from './cloudAgentExecutionSnapshot';
 
 export const CLOUD_AGENT_NO_PROVIDER_NOTICE = 'No provider configured yet.';
-export const CLOUD_AGENT_MODEL_UNAVAILABLE_NOTICE = 'This model is not available for the selected account.';
+/** The owner's line when the provider refuses the route's model for the account: another model helps, a retry does not. */
+export const CLOUD_AGENT_MODEL_UNAVAILABLE_NOTICE = "This model isn't available with your AI provider account. Choose another model.";
+/** Older builds stored this line for an unavailable model. */
+const LEGACY_MODEL_UNAVAILABLE_NOTICE = 'this model is not available for the selected account.';
 /** The owner's line for an expired AI provider connection whose provider is not named. */
 export const CLOUD_AGENT_PROVIDER_EXPIRED_NOTICE = 'Your AI provider connection expired.';
 /** Older builds stored this line for an expired provider connection. */
@@ -99,6 +102,7 @@ export function cloudAgentFallbackErrorNotice(input: { code?: string | null; mes
     return 'The owner device is online, so Kordi will answer from the device.';
   }
   if (normalizedCode === 'provider_auth_rejected') return CLOUD_AGENT_PROVIDER_EXPIRED_NOTICE;
+  if (normalizedCode === 'model_unavailable') return CLOUD_AGENT_MODEL_UNAVAILABLE_NOTICE;
   if (normalizedCode === 'model_provider_error') {
     return 'The provider failed while Kordi was replying. Try again in a moment.';
   }
@@ -144,10 +148,17 @@ export function cloudAgentNoProviderNoticeText(): string {
   return CLOUD_AGENT_NO_PROVIDER_NOTICE;
 }
 
-/** The runtime could not resolve the route's model for the account it runs on. */
+/**
+ * The runtime could not resolve the route's model, or the provider refused it
+ * for the account (the OMP runtime's fixed wording, or the provider's code).
+ */
 export function isCloudAgentModelUnavailableError(value: unknown): boolean {
   const normalized = normalizedErrorText(value);
-  return normalized.includes('unknown model:') || normalized === CLOUD_AGENT_MODEL_UNAVAILABLE_NOTICE.toLowerCase();
+  return normalized.includes('unknown model:')
+    || normalized.includes('the selected model is unavailable for this account')
+    || normalized.includes('model_not_found')
+    || normalized === CLOUD_AGENT_MODEL_UNAVAILABLE_NOTICE.toLowerCase()
+    || normalized === LEGACY_MODEL_UNAVAILABLE_NOTICE;
 }
 
 /** A saved AI provider connection exists but is expired or could not be refreshed. */

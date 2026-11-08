@@ -97,7 +97,8 @@ test('execution waits for capability acknowledgement and ignores stale account r
   const reportWarning = () => {};
   let ready = false;
   function Probe({ accountId, runtimeReady = true }: { accountId: string; runtimeReady?: boolean }) {
-    ready = useDesktopAgentReadiness({ account: { accountId } as CloudAccount, client, runtimeReady, reportWarning });
+    // No reload grace: a runtime that stops being ready withdraws at once.
+    ready = useDesktopAgentReadiness({ account: { accountId } as CloudAccount, client, runtimeReady, reportWarning, reloadGraceMs: 0 });
     return null;
   }
   try {
@@ -129,6 +130,45 @@ test('execution waits for capability acknowledgement and ignores stale account r
   } finally { await view.close(); }
 });
 
+
+test('a reloading runtime keeps its readiness published until it is ready again', async () => {
+  const view = await fixture(async () => null);
+  const published: unknown[] = [];
+  const client = new CloudAuthClient('http://localhost');
+  client.desktopAgentExecution = async <T,>(_token: string, action: string, input: unknown): Promise<T> => {
+    assert.equal(action, 'ready');
+    published.push(input);
+    return {} as T;
+  };
+  const reportWarning = () => {};
+  let ready = false;
+  function Probe({ runtimeReady, reloadGraceMs }: { runtimeReady: boolean; reloadGraceMs: number }) {
+    ready = useDesktopAgentReadiness({ account: { accountId: 'acct_test' } as CloudAccount, client, runtimeReady, reportWarning, reloadGraceMs });
+    return null;
+  }
+  const owned = { agentIds: ['cloud-agent:acct_test'], digest: false, scheduled: false, proactive: false };
+  try {
+    // Before the runtime was ever ready there is nothing to keep.
+    await view.render(<Probe runtimeReady={false} reloadGraceMs={60_000} />);
+    await waitFor(() => published.length === 1);
+    assert.deepEqual(published[0], { agentIds: [], digest: false, scheduled: false, proactive: false });
+    await view.render(<Probe runtimeReady reloadGraceMs={60_000} />);
+    await waitFor(() => published.length === 2 && ready);
+    assert.deepEqual(published[1], owned);
+    // The owner picks another model: the route resolves again, no withdrawal.
+    await view.render(<Probe runtimeReady={false} reloadGraceMs={60_000} />);
+    assert.equal(ready, false, 'a reloading runtime does not execute');
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
+    assert.equal(published.length, 2);
+    await view.render(<Probe runtimeReady reloadGraceMs={60_000} />);
+    assert.equal(ready, true);
+    assert.equal(published.length, 2);
+    // A runtime that stays without a route past the grace withdraws.
+    await view.render(<Probe runtimeReady={false} reloadGraceMs={20} />);
+    await waitFor(() => published.length === 3);
+    assert.deepEqual(published[2], { agentIds: [], digest: false, scheduled: false, proactive: false });
+  } finally { await view.close(); }
+});
 
 test('live execution becomes ready after cursor catch-up while older history remains blocked', async () => {
   const view = await fixture(async command => {
@@ -236,7 +276,8 @@ test('a Mac offers proactive runs exactly when it offers digests, never as an ag
   const local = { model: 'openai/gpt-5.6', authProvider: 'openai', authChoice: 'local-active-oauth', thinking: null };
   const reportWarning = () => {};
   function Probe({ model, runtimeReady = true }: { model: string; runtimeReady?: boolean }) {
-    useDesktopAgentReadiness({ account: { accountId: 'acct_test' } as CloudAccount, client, runtimeReady, defaultRoute: { ...local, model }, reportWarning });
+    // No reload grace: a runtime that stops being ready withdraws at once.
+    useDesktopAgentReadiness({ account: { accountId: 'acct_test' } as CloudAccount, client, runtimeReady, defaultRoute: { ...local, model }, reportWarning, reloadGraceMs: 0 });
     return null;
   }
   try {
