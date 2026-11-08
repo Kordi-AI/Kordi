@@ -36,12 +36,18 @@ pub async fn thread_attention(
             FROM cloud_chat_conversations c JOIN cloud_chat_conversation_members viewer USING(conversation_id)
             WHERE viewer.account_id=$1 AND viewer.membership_state='active' AND ($2::uuid IS NULL OR c.conversation_id>$2)
             ORDER BY c.conversation_id LIMIT 200
-        ), unread AS (
-            SELECT m.conversation_id,m.message_id,m.thread_root_message_id,m.conversation_sequence
+        ), candidates AS MATERIALIZED (
+            -- Cheap read-position filter first: content checks below decode
+            -- large message bodies, so they run only on unread messages.
+            SELECT m.message_id,m.conversation_id,m.thread_root_message_id,m.conversation_sequence
             FROM conversations c JOIN cloud_chat_messages m USING(conversation_id)
             LEFT JOIN cloud_chat_thread_read_cursors r ON r.conversation_id=m.conversation_id AND r.root_message_id=m.thread_root_message_id AND r.account_id=$1
             WHERE m.deleted_at IS NULL
-              AND NOT EXISTS(SELECT 1 FROM cloud_chat_message_visibility v WHERE v.message_id=m.message_id AND v.account_id=$1)
+              AND m.conversation_sequence > CASE WHEN m.thread_root_message_id IS NULL THEN c.last_read_sequence ELSE COALESCE(r.last_read_sequence,0) END
+        ), unread AS MATERIALIZED (
+            SELECT u.conversation_id,u.message_id,u.thread_root_message_id,u.conversation_sequence
+            FROM candidates u JOIN cloud_chat_messages m ON m.message_id=u.message_id
+            WHERE NOT EXISTS(SELECT 1 FROM cloud_chat_message_visibility v WHERE v.message_id=m.message_id AND v.account_id=$1)
               AND NOT EXISTS(SELECT 1 FROM cloud_account_blocks b WHERE b.blocker_account_id=$1 AND b.blocked_account_id=m.sender_account_id)
               AND (m.sender_account_id<>$1 OR m.attention_content->>'senderKind'='agent' OR m.attention_content->>'kind'='agent-response')
               AND COALESCE(m.attention_content->>'hidden','false')<>'true'
@@ -51,9 +57,8 @@ pub async fn thread_attention(
                    OR jsonb_array_length(CASE WHEN jsonb_typeof(m.content->'legacy_attachments')='array' THEN m.content->'legacy_attachments' ELSE '[]'::jsonb END)>0
                    OR EXISTS(SELECT 1 FROM cloud_chat_message_attachments a WHERE a.message_id=m.message_id)
                    OR EXISTS(SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(m.content->'blocks')='array' THEN m.content->'blocks' ELSE '[]'::jsonb END) b WHERE b->>'type'='voice'))
-              AND m.conversation_sequence > CASE WHEN m.thread_root_message_id IS NULL THEN c.last_read_sequence ELSE COALESCE(r.last_read_sequence,0) END
-              AND (m.thread_root_message_id IS NULL OR EXISTS(
-                  SELECT 1 FROM cloud_chat_messages root WHERE root.message_id=m.thread_root_message_id AND root.deleted_at IS NULL
+              AND (u.thread_root_message_id IS NULL OR EXISTS(
+                  SELECT 1 FROM cloud_chat_messages root WHERE root.message_id=u.thread_root_message_id AND root.deleted_at IS NULL
                   AND NOT EXISTS(SELECT 1 FROM cloud_chat_message_visibility v WHERE v.message_id=root.message_id AND v.account_id=$1)))
         ) SELECT c.conversation_id,c.session_id,COUNT(u.message_id),COUNT(DISTINCT u.thread_root_message_id),COUNT(u.message_id) FILTER(WHERE u.thread_root_message_id IS NOT NULL),
             (array_agg(u.thread_root_message_id ORDER BY u.conversation_sequence) FILTER(WHERE u.thread_root_message_id IS NOT NULL))[1],
