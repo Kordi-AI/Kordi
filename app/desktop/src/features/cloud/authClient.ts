@@ -247,11 +247,12 @@ export class CloudAuthClient {
     path: string,
     init: RequestInit,
     fallbackMessage: string,
+    timeoutMs = this.requestTimeoutMs,
   ): Promise<TResponse> {
     let response: Response;
     const timeoutController = init.signal ? null : new AbortController();
     const timeout = timeoutController
-      ? setTimeout(() => timeoutController.abort(), this.requestTimeoutMs)
+      ? setTimeout(() => timeoutController.abort(), timeoutMs)
       : null;
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
@@ -577,11 +578,12 @@ export class CloudAuthClient {
     );
   }
 
-  async desktopAgentExecution<T>(token: string, action: string, input: unknown): Promise<T> {
+  /** `timeoutMs` overrides the default request timeout, such as for a lease renewal on a slow server. */
+  async desktopAgentExecution<T>(token: string, action: string, input: unknown, options: { timeoutMs?: number } = {}): Promise<T> {
     return this.send<T>(`/v1/cloud/agent-runs/desktop/${action}`, {
       method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
       body: JSON.stringify(input),
-    }, 'Could not coordinate desktop agent execution.');
+    }, 'Could not coordinate desktop agent execution.', options.timeoutMs);
   }
 
   /** Asks whoever executes the request's agent run to stop it. */

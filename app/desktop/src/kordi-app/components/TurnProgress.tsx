@@ -68,7 +68,7 @@ export function TurnProgress({ turn, trailing, renderTool, legacyAnswer }: {
         aria-label={`${statusLabel}${elapsed ? ` ${elapsed}` : ''}`} disabled={!expandable}
         data-transcript-stable-disclosure="true" onClick={toggleTrajectory}>
         {live ? <ProgressBird /> : null}
-        <span role={live ? 'status' : undefined} className={live ? 'app-turn-status-label' : undefined} title={statusLabel}><span key={statusLabel} className="app-turn-status-text">{statusLabel}</span></span>{elapsed ? <span className="app-turn-progress-time" aria-hidden="true">{elapsed}</span> : null}
+        <span role={live ? 'status' : undefined} className="app-turn-status-label" title={statusLabel}><span key={statusLabel} className="app-turn-status-text">{statusLabel}</span></span>{elapsed ? <span className="app-turn-progress-time" aria-hidden="true">{elapsed}</span> : null}
         {expandable ? <ChevronRight size={13} aria-hidden="true" className={trajectoryExpanded ? 'rotate-90' : undefined} /> : null}
       </button>
       {live ? trailing : null}
