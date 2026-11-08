@@ -1,5 +1,6 @@
 import { CloudAuthClient, CloudAuthError } from './authClient';
 import { loadSession } from './session';
+import { isTransientCloudFailure } from './cloudDesktopExecutionLease';
 import { fetchDesktopSubsessionSnapshot } from '@/lib/desktopBackgroundSessions';
 import { cancelDesktopChatTurn, renewDesktopChatExecutionLease } from '@/lib/desktop';
 import { relatedAgentSessionsFromTools, normalizedRelatedAgentSessionStatus } from '@/features/chat/relatedAgentSessions';
@@ -8,6 +9,14 @@ import type { DesktopChatTurnSnapshot } from '@/kordi-app/types';
 const jobs = new Map<string, Promise<void>>();
 class SubsessionSyncStop extends Error {}
 const pause = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+/** How long a background session runs on this Mac after the last renewal. */
+export const SUBSESSION_LEASE_WINDOW_MS = 30_000;
+/** Renewals while a cloud request is pending, so a slow server cannot starve the deadline. */
+export const SUBSESSION_LEASE_HEARTBEAT_MS = 5_000;
+
+/** No answer from the cloud: a timeout, a server error, or a failed local read. */
+const unanswered = (error: unknown) => !(error instanceof CloudAuthError) || isTransientCloudFailure(error);
 
 export async function publishModelSubsession(id: string): Promise<void> {
   const account = await loadSession();
@@ -26,11 +35,41 @@ export async function publishModelSubsession(id: string): Promise<void> {
     // stop publishing it, instead of letting the task's watchdog stop it.
     let publishRefused = false;
     let runningTurnId: string | null = null;
+    // The deadline starts with the first accepted or refused publish. After
+    // that, this loop keeps the task alive while it runs: a slow or
+    // unreachable cloud must not stop a task that runs on this Mac. Only a
+    // stop, a sign-out, refused attempts for the whole window, or this page
+    // closing end it.
+    let leaseArmed = false;
+    let keepAlive = true;
+    let watching = true;
+    const renew = () => {
+      if (!watching || !leaseArmed || !keepAlive || !runningTurnId) return Promise.resolve();
+      return renewDesktopChatExecutionLease(runningTurnId, Date.now() + SUBSESSION_LEASE_WINDOW_MS).catch(() => undefined);
+    };
+    let heartbeatStarted = false;
+    const heartbeat = () => {
+      if (!watching) return;
+      void renew();
+      window.setTimeout(heartbeat, SUBSESSION_LEASE_HEARTBEAT_MS);
+    };
+    const armLease = () => {
+      leaseArmed = true;
+      if (heartbeatStarted) return;
+      heartbeatStarted = true;
+      window.setTimeout(heartbeat, SUBSESSION_LEASE_HEARTBEAT_MS);
+    };
     try {
       for (;;) {
-        const current = await loadSession();
+        let current: Awaited<ReturnType<typeof loadSession>>;
+        try { current = await loadSession(); }
+        catch {
+          // Reading the stored sign-in failed once; that is not a sign-out.
+          await renew();
+          await pause(1500);
+          continue;
+        }
         if (!current || current.accountId !== account.accountId) throw new Error('Account changed.');
-        let published = false;
         try {
           const snapshot = await fetchDesktopSubsessionSnapshot(id);
           if (!snapshot.parentRequestId) throw new SubsessionSyncStop('This task has no shared request identity.');
@@ -46,6 +85,7 @@ export async function publishModelSubsession(id: string): Promise<void> {
               });
               if ((await loadSession())?.accountId !== account.accountId) throw new Error('Account changed.');
               if (record?.status === 'stopped' && runningTurnId) {
+                watching = false;
                 await cancelDesktopChatTurn(runningTurnId);
                 resolveFirst();
                 return;
@@ -56,33 +96,38 @@ export async function publishModelSubsession(id: string): Promise<void> {
             version = saved.version;
             resolveFirst();
             if (saved.status === 'stopped' && runningTurnId) {
+              watching = false;
               await cancelDesktopChatTurn(runningTurnId);
               return;
             }
             if (saved.hasFollowupExecution) return;
           }
-          published = true;
+          keepAlive = true;
+          armLease();
           if (!runningTurnId) return;
         } catch (error) {
           if (error instanceof SubsessionSyncStop || (error instanceof Error && error.message === 'Account changed.')) throw error;
           if (error instanceof CloudAuthError && [400, 403].includes(error.status ?? 0)) {
             publishRefused = true;
             resolveFirst();
+            keepAlive = true;
+            armLease();
+          } else {
+            // No answer (a native read that failed once, a timeout, a server
+            // error) keeps the task alive and is retried. An answer that
+            // refuses this attempt (an expired access token, a version
+            // conflict) is retried without renewing. A lost response may
+            // already have committed, so the version is reloaded; retries
+            // never create or restart a model runtime.
+            keepAlive = unanswered(error);
           }
-          // Anything else (a native read that failed once, an access token
-          // that was just refreshed, a lost response) is retried. A lost
-          // response may already have committed, so the version is reloaded;
-          // retries never create or restart a model runtime.
           version = null;
         }
-        // The task keeps running while this Mac watches it. A failed attempt
-        // skips one renewal and is retried well before the 30 s deadline;
-        // only a stop, a sign-out or this page closing ends the task.
-        if (runningTurnId && (published || publishRefused)) await renewDesktopChatExecutionLease(runningTurnId, Date.now() + 30_000).catch(() => undefined);
+        await renew();
         await pause(1500);
       }
     } catch (error) { rejectFirst(error); }
-    finally { jobs.delete(key); }
+    finally { watching = false; jobs.delete(key); }
   })();
   return first;
 }
