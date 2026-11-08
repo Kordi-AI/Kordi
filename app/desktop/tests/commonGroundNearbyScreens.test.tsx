@@ -7,6 +7,7 @@ import type { CgHost } from '../src/features/commonGround/host';
 import { NearbyScreen } from '../src/features/commonGround/NearbyScreen';
 import { PairCodePanel } from '../src/features/commonGround/PairCodePanel';
 import { CommonGroundStore } from '../src/features/commonGround/store';
+import { nearbyStoreFor } from '../src/features/commonGround/storeNearby';
 
 import { mockServer, owner, profile, type Reply } from './helpers/commonGroundServer';
 import { installDom } from './helpers/transcriptAttachmentDom';
@@ -58,6 +59,22 @@ function Panel({ store, nearby }: { store: CommonGroundStore; nearby: boolean })
 function Screen({ store }: { store: CommonGroundStore }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   return createElement(NearbyScreen, { state, store, host });
+}
+
+/** This device answers location requests with a fix; returns how many were asked for. */
+function deviceAnswers(store: CommonGroundStore, available = true) {
+  const locator = nearbyStoreFor(store).locator;
+  let requests = 0;
+  const device = { available };
+  locator.env = {
+    ...locator.env,
+    available: () => device.available,
+    locate: async () => {
+      requests += 1;
+      return { latitude: 40.123, longitude: -75.654, accuracy: 50, capturedAt: new Date().toISOString() };
+    },
+  };
+  return { device, requests: () => requests };
 }
 
 const settle = () => act(async () => { for (let index = 0; index < 6; index += 1) await new Promise((resolve) => setTimeout(resolve, 0)); });
@@ -343,7 +360,7 @@ test('nearby screen: no matches and no location both keep a visible People resul
   }
 });
 
-test('nearby screen: a device fix is requested only on click, rounded, posted, and followed by results', async () => {
+test('nearby screen: the manual link requests a device fix, rounded, posted, and followed by results', async () => {
   const { store, calls } = storeWith({
     'GET nearby': [{ status: 200, body: settings({ location: null }) }, { status: 200, body: settings() }],
     'GET nearby/needs': { status: 200, body: { needs: [] } },
@@ -367,6 +384,72 @@ test('nearby screen: a device fix is requested only on click, rounded, posted, a
     });
     assert.match(root.textContent ?? '', /Maya Chen/);
     assert.doesNotMatch(root.textContent ?? '', /No results yet/);
+  });
+});
+
+test('nearby screen: opening it with sharing on sends this device\'s location by itself, then shows results', async () => {
+  const { store, calls } = storeWith({
+    'GET nearby': [{ status: 200, body: settings({ location: null }) }, { status: 200, body: settings() }],
+    'GET nearby/needs': { status: 200, body: { needs: [] } },
+    'GET nearby/people': { status: 200, body: people },
+    'POST nearby/location': { status: 200, body: { location: fresh() } },
+  });
+  const device = deviceAnswers(store);
+  await mount(createElement(Screen, { store }), async (root) => {
+    assert.equal(device.requests(), 1);
+    assert.equal(calls.filter((call) => call.url.endsWith('/nearby/location')).length, 1);
+    assert.match(root.textContent ?? '', /Maya Chen/);
+    assert.doesNotMatch(root.textContent ?? '', /No results yet/);
+    assert.ok(buttonNamed(root, 'Use this device’s location'), 'the manual link stays');
+  });
+});
+
+test('nearby screen: paused or off never asks for this device\'s location', async () => {
+  for (const patch of [{ pausedUntil: new Date(Date.now() + 60 * 60_000).toISOString() }, { enabled: false, participating: false }]) {
+    const { store, calls } = storeWith({
+      'GET nearby': { status: 200, body: settings({ location: null, ...patch }) },
+      'GET nearby/needs': { status: 200, body: { needs: [] } },
+    });
+    const device = deviceAnswers(store);
+    await mount(createElement(Screen, { store }), async () => {
+      assert.equal(device.requests(), 0);
+      assert.equal(calls.filter((call) => call.method === 'POST').length, 0);
+    });
+  }
+});
+
+test('nearby screen: Refresh results also sends a new location, at most once a minute', async () => {
+  const { store, calls } = storeWith({
+    'GET nearby': { status: 200, body: settings({ location: null }) },
+    'GET nearby/needs': { status: 200, body: { needs: [] } },
+    'POST nearby/location': { status: 200, body: { location: fresh() } },
+  });
+  const device = deviceAnswers(store, false);
+  await mount(createElement(Screen, { store }), async (root) => {
+    assert.equal(device.requests(), 0);
+    device.device.available = true;
+    await click(buttonNamed(root, 'Refresh results'));
+    assert.equal(device.requests(), 1);
+    assert.equal(calls.filter((call) => call.url.endsWith('/nearby/location')).length, 1);
+    await click(buttonNamed(root, 'Refresh results'));
+    assert.equal(device.requests(), 1, 'throttled');
+  });
+});
+
+test('nearby screen: the empty People state offers the location update', async () => {
+  const { store, calls } = storeWith({
+    'GET nearby': [{ status: 200, body: settings({ location: null }) }, { status: 200, body: settings() }],
+    'GET nearby/needs': { status: 200, body: { needs: [] } },
+    'GET nearby/people': { status: 200, body: people },
+    'POST nearby/location': { status: 200, body: { location: fresh() } },
+  });
+  const device = deviceAnswers(store, false);
+  await mount(createElement(Screen, { store }), async (root) => {
+    assert.match(root.textContent ?? '', /No results yet/);
+    await click(buttonNamed(root, 'Update location'));
+    assert.equal(device.requests(), 1);
+    assert.equal(calls.filter((call) => call.url.endsWith('/nearby/location')).length, 1);
+    assert.match(root.textContent ?? '', /Maya Chen/);
   });
 });
 
