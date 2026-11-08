@@ -34,6 +34,8 @@ import type {
   CloudGroupAgentRuntime,
   CloudGroupMessageControlContext,
 } from './cloudGroupControlContext';
+import type { CloudAuthClient } from './authClient';
+import { publishCloudGroupAgentEnvelope } from './cloudGroupAgentPublication';
 
 type CloudGroupAgentFailureStateOps = {
   cleanText(value?: string | null): string;
@@ -54,7 +56,34 @@ export type HandleCloudGroupAgentFailureInput = {
   runtime: CloudGroupAgentRuntime;
   stateOps: CloudGroupAgentFailureStateOps;
   signal?: AbortSignal;
+  /**
+   * The execution lease's publisher when this Mac holds the run. The failure
+   * then ends the run on the server, so the cloud never answers it again.
+   */
+  publisher?: Pick<CloudAuthClient, 'sendMessage'>;
 };
+
+// Requests whose failure this Mac already published, so a second failure
+// path for the same mention posts nothing.
+const publishedFailureKeys = new Set<string>();
+const PUBLISHED_FAILURE_KEY_LIMIT = 500;
+
+function cloudGroupAgentFailureKey(accountId: string, requestId: string): string {
+  return `${accountId}:${requestId}`;
+}
+
+function rememberPublishedFailure(key: string): void {
+  publishedFailureKeys.add(key);
+  if (publishedFailureKeys.size > PUBLISHED_FAILURE_KEY_LIMIT) {
+    const oldest = publishedFailureKeys.values().next().value;
+    if (oldest !== undefined) publishedFailureKeys.delete(oldest);
+  }
+}
+
+/** Test hook: forgets which failures were published. */
+export function __resetPublishedCloudGroupAgentFailuresForTests(): void {
+  publishedFailureKeys.clear();
+}
 
 export function cloudGroupAgentFailureNoticeRequest({
   accountId,
@@ -121,12 +150,19 @@ export async function handleCloudGroupAgentFailure(
     runtime,
     stateOps,
     signal,
+    publisher,
   }: HandleCloudGroupAgentFailureInput,
 ): Promise<void> {
   const { account, envelope } = context;
   const message = envelope.message;
   if (!message) return;
   runtime.turnIdsByRequestId.delete(message.id);
+  const failureKey = cloudGroupAgentFailureKey(account.accountId, message.id);
+  // One mention gets at most one failure reply from this Mac.
+  if (publishedFailureKeys.has(failureKey)) {
+    runtime.reportFailure('local-response', error);
+    return;
+  }
   // The generic refusal for a restricted requester is never answered in the
   // group: an error there would tell them about the restriction.
   if (isAgentUnavailableRefusal(error)) {
@@ -194,6 +230,7 @@ export async function handleCloudGroupAgentFailure(
   });
   if (!noProvider) runtime.reportFailure('local-response', error);
 
+  rememberPublishedFailure(failureKey);
   void publishCloudGroupAgentFailure({
     context,
     runtime,
@@ -203,6 +240,7 @@ export async function handleCloudGroupAgentFailure(
     agentDisplayName,
     agentId,
     signal,
+    publisher,
   }).catch((fanoutError) => {
     runtime.reportFailure(
       noProvider ? 'no-provider-notice' : 'local-response',
@@ -220,6 +258,7 @@ async function publishCloudGroupAgentFailure({
   agentDisplayName,
   agentId,
   signal,
+  publisher,
 }: {
   context: CloudGroupMessageControlContext;
   runtime: CloudGroupAgentRuntime;
@@ -229,6 +268,7 @@ async function publishCloudGroupAgentFailure({
   agentDisplayName: string;
   agentId: string;
   signal?: AbortSignal;
+  publisher?: Pick<CloudAuthClient, 'sendMessage'>;
 }): Promise<void> {
   if (signal?.aborted) return;
   const {
@@ -273,41 +313,28 @@ async function publishCloudGroupAgentFailure({
   const fanoutSpan = beginChatPerformanceSpan(
     'cloud-agent-terminal-fanout',
   );
-  const sent = await Promise.allSettled(
-    targetAccountIds.map((targetAccountId) => runtime.client.sendMessage(
-      session.token,
-      targetAccountId,
-      responseBody,
-      {
-        sessionId: envelope.groupId,
-        clientCreatedAt: new Date(responseCreatedAtMs).toISOString(),
-        conversationKind: 'group',
-        memberAccountIds: targetAccountIds,
-      },
-    )),
-  );
-  sent.forEach((result) => {
-    if (result.status === 'fulfilled' && !signal?.aborted) {
-      runtime.mergeMessage(result.value);
-    }
+  const fanout = await publishCloudGroupAgentEnvelope({
+    publisher,
+    runtime,
+    token: session.token,
+    targetAccountIds,
+    body: responseBody,
+    sessionId: envelope.groupId,
+    createdAtMs: responseCreatedAtMs,
+    signal,
+    // Keyed by the reply, not its text and time, so a resend is a no-op.
+    clientMessageId: `group-agent-failure:${envelope.groupId}:${responseMessageId}`,
   });
-  const fanoutFailure = sent.find(
-    (result): result is PromiseRejectedResult =>
-      result.status === 'rejected',
-  );
-  const sentCount = sent.filter(
-    (result) => result.status === 'fulfilled',
-  ).length;
-  const failedCount = sent.length - sentCount;
   finishChatPerformanceSpan(fanoutSpan, {
-    resultClass: failedCount === 0
+    resultClass: fanout.failedCount === 0
       ? 'success'
-      : sentCount > 0
+      : fanout.sentCount > 0
         ? 'partial'
         : 'failed',
     recipientCount: targetAccountIds.length,
-    errorCount: failedCount,
+    errorCount: fanout.failedCount,
   });
   if (!signal?.aborted) void runtime.syncDiff();
-  if (fanoutFailure) throw fanoutFailure.reason;
+  // One delivered copy reaches the whole group.
+  if (fanout.sentCount === 0 && fanout.failedCount > 0) throw fanout.firstError;
 }
