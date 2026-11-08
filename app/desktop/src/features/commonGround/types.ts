@@ -153,7 +153,8 @@ export type CgDeviceSource = 'calendar' | 'reminders';
 export type CgDeviceItem = { title: string; date: string | null };
 
 /** An agent instruction or memory file from this Mac; `label` is the path under the home directory. */
-export type CgAgentFile = { label: string; text: string };
+/** `label` is the title the card shows; `path` (home-relative) stays on this Mac and is never sent. */
+export type CgAgentFile = { label: string; path?: string; text: string };
 
 export type CgBuildRequest = {
   memory: boolean;
