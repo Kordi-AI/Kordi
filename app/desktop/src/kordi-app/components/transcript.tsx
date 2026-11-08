@@ -353,10 +353,10 @@ function MessageBubbleView({
   const forks = messageForks ?? [];
   const forkCount = forks.length;
   const forkChip = forkCount > 0 ? (
-    <span className="relative inline-flex">
+    <span className="relative inline-flex shrink-0">
       <button
         type="button"
-        className="app-button-quiet app-message-fork-chip inline-flex h-6 items-center gap-1 rounded-full px-2 text-[10.5px] font-medium tabular-nums"
+        className="app-button-quiet app-message-fork-chip inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 text-[10.5px] font-medium tabular-nums"
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -366,7 +366,7 @@ function MessageBubbleView({
         aria-haspopup="menu"
         aria-expanded={isForkListOpen}
       >
-        <Split className="h-2.5 w-2.5" />
+        <Split className="h-2.5 w-2.5 shrink-0" />
         <span>
           {forkCount} fork{forkCount === 1 ? '' : 's'}
         </span>
