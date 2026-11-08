@@ -307,7 +307,7 @@ async fn claim_request(
         let acquired: (bool,) = query_as("SELECT execution_backend='desktop' AND claimed_by=$2 AND status IN ('leased','running') AND lease_expires_at::timestamptz>now() FROM cloud_agent_fallback_runs WHERE run_id=$1")
             .bind(&run.run_id).bind(owner).fetch_one(state.db_pool()).await?;
         let identity = if acquired.0 { Some(runs::identity::identity_for_run(state.db_pool(), &run.run_id).await?) } else { None };
-        let mut value = json!({"runId":run.run_id,"acquired":acquired.0,"leaseSeconds":45,"turnIdentity":identity});
+        let mut value = json!({"runId":run.run_id,"acquired":acquired.0,"leaseSeconds":crate::cloud_agent_runtime::DESKTOP_LEASE_SECONDS,"turnIdentity":identity});
         // The claiming Mac runs the turn in its own folder of this project.
         if let Some(route) = project.as_ref() {
             value["project"] = json!({"id":route.project_id,"name":route.project_name,"workspaceId":route.workspace_id});

@@ -63,3 +63,17 @@ test('a retrying turn shows the provider reason under its label', () => {
   const recovered = renderToStaticMarkup(createElement(TurnProgress, { turn: { ...retrying, status: 'streaming' }, renderTool: () => null }));
   assert.doesNotMatch(recovered, /app-turn-retry-reason/);
 });
+
+test('a reply that ended early reports the work done, and its label never shares space with the time', () => {
+  for (const [status, ending] of [['failed', 'interrupted'], ['cancelled', 'stopped']] as const) {
+    const ended: DesktopChatTurnSnapshot = { ...turn, status, succeeded: false, ending };
+    assert.equal(turnProgressLabel(ended), 'Worked for');
+    const html = renderToStaticMarkup(createElement(TurnProgress, { turn: ended, renderTool: () => null }));
+    assert.match(html, /aria-label="Worked for 3m 15s"/);
+    assert.doesNotMatch(html, /Needs attention/);
+    // The settled label keeps its own clipped box, so it cannot paint over the duration.
+    assert.match(html, /class="app-turn-status-label"[^>]*><span class="app-turn-status-text">Worked for<\/span><\/span><span class="app-turn-progress-time"/);
+  }
+  // A failure without partial text still asks for attention.
+  assert.equal(turnProgressLabel({ ...turn, status: 'failed', succeeded: false }), 'Needs attention');
+});

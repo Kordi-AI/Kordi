@@ -269,11 +269,14 @@ pub(super) async fn renew(
     // A desktop still renewing well after a stop request ignores it, so its
     // lease is refused and the run ends when the lease lapses.
     let result = query_as::<_, (bool,)>("UPDATE cloud_agent_fallback_runs SET lease_expires_at=$3, updated_at=$4 WHERE run_id=$1 AND claimed_by=$2 AND execution_backend='desktop' AND status IN ('leased','running') AND lease_expires_at::timestamptz>now() AND (cancel_requested_at IS NULL OR cancel_requested_at>now()-interval '30 seconds') RETURNING cancel_requested_at IS NOT NULL")
-        .bind(run_id).bind(executor(&session,input.claim_id)).bind((Utc::now()+chrono::Duration::seconds(45)).to_rfc3339()).bind(Utc::now().to_rfc3339()).fetch_optional(state.db_pool()).await;
+        .bind(run_id).bind(executor(&session,input.claim_id)).bind((Utc::now()+chrono::Duration::seconds(super::DESKTOP_LEASE_SECONDS)).to_rfc3339()).bind(Utc::now().to_rfc3339()).fetch_optional(state.db_pool()).await;
     match result {
-        Ok(Some((cancel_requested,))) => {
-            Json(json!({"ok":true,"cancelRequested":cancel_requested})).into_response()
-        }
+        Ok(Some((cancel_requested,))) => Json(json!({
+            "ok": true,
+            "cancelRequested": cancel_requested,
+            "leaseSeconds": super::DESKTOP_LEASE_SECONDS,
+        }))
+        .into_response(),
         Ok(None) => expired(),
         Err(e) => run_error_response("desktop lease", "Could not renew execution.", e.into()),
     }

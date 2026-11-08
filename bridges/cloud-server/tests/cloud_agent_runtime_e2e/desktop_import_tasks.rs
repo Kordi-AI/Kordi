@@ -108,7 +108,7 @@ async fn a_mac_starts_an_import_and_gets_its_hosted_credentials() {
     let claim_id = uuid::Uuid::new_v4();
     let started = fx.start(claim_id, hosted_route()).await;
     assert_eq!(started["acquired"], true);
-    assert_eq!(started["leaseSeconds"], 45);
+    assert_eq!(started["leaseSeconds"], 120);
     let run_id = started["runId"].as_str().unwrap().to_string();
     assert!(run_id.starts_with("import_"));
     let import = &started["import"];

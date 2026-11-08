@@ -39,7 +39,7 @@ pub const CAPABILITY: &str = "scheduled";
 /// How long a `local_required` run waits for a Mac before it fails.
 pub const LOCAL_WAIT_HOURS: i64 = 12;
 /// Seconds a desktop claim holds the run before it must renew, as for chat.
-const LEASE_SECONDS: i64 = 45;
+const LEASE_SECONDS: i64 = crate::cloud_agent_runtime::DESKTOP_LEASE_SECONDS;
 const UNAVAILABLE_CODE: &str = "desktop_unavailable";
 const UNAVAILABLE_MESSAGE: &str = "Your Mac was not online to run this task.";
 
