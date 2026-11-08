@@ -52,6 +52,17 @@ test('a failed hand-back request is retried', async () => {
   assert.equal(calls.length, 3);
 });
 
+test('a timed-out hand-back request is retried, not taken as a refusal', async () => {
+  let attempts = 0;
+  const { client, calls } = fakeClient(() => (
+    ++attempts < 2
+      ? new CloudAuthError('network_error', 'Cloud request timed out. Check your connection and try again.', 0)
+      : { released: true }
+  ));
+  assert.equal(await handBackDesktopRun(client, 'token', lease([]), { retryMs: 0 }), true);
+  assert.equal(calls.length, 2);
+});
+
 const account: CloudAccount = {
   accountId: 'acct_me', displayName: 'Owner', primaryEmail: 'owner@example.com', avatarUrl: null,
   avatar: cloudAccountAvatarFixture, nodeId: 'node_me', passwordSet: true,
