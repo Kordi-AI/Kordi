@@ -469,4 +469,9 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
         "0185_apple_token_revocations.sql"
     ),
     migration!(186, "default agent access", "0186_default_agent_access.sql"),
+    migration!(
+        187,
+        "common ground link errors",
+        "0187_common_ground_link_errors.sql"
+    ),
 ];

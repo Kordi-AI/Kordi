@@ -31,10 +31,11 @@ This document is the UX and UI design for iOS and macOS. It is tracked in [#1847
    - **On this iPhone** (iOS) / **On this Mac** (macOS): Calendar, Reminders. **Allow** shows the system prompt; the row then shows the count found and a switch.
    - **Agents on this Mac** (macOS only): instruction and memory files from local coding agents, redacted before use.
      The server reads up to 12 files, keeps at most 2,000 characters of each after redaction, and rejects a build whose agent text passes 60,000 characters.
-   - **Links**: URLs and text separated by `;` (homepage, ORCID, papers). Sites that need sign-in are skipped with a reason.
+   - **Links**: URLs and text separated by `;` (homepage, ORCID, Google Scholar, papers). The server reads up to six public pages when the build starts (8 seconds each, an honest user agent, public addresses only); the link stays the reference. A page that is blocked, needs sign-in or has no readable text keeps only its address, and the Build screen and the card name it ("Couldn't read scholar.google.com"). Nothing retries or works around a site that refuses the request.
    - **Notes**: free text.
    - Primary button **Build profile**, enabled when at least one source is on.
 3. **Building.** The Kordi mark and two steps ("Reading sources", "Building your card"). Usually 10 to 30 seconds.
+   A build that fails keeps the previous card and returns to the sources with one line and **Build** as the retry. A run that ended without reporting back (cancelled, lost, expired) counts as failed, never as idle. A start request with no answer is not treated as "never started": the app checks the card and follows the build if the server started it.
 4. **Your card.** See [Card](#card). The first visit shows a single line under the title: "Remove anything you don't want to share."
 
 ### 2. Home

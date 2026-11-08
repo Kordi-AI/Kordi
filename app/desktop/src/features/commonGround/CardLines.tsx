@@ -4,19 +4,36 @@ import { ArrowUpRight, Eye, EyeOff, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { openExternalMessageLink, safeExternalHttpHref } from '@/kordi-app/components/messageLinks';
 import { topicTone } from './format';
-import { cardAnchor, isNotesSource, jumpTo, QUOTE_FOLD_CHARS, refMeta, seenLine, sourceLook, topicRefs, type CardRef } from './cardReferences';
+import { cardAnchor, isNotesSource, QUOTE_FOLD_CHARS, refKey, refMeta, seenLine, sourceLook, topicRefs, type CardRef } from './cardReferences';
 import { CgTag } from './parts';
 import type { CgOwnCard } from './types';
 
 export const TOPIC_MAX_CHARS = 40;
 
+/** Where and when a reference came from; the title links to the source when it has a URL. */
+function RefMeta({ item }: { item: CardRef['item'] }) {
+  const { title, rest } = refMeta(item);
+  const href = item.url ? safeExternalHttpHref(item.url) : null;
+  const { Icon } = sourceLook(item.source);
+  return (
+    <span className="cg-ref-meta">
+      {isNotesSource(item.source) ? null : <Icon className="cg-ref-glyph" aria-hidden="true" />}
+      {href ? (
+        <a className="cg-ref-link" href={href} title={href} target="_blank" rel="noreferrer noopener" onClick={(event) => openExternalMessageLink(event, href)}>
+          {title || item.title || item.source}
+          <ArrowUpRight className="cg-ref-arrow" aria-hidden="true" />
+        </a>
+      ) : title ? <span className="cg-ref-title">{title}</span> : null}
+      {(href || title) && rest ? <span aria-hidden="true">·</span> : null}
+      <span>{rest}</span>
+    </span>
+  );
+}
+
 /** One reference: its own words first, then where and when it came from. */
 function RefRow({ id, item }: CardRef) {
   const [open, setOpen] = useState(false);
   const words = item.snippet.trim() || item.title.trim();
-  const { title, rest } = refMeta(item);
-  const href = item.url ? safeExternalHttpHref(item.url) : null;
-  const { Icon } = sourceLook(item.source);
   const folds = words.length > QUOTE_FOLD_CHARS;
   return (
     <div className="cg-ref" id={cardAnchor('ref', id)}>
@@ -26,17 +43,7 @@ function RefRow({ id, item }: CardRef) {
           {open ? 'Show less' : 'Show more'}
         </button>
       ) : null}
-      <span className="cg-ref-meta">
-        {isNotesSource(item.source) ? null : <Icon className="cg-ref-glyph" aria-hidden="true" />}
-        {href ? (
-          <a className="cg-ref-link" href={href} title={href} target="_blank" rel="noreferrer noopener" onClick={(event) => openExternalMessageLink(event, href)}>
-            {title || item.title || item.source}
-            <ArrowUpRight className="cg-ref-arrow" aria-hidden="true" />
-          </a>
-        ) : title ? <span className="cg-ref-title">{title}</span> : null}
-        {(href || title) && rest ? <span aria-hidden="true">·</span> : null}
-        <span>{rest}</span>
-      </span>
+      <RefMeta item={item} />
     </div>
   );
 }
@@ -45,13 +52,16 @@ function RefRow({ id, item }: CardRef) {
 export function CardLine({ card, topic, owners, onHide, onRemove }: {
   card: CgOwnCard;
   topic: string;
-  /** For each cited item, the first topic on the page that shows it in full. */
+  /** For each source (by `refKey`), the first topic on the page that shows it in full. */
   owners: Map<string, string>;
   onHide: () => void;
   onRemove: () => void;
 }) {
   const hidden = card.hidden.includes(topic);
   const refs = topicRefs(card, topic);
+  // A source shown in full under an earlier topic appears here only as where it came from.
+  const shown = refs.filter((ref) => (owners.get(refKey(ref.item)) ?? topic) === topic);
+  const repeated = refs.filter((ref) => !shown.includes(ref));
   const seen = seenLine(card, topic);
   return (
     <div className={cn('cg-line', hidden && 'is-off')} id={cardAnchor('topic', topic)}>
@@ -68,15 +78,12 @@ export function CardLine({ card, topic, owners, onHide, onRemove }: {
       </div>
       {refs.length ? (
         <div className="cg-line-refs">
-          {refs.map((ref) => {
-            const first = owners.get(ref.id) ?? topic;
-            if (first === topic) return <RefRow key={ref.id} {...ref} />;
-            return (
-              <button key={ref.id} type="button" className="cg-ref-same" onClick={() => jumpTo(cardAnchor('ref', ref.id))}>
-                Same {isNotesSource(ref.item.source) ? 'note' : 'reference'} as {first}
-              </button>
-            );
-          })}
+          {shown.map((ref) => <RefRow key={ref.id} {...ref} />)}
+          {repeated.length ? (
+            <div className="cg-ref-sources">
+              {repeated.map((ref) => <RefMeta key={ref.id} item={ref.item} />)}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

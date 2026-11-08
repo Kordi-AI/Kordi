@@ -23,11 +23,23 @@ export function sourceLook(source: string): { Icon: typeof Mail; tint: string } 
 /** One reference under a topic: its id in the card's evidence, and the item. */
 export type CardRef = { id: string; item: CgEvidence };
 
-/** The references behind a topic, newest first. */
+/** One source per key: its link, or its words where it has none. */
+export function refKey(item: CgEvidence): string {
+  const url = item.url?.trim().replace(/\/+$/, '');
+  return url ? `url:${url}` : `item:${item.source}\u0000${item.title}\u0000${item.snippet}`;
+}
+
+/** The references behind a topic, newest first, each source once. */
 export function topicRefs(card: CgOwnCard, topic: string): CardRef[] {
   const info = card.profile?.topics?.[topic];
   const evidence = card.profile?.evidence ?? {};
-  return (info?.refs ?? []).flatMap((id) => (evidence[id] ? [{ id, item: evidence[id] }] : []));
+  const seen = new Set<string>();
+  return (info?.refs ?? []).flatMap((id) => {
+    const item = evidence[id];
+    if (!item || seen.has(refKey(item))) return [];
+    seen.add(refKey(item));
+    return [{ id, item }];
+  });
 }
 
 /** The topics on the card, in the order the page lists them. */
@@ -35,11 +47,14 @@ export function cardTopics(card: CgOwnCard): string[] {
   return CG_TOPIC_SECTIONS.flatMap(([key]) => card[key]);
 }
 
-/** For each cited item, the first topic on the page that cites it; later topics link back to it. */
+/**
+ * For each source (by `refKey`), the first topic on the page that cites it. That topic shows it in
+ * full; later topics show only where it came from, as a link when it has one.
+ */
 export function firstCiters(card: CgOwnCard): Map<string, string> {
   const owners = new Map<string, string>();
   for (const topic of cardTopics(card)) {
-    for (const { id } of topicRefs(card, topic)) if (!owners.has(id)) owners.set(id, topic);
+    for (const { item } of topicRefs(card, topic)) if (!owners.has(refKey(item))) owners.set(refKey(item), topic);
   }
   return owners;
 }

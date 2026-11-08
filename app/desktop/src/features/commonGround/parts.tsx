@@ -6,8 +6,9 @@ import { KordiFlyingBird } from '@/features/cloud/KordiFlyingBird';
 import { GroupAvatar } from '@/kordi-app/components/GroupAvatar';
 import { IdentityAvatar } from '@/kordi-app/components/IdentityAvatar';
 import { cn } from '@/lib/utils';
+import { unreadLinkLine } from './buildRequest';
 import { topicTone } from './format';
-import type { CgPerson } from './types';
+import type { CgPerson, CgUnreadLink } from './types';
 
 type AvatarPerson = Pick<CgPerson, 'accountId' | 'name' | 'avatarUrl'>;
 
@@ -151,6 +152,16 @@ export function CgIcon({ children, tone = 'accent' }: { children: ReactNode; ton
 
 export function CgNotice({ text }: { text: string | null }) {
   return text ? <ErrorLine className="mt-2.5">{text}</ErrorLine> : null;
+}
+
+/** One quiet line per link the last build could not read. */
+export function CgUnreadLinks({ links }: { links: CgUnreadLink[] }) {
+  if (!links.length) return null;
+  return (
+    <ul className="cg-unread-links">
+      {links.map(({ url }) => <li key={url} title={url}>{unreadLinkLine(url)}</li>)}
+    </ul>
+  );
 }
 
 export function CgScore({ score }: { score: number | null | undefined }) {

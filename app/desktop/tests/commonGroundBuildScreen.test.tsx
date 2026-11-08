@@ -159,3 +159,24 @@ test('build screen: the card\'s last failed build shows on opening and clears wh
     assert.equal(alertText(root), null);
   });
 });
+
+test('build screen: a failed build shows even when the store also carries its notice', async () => {
+  // A first card's profile arrives as the build ends, so Build opens afresh with the failure in the store.
+  const { store } = storeWith({});
+  store.set({ owner: owner({ card: null, profile: work, build: { status: 'failed', errorCode: 'build_interrupted' } }), notice: 'Could not build your card. Try again.' });
+  await mount(createElement(Screen, { store, host: hostWith() }), async (root) => {
+    assert.equal(alertText(root), 'Could not build your card. Try again.');
+    assert.ok(buttonNamed(root, 'Build'), 'Build is the retry, beside the error');
+  });
+});
+
+test('build screen: links the last build could not read are named under Links', async () => {
+  const { store } = storeWith({});
+  const unreadLinks = [{ url: 'https://scholar.google.com/citations?user=abc', reason: 'blocked' }];
+  store.set({ owner: owner({ card: null, profile: work, build: { status: 'idle', errorCode: null, unreadLinks } }) });
+  await mount(createElement(Screen, { store, host: hostWith() }), async (root) => {
+    const line = root.querySelector('.cg-unread-links li');
+    assert.equal(line?.textContent, "Couldn't read scholar.google.com");
+    assert.equal(line?.getAttribute('title'), 'https://scholar.google.com/citations?user=abc');
+  });
+});

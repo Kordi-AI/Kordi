@@ -52,13 +52,46 @@ test('card page: other sources get a 12px glyph, and a URL makes the title a lin
   assert.match(html, /GitHub · 3 Oct/);
 });
 
-test('card page: evidence cited again collapses to a link back to the first topic', () => {
+test('card page: evidence cited again shows only where it came from, never a "Same reference as" row', () => {
   const html = render(refsCard);
   assert.equal(html.split(diary).length - 1, 1);
   assert.equal(html.split(`id="${cardAnchor('ref', 'e1')}"`).length - 1, 1);
-  assert.match(html, /<button type="button" class="cg-ref-same">Same note as Agent memory<\/button>/);
-  assert.equal(html.split('Same note as Agent memory').length - 1, 2);
-  assert.deepEqual([...firstCiters(refsCard).entries()], [['e1', 'Agent memory'], ['e2', 'Agent memory']]);
+  assert.doesNotMatch(html, /Same (note|reference) as|cg-ref-same/);
+  // The two later topics each show the note's source line instead.
+  assert.equal(html.split('<div class="cg-ref-sources"><span class="cg-ref-meta"><span>Notes · 12 Oct</span></span></div>').length - 1, 2);
+  assert.deepEqual([...firstCiters(refsCard).values()], ['Agent memory', 'Agent memory']);
+});
+
+const scholar = 'https://scholar.google.com/citations?user=abc';
+const linksCard = withProfile({ workingOn: ['AI agent evaluation', 'Multi-agent collaboration'] }, {
+  topics: {
+    'AI agent evaluation': { refs: ['e1', 'e2'], firstSeen: '2026-11-01', lastSeen: '2026-11-01' },
+    'Multi-agent collaboration': { refs: ['e1', 'e2', 'e3'], firstSeen: '2026-11-01', lastSeen: '2026-11-01' },
+  },
+  evidence: {
+    e1: { source: 'Link', title: 'Jane Doe - Google Scholar', date: '2026-11-01', url: scholar, snippet: 'Jane Doe · Research interests: multi-agent systems' },
+    // The same page given twice is one source.
+    e2: { source: 'Link', title: 'Jane Doe - Google Scholar', date: '2026-11-01', url: `${scholar}/`, snippet: 'Jane Doe · Research interests: multi-agent systems' },
+    e3: { source: 'Link', title: 'Lab page', date: '2026-11-01', url: 'https://lab.example.test/', snippet: 'Our lab studies how teams of agents cooperate.' },
+  },
+});
+
+test('card page: a link cited again is just a link to its source, each source once', () => {
+  const html = render(linksCard);
+  assert.doesNotMatch(html, /Same (note|reference) as/);
+  assert.equal(html.split('Jane Doe · Research interests').length - 1, 1, 'the page text shows once');
+  const links = html.match(/<a class="cg-ref-link" href="https:\/\/scholar\.google\.com\/citations\?user=abc"/g) ?? [];
+  assert.equal(links.length, 2, 'once in full, once as a link under the later topic');
+  assert.match(html, /<div class="cg-ref-sources"><span class="cg-ref-meta"><svg[\s\S]*?<\/svg><a class="cg-ref-link" href="https:\/\/scholar\.google\.com\/citations\?user=abc"[^>]*>Jane Doe - Google Scholar/);
+  assert.match(html, /Our lab studies how teams of agents cooperate\./);
+});
+
+test('card page: a link the build could not read says so under Sources', () => {
+  const store = new CommonGroundStore(mockServer({}).client, { profiles: true });
+  const unreadLinks = [{ url: scholar, reason: 'blocked' }];
+  store.set({ profiles: [work], profileId: 'cgp_work', owner: owner({ card: linksCard, build: { status: 'idle', errorCode: null, unreadLinks } }) });
+  const html = renderToStaticMarkup(createElement(CardScreen, { state: store.getSnapshot(), store }));
+  assert.match(html, /<ul class="cg-unread-links"><li title="https:\/\/scholar\.google\.com\/citations\?user=abc">Couldn&#x27;t read scholar\.google\.com<\/li><\/ul>/);
 });
 
 const timelineCard = withProfile({ workingOn: ['Agent memory', 'Eval design'], interests: ['Speech'] }, {

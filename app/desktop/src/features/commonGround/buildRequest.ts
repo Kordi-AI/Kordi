@@ -76,9 +76,25 @@ export function emptySourcesMessage(request: CgBuildRequest): string {
 
 /** A build that found nothing for the profile cannot succeed again with the same sources. */
 export function buildFailureMessage(errorCode: string | null) {
-  return errorCode === 'no_topics'
-    ? 'Nothing here fits this profile. Add a note or choose other sources.'
-    : 'Could not build your card. Try again.';
+  switch (errorCode) {
+    case 'no_topics': return 'Nothing here fits this profile. Add a note or choose other sources.';
+    case 'build_timed_out': return 'Building took too long. Try again.';
+    default: return 'Could not build your card. Try again.';
+  }
+}
+
+/** The start request got no answer and the card shows no build: it did not start. */
+export const BUILD_NOT_STARTED = 'Could not start building. Try again.';
+
+/** "Couldn't read scholar.google.com", for a link the last build could not read. */
+export function unreadLinkLine(url: string): string {
+  let host = url;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    // Keep the link as given.
+  }
+  return `Couldn't read ${host}`;
 }
 
 /** The hint in the build screen's notes box: what this profile keeps. Work when there is no profile, as the server builds. */
