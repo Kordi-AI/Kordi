@@ -29,6 +29,9 @@ export function elapsedLabel(turn: DesktopChatTurnSnapshot, now: number) {
 }
 
 export function turnProgressLabel(turn: DesktopChatTurnSnapshot) {
+  // A reply that ended early keeps its text; its footer says how it ended, so
+  // the header reports the work done instead of a second status.
+  if (turn.completed && turn.ending) return elapsedLabel(turn, 0) ? 'Worked for' : 'Finished';
   if (turn.status === 'cancelling') return 'Stopping…';
   if (turn.status === 'cancelled') return 'Stopped';
   if (turn.status === 'retrying') return 'Retrying…';

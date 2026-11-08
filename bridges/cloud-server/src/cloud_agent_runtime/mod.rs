@@ -17,3 +17,9 @@ pub(crate) mod subsession_execution;
 mod sync_events;
 
 pub(crate) use desktop::agent_desktop_ready;
+
+/// Seconds a desktop claim or renewal holds a run before the Mac must renew.
+/// Long enough that a slow server (or several timed-out renewals) does not
+/// stop a running Mac turn; the claim and renewal answers name it so the Mac
+/// stops before the lease lapses and the run can move to another executor.
+pub(crate) const DESKTOP_LEASE_SECONDS: i64 = 120;
