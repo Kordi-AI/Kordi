@@ -483,3 +483,6 @@ async fn overlapping_roots_keep_their_leases_and_downstream_replies_separate() {
     }
     assert!(f.pending(0).await.is_empty());
 }
+
+#[path = "agent_exchange_rounds.rs"]
+mod rounds;
