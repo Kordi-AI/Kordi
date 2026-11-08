@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "catalogSha256": "855b46a4b767dafb94422f6f6dc1d0a184a6b9913b774a41a1aab75ede9c6d18",
+  "catalogSha256": "ac5b5c33c1869fec9972ac4550625ca038a2e3bd65c1298704e487c5aada0d81",
   "inputs": {
-    "Cargo.lock": "cbf5a029d1f2ac0ccea997cae1102c2393035c01561a0582f942e1d9d5ea696b",
+    "Cargo.lock": "aaddf18bc846c7c7716c5ddf13498db0b14aa1f73ae8f56ab0022a436ce59870",
     "pnpm-lock.yaml": "538ab03d007684ded90b4f672a8eda6e9758c69d6abccd7d9807484e693e4e08",
     "shared/omp-runtime/bun.lock": "3d9f19374280ba7573dd6c33dfdebc876876b56517fe35edc55c6024ed515f4a",
     "bridges/cloud-temporal-bridge/go.mod": "c09969e162406833ad4a1c85524a1fbe4196fd84aea2ded9ef4c8b251da72c51",
@@ -12,8 +12,8 @@
     "legal/runtime-sources.json": "19b23dc48c6e5f1ae535454bc46350f7530d1a653ae12b00bddb7d07b688c11e",
     "legal/native/archive-evidence.json": "90f8c673a36c1557adda2b118c3b2b5c29200c252c35d01a7b3ce4610ce99598",
     "legal/public-contact-hashes.json": "241ddd7846876dcb475628fb6b57a7797a438cee0e2a669a9bfa2871c54a8ae1",
-    "app/desktop/package.json": "e3007e973af2e8912704b1d6e193032721d5c6d8968bf8fd5a7ca84e90cfa718",
-    "app/web/package.json": "419090321f2bda656b55bf92f88d2e90b6b2a23ab176f625bc449f2f3f258d71",
+    "app/desktop/package.json": "308351f9be88b13b1c113eb0ab2d79f26a018618cf6603c77b887d8783b920dc",
+    "app/web/package.json": "846b7092b4bf894e8ca0ddc632342af548e42528d778845f84f80392d290b102",
     "legal/runtime-relink-verification.json": "46b07aa896e06a574a1acc8b529ab8f66ee59090885a2e40b8cef7b001800701",
     "legal/runtime-bundle-review.json": "cf656bedd6ae468623d981c0efe4333aabba8965afb382b7728b1a0a8bf121f5",
     "deploy/minio/Dockerfile.server": "fe4e8d79b1bcd1663bddc367d48870f924c4a26f9784068ed99deb28153a5b00",
@@ -33,9 +33,9 @@
   "files": {
     "LICENSE": "0d699f2763ad95c6b648b27536bf176e2b517e06bf204643629ada1623ac1196",
     "NOTICE": "8fc419687eab6772d2f483c7008369bc87feb896c215b8e4b0cfa6da6eca60eb",
-    "SOURCES.md": "765c82ac1f9af33193368d5ef400608dbae722dcf973f4d76ab2fda027644321",
-    "THIRD-PARTY-NOTICES.txt": "008467c81d47d54db96ca01a93e57bcf388264e7958003eeb8fe201aa1c1fb79",
-    "index.html": "061b7d42c1c22f7434cf78254ff5388af04920e6af95547203438bcb06771d4c",
+    "SOURCES.md": "f7dda619ca26ba3c8aa908254c5ae22fa7b7c91dc049f919b54b7dd06cb221c6",
+    "THIRD-PARTY-NOTICES.txt": "039b28a7d3188f45de5f47dee4a75830779789c84f35a8ef9f27cdce8cf6e7b5",
+    "index.html": "ebedfeb488cdac73e2cb3a34349c2033443f62147cc4b86c8e50cce54eb6795b",
     "inventory.json": "eb776fb0036ef2549e74983fa58817d51f3fc79e159e39bdd7a628730b6a3f87"
   }
 }
