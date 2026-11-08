@@ -6,6 +6,7 @@
 import { BUILD_NOT_STARTED, buildFailureMessage, emptySourcesMessage } from './buildRequest';
 import { CommonGroundError, commonGroundErrorCode, commonGroundErrorMessage, isRouteMissing, isTransientFailure, type CommonGroundClient } from './client';
 import type { CgProfileMemory } from './profiles';
+import { BUILD_CHECK_MS, startedBuild } from './storeBuild';
 import * as pairOps from './storePairing';
 import * as profileOps from './storeProfiles';
 import * as roomOps from './storeRooms';
@@ -66,9 +67,7 @@ export type CommonGroundStoreOptions = {
 export const LOBBY_POLL_MS = 2_000;
 export const MATCH_POLL_MS = 3_000;
 export const BUILD_POLL_MS = 3_000;
-/** Checks of the card after a build request got no answer. */
-export const BUILD_START_CHECKS = 3;
-export const BUILD_CHECK_MS = 2_000;
+export { BUILD_CHECK_MS, BUILD_START_CHECKS } from './storeBuild';
 /** The shortest gap between two refreshes from other devices. */
 export const SYNC_INTERVAL_MS = 30_000;
 
@@ -305,23 +304,12 @@ export class CommonGroundStore {
     });
   }
 
-  /** Looks at the card a few times; true once it shows the build running, which then polls as usual. */
+  /** True once the card shows the build running; it then polls as usual. */
   private async followStartedBuild(profileId: string | null): Promise<boolean> {
-    for (let check = 0; check < BUILD_START_CHECKS; check += 1) {
-      if (check) await new Promise((resolve) => setTimeout(resolve, this.buildCheckMs));
-      if (this.disposed || this.state.profileId !== profileId) return false;
-      try {
-        const owner = await this.client.card(profileId);
-        if (this.state.profileId !== profileId) return false;
-        if (owner.build.status === 'building') {
-          this.applyOwner(owner);
-          return true;
-        }
-      } catch {
-        // Still no answer; check again.
-      }
-    }
-    return false;
+    const current = () => !this.disposed && this.state.profileId === profileId;
+    const owner = await startedBuild(this.client, profileId, current, this.buildCheckMs);
+    if (owner) this.applyOwner(owner);
+    return Boolean(owner);
   }
 
   async saveTopics(lists: CgTopicLists): Promise<void> {

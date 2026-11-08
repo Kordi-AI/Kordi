@@ -3,105 +3,16 @@ import { test } from 'node:test';
 
 import { act, createElement, useSyncExternalStore } from 'react';
 
-import type { CgHost } from '../src/features/commonGround/host';
-import { NearbyScreen } from '../src/features/commonGround/NearbyScreen';
 import { PairCodePanel } from '../src/features/commonGround/PairCodePanel';
 import { CommonGroundStore } from '../src/features/commonGround/store';
-import { nearbyStoreFor } from '../src/features/commonGround/storeNearby';
 
-import { mockServer, owner, profile, type Reply } from './helpers/commonGroundServer';
-import { installDom } from './helpers/transcriptAttachmentDom';
-
-const work = profile('cgp_work', 'work', 'Work', true);
-const workshops = profile('cgp_ws', 'custom', 'Workshops', true, { design: 'workshop' });
-const health = profile('cgp_health', 'health', 'Health', false);
-
-const fresh = () => ({ capturedAt: new Date(Date.now() - 3 * 60_000 - 5_000).toISOString(), freshUntil: new Date(Date.now() + 27 * 60_000).toISOString(), fresh: true });
-const settings = (patch: Record<string, unknown> = {}) => ({
-  enabled: true, participating: true, pausedUntil: null, consentedAt: '2026-10-26T09:00:00Z', profileId: 'cgp_work', openTo: ['Coffee chat'],
-  range: 2000, minScore: 0, alerts: { requests: true, matches: true, matchMinScore: 85, maxPerDay: 3 }, location: fresh(), freshSeconds: 1800, ...patch,
-});
-const maya = {
-  person: { accountId: 'acct_maya', name: 'Maya Chen', avatarUrl: null, profile: { profileId: 'cgp_maya', kind: 'work', name: 'Work' } },
-  relationship: { contact: false, request: null, requestId: null, conversationId: null },
-  distance: { minMeters: 0, maxMeters: 500 }, openTo: ['Collaborating'], status: 'ready', score: 92, headline: 'Both build memory for agents',
-  requests: [{ needId: 'cgn_1', text: 'Someone founding a startup' }],
-};
-const people = { people: [maya], matching: 2, location: fresh() };
-
-const host: CgHost = {
-  self: { accountId: 'acct_you', name: 'Alex Kim', avatarUrl: null },
-  profiles: true,
-  nearby: true,
-  memoryAvailable: false,
-  openChat: () => undefined,
-  acceptRequest: async () => undefined,
-  contactsChanged: () => undefined,
-  openGroup: () => undefined,
-  connectors: null,
-  agentFiles: null,
-  device: null,
-  openUrl: () => undefined,
-};
-
-function storeWith(routes: Record<string, Reply | Reply[]>) {
-  const server = mockServer(routes);
-  const store = new CommonGroundStore(server.client, { profiles: true });
-  store.set({ profiles: [work, workshops, health], profileId: 'cgp_work', owner: owner(), loaded: true });
-  return { ...server, store };
-}
+import { owner } from './helpers/commonGroundServer';
+import { Screen, buttonNamed, click, fresh, health, host, mount, people, settings, settle, storeWith, work, workshops } from './helpers/nearbyScreen';
 
 function Panel({ store, nearby }: { store: CommonGroundStore; nearby: boolean }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   return createElement(PairCodePanel, { state, store, nearby });
 }
-
-function Screen({ store }: { store: CommonGroundStore }) {
-  const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  return createElement(NearbyScreen, { state, store, host });
-}
-
-/** This device answers location requests with a fix; returns how many were asked for. */
-function deviceAnswers(store: CommonGroundStore, available = true) {
-  const locator = nearbyStoreFor(store).locator;
-  let requests = 0;
-  const device = { available };
-  locator.env = {
-    ...locator.env,
-    available: () => device.available,
-    locate: async () => {
-      requests += 1;
-      return { latitude: 40.123, longitude: -75.654, accuracy: 50, capturedAt: new Date().toISOString() };
-    },
-  };
-  return { device, requests: () => requests };
-}
-
-const settle = () => act(async () => { for (let index = 0; index < 6; index += 1) await new Promise((resolve) => setTimeout(resolve, 0)); });
-
-/** Mounts an element; React DOM loads after the window exists so it listens for input events. */
-async function mount(element: ReturnType<typeof createElement>, run: (root: HTMLElement) => Promise<void>) {
-  const installed = installDom();
-  const { createRoot } = await import('react-dom/client');
-  const node = document.createElement('div');
-  document.body.append(node);
-  const root = createRoot(node);
-  try {
-    await act(async () => root.render(element));
-    await settle();
-    await run(node);
-  } finally {
-    await act(async () => root.unmount());
-    installed.restore();
-  }
-}
-
-const click = async (element: Element | null | undefined) => {
-  assert.ok(element, 'element to click');
-  await act(async () => { (element as HTMLElement).click(); });
-  await settle();
-};
-const buttonNamed = (scope: ParentNode, text: string) => [...scope.querySelectorAll('button')].find((button) => button.textContent?.trim() === text);
 
 test('pair panel: the Nearby row shows only with the capability, and opens Nearby', async () => {
   const { store, calls } = storeWith({ 'GET nearby': { status: 200, body: settings() }, 'GET nearby/people': { status: 200, body: people } });
@@ -384,72 +295,6 @@ test('nearby screen: the manual link requests a device fix, rounded, posted, and
     });
     assert.match(root.textContent ?? '', /Maya Chen/);
     assert.doesNotMatch(root.textContent ?? '', /No results yet/);
-  });
-});
-
-test('nearby screen: opening it with sharing on sends this device\'s location by itself, then shows results', async () => {
-  const { store, calls } = storeWith({
-    'GET nearby': [{ status: 200, body: settings({ location: null }) }, { status: 200, body: settings() }],
-    'GET nearby/needs': { status: 200, body: { needs: [] } },
-    'GET nearby/people': { status: 200, body: people },
-    'POST nearby/location': { status: 200, body: { location: fresh() } },
-  });
-  const device = deviceAnswers(store);
-  await mount(createElement(Screen, { store }), async (root) => {
-    assert.equal(device.requests(), 1);
-    assert.equal(calls.filter((call) => call.url.endsWith('/nearby/location')).length, 1);
-    assert.match(root.textContent ?? '', /Maya Chen/);
-    assert.doesNotMatch(root.textContent ?? '', /No results yet/);
-    assert.ok(buttonNamed(root, 'Use this device’s location'), 'the manual link stays');
-  });
-});
-
-test('nearby screen: paused or off never asks for this device\'s location', async () => {
-  for (const patch of [{ pausedUntil: new Date(Date.now() + 60 * 60_000).toISOString() }, { enabled: false, participating: false }]) {
-    const { store, calls } = storeWith({
-      'GET nearby': { status: 200, body: settings({ location: null, ...patch }) },
-      'GET nearby/needs': { status: 200, body: { needs: [] } },
-    });
-    const device = deviceAnswers(store);
-    await mount(createElement(Screen, { store }), async () => {
-      assert.equal(device.requests(), 0);
-      assert.equal(calls.filter((call) => call.method === 'POST').length, 0);
-    });
-  }
-});
-
-test('nearby screen: Refresh results also sends a new location, at most once a minute', async () => {
-  const { store, calls } = storeWith({
-    'GET nearby': { status: 200, body: settings({ location: null }) },
-    'GET nearby/needs': { status: 200, body: { needs: [] } },
-    'POST nearby/location': { status: 200, body: { location: fresh() } },
-  });
-  const device = deviceAnswers(store, false);
-  await mount(createElement(Screen, { store }), async (root) => {
-    assert.equal(device.requests(), 0);
-    device.device.available = true;
-    await click(buttonNamed(root, 'Refresh results'));
-    assert.equal(device.requests(), 1);
-    assert.equal(calls.filter((call) => call.url.endsWith('/nearby/location')).length, 1);
-    await click(buttonNamed(root, 'Refresh results'));
-    assert.equal(device.requests(), 1, 'throttled');
-  });
-});
-
-test('nearby screen: the empty People state offers the location update', async () => {
-  const { store, calls } = storeWith({
-    'GET nearby': [{ status: 200, body: settings({ location: null }) }, { status: 200, body: settings() }],
-    'GET nearby/needs': { status: 200, body: { needs: [] } },
-    'GET nearby/people': { status: 200, body: people },
-    'POST nearby/location': { status: 200, body: { location: fresh() } },
-  });
-  const device = deviceAnswers(store, false);
-  await mount(createElement(Screen, { store }), async (root) => {
-    assert.match(root.textContent ?? '', /No results yet/);
-    await click(buttonNamed(root, 'Update location'));
-    assert.equal(device.requests(), 1);
-    assert.equal(calls.filter((call) => call.url.endsWith('/nearby/location')).length, 1);
-    assert.match(root.textContent ?? '', /Maya Chen/);
   });
 });
 
