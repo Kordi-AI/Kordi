@@ -13,7 +13,7 @@ import {
   authButtonDangerClass,
   authButtonNeutralClass,
 } from './AuthDetailPrimitives';
-import { addMethodsSummary, buildAddMethods, resolveAddMethod, type AuthAddMethod, type AuthAddRoute } from './authAddMethods';
+import { addMethodsSummary, buildAddMethods, renewableAuthChoice, resolveAddMethod, type AuthAddMethod, type AuthAddRoute } from './authAddMethods';
 import { AuthCustomApiSetup } from './AuthCustomApiSetup';
 import { customApiAccounts } from './customApiAccount';
 import { AuthRouteTest } from './AuthRouteTest';
@@ -127,20 +127,26 @@ export function AuthProviderDetail({
       onOpenLogin(method.raw, method.nativeMode);
       return;
     }
-    navigate({ method: method.key });
+    // A method picked while reconnecting still renews that account.
+    navigate({ method: method.key, ...(route?.renew && method.hosted ? { renew: route.renew } : {}) });
   };
 
-  // Reconnect signs in again with the method that created the account.
+  // Reconnect signs in again with the method that created the account. A hosted
+  // sign-in is renewed in place, so it keeps its name, routes and defaults.
   const reconnect = (option: AuthDisplayOption, method: AuthDisplayMethod) => {
     const raw = rawProviders.find((item) => item.id === option.providerId);
     if (option.source !== 'Cloud' && raw) {
       onOpenLogin(raw, method.mode);
       return;
     }
+    const renew = renewableAuthChoice(option.value);
     const match = addMethods.find((item) => item.method?.providerId === method.providerId && item.hosted
       && (method.mode === 'api-key' ? item.kind === 'api-key' : item.kind !== 'api-key'));
-    navigate(match ? { method: match.key } : {});
+    navigate(match ? { method: match.key, ...(renew ? { renew } : {}) } : renew ? { renew } : {});
   };
+  const renewedAccount = route?.renew
+    ? provider.methods.flatMap((method) => method.options).find((option) => option.value === route.renew) ?? null
+    : null;
 
   const notice = ompUnavailable ? <AuthPageNotice>{OMP_UNAVAILABLE_MESSAGE}</AuthPageNotice> : null;
   const omp = { ompUnavailable, onOmpUnavailable };
@@ -169,9 +175,10 @@ export function AuthProviderDetail({
       return (
         <Suspense fallback={<p className="m-0 pt-6 text-[12px] text-slate-500">Loading sign-in…</p>}>
         <AuthLoginPage
-          key={method.key}
+          key={`${method.key}:${renewedAccount?.value ?? ''}`}
           {...omp}
           method={method}
+          renew={renewedAccount ? { authChoice: renewedAccount.value, label: renewedAccount.label } : null}
           suggestedAccountName={suggestedAccountName(provider)}
           client={loginClient}
           callbackCapture={loginCallbackCapture}
