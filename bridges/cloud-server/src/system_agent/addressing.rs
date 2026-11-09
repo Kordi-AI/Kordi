@@ -124,7 +124,8 @@ pub(super) async fn answered_ids(
 }
 
 /// Whether the new chat alone is worth a model call: members' new messages
-/// that address no agent and that no agent answered, checked for plan words.
+/// that address no agent, that no agent answered or owns, and that no agent
+/// wrote, checked for plan words.
 pub(super) fn new_chat_worth_a_look(input: &Value) -> bool {
     let new_texts: Vec<String> = input["messages"]
         .as_array()
@@ -134,7 +135,14 @@ pub(super) fn new_chat_worth_a_look(input: &Value) -> bool {
             message["isNew"] == json!(true) && message["fromSystemAgent"] != json!(true)
         })
         .filter(|message| {
-            message["addressesAgent"] != json!(true) && message["answeredByAgent"] != json!(true)
+            [
+                "addressesAgent",
+                "answeredByAgent",
+                "agentOwned",
+                "fromAgent",
+            ]
+            .iter()
+            .all(|flag| message[*flag] != json!(true))
         })
         .filter_map(|message| message["text"].as_str().map(str::to_string))
         .collect();

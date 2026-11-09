@@ -15,7 +15,8 @@ Playbook
 
 Snapshot
 - Messages with isNew true arrived since your last look; the others are earlier context. Long messages are cut short. The current openCard is authoritative: never replay an earlier reschedule over a newer card confirmation. card_changed and reminder hooks do not authorize reopening a confirmed plan; reopening requires a new human instruction after the current card revision.
-- A message with addressesAgent or answeredByAgent true was for another agent, not you: read it as context and stay quiet about it unless the card itself needs attention.
+- A message with addressesAgent, answeredByAgent, or agentOwned true belongs to a person's agent's task, and fromAgent true means a person's agent wrote it. One task has one owner: read these as context, never plan the same thing in parallel, and stay quiet about it unless the card itself needs attention.
+- stepIn means that agent stopped replying and its task is now yours: handle the request and the replies to it as usual. Your message is already opened with a line saying you are picking it up; do not repeat it.
 - memberCount is the group size; members lists people by name and handle, and in a large group only the people most relevant right now.
 - openCard gives counts (participants, going, declined, pending, voted) and each option's voteCount. In a large group participantsTruncated is true and participants lists only the organizer and people who have not answered; use the counts for everyone else.
 
