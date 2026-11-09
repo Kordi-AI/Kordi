@@ -1,0 +1,53 @@
+/* Tokens copied from the account-handle preview, which mirrors
+ * styles/theme-palette.css and theme-shell-controls.css (default palette, hue 250)
+ * on the Mac and the X-style "Edit profile" screen on iPhone. */
+:root {
+  --font: -apple-system, "SF Pro Text", Inter, system-ui, sans-serif;
+  --page: #e9e9ee; --chrome: #fff; --chrome-text: #1c1c1e; --chrome-muted: rgba(60, 60, 67, .6); --chip: rgba(120, 120, 128, .12);
+  /* Mac settings dialog (light) */
+  --m-canvas: oklch(95.5% .012 250); --m-rail: oklch(93.6% .015 250); --m-ink: rgb(15 23 42); --m-300: rgb(71 85 105);
+  --m-400: rgb(82 94 109); --m-500: rgb(73 83 97); --m-border: oklch(36% .025 250 / .15); --m-divider: oklch(36% .025 250 / .10);
+  --m-error: rgb(159 18 57); --m-accent: #365F98; --m-accent-ink: oklch(98% .005 250);
+  --m-selected: oklch(36% .025 250 / .08); --m-hover: oklch(36% .025 250 / .06); --m-focus: oklch(36% .025 250 / .32);
+  --m-shadow: 0 14px 36px rgb(0 0 0 / .16); --m-menu: oklch(98.5% .006 250);
+  /* iPhone (light) */
+  --i-page: #fff; --i-label: #000; --i-secondary: rgba(60, 60, 67, .6); --i-tertiary: rgba(60, 60, 67, .3);
+  --i-accent: #365F98; --i-red: #9F1239; --i-hair: rgba(0, 0, 0, .12); --i-fill: rgba(120, 120, 128, .12);
+  --i-banner-a: oklch(91% .025 255); --i-banner-b: oklch(86% .035 260); --i-banner-edge: rgba(0, 0, 0, .12);
+  --i-cam: rgba(0, 0, 0, .4); --i-cam-ink: #fff; --i-av-a: #7d8ba3; --i-av-b: #55617a;
+  --i-bezel: #0b0b0c; --i-shadow: 0 30px 70px rgba(0, 0, 0, .18), 0 2px 6px rgba(0, 0, 0, .08);
+  --i-alert: rgba(242, 242, 247, .92); --i-alert-line: rgba(60, 60, 67, .29); --i-system-blue: #007AFF;
+  --scrim: rgba(0, 0, 0, .22);
+}
+
+:root[data-theme="dark"] {
+  --page: #141416; --chrome: #1c1c1e; --chrome-text: #f2f2f7; --chrome-muted: rgba(235, 235, 245, .6); --chip: rgba(120, 120, 128, .24);
+  --m-canvas: oklch(21.5% .018 250); --m-rail: oklch(19.5% .02 250); --m-ink: #fff; --m-300: #cbd5e1; --m-400: #94a3b8; --m-500: #64748b;
+  --m-border: oklch(85% .018 250 / .16); --m-divider: oklch(85% .018 250 / .10); --m-error: #fecdd3;
+  --m-accent: #AEC4E3; --m-accent-ink: oklch(22% .025 250); --m-selected: oklch(85% .018 250 / .09);
+  --m-hover: oklch(85% .018 250 / .06); --m-focus: oklch(85% .018 250 / .30);
+  --m-shadow: 0 14px 36px rgb(0 0 0 / .28); --m-menu: oklch(25% .018 250);
+  --i-page: #000; --i-label: #fff; --i-secondary: rgba(235, 235, 245, .6); --i-tertiary: rgba(235, 235, 245, .3);
+  --i-accent: #AEC4E3; --i-red: #FDA4AF; --i-hair: rgba(255, 255, 255, .18); --i-fill: rgba(120, 120, 128, .24);
+  --i-banner-a: oklch(29% .03 255); --i-banner-b: oklch(23% .025 260); --i-banner-edge: rgba(255, 255, 255, .18);
+  --i-bezel: #2a2a2d; --i-shadow: 0 30px 70px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .4);
+  --i-alert: rgba(37, 37, 39, .92); --i-alert-line: rgba(84, 84, 88, .6); --i-system-blue: #0A84FF;
+  --scrim: rgba(0, 0, 0, .45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #141416; --chrome: #1c1c1e; --chrome-text: #f2f2f7; --chrome-muted: rgba(235, 235, 245, .6); --chip: rgba(120, 120, 128, .24);
+    --m-canvas: oklch(21.5% .018 250); --m-rail: oklch(19.5% .02 250); --m-ink: #fff; --m-300: #cbd5e1; --m-400: #94a3b8; --m-500: #64748b;
+    --m-border: oklch(85% .018 250 / .16); --m-divider: oklch(85% .018 250 / .10); --m-error: #fecdd3;
+    --m-accent: #AEC4E3; --m-accent-ink: oklch(22% .025 250); --m-selected: oklch(85% .018 250 / .09);
+    --m-hover: oklch(85% .018 250 / .06); --m-focus: oklch(85% .018 250 / .30);
+    --m-shadow: 0 14px 36px rgb(0 0 0 / .28); --m-menu: oklch(25% .018 250);
+    --i-page: #000; --i-label: #fff; --i-secondary: rgba(235, 235, 245, .6); --i-tertiary: rgba(235, 235, 245, .3);
+    --i-accent: #AEC4E3; --i-red: #FDA4AF; --i-hair: rgba(255, 255, 255, .18); --i-fill: rgba(120, 120, 128, .24);
+    --i-banner-a: oklch(29% .03 255); --i-banner-b: oklch(23% .025 260); --i-banner-edge: rgba(255, 255, 255, .18);
+    --i-bezel: #2a2a2d; --i-shadow: 0 30px 70px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .4);
+    --i-alert: rgba(37, 37, 39, .92); --i-alert-line: rgba(84, 84, 88, .6); --i-system-blue: #0A84FF;
+    --scrim: rgba(0, 0, 0, .45);
+  }
+}
