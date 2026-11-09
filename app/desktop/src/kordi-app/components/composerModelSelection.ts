@@ -1,3 +1,4 @@
+import { isModelUnavailableForSignIn } from '@/features/chat/modelAvailability';
 import { ACCOUNT_UNAVAILABLE_LABEL, isAccountAuthChoice } from '@/features/cloud/routeAccountChoice';
 import { fallbackComposerThinkingValue } from './composerThinking';
 
@@ -251,11 +252,22 @@ function modelIdOf(value: string) {
   return separator > 0 ? value.slice(separator + 1) : value;
 }
 
+/** A sign-in the provider refused the model for opens on its first model it has not refused. */
+function availableModelForAccount(account: ComposerProviderOption, model: string,
+  offered: readonly ComposerModelOption[], modelOptions: readonly ComposerModelOption[]) {
+  const authChoice = authChoiceFromProviderOption(account) ?? '';
+  const refused = (value: string) => isModelUnavailableForSignIn({ provider: account.providerId, authChoice, model: value });
+  if (!refused(model)) return model;
+  return offered.map((option) => modelInAccountNamespace(option.value, account.providerId, modelOptions))
+    .find((value) => !refused(value)) ?? model;
+}
+
 /**
  * The complete route one pick applies, so no control is left without a valid
  * value. An account that is gone or switched off gives way to a signed-in
  * account of the same provider, a model the account does not offer gives way
- * to its default model, and the thinking level follows the model. Null when no
+ * to its default model (on a new sign-in, also one the provider refused it),
+ * and the thinking level follows the model. Null when no
  * account can run the pick.
  */
 export function resolveComposerRoutePick({
@@ -296,7 +308,8 @@ export function resolveComposerRoutePick({
   const offeredModel = offered.length === 0 || offered.some((option) => option.value === requestedModel)
     ? requestedModel
     : (offered.find((option) => modelIdOf(option.value) === modelIdOf(requestedModel)) ?? offered[0]).value;
-  const model = modelInAccountNamespace(offeredModel, account.providerId, modelOptions);
+  const model = availableModelForAccount(account, modelInAccountNamespace(offeredModel, account.providerId, modelOptions),
+    pick.type === 'provider' ? offered : [], modelOptions);
   const modelOption = modelOptions.find((option) => option.value === model);
   const thinking = pick.type === 'thinking'
     ? pick.value

@@ -1,3 +1,4 @@
+import { clearProviderModelAvailability } from '@/features/chat/modelAvailability';
 import { loadSession } from '@/features/cloud/session';
 
 export const DESKTOP_AUTH_CHANNEL_NAME = 'kordi-auth';
@@ -120,6 +121,8 @@ export async function broadcastDesktopAuthUpdated(
   providerId?: string,
   profileId?: string,
 ) {
+  // A new sign-in or key can bring another plan; forget which models the provider refused.
+  if (reason === 'oauth-completed' || reason === 'api-key-saved') clearProviderModelAvailability(providerId);
   if (typeof BroadcastChannel === 'undefined') return;
 
   try {

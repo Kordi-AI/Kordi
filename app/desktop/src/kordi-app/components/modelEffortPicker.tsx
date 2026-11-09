@@ -5,8 +5,10 @@ import { composerModelChipLabels, modelDisplayName, modelEffortLabel } from '@/l
 import { ErrorLine, withoutTryAgain } from '@/components/ui/errors';
 import { cn } from '@/lib/utils';
 import { composerThinkingLevelsIncludingCurrent } from './composerThinking';
+import { isModelUnavailableForSignIn, useModelAvailabilityVersion } from '@/features/chat/modelAvailability';
+import { rememberModelCatalog } from '@/features/chat/modelAvailabilityRoutes';
 import {
-  composerModelsForProvider, composerProviderOptionUsable, normalizeComposerProviderId,
+  authChoiceFromProviderOption, composerModelsForProvider, composerProviderOptionUsable, normalizeComposerProviderId,
   providerDisplayLabel, resolveComposerModelSelection, resolveComposerRoutePick,
   type ComposerModelOption, type ComposerProviderOption, type ComposerRoute, type ComposerRoutePick,
 } from './composerModelSelection';
@@ -58,7 +60,14 @@ export function ModelEffortPicker({ selection, providerOptions, modelOptions, on
   ).filter((value) => !['default', 'auto', 'thinking'].includes(value));
   const uniqueLevels = [...new Set(levels)];
   const effortIndex = Math.max(0, uniqueLevels.indexOf(draftEffort));
-  const defaultModel = composerModelsForProvider(account?.providerId ?? resolved.selectedProviderValue, modelOptions)[0];
+  useModelAvailabilityVersion();
+  useEffect(() => { rememberModelCatalog(modelOptions); }, [modelOptions]);
+  // A model the provider refused for this sign-in stays listed, but off.
+  const refused = (option: ComposerModelOption) => Boolean(account && option.provider
+    && normalizeComposerProviderId(option.provider) === normalizeComposerProviderId(account.providerId)
+    && isModelUnavailableForSignIn({ provider: account.providerId, authChoice: authChoiceFromProviderOption(account) ?? '', model: option.value }));
+  const providerModels = composerModelsForProvider(account?.providerId ?? resolved.selectedProviderValue, modelOptions);
+  const defaultModel = providerModels.find((option) => !refused(option)) ?? providerModels[0];
   const requestedModel = modelOptions.find((option) => option.value === accountModel);
   const accountProvider = requestedModel?.provider ?? account?.providerId ?? resolved.selectedProviderValue;
   const accounts = accountProvider
@@ -165,8 +174,9 @@ export function ModelEffortPicker({ selection, providerOptions, modelOptions, on
     if (value && value !== selection.thinking) pick({ type: 'thinking', value });
   };
   const modelRow = (option: ComposerModelOption) => <button key={option.value} type="button" className="app-transient-action-row app-model-picker-row"
-    disabled={saving} aria-pressed={option.value === selection.model} onClick={() => pick({ type: 'model', value: option.value })}>
-    <span>{modelDisplayName(option.value, option.label)}<small className="app-transient-metadata">{option.providerLabel ?? providerDisplayLabel(option.provider ?? '')}</small></span>
+    disabled={saving || refused(option)} aria-pressed={option.value === selection.model} onClick={() => pick({ type: 'model', value: option.value })}>
+    <span>{modelDisplayName(option.value, option.label)}<small className="app-transient-metadata">{refused(option)
+      ? 'Not available with this account' : option.providerLabel ?? providerDisplayLabel(option.provider ?? '')}</small></span>
     {option.value === selection.model ? <Check size={14} aria-hidden="true" /> : null}
   </button>;
   const menu = <div ref={menuRef} id={id} role="dialog" aria-label={view === 'thinking' ? 'Thinking effort' : view === 'provider' ? 'Choose account' : view === 'confirm' ? confirmTitle : 'Select model'}
