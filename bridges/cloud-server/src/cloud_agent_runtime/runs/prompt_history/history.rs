@@ -155,31 +155,60 @@ fn action_context_suffix(action: Option<&serde_json::Value>) -> String {
     }
 }
 
+/// An agent's reply is labelled by whose agent it is, never as its owner's
+/// own words: an agent posts under its owner's account.
+fn agent_label(
+    agent_owner: &str,
+    requester_account_id: &str,
+    owner_account_id: &str,
+) -> &'static str {
+    if agent_owner == owner_account_id {
+        "Owner agent"
+    } else if agent_owner == requester_account_id {
+        "Requester's agent"
+    } else {
+        "Participant's agent"
+    }
+}
+
 pub(super) fn fallback_prompt_history_line(
     requester_account_id: &str,
     owner_account_id: &str,
     message: &CloudFallbackHistoryMessage,
 ) -> Option<String> {
     let (label, text, suffix) = if let Some(text) = cloud_agent_response_text(&message.body) {
-        ("Owner agent", text, String::new())
+        let label = agent_label(
+            &message.from_account_id,
+            requester_account_id,
+            owner_account_id,
+        );
+        (label, text, String::new())
     } else if let Some(envelope) = parse_cloud_group_envelope(&message.body) {
         let group_message = envelope.message?;
-        let label = if group_message.sender_account_id == requester_account_id {
-            "Requester"
-        } else if group_message.sender_account_id == owner_account_id {
-            if group_message.sender_kind.as_deref() == Some("agent") {
-                "Owner agent"
-            } else {
-                "Owner"
-            }
+        let suffix = action_context_suffix(group_message.message_action.as_ref());
+        if group_message.sender_kind.as_deref() == Some("agent") {
+            let agent_owner = group_message
+                .sender_owner_account_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|owner| !owner.is_empty())
+                .unwrap_or(&group_message.sender_account_id);
+            let label = agent_label(agent_owner, requester_account_id, owner_account_id);
+            (label, group_message.text.trim().to_string(), suffix)
         } else {
-            "Participant"
-        };
-        (
-            label,
-            strip_leading_agent_mention(&group_message.text),
-            action_context_suffix(group_message.message_action.as_ref()),
-        )
+            let label = if group_message.sender_account_id == requester_account_id {
+                "Requester"
+            } else if group_message.sender_account_id == owner_account_id {
+                "Owner"
+            } else {
+                "Participant"
+            };
+            (
+                label,
+                strip_leading_agent_mention(&group_message.text),
+                suffix,
+            )
+        }
     } else if let Some(envelope) = direct_message_envelope(&message.body) {
         let text = envelope
             .get("text")
