@@ -4,7 +4,8 @@
 //! continuation path. In a direct or group conversation the person who made
 //! the request can be asked too, so their next plain message continues the
 //! task; in the owner's private agent chat every message already reaches the
-//! agent, so nobody there is a target.
+//! agent, so nobody there is a target. A request made by someone other than
+//! the agent's owner may ask only that requester.
 use super::*;
 use serde::Serialize;
 use sqlx_postgres::PgConnection;
@@ -49,7 +50,7 @@ fn mention_handle(name: &str) -> String {
 }
 
 const PEOPLE_SQL: &str = "SELECT a.account_id,COALESCE(NULLIF(btrim(a.display_name),''),'Participant'),a.public_handle FROM cloud_chat_conversation_members m JOIN cloud_accounts a USING(account_id)
-     WHERE m.conversation_id=$1 AND m.membership_state='active' AND ((a.account_id<>$2 AND a.account_id<>$3) OR ($5 AND a.account_id=$2))
+     WHERE m.conversation_id=$1 AND m.membership_state='active' AND ((a.account_id<>$2 AND a.account_id<>$3 AND NOT $6) OR ($5 AND a.account_id=$2))
        AND NOT cloud_accounts_blocked_either_way($2,a.account_id) AND NOT cloud_accounts_blocked_either_way($3,a.account_id)
        AND ($4::text IS NULL OR a.account_id=$4)
      ORDER BY a.display_name,a.account_id";
@@ -59,15 +60,16 @@ async fn people(
     parent: &Parent,
     only: Option<&str>,
 ) -> RunResult<Vec<Person>> {
-    // Only the owner's own runs reach here; outside the private agent chat
-    // that owner may be asked as the requester.
-    let requester = parent.owner == parent.requester && parent.kind != "ai";
+    // Outside the private agent chat the requester may be asked. A request
+    // made by someone other than the owner may ask only that requester.
+    let requester = parent.kind != "ai" && parent.may_reach_out();
     let rows: Vec<(String, String, Option<String>)> = query_as(PEOPLE_SQL)
         .bind(parent.conversation)
         .bind(&parent.requester)
         .bind(&parent.owner)
         .bind(only)
         .bind(requester)
+        .bind(parent.requester_only())
         .fetch_all(conn)
         .await?;
     Ok(rows
@@ -85,6 +87,7 @@ async fn people(
 
 /// Active members a run may ask: other people, plus the requester outside the
 /// private agent chat; never a service account or anyone blocked either way.
+/// A request made by someone other than the owner may ask only its requester.
 pub(super) async fn directory(pool: &PgPool, parent: &Parent) -> RunResult<Vec<Person>> {
     let mut conn = pool.acquire().await?;
     people(&mut conn, parent, None).await
@@ -214,7 +217,14 @@ pub(super) async fn send(
         .bind(message)
         .execute(&mut *tx)
         .await?;
-    progress::waiting_for(&mut tx, id, &person.name, person.requester).await?;
+    progress::waiting_for(
+        &mut tx,
+        id,
+        &person.name,
+        &person.account_id,
+        person.requester && !parent.requester_only(),
+    )
+    .await?;
     tx.commit().await?;
     Ok(receipt(id, "pending", person))
 }

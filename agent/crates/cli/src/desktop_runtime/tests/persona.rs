@@ -198,7 +198,7 @@ async fn runtime_identity_is_append_only_and_keeps_the_full_prompt_stable() -> R
     let mut identity = kordi_core::types::RuntimeIdentity {
         request_id: "request-a".into(), agent_id: "agent-owner".into(), agent_name: "Owner's Kordi".into(),
         owner_account_id: "owner".into(), owner_name: "Owner".into(),
-        requester_account_id: "visitor".into(), requester_name: "Visitor".into(), request_policy: None,
+        requester_account_id: "visitor".into(), requester_name: "Visitor".into(), request_policy: None, conversation_context: None,
     };
     let message = |identity: &kordi_core::types::RuntimeIdentity| DesktopChatContextMessage {
 

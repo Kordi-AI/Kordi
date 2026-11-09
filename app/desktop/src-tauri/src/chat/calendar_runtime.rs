@@ -67,6 +67,7 @@ mod tests {
             requester_account_id: "owner".into(),
             requester_name: "Owner".into(),
             request_policy: None,
+            conversation_context: None,
         };
         assert_eq!(authorized_scope("owner", None, None), Ok(None));
         assert!(authorized_scope("owner", None, Some("group")).is_err());

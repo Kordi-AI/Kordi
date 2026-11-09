@@ -132,7 +132,8 @@ pub(super) async fn fallback_prompt_for_claim(
         &input.request_message_id,
     )
     .await?;
-    // The agent never reads people its owner stopped from using it.
+    // The agent never reads people its owner stopped from using it, nor the
+    // model and thinking-effort notices a session records when they change.
     let mut chat_rows = query_as::<_, (String, String, String, serde_json::Value, i32)>(&format!(
         "SELECT message.message_id::text, message.client_message_id::text, message.sender_account_id,
                 message.content, message.version
@@ -141,6 +142,7 @@ pub(super) async fn fallback_prompt_for_claim(
            ON message.conversation_id = conversation.conversation_id
          WHERE conversation.legacy_session_id = $1
            AND message.deleted_at IS NULL
+           AND message.message_kind <> 'agent-model-change'
            AND NOT EXISTS(SELECT 1 FROM cloud_chat_message_visibility hidden
                           WHERE hidden.message_id=message.message_id AND hidden.account_id=ANY($2))
            AND NOT EXISTS(SELECT 1 FROM cloud_accounts consent

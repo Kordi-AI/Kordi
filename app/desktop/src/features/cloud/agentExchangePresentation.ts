@@ -23,8 +23,19 @@ export function agentExchangeWaitingFor(value: unknown): string | undefined {
 }
 
 /**
+ * Whether a question waits for the viewer: the server names the account it
+ * waits for, and marks a question the owner's agent asked the owner, as the
+ * requester (`ownAgentAskedOwner`), which older servers send alone.
+ */
+export function agentExchangeWaitsForViewer(waitingForAccountId: unknown, viewerAccountId: string | null | undefined, ownAgentAskedOwner: boolean): boolean {
+  const waiting = typeof waitingForAccountId === 'string' ? waitingForAccountId.trim() : '';
+  const viewer = viewerAccountId?.trim() ?? '';
+  return ownAgentAskedOwner || (Boolean(waiting) && waiting === viewer);
+}
+
+/**
  * The durable question owns one progress indicator through reply and continuation.
- * `forViewer` marks a question the viewer's own agent asked the viewer, as the requester.
+ * `forViewer` marks a question that waits for the viewer's own answer.
  */
 export function agentExchangeProgressTurn(
   state: unknown, text: string, id: string, sessionId: string,

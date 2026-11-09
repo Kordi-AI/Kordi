@@ -9,12 +9,17 @@ struct Fixture {
     session: String,
     root: String,
     claim: uuid::Uuid,
+    identity: Value, // The root run's turn identity.
 }
 impl Fixture {
     async fn new() -> Option<Self> {
         Self::kind(true).await
     }
     async fn kind(group: bool) -> Option<Self> {
+        Self::requested_by(group, 0).await
+    }
+    /// The root run is Alpha's agent working on a request from `requester`.
+    async fn requested_by(group: bool, requester: usize) -> Option<Self> {
         let pool = try_pool().await?;
         let router = test_router(Arc::new(signup_email_fixture::state(pool.clone())));
         let mut people = vec![];
@@ -55,6 +60,7 @@ impl Fixture {
             format!("session:direct-person:{}:{}", ids[0], ids[1])
         };
         let owner = &people[0];
+        let asker = &people[requester];
         let conversation = create_test_conversation(
             &pool,
             &owner.account_id,
@@ -76,10 +82,10 @@ impl Fixture {
             .map(|p| json!({"accountId":p.account_id,"displayName":"Synthetic participant"}))
             .collect();
         let envelope = json!({"kind":"group-message","groupId":session,"createdByAccountId":owner.account_id,"actor":{"accountId":owner.account_id,"displayName":"Synthetic owner"},"participants":participants,
-            "message":{"id":logical,"senderAccountId":owner.account_id,"senderKind":"human","text":"Ask Beta and continue","createdAtMs":chrono::Utc::now().timestamp_millis(),"targetCloudAgentId":format!("cloud-agent:{}",owner.account_id),"targetCloudAgentOwnerAccountId":owner.account_id,"targetCloudAgentName":"Kordi"}});
+            "message":{"id":logical,"senderAccountId":asker.account_id,"senderKind":"human","text":"Ask Beta and continue","createdAtMs":chrono::Utc::now().timestamp_millis(),"targetCloudAgentId":format!("cloud-agent:{}",owner.account_id),"targetCloudAgentOwnerAccountId":owner.account_id,"targetCloudAgentName":"Kordi"}});
         let wire = insert_test_message(
             &pool,
-            &owner.account_id,
+            &asker.account_id,
             conversation,
             &if group {
                 format!(
@@ -93,7 +99,7 @@ impl Fixture {
         .await;
         let logical = if group { logical } else { wire };
         let claim = uuid::Uuid::new_v4();
-        let body = json!({"requestMessageId":logical,"sessionId":session,"ownerAccountId":owner.account_id,"requesterAccountId":owner.account_id,"prompt":"Ask Beta and continue","idempotencyKey":logical,"claimId":claim});
+        let body = json!({"requestMessageId":logical,"sessionId":session,"ownerAccountId":owner.account_id,"requesterAccountId":asker.account_id,"prompt":"Ask Beta and continue","idempotencyKey":logical,"claimId":claim});
         let response = router
             .clone()
             .oneshot(post_json_with_token(
@@ -113,6 +119,7 @@ impl Fixture {
             session,
             root: value["runId"].as_str().unwrap().into(),
             claim,
+            identity: value["turnIdentity"].clone(),
         })
     }
     async fn post(&self, person: usize, path: &str, body: Value) -> Value {

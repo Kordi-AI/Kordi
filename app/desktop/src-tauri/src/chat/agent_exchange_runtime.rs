@@ -27,13 +27,12 @@ impl Transport {
     }
 }
 
+/// The server decides who this run may reach: everyone for the owner's own
+/// request, only the requester for anyone else's, and nobody on an older
+/// server, whose capability check refuses requests from other people.
 pub(super) async fn build(
     lease: Option<&DesktopCloudExecutionLease>,
-    owner_request: bool,
 ) -> Option<(ReachOutRuntime, String)> {
-    if !owner_request {
-        return None;
-    }
     let lease = lease?.clone();
     let base = crate::cloud_api_base_url_from_env().ok()?;
     let transport = Arc::new(Transport {
@@ -95,6 +94,16 @@ fn guidance(capabilities: &Value) -> Option<String> {
     if capabilities["available"] != true || !(agents || people) {
         return None;
     }
+    let only_requester = !agents
+        && capabilities["people"]
+            .as_array()
+            .is_some_and(|people| people.iter().all(|p| p["requester"] == true));
+    if only_requester {
+        return Some(format!(
+            "If you need information or a decision from the person who asked before you can finish, ask them with reach_out (targetKind person, their accountId) instead of ending your turn with a question; their next message in this conversation, or their reply to your question, continues the task. They are the only one you can ask for this request: do not contact other agents or people. Ask only for what is actually missing, in one message, and never share private context or files. Follow the receipt to end this turn. Do not poll or resend. Person you can ask: {}.",
+            capabilities["people"]
+        ));
+    }
     let mut text = String::from("Use reach_out to contact another agent or ask a person in this conversation. Send only the explicit question, never private context or files.");
     if agents {
         text.push_str(&format!(
@@ -139,11 +148,15 @@ mod tests {
         let people_only = json!({"available":true,"targets":[],"people":[{"accountId":"p"}]});
         assert!(guidance(&people_only).unwrap().contains("People:"));
         assert!(!text.contains("marked requester"));
-        let shared =
-            json!({"available":true,"targets":[],"people":[{"accountId":"o","requester":true}]});
-        assert!(guidance(&shared)
+        let owner_request = json!({"available":true,"targets":[],"people":[{"accountId":"o","requester":true},{"accountId":"p"}]});
+        assert!(guidance(&owner_request)
             .unwrap()
             .contains("ask them with reach_out instead of ending your turn with a question"));
+        let shared =
+            json!({"available":true,"targets":[],"people":[{"accountId":"o","requester":true}]});
+        let requester_only = guidance(&shared).unwrap();
+        assert!(requester_only.contains("They are the only one you can ask"));
+        assert!(!requester_only.contains("contact another agent"));
         let older = json!({"available":true,"targets":[{"agentId":"cloud-agent:a"}]});
         assert!(!guidance(&older).unwrap().contains("People:"));
         assert!(guidance(&json!({"available":true,"targets":[],"people":[]})).is_none());

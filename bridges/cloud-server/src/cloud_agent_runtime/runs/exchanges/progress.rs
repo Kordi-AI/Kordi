@@ -18,19 +18,23 @@ pub(super) async fn update(
 }
 
 /// A question to a person names who the agent is waiting for, so every client
-/// can say so instead of a generic waiting label. A question to the requester
-/// is marked, so the requester's own client can say it waits for them.
+/// can say so instead of a generic waiting label, and carries their account,
+/// so that person's own client can say it waits for them. Older clients read
+/// `agentExchangeWaitingForRequester` as "the owner's agent asked the owner",
+/// so it is set only for a question to the owner as the requester.
 pub(super) async fn waiting_for(
     tx: &mut Transaction<'_, Postgres>,
     exchange: Uuid,
     name: &str,
-    requester: bool,
+    account: &str,
+    owner_requester: bool,
 ) -> RunResult<()> {
     let mut fields = vec![
         ("agentExchangeStatus", json!("waiting")),
         ("agentExchangeWaitingFor", json!(name)),
+        ("agentExchangeWaitingForAccountId", json!(account)),
     ];
-    if requester {
+    if owner_requester {
         fields.push(("agentExchangeWaitingForRequester", json!(true)));
     }
     patch(tx, exchange, &fields).await

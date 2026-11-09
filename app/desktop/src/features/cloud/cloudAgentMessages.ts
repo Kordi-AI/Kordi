@@ -42,6 +42,7 @@ export type CloudAgentResponseEnvelope = {
   agentExchangeStatus?: AgentExchangeStatus;
   agentExchangeWaitingFor?: string;
   agentExchangeWaitingForRequester?: boolean;
+  agentExchangeWaitingForAccountId?: string; // The account the question waits for.
   ending?: CloudAgentReplyEnding;
   execution?: CloudAgentExecutionSnapshot;
   backgroundSessions?: CloudAgentBackgroundSession[];
@@ -239,6 +240,7 @@ export function parseCloudAgentResponse(body: string): CloudAgentResponseEnvelop
       requestId: parsed.requestId,
       text: parsed.text,
       ...(exchangeStatus ? { agentExchangeStatus: exchangeStatus } : {}), ...(waitingFor ? { agentExchangeWaitingFor: waitingFor } : {}), ...(waitingFor && parsed.agentExchangeWaitingForRequester === true ? { agentExchangeWaitingForRequester: true } : {}),
+      ...(waitingFor && typeof parsed.agentExchangeWaitingForAccountId === 'string' && parsed.agentExchangeWaitingForAccountId.trim() ? { agentExchangeWaitingForAccountId: parsed.agentExchangeWaitingForAccountId.trim().slice(0, 200) } : {}),
       ...(parsed.synchronizationOnly === true ? { synchronizationOnly: true } : {}),
       ...(deliveryState ? { deliveryState } : {}),
       ...(deliveryState === 'failed' ? cloudAgentFailureCodeField(parsed.failureCode) : {}),
