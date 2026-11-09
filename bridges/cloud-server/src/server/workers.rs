@@ -18,6 +18,7 @@ pub(super) fn spawn_background_workers(
         database_url.to_string(),
         state.chat_sync_wakes().clone(),
         state.session_signals().clone(),
+        state.document_rooms().clone(),
     );
     crate::support::spawn_ticket_worker(state.clone());
     crate::safety::spawn_report_notice_worker(state.clone());
