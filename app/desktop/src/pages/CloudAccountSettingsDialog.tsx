@@ -29,6 +29,7 @@ import { useConnectorsLinkSelection } from '@/features/connectors/useConnectorsL
 import { AiConsentSettingsPanel } from '@/features/aiConsent/AiConsentSettingsPanel';
 import { MemorySettingsPanel } from '@/features/memory/MemorySettingsPanel';
 import { BlockedAccountsPanel } from '@/features/safety/BlockedAccountsPanel';
+import { UpdatesSettingsPanel } from '@/features/updates/UpdatesSettingsPanel';
 import { useSafetyActions } from '@/features/safety/safetyActions';
 import { memoryClientForEnvironment, type MemoryClient } from '@/features/memory/memoryClient';
 import type { MemoryImporter } from '@/features/memory/memoryImport';
@@ -210,9 +211,10 @@ export function CloudAccountSettingsDialog({
     connectorsAvailable: connectorsClient !== null,
     memoryAvailable: memoryClient !== null,
     blockedAvailable,
+    updatesAvailable: isNativeShell,
   });
   const visibleTab: CloudAccountSettingsTabId =
-    (activeTab === 'connectors' && !connectorsClient) || (activeTab === 'memory' && !memoryClient) || (activeTab === 'blocked' && !blockedAvailable) ? 'profile' : activeTab;
+    (activeTab === 'connectors' && !connectorsClient) || (activeTab === 'memory' && !memoryClient) || (activeTab === 'blocked' && !blockedAvailable) || (activeTab === 'updates' && !isNativeShell) ? 'profile' : activeTab;
 
   const selectTab = (tabId: CloudAccountSettingsTabId) => {
     if (tabId !== 'connectors') clearConnectorsLinkSelection();
@@ -338,7 +340,7 @@ export function CloudAccountSettingsDialog({
           </div>
           <ScrollArea className="min-h-0 flex-1">
             <div className="px-8 pb-8 pt-2">
-              {visibleTab === 'profile' ? profilePanel : visibleTab === 'devices' ? devicesPanel : visibleTab === 'auth' ? authPanel : visibleTab === 'notifications' ? notificationsPanel : visibleTab === 'privacy' ? <AiConsentSettingsPanel /> : visibleTab === 'connectors' ? connectorsPanel : visibleTab === 'memory' ? memoryPanel : visibleTab === 'usage' ? usagePanel : visibleTab === 'blocked' ? <BlockedAccountsPanel /> : appearancePanel}
+              {visibleTab === 'profile' ? profilePanel : visibleTab === 'devices' ? devicesPanel : visibleTab === 'auth' ? authPanel : visibleTab === 'notifications' ? notificationsPanel : visibleTab === 'privacy' ? <AiConsentSettingsPanel /> : visibleTab === 'connectors' ? connectorsPanel : visibleTab === 'memory' ? memoryPanel : visibleTab === 'usage' ? usagePanel : visibleTab === 'blocked' ? <BlockedAccountsPanel /> : visibleTab === 'updates' ? <div className="app-cloud-account-settings-section max-w-[680px]"><UpdatesSettingsPanel /></div> : appearancePanel}
             </div>
           </ScrollArea>
         </div>

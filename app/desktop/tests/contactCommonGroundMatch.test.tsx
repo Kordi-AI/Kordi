@@ -70,7 +70,18 @@ test('without a match the card renders their topics as before', () => {
   assert.match(markup, />Common ground</);
   assert.match(markup, />Working on<.*>tabletop manipulation<.*>sim-to-real</);
   assert.match(markup, />Can help<.*>grant writing</);
-  assert.doesNotMatch(markup, /% match|You both|Their card|Looking for/);
+  assert.doesNotMatch(markup, /% match|You both|Their card|Looking for|Interests/);
+});
+
+test('a card with only interests shows them, and an empty card shows no section', () => {
+  const ground = profile({ workingOn: [], interests: ['bouldering'], canHelp: [], lookingFor: [], match: null }).commonGround!;
+  assert.deepEqual(ground.interests, ['bouldering']);
+  const markup = renderToStaticMarkup(createElement(CommonGroundCard, { card: ground }));
+  assert.match(markup, />Common ground</);
+  assert.match(markup, />Interests<.*>bouldering</);
+
+  const empty = { workingOn: [], interests: [], canHelp: [], lookingFor: [], match: null };
+  assert.equal(renderToStaticMarkup(createElement(CommonGroundCard, { card: empty })), '');
 });
 
 test('the chat person popover shows the compact section above the shared rows', async () => {

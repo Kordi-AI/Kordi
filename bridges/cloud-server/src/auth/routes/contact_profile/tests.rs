@@ -289,49 +289,103 @@ async fn about_is_trimmed_cleared_and_limited() {
     assert_eq!((status, body["about"].clone()), (200, Value::Null));
 }
 
+/// `commonGround` on the contact profile of `target` as `token` sees it.
+async fn grounding(app: &axum::Router, token: &str, target: &str) -> Value {
+    let (status, body) = send(app, "GET", &profile_path(target), token, None).await;
+    assert_eq!(status, 200, "{body}");
+    body["commonGround"].clone()
+}
+
+/// The owner's card as the fixture shares it: hidden topics removed, each
+/// list holding four.
+fn shared_fixture_card() -> Value {
+    json!({
+        "workingOn": ["Tabletop manipulation", "Sim-to-real", "Grasping", "Tactile"],
+        "interests": ["Bouldering"],
+        "canHelp": ["Grant writing"],
+        "lookingFor": ["Robot datasets"],
+        "match": null,
+    })
+}
+
 #[tokio::test]
-async fn common_ground_shows_only_when_the_card_is_visible_and_shared() {
+async fn contacts_see_a_shared_card_without_a_pairing_or_a_card_of_their_own() {
     let Some(pool) = pool().await else { return };
     let app = app(&pool, None);
-    let (me, token) = signed_in(&pool, "cp_cg_me").await;
-    let (paired, _) = signed_in(&pool, "cp_cg_paired").await;
-    let (unpaired, _) = signed_in(&pool, "cp_cg_unpaired").await;
-    let (private, _) = signed_in(&pool, "cp_cg_private").await;
-    for (peer, sharing) in [(&paired, true), (&unpaired, true), (&private, false)] {
-        befriend(&pool, &me, peer).await;
-        card(&pool, peer, sharing).await;
-    }
-    card(&pool, &me, true).await;
-    pair(&pool, &me, &paired).await;
-    pair(&pool, &me, &private).await;
+    let (owner, _) = signed_in(&pool, "cp_cg_owner").await;
+    let (paired, paired_token) = signed_in(&pool, "cp_cg_paired").await;
+    let (contact, contact_token) = signed_in(&pool, "cp_cg_contact").await;
+    card(&pool, &owner, true).await;
+    befriend(&pool, &owner, &paired).await;
+    card(&pool, &paired, true).await;
+    pair(&pool, &owner, &paired).await;
+    befriend(&pool, &owner, &contact).await;
 
-    let (status, body) = send(&app, "GET", &profile_path(&paired), &token, None).await;
-    assert_eq!(status, 200, "{body}");
     assert_eq!(
-        body["commonGround"],
-        json!({
-            "workingOn": ["Tabletop manipulation", "Sim-to-real", "Grasping", "Tactile"],
-            "canHelp": ["Grant writing"],
-            "lookingFor": ["Robot datasets"],
-            "match": null,
-        }),
-        "hidden topics are removed and each list holds four"
+        grounding(&app, &paired_token, &owner).await,
+        shared_fixture_card()
     );
-    for peer in [&unpaired, &private] {
-        let (status, body) = send(&app, "GET", &profile_path(peer), &token, None).await;
-        assert_eq!(status, 200);
-        assert_eq!(body["commonGround"], Value::Null, "{peer}");
-    }
-    // Nor while my own card is not shared.
+    assert_eq!(
+        grounding(&app, &contact_token, &owner).await,
+        shared_fixture_card(),
+        "no pairing and no card of their own"
+    );
+    // The paired contact keeps seeing it while their own card is not shared.
     query("UPDATE cloud_common_ground_cards SET sharing_enabled = false WHERE account_id = $1")
-        .bind(&me)
+        .bind(&paired)
         .execute(&pool)
         .await
         .unwrap();
-    let (status, body) = send(&app, "GET", &profile_path(&paired), &token, None).await;
     assert_eq!(
-        (status, &body["commonGround"]),
-        (200, &Value::Null),
-        "{body}"
+        grounding(&app, &paired_token, &owner).await,
+        shared_fixture_card()
     );
+
+    // The owner's sharing switch hides it from every contact.
+    query("UPDATE cloud_common_ground_cards SET sharing_enabled = false WHERE account_id = $1")
+        .bind(&owner)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for token in [&paired_token, &contact_token] {
+        assert_eq!(grounding(&app, token, &owner).await, Value::Null);
+    }
+}
+
+#[tokio::test]
+async fn see_my_card_off_blocks_and_strangers_hide_the_card() {
+    let Some(pool) = pool().await else { return };
+    let app = app(&pool, None);
+    let (owner, _) = signed_in(&pool, "cp_cg_hide_owner").await;
+    let (restricted, restricted_token) = signed_in(&pool, "cp_cg_restricted").await;
+    let (blocked, blocked_token) = signed_in(&pool, "cp_cg_blocked").await;
+    let (stranger, stranger_token) = signed_in(&pool, "cp_cg_stranger").await;
+    card(&pool, &owner, true).await;
+    befriend(&pool, &owner, &restricted).await;
+    befriend(&pool, &owner, &blocked).await;
+
+    card_access(&pool, &owner, &restricted, false).await;
+    assert_eq!(
+        grounding(&app, &restricted_token, &owner).await,
+        Value::Null
+    );
+    card_access(&pool, &owner, &restricted, true).await;
+    assert_eq!(
+        grounding(&app, &restricted_token, &owner).await,
+        shared_fixture_card()
+    );
+
+    block(&pool, &blocked, &owner).await;
+    let (status, body) = send(&app, "GET", &profile_path(&owner), &blocked_token, None).await;
+    assert!(
+        status != 200 || body["commonGround"].is_null(),
+        "{status} {body}"
+    );
+
+    let (status, _) = send(&app, "GET", &profile_path(&owner), &stranger_token, None).await;
+    assert_eq!(status, 404);
+    let found = crate::common_ground::profile_common_ground(&pool, &stranger, &owner, 4)
+        .await
+        .unwrap();
+    assert_eq!(found, None, "not a contact");
 }

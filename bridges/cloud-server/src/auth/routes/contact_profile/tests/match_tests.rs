@@ -166,6 +166,7 @@ async fn no_stored_match_is_null() {
         body["commonGround"],
         json!({
             "workingOn": ["Agent memory"],
+            "interests": [],
             "canHelp": [],
             "lookingFor": [],
             "match": null,
@@ -320,7 +321,7 @@ async fn pairs_the_viewer_cannot_see_are_null() {
         .unwrap();
     assert_eq!(contact_match(&app, &token, &them).await, Value::Null);
 
-    // Nor, with their card lists, while my own card is not shared.
+    // Nor while my own card is not shared; as a contact I still see theirs.
     store(
         &pool,
         (&me, &mine, 1),
@@ -334,10 +335,5 @@ async fn pairs_the_viewer_cannot_see_are_null() {
         .execute(&pool)
         .await
         .unwrap();
-    let (status, body) = send(&app, "GET", &profile_path(&them), &token, None).await;
-    assert_eq!(
-        (status, &body["commonGround"]),
-        (200, &Value::Null),
-        "{body}"
-    );
+    assert_eq!(contact_match(&app, &token, &them).await, Value::Null);
 }

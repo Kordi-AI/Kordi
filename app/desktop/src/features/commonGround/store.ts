@@ -3,9 +3,10 @@
 // which refreshes whatever the top screen is waiting on and returns the delay
 // before the next refresh, or null when nothing is pending.
 
-import { emptySourcesMessage } from './buildRequest';
-import { CommonGroundError, commonGroundErrorCode, commonGroundErrorMessage, isRouteMissing, type CommonGroundClient } from './client';
+import { BUILD_NOT_STARTED, buildFailureMessage, emptySourcesMessage } from './buildRequest';
+import { CommonGroundError, commonGroundErrorCode, commonGroundErrorMessage, isRouteMissing, isTransientFailure, type CommonGroundClient } from './client';
 import type { CgProfileMemory } from './profiles';
+import { BUILD_CHECK_MS, startedBuild } from './storeBuild';
 import * as pairOps from './storePairing';
 import * as profileOps from './storeProfiles';
 import * as roomOps from './storeRooms';
@@ -56,11 +57,17 @@ export type CgState = {
   profileId: string | null;
 };
 
-export type CommonGroundStoreOptions = { profiles?: boolean; memory?: CgProfileMemory };
+export type CommonGroundStoreOptions = {
+  profiles?: boolean;
+  memory?: CgProfileMemory;
+  /** The wait between checks of whether a build started after its request got no answer. */
+  buildCheckMs?: number;
+};
 
 export const LOBBY_POLL_MS = 2_000;
 export const MATCH_POLL_MS = 3_000;
 export const BUILD_POLL_MS = 3_000;
+export { BUILD_CHECK_MS, BUILD_START_CHECKS } from './storeBuild';
 /** The shortest gap between two refreshes from other devices. */
 export const SYNC_INTERVAL_MS = 30_000;
 
@@ -110,10 +117,12 @@ export class CommonGroundStore {
   private disposed = false;
   private lastSync = Date.now();
   readonly memory: CgProfileMemory;
+  private readonly buildCheckMs: number;
 
   constructor(readonly client: CommonGroundClient, options: CommonGroundStoreOptions = {}) {
     this.state = initialState(Boolean(options.profiles));
     this.memory = options.memory ?? NO_MEMORY;
+    this.buildCheckMs = options.buildCheckMs ?? BUILD_CHECK_MS;
   }
 
   getSnapshot = () => this.state;
@@ -265,7 +274,7 @@ export class CommonGroundStore {
     if (!wasBuilding || owner.build.status === 'building') return;
     if (this.state.profilesOn) void profileOps.loadProfiles(this).catch(() => undefined);
     if (owner.build.status === 'failed') {
-      this.set({ notice: 'Could not build your card. Try again.' });
+      this.set({ notice: buildFailureMessage(owner.build.errorCode) });
     } else if (owner.card && this.top().name === 'build') {
       this.home();
     } else if (owner.card && this.top().name === 'home') {
@@ -277,16 +286,30 @@ export class CommonGroundStore {
   // Card
 
   async build(request: CgBuildRequest): Promise<void> {
+    const profileId = this.state.profileId;
     await this.run('build', async () => {
       try {
-        this.applyOwner(await this.client.build(request, this.state.profileId));
+        this.applyOwner(await this.client.build(request, profileId));
       } catch (error) {
         const code = commonGroundErrorCode(error);
         if (code === 'common_ground_no_sources') throw new CommonGroundError(emptySourcesMessage(request), 409, code);
+        // No answer is not "never started": a slow server may have started the build, and a
+        // build already running (from an earlier attempt) is followed rather than reported.
+        const unknown = isTransientFailure(error);
+        if ((unknown || code === 'common_ground_build_in_progress') && await this.followStartedBuild(profileId)) return;
         if (code && BUILD_ERRORS[code]) throw new CommonGroundError(BUILD_ERRORS[code], 409, code);
+        if (unknown) throw new CommonGroundError(BUILD_NOT_STARTED, 0, code);
         throw error;
       }
     });
+  }
+
+  /** True once the card shows the build running; it then polls as usual. */
+  private async followStartedBuild(profileId: string | null): Promise<boolean> {
+    const current = () => !this.disposed && this.state.profileId === profileId;
+    const owner = await startedBuild(this.client, profileId, current, this.buildCheckMs);
+    if (owner) this.applyOwner(owner);
+    return Boolean(owner);
   }
 
   async saveTopics(lists: CgTopicLists): Promise<void> {

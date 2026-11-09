@@ -52,6 +52,23 @@ struct CommonGroundBuildView: View {
         }
     }
 
+    /// One quiet line per link the last build could not read.
+    @ViewBuilder
+    private var unreadLinks: some View {
+        if let links = model.owner?.build.unreadLinks, !links.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(links, id: \.url) { link in
+                    Text(link.line)
+                }
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)
+            .padding(.top, -8)
+        }
+    }
+
     private func back() {
         if let onClose { onClose() } else { dismiss() }
     }
@@ -80,6 +97,7 @@ struct CommonGroundBuildView: View {
                 CommonGroundSection(title: "Links") {
                     field("Homepage; ORCID; papers", text: $links)
                 }
+                unreadLinks
                 CommonGroundSection(title: "Notes") {
                     field(model.activeProfileKind.notesHint, text: $notes)
                 }

@@ -41,8 +41,8 @@ pub(in crate::common_ground) struct BuildRequest {
     /// Titles and dates the app read on the device after the person allowed
     /// access (calendar events, reminders).
     device: Vec<DeviceGroup>,
-    /// Links and text separated by `;` or new lines. Links are kept as given;
-    /// the server does not fetch pages.
+    /// Links and text separated by `;` or new lines. Public pages are read
+    /// when the build starts (`links`); the link stays the reference.
     links: String,
     notes: String,
     /// Agent instruction and memory files the app read on the Mac.
@@ -133,6 +133,21 @@ pub(super) fn link_url(entry: &str) -> Option<String> {
             .next()
             .is_some_and(|tld| tld.len() >= 2 && tld.chars().all(|c| c.is_ascii_alphabetic()));
     looks_like_host.then(|| format!("https://{entry}"))
+}
+
+/// The link box's entries, in order. The same link given twice is one source.
+fn link_entries(links: &str) -> Vec<&str> {
+    let mut seen = std::collections::HashSet::new();
+    links
+        .split([';', '\n'])
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .filter(|entry| {
+            let key = link_url(entry).unwrap_or_else(|| entry.to_string());
+            seen.insert(key.trim_end_matches('/').to_string())
+        })
+        .take(MAX_LINKS)
+        .collect()
 }
 
 /// The text fields of a connector event summary, in order.
@@ -266,13 +281,7 @@ pub(in crate::common_ground) async fn gather(
         used.push("Agents".to_string());
     }
     let today = Utc::now().to_rfc3339();
-    let entries: Vec<&str> = request
-        .links
-        .split([';', '\n'])
-        .map(str::trim)
-        .filter(|entry| !entry.is_empty())
-        .take(MAX_LINKS)
-        .collect();
+    let entries = link_entries(&request.links);
     for entry in &entries {
         let url = link_url(entry);
         let source = if url.is_some() { "Link" } else { "Your words" };
@@ -308,6 +317,11 @@ pub(in crate::common_ground) fn request_for_tests(notes: &str, links: &str) -> B
         links: links.into(),
         ..BuildRequest::default()
     }
+}
+
+#[cfg(test)]
+pub(in crate::common_ground) fn link_entries_for_tests(request: &BuildRequest) -> Vec<&str> {
+    link_entries(&request.links)
 }
 
 #[cfg(test)]

@@ -157,6 +157,18 @@ struct CommonGroundCardDetail: View {
                 }
                 .padding(.horizontal, 16)
             }
+            if let unread = model.owner?.build.unreadLinks, !unread.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(unread, id: \.url) { link in
+                        Text(link.line)
+                    }
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(palette.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+            }
             actions(palette)
         }
         .padding(.bottom, 14)
@@ -263,8 +275,9 @@ struct CommonGroundCardDetail: View {
 
     static func symbol(forSource source: String) -> String {
         let text = source.lowercased()
-        if text.contains("memory") { return "brain" }
+        if text.contains("memory") || text.contains("agent") { return "brain" }
         if text.contains("mail") { return "envelope" }
+        if text.contains("scholar") { return "doc.text" }
         if text.contains("calendar") { return "calendar" }
         if text.contains("paper") || text.contains("pdf") { return "doc.text" }
         if text.contains("health") { return "heart" }

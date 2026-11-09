@@ -268,6 +268,13 @@ test('agent files summary names two files and counts the rest', () => {
   assert.equal(agentFilesSummary([file('.codex/AGENTS.md')]), 'AGENTS.md');
 });
 
+test('agent files are titled for the card, named by path here, and sent without the path', () => {
+  const titled = { label: 'Prefer small reviewed changes', path: '.claude/projects/p/memory/review.md', text: 'Keep pull requests small.' };
+  assert.equal(agentFilesSummary([titled]), 'review.md');
+  const request = commonGroundBuildRequest({ memory: false, connectors: [], useAgents: true, agentFiles: [titled], device: [], links: '', notes: '' });
+  assert.deepEqual(request.agents, [{ label: 'Prefer small reviewed changes', text: 'Keep pull requests small.' }]);
+});
+
 test('rooms list decodes with and without open, and a 404 without a code hides it', async () => {
   const { client } = mockServer({
     'GET rooms': { status: 200, body: { rooms: [

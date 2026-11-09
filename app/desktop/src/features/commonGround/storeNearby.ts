@@ -4,6 +4,7 @@
 
 import { commonGroundErrorCode, commonGroundErrorMessage, type CommonGroundClient } from './client';
 import { nearbyPhase } from './nearbyFormat';
+import { NearbyLocator } from './nearbyLocator';
 import type { CgScreen } from './store';
 import type { CgNearbyAlerts, CgNearbyPatch, CgNearbyPerson, CgNearbyResults, CgNearbySettings, CgNeed, CgNeedInput, CgNeedPatch } from './typesNearby';
 
@@ -65,6 +66,8 @@ export class CgNearbyStore {
   private progressAt = Date.now();
   /** When the open view last refetched; polling waits from here. */
   fetchedAt = 0;
+  /** This device's location for the Nearby screen. */
+  readonly locator: NearbyLocator = new NearbyLocator(this);
 
   constructor(readonly host: CgNearbyStoreHost) {}
 
