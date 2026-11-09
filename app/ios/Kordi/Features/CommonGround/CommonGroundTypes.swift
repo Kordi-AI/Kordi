@@ -184,8 +184,23 @@ struct CommonGroundProfile: Decodable, Hashable {
         evidence = c.cgValue(.evidence, [:])
     }
 
+    /// The references behind a topic, each source once: the same link cited twice is one row.
     func evidence(for label: String) -> [(id: String, item: Evidence)] {
-        (topics[label]?.refs ?? []).compactMap { id in evidence[id].map { (id, $0) } }
+        var seen = Set<String>()
+        return (topics[label]?.refs ?? []).compactMap { id in
+            guard let item = evidence[id], seen.insert(Self.sourceKey(item)).inserted else { return nil }
+            return (id, item)
+        }
+    }
+
+    /// A reference's link without a trailing slash, or its words when it has none.
+    static func sourceKey(_ item: Evidence) -> String {
+        if let url = item.url?.trimmingCharacters(in: .whitespaces), !url.isEmpty {
+            var key = url
+            while key.hasSuffix("/") { key.removeLast() }
+            return "url:\(key)"
+        }
+        return "item:\(item.source)\u{0}\(item.title)\u{0}\(item.snippet)"
     }
 }
 
@@ -212,6 +227,21 @@ struct CommonGroundBuildState: Decodable, Hashable {
     /// "idle", "building" or "failed".
     let status: String
     let errorCode: String?
+    /// Links the last build could not read; absent from older servers.
+    var unreadLinks: [CommonGroundUnreadLink]?
+}
+
+/// A link a build could not read: "blocked", "sign_in", "not_found", "unreachable" or "unreadable".
+struct CommonGroundUnreadLink: Decodable, Hashable {
+    let url: String
+    let reason: String
+
+    /// "Couldn't read scholar.google.com".
+    var line: String {
+        var host = URL(string: url)?.host ?? url
+        if host.hasPrefix("www.") { host.removeFirst(4) }
+        return "Couldn't read \(host)"
+    }
 }
 
 /// `GET card`: the owner's card, sharing and the build state.

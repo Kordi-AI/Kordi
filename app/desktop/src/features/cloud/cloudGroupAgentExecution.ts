@@ -32,7 +32,7 @@ import {
 import { cloudAgentTurnReplyText } from './cloudAgentReplyText';
 import { cloudAgentRuntimeRouteForTargetCloudAgent, ownerRequestRoute } from './cloudAgentTargetRuntimeRoute';
 import { agentRestrictedAccountIds } from './agentRestrictions';
-import { acquireDesktopExecutionLease } from './cloudDesktopExecutionLease';
+import { acquireDesktopExecutionLease, isTransientCloudFailure } from './cloudDesktopExecutionLease';
 import { handBackDesktopRun } from './cloudDesktopRunHandback';
 import { handBackHostedCredentialTurn } from './cloudHostedCredentialHandBack';
 import type { ApplyCloudGroupAgentControlInput } from './cloudGroupAgentControl.types';
@@ -44,7 +44,7 @@ import {
 import { ensureCloudGroupAgentIdentity } from './cloudGroupAgentPersistence';
 import { cloudGroupAgentReplyThreadAction } from './cloudGroupAgentPolicy';
 import {
-  publishCloudGroupAgentEnvelope,
+  publishCloudGroupAgentProcessingBestEffort,
   publishCloudGroupAgentTerminalAfterGuards,
 } from './cloudGroupAgentPublication';
 import { clearCloudGroupAgentPendingState,persistCloudGroupAgentCancellation,throwIfCloudAgentTurnAborted,waitForCloudGroupAgentTurn } from "./cloudGroupAgentRunState";
@@ -147,13 +147,25 @@ export async function respondToCloudGroupAgentMention(
         fallbackRoute: runtime.defaultRoute,
         requestRoute: ownerRequestRoute(message.agentRuntimeRoute, message.senderAccountId, account.accountId),
       });
-  const lease = await acquireDesktopExecutionLease(runtime.client, session.token, {
-    requestMessageId: cloudMessage.messageId, sessionId: envelope.groupId,
-    ownerAccountId: account.accountId, requesterAccountId: message.senderAccountId,
-    prompt: promptTextForCloudAgentMention(message.text, requestVoice),
-    idempotencyKey: `shared:${message.id}:${account.accountId}`,
-    runtimeRoute: requestedRoute ? { defaultModel: requestedRoute.model, defaultAuthProvider: requestedRoute.authProvider, defaultAuthChoice: requestedRoute.authChoice, thinking: requestedRoute.thinking } : undefined,
-  });
+  let claimedLease: Awaited<ReturnType<typeof acquireDesktopExecutionLease>>;
+  try {
+    claimedLease = await acquireDesktopExecutionLease(runtime.client, session.token, {
+      requestMessageId: cloudMessage.messageId, sessionId: envelope.groupId,
+      ownerAccountId: account.accountId, requesterAccountId: message.senderAccountId,
+      prompt: promptTextForCloudAgentMention(message.text, requestVoice),
+      idempotencyKey: `shared:${message.id}:${account.accountId}`,
+      runtimeRoute: requestedRoute ? { defaultModel: requestedRoute.model, defaultAuthProvider: requestedRoute.authProvider, defaultAuthChoice: requestedRoute.authChoice, thinking: requestedRoute.thinking } : undefined,
+    });
+  } catch (error) {
+    // The claim was retried through the Mac-first hold. A server still too
+    // slow is no failure of the agent: the cloud answers a request this Mac
+    // did not claim, and takes over a claim it never renews.
+    if (!isTransientCloudFailure(error)) throw error;
+    runtime.reportFailure('local-response', error);
+    void runtime.syncDiff();
+    return;
+  }
+  const lease = claimedLease;
   if (!lease) { void runtime.syncDiff(); return; }
   let localTurnStarted = false;
   try {
@@ -281,8 +293,8 @@ export async function respondToCloudGroupAgentMention(
       void runtime.syncDiff();
       return;
     }
-    await publishCloudGroupAgentEnvelope({
-    publisher: lease.publisher,
+    await publishCloudGroupAgentProcessingBestEffort({
+      publisher: lease.publisher,
       runtime,
       token: session.token,
       targetAccountIds,
@@ -311,7 +323,7 @@ export async function respondToCloudGroupAgentMention(
       sessionId: envelope.groupId,
       createdAtMs: processingCreatedAtMs,
       signal,
-    });
+    }, (error) => runtime.reportFailure('local-response', error));
     throwIfCloudAgentTurnAborted(signal);
     rememberLocalTurn(startedTurn);
 
@@ -322,7 +334,11 @@ export async function respondToCloudGroupAgentMention(
     );
   } catch (error) {
     cancelStartedTurn();
-    await handleCloudGroupAgentFailure(error, { ...input, context: replyContext, signal });
+    // Handled here once: a failure while reporting must not reach the
+    // coordinator, which would report the same mention again.
+    await handleCloudGroupAgentFailure(error, {
+      ...input, context: replyContext, signal, publisher: lease.publisher,
+    }).catch((failureError) => runtime.reportFailure('local-response', failureError));
     return;
   } finally {
     signal.removeEventListener('abort', cancelStartedTurn);
@@ -464,10 +480,16 @@ export async function respondToCloudGroupAgentMention(
   } catch (error) {
     // Before a local turn starts, this Mac hands the run back so the cloud
     // answers at once instead of the mention failing.
-    if (!localTurnStarted && !signal.aborted
-      && await handBackDesktopRun(runtime.client, session.token, lease)) {
-      runtime.reportFailure('local-response', error);
-      void runtime.syncDiff();
+    if (!localTurnStarted && !signal.aborted) {
+      if (await handBackDesktopRun(runtime.client, session.token, lease)) {
+        runtime.reportFailure('local-response', error);
+        void runtime.syncDiff();
+        return;
+      }
+      // The run stays with this Mac: its failure reply ends it on the server.
+      await handleCloudGroupAgentFailure(error, {
+        ...input, signal, publisher: lease.publisher,
+      }).catch((failureError) => runtime.reportFailure('local-response', failureError));
       return;
     }
     throw error;

@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
 import { subscribeNearbyHints } from './nearbyHints';
+import { startNearbyLocating, type NearbyLocatorState } from './nearbyLocator';
 import type { CommonGroundStore } from './store';
 import { nearbyStoreFor, type CgNearbyState, type CgNearbyStore } from './storeNearby';
 
@@ -48,4 +49,23 @@ export function useNearby(store: CommonGroundStore, options: { accountId?: strin
     };
   }, [nearby, accountId, poll, needs]);
   return [state, nearby];
+}
+
+/** This device's location state for the Nearby views. */
+export function useNearbyLocation(nearby: CgNearbyStore): NearbyLocatorState {
+  return useSyncExternalStore(nearby.locator.subscribe, nearby.locator.getSnapshot);
+}
+
+/**
+ * The Nearby screen's automatic location, foreground only: asks when the screen opens and when
+ * `sharing` turns on or resumes, then every few minutes while it stays open.
+ */
+export function useNearbyAutoLocation(nearby: CgNearbyStore, sharing: boolean): void {
+  const locator = nearby.locator;
+  useEffect(() => locator.attach(), [locator]);
+  useEffect(() => {
+    if (!sharing) return undefined;
+    void locator.auto();
+    return startNearbyLocating(locator);
+  }, [locator, sharing]);
 }

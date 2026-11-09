@@ -3,10 +3,11 @@ import test from 'node:test';
 
 import {
   createDesktopUpdaterController,
-  checkNativeDesktopUpdate,
   manualUpdateUrlForVersion,
   type DesktopUpdaterAdapter,
+  type DesktopUpdaterCheck,
   type DesktopUpdaterDownloadEvent,
+  type DesktopUpdaterLocation,
   type DesktopUpdaterUpdate,
 } from '../src/features/updates/desktopUpdater';
 
@@ -28,30 +29,64 @@ function fakeUpdate(overrides: Partial<DesktopUpdaterUpdate> = {}): DesktopUpdat
     currentVersion: '0.0.1-beta.5.1',
     version: '0.0.1-beta.6',
     body: 'Signed beta.6 update',
-    async downloadAndInstall() {},
-    async close() {},
     ...overrides,
   };
 }
 
-function fakeAdapter(update: DesktopUpdaterUpdate | null): DesktopUpdaterAdapter & {
-  checkCalls: number;
-  relaunchCalls: number;
-} {
-  return {
-    checkCalls: 0,
-    relaunchCalls: 0,
+type FakeAdapter = DesktopUpdaterAdapter & {
+  calls: string[];
+  nextCheck: () => Promise<DesktopUpdaterCheck>;
+  downloadImpl: (listener: (event: DesktopUpdaterDownloadEvent) => void) => Promise<void>;
+  installImpl: () => Promise<void>;
+  relaunchImpl: () => Promise<void>;
+};
+
+function fakeAdapter(
+  update: DesktopUpdaterUpdate | null,
+  location: DesktopUpdaterLocation = 'applications',
+): FakeAdapter {
+  const adapter: FakeAdapter = {
+    calls: [],
+    nextCheck: async () => ({ update, location }),
+    downloadImpl: async (listener) => {
+      listener({ event: 'Started', data: { contentLength: 100 } });
+      listener({ event: 'Progress', data: { chunkLength: 100 } });
+      listener({ event: 'Finished' });
+    },
+    installImpl: async () => {},
+    relaunchImpl: async () => {},
     async check() {
-      this.checkCalls += 1;
-      return update;
+      adapter.calls.push('check');
+      return adapter.nextCheck();
+    },
+    async download(listener) {
+      adapter.calls.push('download');
+      return adapter.downloadImpl(listener);
+    },
+    async install() {
+      adapter.calls.push('install');
+      return adapter.installImpl();
     },
     async relaunch() {
-      this.relaunchCalls += 1;
+      adapter.calls.push('relaunch');
+      return adapter.relaunchImpl();
+    },
+    async revealApp() {
+      adapter.calls.push('reveal');
     },
     async currentVersion() {
       return update?.currentVersion ?? '0.0.1-beta.7';
     },
   };
+  return adapter;
+}
+
+function controllerFor(adapter: DesktopUpdaterAdapter, autoDownload = false) {
+  return createDesktopUpdaterController({ adapter, isTauriRuntime: () => true, autoDownload: () => autoDownload });
+}
+
+async function settle() {
+  for (let i = 0; i < 10; i += 1) await Promise.resolve();
 }
 
 test('manual fallback is product-origin and version-immutable', () => {
@@ -60,300 +95,226 @@ test('manual fallback is product-origin and version-immutable', () => {
     manualUpdateUrlForVersion('10.20.30-beta.4'),
     'https://kordi.ai/updates/releases/10.20.30-beta.4/Kordi_10.20.30-beta.4_aarch64.dmg',
   );
-  for (const value of [
-    undefined,
-    '',
-    'latest',
-    '../beta.6',
-    '0.0.1-beta.06',
-    'https://evil.invalid/x',
-  ]) {
+  for (const value of [undefined, '', 'latest', '../beta.6', '0.0.1-beta.06', 'https://evil.invalid/x']) {
     assert.equal(manualUpdateUrlForVersion(value), undefined);
   }
 });
 
-test('outside Tauri the controller stays idle without importing or checking plugins', async () => {
+test('outside Tauri the controller stays idle without checking', async () => {
   const adapter = fakeAdapter(fakeUpdate());
-  const controller = createDesktopUpdaterController({
-    adapter,
-    isTauriRuntime: () => false,
-  });
-
-  const state = await controller.check();
-
-  assert.equal(state.status, 'idle');
-  assert.equal(adapter.checkCalls, 0);
+  const controller = createDesktopUpdaterController({ adapter, isTauriRuntime: () => false });
+  assert.equal((await controller.check()).status, 'idle');
+  assert.deepEqual(adapter.calls, []);
 });
 
-test('an available update retains the exact checked resource', async () => {
-  const update = fakeUpdate();
-  const adapter = fakeAdapter(update);
-  const controller = createDesktopUpdaterController({ adapter, isTauriRuntime: () => true });
-
+test('with automatic updates off, a found update waits for the user', async () => {
+  const adapter = fakeAdapter(fakeUpdate());
+  const controller = controllerFor(adapter, false);
   const state = await controller.check();
-
+  await settle();
   assert.equal(state.status, 'available');
-  assert.equal(state.currentVersion, '0.0.1-beta.5.1');
   assert.equal(state.latestVersion, '0.0.1-beta.6');
   assert.equal(state.manualDownloadUrl, BETA6_MANUAL_UPDATE_URL);
-  assert.equal(controller.getCheckedUpdate(), update);
+  assert.deepEqual(adapter.calls, ['check']);
+});
+
+test('with automatic updates on, a found update downloads silently and becomes ready', async () => {
+  const adapter = fakeAdapter(fakeUpdate());
+  const controller = controllerFor(adapter, true);
+  const states: Array<[string, boolean | undefined]> = [];
+  controller.subscribe((state) => states.push([state.status, state.background]));
+  await controller.check();
+  await settle();
+  assert.deepEqual(adapter.calls, ['check', 'download']);
+  assert.equal(controller.getState().status, 'ready');
+  assert.ok(states.some(([status, background]) => status === 'downloading' && background === true));
+  assert.ok(!adapter.calls.includes('install'), 'nothing installs before the user restarts or quits');
+});
+
+test('a failed silent download falls back to the manual offer without an error card', async () => {
+  const adapter = fakeAdapter(fakeUpdate());
+  adapter.downloadImpl = async () => { throw new Error('network dropped'); };
+  const controller = controllerFor(adapter, true);
+  await controller.check();
+  await settle();
+  assert.equal(controller.getState().status, 'available');
+  assert.equal(controller.getState().error, undefined);
+});
+
+test('restart to update installs the downloaded bytes without downloading again, then relaunches', async () => {
+  const adapter = fakeAdapter(fakeUpdate());
+  const controller = controllerFor(adapter, true);
+  await controller.check();
+  await settle();
+  await controller.install();
+  assert.deepEqual(adapter.calls, ['check', 'download', 'install', 'relaunch']);
+  assert.equal(controller.getState().status, 'relaunching');
+});
+
+test('update now downloads with progress, installs, and relaunches only after success', async () => {
+  const install = deferred<void>();
+  let emit: ((event: DesktopUpdaterDownloadEvent) => void) | undefined;
+  const finishDownload = deferred<void>();
+  const adapter = fakeAdapter(fakeUpdate());
+  adapter.downloadImpl = async (listener) => { emit = listener; await finishDownload.promise; };
+  adapter.installImpl = () => install.promise;
+  const controller = controllerFor(adapter, false);
+  await controller.check();
+
+  const pending = controller.install();
+  await settle();
+  assert.equal(controller.getState().status, 'downloading');
+  assert.equal(controller.getState().background, false);
+  emit?.({ event: 'Started', data: { contentLength: 200 } });
+  emit?.({ event: 'Progress', data: { chunkLength: 50 } });
+  assert.equal(controller.getState().receivedBytes, 50);
+  assert.equal(controller.getState().totalBytes, 200);
+  finishDownload.resolve();
+  await settle();
+  assert.equal(controller.getState().status, 'installing');
+  assert.ok(!adapter.calls.includes('relaunch'));
+  install.resolve();
+  await pending;
+  assert.deepEqual(adapter.calls, ['check', 'download', 'install', 'relaunch']);
+});
+
+test('install failure never relaunches and retry installs the same downloaded update', async () => {
+  const adapter = fakeAdapter(fakeUpdate());
+  let installs = 0;
+  adapter.installImpl = async () => {
+    installs += 1;
+    if (installs === 1) throw new Error('signature mismatch');
+  };
+  const controller = controllerFor(adapter, false);
+  await controller.check();
+  await assert.rejects(controller.install(), /signature mismatch/);
+  assert.equal(controller.getState().status, 'failed');
+  assert.equal(controller.getState().failureStage, 'install');
+  assert.equal(controller.getState().error, 'signature mismatch');
+  assert.ok(!adapter.calls.includes('relaunch'));
+  await controller.retry();
+  assert.deepEqual(adapter.calls, ['check', 'download', 'install', 'install', 'relaunch']);
+});
+
+test('a manual download failure shows the error card with manual recovery', async () => {
+  const adapter = fakeAdapter(fakeUpdate());
+  adapter.downloadImpl = async () => { throw new Error(''); };
+  const controller = controllerFor(adapter, false);
+  await controller.check();
+  await assert.rejects(controller.install());
+  const state = controller.getState();
+  assert.equal(state.status, 'failed');
+  assert.equal(state.error, 'Unable to install the verified Kordi update.');
+  assert.equal(state.manualDownloadUrl, BETA6_MANUAL_UPDATE_URL);
+});
+
+test('relaunch failure leaves an actionable failed state', async () => {
+  const adapter = fakeAdapter(fakeUpdate());
+  adapter.relaunchImpl = async () => { throw new Error('Quit Kordi and open it from Applications.'); };
+  const controller = controllerFor(adapter, true);
+  await controller.check();
+  await settle();
+  await assert.rejects(controller.install());
+  assert.equal(controller.getState().status, 'failed');
+  assert.equal(controller.getState().error, 'Quit Kordi and open it from Applications.');
+});
+
+test('a copy outside Applications never downloads or installs and offers to move instead', async () => {
+  const adapter = fakeAdapter(fakeUpdate(), 'elsewhere');
+  const controller = controllerFor(adapter, true);
+  const state = await controller.check();
+  await settle();
+  assert.equal(state.status, 'misplaced');
+  assert.deepEqual(adapter.calls, ['check']);
+  await assert.rejects(controller.install(), /Move Kordi to Applications/);
+  await controller.downloadInBackground();
+  await controller.revealApp();
+  assert.deepEqual(adapter.calls, ['check', 'reveal']);
+});
+
+test('turning automatic updates on starts the download for a waiting update', async () => {
+  const adapter = fakeAdapter(fakeUpdate());
+  const controller = controllerFor(adapter, false);
+  await controller.check();
+  await controller.downloadInBackground();
+  assert.equal(controller.getState().status, 'ready');
+  assert.deepEqual(adapter.calls, ['check', 'download']);
+});
+
+test('a recheck keeps a downloaded update ready and a failed recheck does not discard it', async () => {
+  const adapter = fakeAdapter(fakeUpdate());
+  const controller = controllerFor(adapter, true);
+  await controller.check();
+  await settle();
+  assert.equal((await controller.check()).status, 'ready');
+  adapter.nextCheck = async () => { throw new Error('offline'); };
+  assert.equal((await controller.check()).status, 'ready');
+  assert.deepEqual(adapter.calls, ['check', 'download', 'check', 'check']);
+});
+
+test('a newer version replaces a downloaded one and downloads again', async () => {
+  const adapter = fakeAdapter(fakeUpdate());
+  const controller = controllerFor(adapter, true);
+  await controller.check();
+  await settle();
+  adapter.nextCheck = async () => ({ update: fakeUpdate({ version: '0.0.1-beta.7' }), location: 'applications' });
+  await controller.check();
+  await settle();
+  assert.equal(controller.getState().latestVersion, '0.0.1-beta.7');
+  assert.equal(controller.getState().status, 'ready');
+  assert.deepEqual(adapter.calls, ['check', 'download', 'check', 'download']);
 });
 
 test('concurrent checks share one request and publish checking then up-to-date', async () => {
-  const result = deferred<DesktopUpdaterUpdate | null>();
-  let checkCalls = 0;
-  const controller = createDesktopUpdaterController({
-    adapter: {
-      async check() {
-        checkCalls += 1;
-        return result.promise;
-      },
-      async currentVersion() {
-        return '0.0.1-beta.7';
-      },
-      async relaunch() {},
-    },
-    isTauriRuntime: () => true,
-  });
+  const result = deferred<DesktopUpdaterCheck>();
+  const adapter = fakeAdapter(null);
+  adapter.nextCheck = () => result.promise;
+  const controller = controllerFor(adapter);
   const states: string[] = [];
   controller.subscribe((state) => states.push(state.status));
-
   const first = controller.check();
   const second = controller.check();
-
   assert.equal(first, second);
-  await Promise.resolve();
-  assert.equal(checkCalls, 1);
-  assert.equal(controller.getState().status, 'checking');
-
-  result.resolve(null);
-  assert.deepEqual(await first, {
-    status: 'up-to-date',
-    currentVersion: '0.0.1-beta.7',
-  });
+  await settle();
+  assert.deepEqual(adapter.calls, ['check']);
+  result.resolve({ update: null, location: 'applications' });
+  assert.deepEqual(await first, { status: 'up-to-date', currentVersion: '0.0.1-beta.7' });
   assert.deepEqual(states, ['checking', 'up-to-date']);
 });
 
 test('a failed check stays visible and retry performs a new check', async () => {
-  let checkCalls = 0;
-  const controller = createDesktopUpdaterController({
-    adapter: {
-      async check() {
-        checkCalls += 1;
-        if (checkCalls === 1) throw new Error('update service offline');
-        return null;
-      },
-      async currentVersion() {
-        return '0.0.1-beta.7';
-      },
-      async relaunch() {},
-    },
-    isTauriRuntime: () => true,
-  });
-
+  const adapter = fakeAdapter(null);
+  let checks = 0;
+  adapter.nextCheck = async () => {
+    checks += 1;
+    if (checks === 1) throw new Error('update service offline');
+    return { update: null, location: 'applications' };
+  };
+  const controller = controllerFor(adapter);
   assert.deepEqual(await controller.check(), {
     status: 'failed',
     currentVersion: '0.0.1-beta.7',
     failureStage: 'check',
     error: 'update service offline',
   });
-
-  const retried = await controller.retry();
-  assert.equal(checkCalls, 2);
-  assert.deepEqual(retried, {
-    status: 'up-to-date',
-    currentVersion: '0.0.1-beta.7',
-  });
+  assert.equal((await controller.retry())?.status, 'up-to-date');
+  assert.equal(checks, 2);
 });
 
 test('a failed recheck preserves the known manual-download recovery', async () => {
-  const update = fakeUpdate();
-  let checkCalls = 0;
-  const controller = createDesktopUpdaterController({
-    adapter: {
-      async check() {
-        checkCalls += 1;
-        if (checkCalls === 1) return update;
-        throw new Error('temporary network failure');
-      },
-      async currentVersion() {
-        return update.currentVersion;
-      },
-      async relaunch() {},
-    },
-    isTauriRuntime: () => true,
-  });
-
+  const adapter = fakeAdapter(fakeUpdate());
+  const controller = controllerFor(adapter);
   await controller.check();
+  adapter.nextCheck = async () => { throw new Error('temporary network failure'); };
   const failed = await controller.check();
-
   assert.equal(failed.status, 'failed');
-  assert.equal(failed.failureStage, 'check');
-  assert.equal(failed.latestVersion, update.version);
+  assert.equal(failed.latestVersion, '0.0.1-beta.6');
   assert.equal(failed.manualDownloadUrl, BETA6_MANUAL_UPDATE_URL);
 });
 
 test('an invalid update version never becomes a manual download URL', async () => {
-  const controller = createDesktopUpdaterController({
-    adapter: fakeAdapter(fakeUpdate({ version: 'https://evil.invalid/x' })),
-    isTauriRuntime: () => true,
-  });
-
+  const controller = controllerFor(fakeAdapter(fakeUpdate({ version: 'https://evil.invalid/x' })));
   const state = await controller.check();
-
   assert.equal(state.status, 'available');
   assert.equal(state.manualDownloadUrl, undefined);
-});
-
-test('confirm downloads once, reports progress, installs, and relaunches only after success', async () => {
-  const install = deferred<void>();
-  let onEvent: ((event: DesktopUpdaterDownloadEvent) => void) | undefined;
-  let installCalls = 0;
-  const update = fakeUpdate({
-    downloadAndInstall(listener) {
-      installCalls += 1;
-      onEvent = listener;
-      return install.promise;
-    },
-  });
-  const adapter = fakeAdapter(update);
-  const controller = createDesktopUpdaterController({ adapter, isTauriRuntime: () => true });
-  const states: string[] = [];
-  controller.subscribe((state) => states.push(state.status));
-  await controller.check();
-
-  const first = controller.install();
-  const second = controller.install();
-  assert.equal(first, second);
-  assert.equal(installCalls, 1);
-  assert.equal(adapter.relaunchCalls, 0);
-
-  onEvent?.({ event: 'Started', data: { contentLength: 100 } });
-  onEvent?.({ event: 'Progress', data: { chunkLength: 35 } });
-  assert.deepEqual(controller.getState(), {
-    status: 'downloading',
-    currentVersion: '0.0.1-beta.5.1',
-    latestVersion: '0.0.1-beta.6',
-    notes: 'Signed beta.6 update',
-    receivedBytes: 35,
-    totalBytes: 100,
-    manualDownloadUrl: BETA6_MANUAL_UPDATE_URL,
-  });
-
-  onEvent?.({ event: 'Finished' });
-  assert.equal(controller.getState().status, 'installing');
-  install.resolve();
-  await first;
-
-  assert.equal(adapter.relaunchCalls, 1);
-  assert.equal(controller.getState().status, 'relaunching');
-  assert.ok(states.includes('downloading'));
-  assert.ok(states.includes('installing'));
-  assert.ok(states.includes('relaunching'));
-});
-
-test('signature or install failure never relaunches and retry reuses the checked update', async () => {
-  let attempts = 0;
-  const update = fakeUpdate({
-    async downloadAndInstall() {
-      attempts += 1;
-      if (attempts === 1) throw new Error('signature verification failed');
-    },
-  });
-  const adapter = fakeAdapter(update);
-  const controller = createDesktopUpdaterController({ adapter, isTauriRuntime: () => true });
-  await controller.check();
-
-  await assert.rejects(controller.install(), /signature verification failed/);
-  assert.equal(adapter.relaunchCalls, 0);
-  assert.equal(controller.getState().status, 'failed');
-  assert.equal(controller.getState().manualDownloadUrl, BETA6_MANUAL_UPDATE_URL);
-
-  await controller.retry();
-  assert.equal(attempts, 2);
-  assert.equal(adapter.checkCalls, 1);
-  assert.equal(adapter.relaunchCalls, 1);
-});
-
-test('relaunch failure leaves the installed update in an actionable failed state', async () => {
-  const update = fakeUpdate();
-  const adapter = fakeAdapter(update);
-  adapter.relaunch = async () => {
-    throw new Error('Quit Kordi and open it from Applications.');
-  };
-  const controller = createDesktopUpdaterController({ adapter, isTauriRuntime: () => true });
-  await controller.check();
-
-  await assert.rejects(controller.install(), /open it from Applications/);
-
-  assert.equal(controller.getState().status, 'failed');
-  assert.equal(controller.getState().failureStage, 'install');
-  assert.equal(controller.getState().error, 'Quit Kordi and open it from Applications.');
-  assert.equal(controller.getState().manualDownloadUrl, BETA6_MANUAL_UPDATE_URL);
-});
-
-test('an uninformative install failure uses verified-update fallback copy', async () => {
-  const update = fakeUpdate({
-    async downloadAndInstall() {
-      throw new Error('');
-    },
-  });
-  const controller = createDesktopUpdaterController({
-    adapter: fakeAdapter(update),
-    isTauriRuntime: () => true,
-  });
-  await controller.check();
-
-  await assert.rejects(controller.install());
-
-  assert.equal(controller.getState().status, 'failed');
-  assert.equal(controller.getState().error, 'Unable to install the verified Kordi update.');
-});
-
-test('disposing closes the held updater resource', async () => {
-  let closeCalls = 0;
-  const update = fakeUpdate({ async close() { closeCalls += 1; } });
-  const adapter = fakeAdapter(update);
-  const controller = createDesktopUpdaterController({ adapter, isTauriRuntime: () => true });
-  await controller.check();
-  await controller.dispose();
-  assert.equal(closeCalls, 1);
-  assert.equal(controller.getCheckedUpdate(), null);
-});
-
-
-test('native updater reports only the actual numeric Mac OS version', async () => {
-  const expected = fakeUpdate();
-  const result = await checkNativeDesktopUpdate(
-    async () => ({ platform: 'macos', osVersion: '13.0.1', machineId: 'synthetic-private-device' }),
-    async (options) => {
-      assert.deepEqual(options, { headers: { 'X-Kordi-OS-Version': '13.0.1' } });
-      return expected;
-    },
-  );
-  assert.equal(result, expected);
-  for (const osVersion of ['13', '013.0', '13.00', '13.0 ', 'macOS 13.0', '13.0.0.0', '13.0,14.0', '65536.0', '13.65536', '0.0', '']) {
-    await assert.rejects(checkNativeDesktopUpdate(
-      async () => ({ platform: 'macos', osVersion }),
-      async () => { assert.fail('unknown OS must not check for an installable update'); },
-    ), /compatibility/);
-  }
-  await assert.rejects(checkNativeDesktopUpdate(
-    async () => { throw new Error('native metadata unavailable'); },
-    async () => { assert.fail('native failure must not check for an update'); },
-  ), /unavailable/);
-});
-
-
-test('native updater accepts version bounds and rejects other platforms', async () => {
-  for (const osVersion of ['1.0', '13.0', '13.0.0', '65535.65535.65535']) {
-    await checkNativeDesktopUpdate(async () => ({ platform: 'macos', osVersion }), async (options) => {
-      assert.equal(options.headers['X-Kordi-OS-Version'], osVersion);
-      return null;
-    });
-  }
-  await assert.rejects(checkNativeDesktopUpdate(
-    async () => ({ platform: 'windows', osVersion: '13.0' }),
-    async () => { assert.fail('a non-Mac must not claim macOS eligibility'); },
-  ), /compatibility/);
 });

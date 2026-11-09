@@ -9,7 +9,7 @@ import { DocumentsRow } from './BuildDocuments';
 import { agentFilesSummary, buildFailureMessage, canBuildProfile, commonGroundBuildRequest, notesHint, type CgBuildChoices } from './buildRequest';
 import { DEVICE_SOURCES } from './deviceAccess';
 import type { CgHost } from './host';
-import { CgAvatar, CgBack, CgGroup, CgHero, CgIcon, CgNotice, CgProgress, CgRow, CgSection } from './parts';
+import { CgAvatar, CgBack, CgGroup, CgHero, CgIcon, CgNotice, CgProgress, CgRow, CgSection, CgUnreadLinks } from './parts';
 import { buildTitle } from './profiles';
 import { currentProfile, type CgState, type CommonGroundStore } from './store';
 import type { CgAgentFile } from './types';
@@ -60,8 +60,11 @@ export function BuildScreen({ state, store, host }: { state: CgState; store: Com
     notes: picks.notes,
     ...(sourcesOn ? { documents: picks.documents, picks } : {}),
   };
-  const failed = state.owner?.build.status === 'failed' && !state.notice ? buildFailureMessage(state.owner.build.errorCode) : null;
+  // The card's own failed build always shows on opening, even when the store also carries a notice
+  // (a build that failed while this screen was replaced, such as when a first card's profile arrives).
+  const failed = state.owner?.build.status === 'failed' ? buildFailureMessage(state.owner.build.errorCode) : null;
   const notice = phase === 'attempted' ? state.notice ?? failed : phase === 'opened' ? failed : null;
+  const unreadLinks = state.owner?.build.unreadLinks ?? [];
   const hasAgentFiles = Boolean(agentFiles?.length);
   const agentsRow = host.agentFiles ? (
     <CgRow
@@ -106,6 +109,7 @@ export function BuildScreen({ state, store, host }: { state: CgState; store: Com
         <CgGroup>
           <textarea className="cg-textarea" value={picks.links} onChange={(event) => set({ links: event.target.value })} placeholder="Homepage; ORCID; papers" aria-label="Links" />
         </CgGroup>
+        <CgUnreadLinks links={unreadLinks} />
       </CgSection>
       <CgSection title="Notes">
         <CgGroup>

@@ -232,28 +232,30 @@ button.cg-mrow:hover { background: var(--cg-fill); }
 .cg-line-act.is-icon { padding: 0 5px; }
 .cg-line:hover .cg-line-act, .cg-line.is-off .cg-line-act[aria-pressed="true"], .cg-line-act:focus-visible { opacity: 1; }
 .cg-line-act:hover { background: var(--cg-fill); color: var(--utility-foreground); }
-.cg-line-refs { padding: 2px 14px 10px; }
+.cg-line-refs { padding: 4px 14px 12px; }
 .cg-line.is-off .cg-line-refs { opacity: 0.45; }
 .cg-line-head:last-child { padding-bottom: 8px; }
-.cg-ref { display: flex; flex-direction: column; align-items: flex-start; margin: 0 -8px; padding: 6px 8px; border-radius: 7px; scroll-margin: 80px; }
-.cg-ref-quote { display: block; max-width: 100%; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
-.cg-ref-quote.is-folded { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
-.cg-ref-more, .cg-ref-same {
-  padding: 0; border: 0; background: none; color: var(--utility-muted-text); font: inherit; font-size: 11px; font-weight: 500; text-align: left; cursor: pointer;
+.cg-ref-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cg-ref-chip {
+  display: inline-flex; max-width: 260px; height: 26px; align-items: center; gap: 5px; padding: 0 9px; border: 0.5px solid var(--cg-line); border-radius: 13px;
+  background: var(--app-main-bg); color: var(--utility-foreground); font: inherit; font-size: 12px; cursor: pointer; transition: background 150ms ease-out, border-color 150ms ease-out;
 }
-.cg-ref-more { margin-top: 2px; }
-.cg-ref-more:hover, .cg-ref-same:hover { color: var(--app-accent); }
-.cg-ref-meta { display: flex; max-width: 100%; align-items: center; gap: 4px; margin-top: 3px; color: var(--utility-muted-text); font-size: 11px; font-variant-numeric: tabular-nums; }
-.cg-ref-meta > * { min-width: 0; flex: none; }
-.cg-ref-glyph { width: 12px; height: 12px; }
-.cg-ref-meta > :is(.cg-ref-title, .cg-ref-link) { overflow: hidden; flex: 0 1 auto; text-overflow: ellipsis; white-space: nowrap; }
-.cg-ref-link { display: inline-flex; align-items: center; gap: 2px; color: var(--utility-foreground); text-decoration: none; }
-.cg-ref-link:hover { color: var(--app-accent); text-decoration: underline; }
-.cg-ref-arrow { width: 11px; height: 11px; flex: none; opacity: 0.6; }
-.cg-ref-same { display: block; padding: 4px 0; }
+.cg-ref-chip > span { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
+.cg-ref-chip .cg-ref-glyph { color: var(--utility-muted-text); }
+.cg-ref-chip:hover { background: var(--cg-fill); }
+.cg-ref-chip:focus-visible { outline: none; border-color: var(--utility-muted-text); }
+.cg-ref-chip[aria-expanded="true"] { border-color: var(--utility-foreground); }
+.cg-ref-glyph { width: 12px; height: 12px; flex: none; }
+.cg-ref-detail { margin-top: 8px; padding: 10px 12px; border-radius: 9px; background: var(--app-main-bg); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.cg-ref-detail-title { font-weight: 500; }
+.cg-ref-detail-meta { color: var(--utility-muted-text); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cg-ref-detail-words { margin: 4px 0 0; color: var(--utility-muted-text); }
+.cg-ref-link { display: inline-flex; align-items: center; gap: 2px; margin-top: 4px; color: var(--app-accent); font-size: 12px; text-decoration: none; }
+.cg-ref-link:hover { text-decoration: underline; }
+.cg-ref-arrow { width: 11px; height: 11px; flex: none; opacity: 0.8; }
 .cg-lines > .cg-line:first-child { border-radius: 9px 9px 0 0; }
 .cg-line { scroll-margin: 80px; }
-.cg-line.is-flash, .cg-ref.is-flash { animation: cg-flash 1400ms ease-out; }
+.cg-line.is-flash { animation: cg-flash 1400ms ease-out; }
 @keyframes cg-flash { 0%, 35% { background: color-mix(in srgb, var(--app-accent) 12%, transparent); } }
 
 /* Now and the timeline: chips, then periods newest first on a dotted rail. */
@@ -281,12 +283,20 @@ button.cg-mrow:hover { background: var(--cg-fill); }
 .cg-line-add.is-editing { cursor: text; box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--app-accent) 55%, transparent); }
 .cg-line-add.is-editing input { min-width: 0; width: 160px; padding: 0; border: 0; background: transparent; color: var(--utility-foreground); font: inherit; outline: none; }
 /* Memories on the card: text, then the category chip and date; Add to card…, Remove from card and Delete on hover. */
-.cg-mem { position: relative; display: flex; align-items: flex-start; gap: 4px; padding: 10px 8px 10px 14px; }
+.cg-mem { position: relative; display: flex; align-items: flex-start; padding: 10px 14px; }
 .cg-mem + .cg-mem { border-top: 0.5px solid var(--cg-line); }
 .cg-mem-text { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+/* The actions float over the row's corner on hover, so hidden buttons never take width from the text. */
+.cg-mem-acts {
+  position: absolute; top: 7px; right: 8px; display: flex; gap: 2px; padding-left: 16px;
+  /* --cg-card is a tint, so it sits on the page colour to hide the text underneath. */
+  background: linear-gradient(to right, transparent, var(--cg-card) 16px), linear-gradient(to right, transparent, var(--app-main-bg) 16px);
+  opacity: 0; pointer-events: none; transition: opacity 150ms;
+}
+.cg-mem:hover .cg-mem-acts, .cg-mem:focus-within .cg-mem-acts, .cg-mem-acts:has([aria-expanded="true"]) { opacity: 1; pointer-events: auto; }
 .cg-mem-title { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
 .cg-mem-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px; color: var(--utility-muted-text); font-size: 11px; font-variant-numeric: tabular-nums; }
-.cg-mem:hover .cg-line-act, .cg-mem .cg-line-act[aria-expanded="true"] { opacity: 1; }
+.cg-mem:is(:hover, :focus-within) .cg-line-act, .cg-mem .cg-line-act[aria-expanded="true"] { opacity: 1; }
 .cg-mem-menu {
   position: absolute; z-index: 20; top: 36px; right: 8px; min-width: 180px; padding: 4px; border: 0.5px solid var(--cg-line); border-radius: 10px;
   background: var(--app-transient-surface-fallback, var(--app-main-bg)); box-shadow: 0 10px 30px rgb(0 0 0 / 0.18), 0 1px 3px rgb(0 0 0 / 0.08);

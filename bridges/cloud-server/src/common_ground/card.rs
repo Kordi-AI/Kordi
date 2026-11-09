@@ -75,7 +75,23 @@ pub(super) struct CardRow {
     pub built_at: Option<DateTime<Utc>>,
     pub building: bool,
     pub error_code: Option<String>,
+    /// Links the last build could not read, with why.
+    pub unread_links: Vec<UnreadLink>,
 }
+
+/// A link source a build could not read.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(super) struct UnreadLink {
+    pub url: String,
+    /// `blocked`, `sign_in`, `not_found`, `unreachable` or `unreadable`.
+    pub reason: String,
+}
+
+/// A build whose run ended without reporting back: it was cancelled, lost or
+/// expired, so the card shows it failed instead of quietly going idle.
+pub(super) const BUILD_INTERRUPTED: &str = "build_interrupted";
+/// A build whose run was still waiting or running after the in-flight window.
+pub(super) const BUILD_TIMED_OUT: &str = "build_timed_out";
 
 type RawCardRow = (
     Value,
@@ -86,6 +102,9 @@ type RawCardRow = (
     Option<DateTime<Utc>>,
     bool,
     Option<String>,
+    bool,
+    bool,
+    Value,
 );
 
 /// A build counts as in flight while its run is still queued or running.
@@ -103,7 +122,12 @@ where
 {
     let sql = format!(
         "SELECT card.topics_json, card.evidence_json, card.hidden_json, card.sharing_enabled,
-                card.revision, card.built_at, ({BUILD_IN_FLIGHT_SQL}), card.build_error_code
+                card.revision, card.built_at, ({BUILD_IN_FLIGHT_SQL}), card.build_error_code,
+                card.active_run_id IS NOT NULL,
+                EXISTS (SELECT 1 FROM cloud_agent_fallback_runs run
+                        WHERE run.run_id = card.active_run_id
+                          AND run.status IN ('queued', 'leased', 'running')),
+                card.link_errors_json
          FROM cloud_common_ground_cards card WHERE card.profile_id = $1"
     );
     let row: Option<RawCardRow> = query_as(&sql)
@@ -111,7 +135,19 @@ where
         .fetch_optional(executor)
         .await?;
     Ok(row.map(
-        |(topics, evidence, hidden, sharing, revision, built_at, building, error_code)| CardRow {
+        |(
+            topics,
+            evidence,
+            hidden,
+            sharing,
+            revision,
+            built_at,
+            building,
+            error_code,
+            pending,
+            run_active,
+            unread_links,
+        )| CardRow {
             topics: serde_json::from_value(topics).unwrap_or_default(),
             evidence: serde_json::from_value(evidence).unwrap_or_default(),
             hidden: serde_json::from_value(hidden).unwrap_or_default(),
@@ -119,9 +155,33 @@ where
             revision,
             built_at,
             building,
-            error_code,
+            error_code: build_error(building, error_code, pending, run_active),
+            unread_links: serde_json::from_value(unread_links).unwrap_or_default(),
         },
     ))
+}
+
+/// The error of the last build. A build that still names its run but is no
+/// longer in flight never reported back; it failed rather than went idle.
+pub(super) fn build_error(
+    building: bool,
+    stored: Option<String>,
+    pending: bool,
+    run_active: bool,
+) -> Option<String> {
+    if building {
+        return None;
+    }
+    stored.or_else(|| {
+        pending.then(|| {
+            if run_active {
+                BUILD_TIMED_OUT
+            } else {
+                BUILD_INTERRUPTED
+            }
+            .to_string()
+        })
+    })
 }
 
 impl CardRow {
@@ -153,6 +213,7 @@ impl CardRow {
         let build = json!({
             "status": if self.building { "building" } else if self.error_code.is_some() { "failed" } else { "idle" },
             "errorCode": if self.building { None } else { self.error_code.clone() },
+            "unreadLinks": self.unread_links,
         });
         if !self.has_card() {
             return json!({ "card": Value::Null, "sharing": self.sharing, "build": build });
@@ -176,7 +237,11 @@ impl CardRow {
 }
 
 pub(super) fn empty_view() -> Value {
-    json!({ "card": Value::Null, "sharing": true, "build": { "status": "idle", "errorCode": Value::Null } })
+    json!({
+        "card": Value::Null,
+        "sharing": true,
+        "build": { "status": "idle", "errorCode": Value::Null, "unreadLinks": [] },
+    })
 }
 
 /// Collapses whitespace, caps the length and drops duplicates (ignoring case)

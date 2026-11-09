@@ -4,49 +4,76 @@ import { ArrowUpRight, Eye, EyeOff, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { openExternalMessageLink, safeExternalHttpHref } from '@/kordi-app/components/messageLinks';
 import { topicTone } from './format';
-import { cardAnchor, isNotesSource, jumpTo, QUOTE_FOLD_CHARS, refMeta, seenLine, sourceLook, topicRefs, type CardRef } from './cardReferences';
+import { cardAnchor, isNotesSource, refMeta, seenLine, sourceLook, topicRefs, type CardRef } from './cardReferences';
 import { CgTag } from './parts';
-import type { CgOwnCard } from './types';
+import type { CgEvidence, CgOwnCard } from './types';
 
 export const TOPIC_MAX_CHARS = 40;
 
-/** One reference: its own words first, then where and when it came from. */
-function RefRow({ id, item }: CardRef) {
-  const [open, setOpen] = useState(false);
-  const words = item.snippet.trim() || item.title.trim();
+/** The words on a reference's chip: its title, or for a note its own words. */
+function chipLabel(item: CgEvidence): string {
+  const title = item.title.trim();
+  if (title && !isNotesSource(item.source)) return title;
+  return item.snippet.trim() || title || item.source;
+}
+
+/** One reference opened under the chips: title, where and when, its words, and Open for a web page. */
+function RefDetail({ id, item, panelId }: CardRef & { panelId: string }) {
   const { title, rest } = refMeta(item);
+  const words = item.snippet.trim();
   const href = item.url ? safeExternalHttpHref(item.url) : null;
-  const { Icon } = sourceLook(item.source);
-  const folds = words.length > QUOTE_FOLD_CHARS;
   return (
-    <div className="cg-ref" id={cardAnchor('ref', id)}>
-      <q className={cn('cg-ref-quote', folds && !open && 'is-folded')}>{words}</q>
-      {folds ? (
-        <button type="button" className="cg-ref-more" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? 'Show less' : 'Show more'}
-        </button>
+    <div className="cg-ref-detail" id={panelId} data-ref={id}>
+      {title ? <div className="cg-ref-detail-title">{title}</div> : null}
+      {rest ? <div className="cg-ref-detail-meta">{rest}</div> : null}
+      {words && words !== title ? <p className="cg-ref-detail-words">{words}</p> : null}
+      {href ? (
+        <a className="cg-ref-link" href={href} title={href} target="_blank" rel="noreferrer noopener" onClick={(event) => openExternalMessageLink(event, href)}>
+          Open
+          <ArrowUpRight className="cg-ref-arrow" aria-hidden="true" />
+        </a>
       ) : null}
-      <span className="cg-ref-meta">
-        {isNotesSource(item.source) ? null : <Icon className="cg-ref-glyph" aria-hidden="true" />}
-        {href ? (
-          <a className="cg-ref-link" href={href} title={href} target="_blank" rel="noreferrer noopener" onClick={(event) => openExternalMessageLink(event, href)}>
-            {title || item.title || item.source}
-            <ArrowUpRight className="cg-ref-arrow" aria-hidden="true" />
-          </a>
-        ) : title ? <span className="cg-ref-title">{title}</span> : null}
-        {(href || title) && rest ? <span aria-hidden="true">·</span> : null}
-        <span>{rest}</span>
-      </span>
+    </div>
+  );
+}
+
+/** A topic's references as chips; clicking one opens its detail below, clicking it again closes it. */
+function RefChips({ topic, refs }: { topic: string; refs: CardRef[] }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const panelId = `${cardAnchor('topic', topic)}-ref`;
+  const open = refs.find((ref) => ref.id === openId) ?? null;
+  return (
+    <div className="cg-line-refs">
+      <div className="cg-ref-chips">
+        {refs.map(({ id, item }) => {
+          const { Icon } = sourceLook(item.source);
+          const label = chipLabel(item);
+          const expanded = id === openId;
+          return (
+            <button
+              key={id}
+              type="button"
+              className="cg-ref-chip"
+              title={label}
+              aria-expanded={expanded}
+              aria-controls={expanded ? panelId : undefined}
+              onClick={() => setOpenId(expanded ? null : id)}
+            >
+              <Icon className="cg-ref-glyph" aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+      {open ? <RefDetail {...open} panelId={panelId} /> : null}
     </div>
   );
 }
 
 /** One topic: its tag, when it was seen, Hide and Remove on hover, then its references. */
-export function CardLine({ card, topic, owners, onHide, onRemove }: {
+export function CardLine({ card, topic, onHide, onRemove }: {
   card: CgOwnCard;
   topic: string;
-  /** For each cited item, the first topic on the page that shows it in full. */
-  owners: Map<string, string>;
   onHide: () => void;
   onRemove: () => void;
 }) {
@@ -66,19 +93,7 @@ export function CardLine({ card, topic, owners, onHide, onRemove }: {
           <X className="h-[13px] w-[13px]" aria-hidden="true" />
         </button>
       </div>
-      {refs.length ? (
-        <div className="cg-line-refs">
-          {refs.map((ref) => {
-            const first = owners.get(ref.id) ?? topic;
-            if (first === topic) return <RefRow key={ref.id} {...ref} />;
-            return (
-              <button key={ref.id} type="button" className="cg-ref-same" onClick={() => jumpTo(cardAnchor('ref', ref.id))}>
-                Same {isNotesSource(ref.item.source) ? 'note' : 'reference'} as {first}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      {refs.length ? <RefChips topic={topic} refs={refs} /> : null}
     </div>
   );
 }

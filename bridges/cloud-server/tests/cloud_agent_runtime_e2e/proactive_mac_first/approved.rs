@@ -77,7 +77,7 @@ async fn an_allowed_offer_runs_on_the_ready_mac_and_answers_as_the_agent() {
 
     let claim_id = uuid::Uuid::new_v4();
     let claimed = fx.mac_takes(&run_id, claim_id).await;
-    assert_eq!(claimed["leaseSeconds"], 45);
+    assert_eq!(claimed["leaseSeconds"], 120);
     assert_eq!(claimed["proactive"], json!({"kind": "approved"}));
     let identity = &claimed["turnIdentity"];
     assert_eq!(identity["ownerAccountId"], fx.owner.account_id.as_str());

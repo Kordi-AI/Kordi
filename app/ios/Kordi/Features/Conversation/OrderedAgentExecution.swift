@@ -3,6 +3,8 @@ import SwiftUI
 /// One disclosure per adjacent tool group, with assistant commentary left in place.
 struct OrderedAgentExecution: View {
     let execution: AgentExecutionSnapshot
+    /// How the reply ended when it ended early; its caption shows under the reply.
+    var ending: AgentReplyEnding? = nil
     var stopRequestID: String?
     let conversationID: String
     let onExpansionChange: (Bool) -> Void
@@ -26,7 +28,7 @@ struct OrderedAgentExecution: View {
 
     private func activity(_ group: AgentTurnContentGroup, isTail: Bool) -> some View {
         AgentActivityGroup(
-            group: group, execution: execution, isTail: isTail,
+            group: group, execution: execution, ending: ending, isTail: isTail,
             stopRequestID: isTail ? stopRequestID : nil,
             conversationID: conversationID, onExpansionChange: onExpansionChange
         )
@@ -41,6 +43,7 @@ struct AgentActivityGroup: View {
     @State private var openToolIDs: Set<String>? = Self.previewOpensDetails ? nil : []
     let group: AgentTurnContentGroup
     let execution: AgentExecutionSnapshot
+    var ending: AgentReplyEnding? = nil
     let isTail: Bool
     let stopRequestID: String?
     let conversationID: String
@@ -75,7 +78,7 @@ struct AgentActivityGroup: View {
     private var active: Bool { isTail && !execution.completed }
     private var label: String {
         if active || (isTail && group.tools.isEmpty && group.unavailable == 0) {
-            return execution.completed && execution.phase == .complete && execution.startedAtMs == nil ? "Activity" : execution.progressLabel
+            return execution.progressLabel(ending: ending)
         }
         let count = group.tools.count + group.unavailable
         return "Used \(count) \(count == 1 ? "tool" : "tools")"
@@ -87,14 +90,20 @@ struct AgentActivityGroup: View {
                 Button(action: toggle) {
                     HStack(spacing: 7) {
                         if active { AgentExecutionActivityIndicator(accessibilityStatus: label) }
-                        Text(label)
+                        // The label truncates before the duration does.
+                        Text(label).lineLimit(1)
                         if isTail {
                             if execution.completed {
-                                if let elapsed = execution.elapsedLabel(at: .now) { Text(elapsed).monospacedDigit() }
+                                if let elapsed = execution.elapsedLabel(at: .now) {
+                                    Text(elapsed).monospacedDigit().fixedSize().layoutPriority(1)
+                                }
                             } else {
                                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                                    if let elapsed = execution.elapsedLabel(at: context.date) { Text(elapsed).monospacedDigit() }
+                                    if let elapsed = execution.elapsedLabel(at: context.date) {
+                                        Text(elapsed).monospacedDigit().fixedSize()
+                                    }
                                 }
+                                .layoutPriority(1)
                             }
                         }
                         if expandable {

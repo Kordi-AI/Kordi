@@ -23,11 +23,23 @@ export function sourceLook(source: string): { Icon: typeof Mail; tint: string } 
 /** One reference under a topic: its id in the card's evidence, and the item. */
 export type CardRef = { id: string; item: CgEvidence };
 
-/** The references behind a topic, newest first. */
+/** One source per key: its link, or its words where it has none. */
+export function refKey(item: CgEvidence): string {
+  const url = item.url?.trim().replace(/\/+$/, '');
+  return url ? `url:${url}` : `item:${item.source}\u0000${item.title}\u0000${item.snippet}`;
+}
+
+/** The references behind a topic, newest first, each source once. */
 export function topicRefs(card: CgOwnCard, topic: string): CardRef[] {
   const info = card.profile?.topics?.[topic];
   const evidence = card.profile?.evidence ?? {};
-  return (info?.refs ?? []).flatMap((id) => (evidence[id] ? [{ id, item: evidence[id] }] : []));
+  const seen = new Set<string>();
+  return (info?.refs ?? []).flatMap((id) => {
+    const item = evidence[id];
+    if (!item || seen.has(refKey(item))) return [];
+    seen.add(refKey(item));
+    return [{ id, item }];
+  });
 }
 
 /** The topics on the card, in the order the page lists them. */
@@ -35,32 +47,20 @@ export function cardTopics(card: CgOwnCard): string[] {
   return CG_TOPIC_SECTIONS.flatMap(([key]) => card[key]);
 }
 
-/** For each cited item, the first topic on the page that cites it; later topics link back to it. */
-export function firstCiters(card: CgOwnCard): Map<string, string> {
-  const owners = new Map<string, string>();
-  for (const topic of cardTopics(card)) {
-    for (const { id } of topicRefs(card, topic)) if (!owners.has(id)) owners.set(id, topic);
-  }
-  return owners;
-}
-
 /** Notes are the default source; their rows carry no glyph and no title. */
 export function isNotesSource(source: string): boolean {
   return /^\s*(your\s+)?notes?\s*$/i.test(source);
 }
 
-/** The small line under a quote: the title when it says something, the source, the day. */
+/** A reference's detail lines: the title when it says something, then the source and the day. */
 export function refMeta(item: CgEvidence): { title: string; rest: string } {
   const title = item.title.trim();
   const showTitle = Boolean(title) && Boolean(item.snippet.trim()) && (Boolean(item.url) || !isNotesSource(item.source));
   return { title: showTitle ? title : '', rest: [item.source, shortDay(item.date)].filter(Boolean).join(' · ') };
 }
 
-/** Snippets longer than this get "Show more" under their two lines. */
-export const QUOTE_FOLD_CHARS = 140;
-
 /** A DOM id for a topic or a reference on the card page. */
-export function cardAnchor(kind: 'topic' | 'ref', key: string): string {
+export function cardAnchor(kind: 'topic', key: string): string {
   let hash = 5381;
   for (const char of key) hash = ((hash * 33) ^ char.charCodeAt(0)) >>> 0;
   return `cg-${kind}-${hash.toString(36)}`;

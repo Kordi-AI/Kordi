@@ -88,6 +88,7 @@ export function WorkspaceSidebar({
     onRetryUpdate,
     onSubscribeToUpdate,
     onOpenUpdateUrl,
+    onRevealUpdateApp,
   } = layout;
   const {
     chatSearch,
@@ -260,6 +261,7 @@ export function WorkspaceSidebar({
               onRetryUpdate,
               onSubscribeToUpdate,
               onOpenUpdateUrl,
+              onRevealUpdateApp,
             }}
           />
 

@@ -272,8 +272,10 @@ async fn claim_run_with_executor(
         &input.requester_account_id,
     )
     .await?;
-    let lease_expires_at =
-        desktop_executor.map(|_| (Utc::now() + chrono::Duration::seconds(45)).to_rfc3339());
+    let lease_expires_at = desktop_executor.map(|_| {
+        (Utc::now() + chrono::Duration::seconds(crate::cloud_agent_runtime::DESKTOP_LEASE_SECONDS))
+            .to_rfc3339()
+    });
     // The permission check and the insert hold the owner and requester's
     // permission lock and the owner's Access lock, so a restriction saved
     // meanwhile either refuses this run or sees it and cancels it.

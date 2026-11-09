@@ -102,7 +102,7 @@ async fn cards_rooms_and_pairings() {
     let (_, body) = send(&app, "GET", card, &alex_token, None).await;
     assert_eq!(
         body["build"],
-        json!({"status": "failed", "errorCode": "invalid_output"})
+        json!({"status": "failed", "errorCode": "invalid_output", "unreadLinks": []})
     );
 
     build_card(&app, &pool, &alex, &alex_token, &["Agent memory"]).await;
@@ -383,7 +383,7 @@ async fn failed_builds_and_servers_without_the_service_key() {
     .await;
     assert_eq!(
         body["build"],
-        json!({"status": "failed", "errorCode": "missing_provider_auth"})
+        json!({"status": "failed", "errorCode": "missing_provider_auth", "unreadLinks": []})
     );
     let (status, _) = send(
         &app,

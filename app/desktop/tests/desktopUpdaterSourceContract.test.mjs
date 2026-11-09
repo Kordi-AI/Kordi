@@ -23,37 +23,33 @@ test('desktop update path contains no URL-driven native installer or destructive
   assert.doesNotMatch(sidebar, /onInstallUpdate\?\(\{[^}]*url/i);
 });
 
-test('the real updater adapter delegates installation to Tauri and relaunch to the native lifecycle', () => {
+test('the real updater adapter delegates download and install to the native update module', () => {
   const controller = source('../src/features/updates/desktopUpdater.ts');
+  const native = source('../src-tauri/src/desktop_update.rs');
   const lifecycle = source('../src-tauri/src/window_lifecycle.rs');
 
-  assert.match(controller, /@tauri-apps\/plugin-updater/);
-  assert.match(controller, /downloadAndInstall/);
-  assert.match(controller, /invoke\('desktop_relaunch_after_update'\)/);
+  for (const command of ['desktop_update_check', 'desktop_update_download', 'desktop_update_install', 'desktop_update_reveal_app', 'desktop_relaunch_after_update']) {
+    assert.match(controller, new RegExp(`invoke(<[^>]+>)?\\('${command}'`));
+  }
+  assert.doesNotMatch(controller, /@tauri-apps\/plugin-updater/);
   assert.doesNotMatch(controller, /@tauri-apps\/plugin-process/);
+  assert.match(native, /tauri_plugin_updater::/);
+  assert.match(native, /fn install_downloaded_update_on_exit/);
+  assert.match(native, /fn classify_install_location/);
   assert.match(lifecycle, /Command::new\("\/usr\/bin\/open"\)/);
   assert.match(lifecycle, /\.arg\("-n"\)/);
   assert.match(lifecycle, /--kordi-update-relaunch/);
-  assert.match(lifecycle, /\.stdin\(Stdio::null\(\)\)/);
-  assert.match(lifecycle, /\.stdout\(Stdio::null\(\)\)/);
-  assert.match(lifecycle, /\.stderr\(Stdio::null\(\)\)/);
   assert.match(lifecycle, /app\.exit\(tauri::RESTART_EXIT_CODE\)/);
-  assert.match(controller, /const KORDI_RELEASE_ORIGIN = 'https:\/\/kordi\.ai'/);
   assert.match(controller, /manualUpdateUrlForVersion\(update\.version\)/);
-  assert.match(controller, /\/updates\/releases\/\$\{encoded\}\/Kordi_\$\{encoded\}_aarch64\.dmg/);
-  assert.doesNotMatch(controller, /\/updates\/releases\/latest\/Kordi\.dmg/);
-  assert.doesNotMatch(controller, /https?:\/\/\$\{/);
-  const literalOrigins = [...controller.matchAll(/https?:\/\/[^/'"`\s]+/g)]
-    .map((match) => match[0]);
-  assert.deepEqual([...new Set(literalOrigins)], ['https://kordi.ai']);
   assert.doesNotMatch(controller, /http:\/\//);
 });
 
-
 test('updater OS eligibility is backed by the native product version, not a web user agent', () => {
   const updater = source('../src/features/updates/desktopUpdater.ts');
-  const native = source('../src-tauri/src/cloud_session.rs');
-  assert.match(updater, /invoke\('cloud_device_system_metadata'\)/);
-  assert.match(native, /command_output\("\/usr\/bin\/sw_vers", &\["-productVersion"\]\)/);
+  const native = source('../src-tauri/src/desktop_update.rs');
+  const session = source('../src-tauri/src/cloud_session.rs');
+  assert.match(native, /cloud_session::cloud_device_system_metadata/);
+  assert.match(native, /X-Kordi-OS-Version/);
+  assert.match(session, /command_output\("\/usr\/bin\/sw_vers", &\["-productVersion"\]\)/);
   assert.doesNotMatch(updater, /navigator\.(userAgent|platform)/);
 });

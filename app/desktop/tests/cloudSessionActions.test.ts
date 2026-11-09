@@ -444,7 +444,8 @@ test('cloud group owner processing upserts the shared slot so a local placeholde
   assert.match(processingBlock, /mergeCanonicalMessageRow\(\s*current,\s*persistedProcessingMessage,?\s*\)/);
   assert.doesNotMatch(processingBlock, /await (?:append|upsert)CanonicalMessage\(\{/);
   assert.match(processingBlock, /sourceTransport:\s*'cloud-group-agent'/);
-  assert.match(processingBlock, /publishCloudGroupAgentEnvelope\(\{\s*publisher: lease\.publisher/);
+  // The placeholder is best-effort: a failed publish never ends the turn.
+  assert.match(processingBlock, /publishCloudGroupAgentProcessingBestEffort\(\{\s*publisher: lease\.publisher/);
 });
 
 test('cloud group terminal hosted-agent responses clear timeout placeholders and keep agent attribution', () => {
@@ -462,7 +463,8 @@ test('cloud group no-provider catch broadcasts a failed agent response to reques
   assert.match(source, /isCloudAgentNoProviderConfiguredError\(error\)/);
   assert.match(source, /encodeCloudGroupControl\(\{/);
   assert.match(source, /deliveryState:\s*'failed'/);
-  assert.match(source, /runtime\.client\.sendMessage/);
+  // Through the run's lease when this Mac holds it, otherwise as a chat message.
+  assert.match(source, /publishCloudGroupAgentEnvelope\(\{\s*publisher,\s*runtime,/);
 });
 
 test('cloud removed sessions are included in workspace hidden ids for restored canonical self-agent forks', () => {

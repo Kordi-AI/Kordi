@@ -14,7 +14,7 @@ import { CardSwatch } from './ProfileCard';
 import type { CgState, CommonGroundStore } from './store';
 import type { CgNearbyState, CgNearbyStore } from './storeNearby';
 import type { CgNeed } from './typesNearby';
-import { useNearby } from './useNearby';
+import { useNearby, useNearbyAutoLocation } from './useNearby';
 import { WalletShell } from './WalletShell';
 
 /** "Sharing: Work" for the card Nearby shares; it opens the cards that can be shared. */
@@ -84,6 +84,7 @@ export function NearbyScreen({ state, store, host }: { state: CgState; store: Co
   const [consent, setConsent] = useState<{ failed: boolean } | null>(null);
   const [editing, setEditing] = useState<{ need: CgNeed | null; failed: boolean } | null>(null);
   const phase = nearby.phase();
+  useNearbyAutoLocation(nearby, phase === 'on' || phase === 'no-phone');
   const off = phase === 'off';
   const settings = nb.settings;
   const shell = (body: ReactNode, on: boolean) => (

@@ -40,7 +40,7 @@ use crate::server::ServerState;
 type Result<T> = std::result::Result<T, sqlx_core::Error>;
 
 /// Seconds a desktop claim holds the run before it must renew, as for chat.
-const LEASE_SECONDS: i64 = 45;
+const LEASE_SECONDS: i64 = crate::cloud_agent_runtime::DESKTOP_LEASE_SECONDS;
 /// The longest evaluation reply the server reads, as for a digest.
 const MAX_EVALUATION_BYTES: usize = 1_048_576;
 

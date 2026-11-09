@@ -34,3 +34,26 @@ export function helpTourGeometry(target: TourRect | null, viewport: { width: num
   const arrow = Math.max(20, Math.min(aim, (vertical ? panel.height : panel.width) - 20));
   return { left, top, side, arrow };
 }
+
+export type TourBox = { left: number; top: number; right: number; bottom: number };
+
+/**
+ * The spotlight around a target: the same pad on every side so the ring stays centered on it, trimmed
+ * evenly when the window edge or a clipping container is close. On an axis where the target itself is
+ * cut off, the ring covers the visible part plus the pad, kept `inset` away from the window edge.
+ */
+export function helpTourRing(target: TourBox, clip: TourBox, viewport: { width: number; height: number }, pad = 5, inset = 4): TourRect | null {
+  if (target.right <= clip.left || target.left >= clip.right || target.bottom <= clip.top || target.top >= clip.bottom) return null;
+  const fitsX = target.left >= clip.left && target.right <= clip.right;
+  const fitsY = target.top >= clip.top && target.bottom <= clip.bottom;
+  const room = [pad];
+  if (fitsX) room.push(target.left - clip.left, clip.right - target.right);
+  if (fitsY) room.push(target.top - clip.top, clip.bottom - target.bottom);
+  const even = Math.max(0, Math.min(...room));
+  const axis = (fits: boolean, start: number, end: number, min: number, max: number, size: number) => fits
+    ? [start - even, end + even]
+    : [Math.max(min, inset, start - pad), Math.min(max, size - inset, end + pad)];
+  const [left, right] = axis(fitsX, target.left, target.right, clip.left, clip.right, viewport.width);
+  const [top, bottom] = axis(fitsY, target.top, target.bottom, clip.top, clip.bottom, viewport.height);
+  return { left, top, width: right - left, height: bottom - top };
+}

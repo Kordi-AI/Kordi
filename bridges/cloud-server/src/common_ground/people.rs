@@ -8,6 +8,11 @@
 //! profile of the same person. An owner who stopped a viewer from seeing
 //! their card (docs/contact-permissions.md) is hidden from that viewer
 //! through every link, exactly as if their card were not shared.
+//!
+//! The contact profile adds one more way: an accepted contact whom the
+//! owner did not stop from seeing their card, with no block either way,
+//! sees the shared card of the owner's default profile without a pairing or
+//! room and without a card of their own.
 
 use std::sync::Arc;
 
@@ -389,6 +394,7 @@ pub(super) async fn shared_view(
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProfileCommonGround {
     pub working_on: Vec<String>,
+    pub interests: Vec<String>,
     pub can_help: Vec<String>,
     pub looking_for: Vec<String>,
     /// The best stored match between the two, from
@@ -396,11 +402,31 @@ pub(crate) struct ProfileCommonGround {
     pub r#match: Option<Value>,
 }
 
+/// Whether `viewer` sees `other`'s card as a contact: each has the other as
+/// an accepted contact, `other` did not stop `viewer` from seeing their
+/// card, and neither blocked the other.
+async fn contact_sees_card(pool: &PgPool, viewer: &str, other: &str) -> sqlx_core::Result<bool> {
+    let condition = format!(
+        "(EXISTS (SELECT 1 FROM cloud_contacts WHERE account_id = $1 AND peer_account_id = $2)
+          AND EXISTS (SELECT 1 FROM cloud_contacts WHERE account_id = $2 AND peer_account_id = $1)
+          AND {allowed} AND NOT cloud_accounts_blocked_either_way($1, $2))",
+        allowed = card_allowed_sql("$2", "$1"),
+    );
+    check(pool, &condition, viewer, other).await
+}
+
+async fn default_profile_id(pool: &PgPool, account: &str) -> sqlx_core::Result<Option<String>> {
+    Ok(profiles::default_profile(pool, account)
+        .await?
+        .map(|profile| profile.profile_id))
+}
+
 /// The card lists of the profile `other` shares with `viewer`, at most
-/// `limit` topics each, under the same rule as [`shared_view`]: the most
-/// recent pairing or room where both profiles share a built card decides
-/// which profile that is. The owner sees their default profile while
-/// sharing is on. `None` when no card is visible or built.
+/// `limit` topics each. The most recent pairing or room where both profiles
+/// share a built card decides which profile that is, as in [`shared_view`];
+/// without one, a contact allowed to see the card ([`contact_sees_card`])
+/// sees `other`'s default profile. The owner sees their default profile.
+/// `None` when no card is visible, built or shared.
 pub(crate) async fn profile_common_ground(
     pool: &PgPool,
     viewer: &str,
@@ -408,13 +434,13 @@ pub(crate) async fn profile_common_ground(
     limit: usize,
 ) -> sqlx_core::Result<Option<ProfileCommonGround>> {
     let profile_id = if viewer == other {
-        profiles::default_profile(pool, other)
-            .await?
-            .map(|profile| profile.profile_id)
+        default_profile_id(pool, other).await?
+    } else if let Some(link) = link(pool, viewer, other, None).await? {
+        Some(link.other_profile)
+    } else if contact_sees_card(pool, viewer, other).await? {
+        default_profile_id(pool, other).await?
     } else {
-        link(pool, viewer, other, None)
-            .await?
-            .map(|link| link.other_profile)
+        None
     };
     let Some(profile_id) = profile_id else {
         return Ok(None);
@@ -429,6 +455,7 @@ pub(crate) async fn profile_common_ground(
     let take = |list: Vec<String>| list.into_iter().take(limit).collect();
     Ok(Some(ProfileCommonGround {
         working_on: take(topics.working_on),
+        interests: take(topics.interests),
         can_help: take(topics.can_help),
         looking_for: take(topics.looking_for),
         r#match: None,

@@ -126,7 +126,9 @@ test('the Help update row describes checking, availability, progress, and retry 
     [{ status: 'available', latestVersion: '1.2.3' }, 'Update available'],
     [{ status: 'downloading' }, 'Downloading update…'],
     [{ status: 'installing' }, 'Installing update…'],
-    [{ status: 'relaunching' }, 'Relaunching Kordi…'],
+    [{ status: 'relaunching' }, 'Restarting Kordi…'],
+    [{ status: 'ready', latestVersion: '1.2.3' }, 'Restart to update'],
+    [{ status: 'misplaced', latestVersion: '1.2.3' }, 'Move Kordi to Applications'],
     [{ status: 'failed', failureStage: 'check' }, 'Check for updates'],
     [{ status: 'failed', failureStage: 'install' }, 'Retry update'],
   ];
@@ -175,11 +177,11 @@ test('Help checks manually and keeps the update dialog alive after the menu clos
     assert.equal(installs, 0);
     assert.equal(document.querySelector('[data-update-action]'), null);
     assert.equal(document.querySelector('[role="dialog"]')?.getAttribute('data-update-state'), 'available');
-    await clickButton('Close update status');
+    await clickButton('Not now');
     await clickButton('Help');
     await clickButton('Update available');
     assert.equal(checks, 2);
-    await clickButton('Update Kordi now');
+    await clickButton('Update now');
     assert.equal(installs, 1);
     await act(async () => publish({ status: 'downloading', receivedBytes: 50, totalBytes: 100 }));
     assert.equal(document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow'), '50');
@@ -218,20 +220,76 @@ test('web mode omits the native update row and does not check', async () => {
   });
 });
 
-test('desktop update popover uses a quiet theme-aware surface in dark mode', () => {
+test('the update card uses the Kordi for Mac prompt layout without the old popover chrome', () => {
+  const source = readFileSync(new URL('../src/pages/workspaceSidebar.updatePopover.tsx', import.meta.url), 'utf8');
+  const prompt = readFileSync(new URL('../src/features/onboarding/MacAppPrompt.tsx', import.meta.url), 'utf8');
+  assert.match(prompt, /app-transient-surface fixed z-30 w-60 rounded-xl border p-4 text-left text-foreground/);
+  assert.match(source, /app-transient-surface app-update-card fixed z-\[180\] w-60 rounded-xl border p-4 text-left text-foreground/);
+  assert.match(source, /app-button-primary rounded-lg px-3 py-2 text-xs/);
+  assert.doesNotMatch(source, /lucide-react|app-update-popover|tail/);
   const css = readDesktopShellCss();
-  const updateSurface = css.match(/\.kordi-app \.app-popover\.app-update-popover \{([\s\S]*?)\n\}/)?.[1] ?? '';
+  assert.doesNotMatch(css, /\.app-update-popover/);
+  assert.match(css, /\.app-update-card-fill/);
+});
 
-  assert.match(updateSurface, /--app-update-surface: var\(--app-transient-surface-bg\)/);
-  assert.match(updateSurface, /--app-update-edge: var\(--app-transient-border\)/);
-  assert.match(updateSurface, /--app-update-shadow: var\(--app-transient-shadow\)/);
-  assert.match(updateSurface, /border: 1px solid var\(--app-update-edge\) !important/);
-  assert.match(updateSurface, /box-shadow: var\(--app-update-shadow\) !important/);
-  assert.doesNotMatch(updateSurface, /var\(--app-shadow-float\)/);
-  assert.doesNotMatch(updateSurface, /inset 0 1px 0/);
-  assert.match(css, /\.kordi-app\.theme-light \.app-popover\.app-update-popover/);
-  assert.match(css, /\.app-update-popover-status-danger/);
-  assert.doesNotMatch(css, /\.app-update-popover-action:focus-visible\s*[,{][^}]*outline:\s*\d/);
+test('a downloaded update opens the card once at the help corner and Not now keeps it closed', async () => {
+  await withJsdomRoot(async (mount) => {
+    window.localStorage.clear();
+    let publish: (state: DesktopUpdaterState) => void = () => {};
+    let installs = 0;
+    const props: SidebarUpdaterProps = {
+      isNativeShell: true,
+      onCheckForUpdates: async () => ({ status: 'up-to-date' }),
+      onInstallUpdate: async () => { installs += 1; },
+      onSubscribeToUpdate: (listener) => { publish = listener; return () => {}; },
+    };
+    await mount(<UpdateHarness {...props} />);
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    await act(async () => publish({ status: 'downloading', latestVersion: '1.2.3', background: true }));
+    assert.equal(document.querySelector('[role="dialog"]'), null, 'silent downloads stay silent');
+    await act(async () => publish({ status: 'ready', latestVersion: '1.2.3' }));
+    const card = document.querySelector('[role="dialog"]');
+    assert.equal(card?.getAttribute('data-update-state'), 'ready');
+    assert.match(card?.textContent ?? '', /Kordi 1\.2\.3/);
+    await clickButton('Not now');
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.equal(installs, 0);
+    await act(async () => publish({ status: 'ready', latestVersion: '1.2.3' }));
+    assert.equal(document.querySelector('[role="dialog"]'), null, 'the same version does not reopen');
+    await act(async () => publish({ status: 'ready', latestVersion: '1.2.4' }));
+    assert.equal(document.querySelector('[role="dialog"]')?.getAttribute('data-update-state'), 'ready');
+    await clickButton('Restart to update');
+    assert.equal(installs, 1);
+  });
+});
+
+test('with automatic updates on, an available update only marks Help instead of opening the card', async () => {
+  await withJsdomRoot(async (mount) => {
+    window.localStorage.clear();
+    let publish: (state: DesktopUpdaterState) => void = () => {};
+    await mount(<UpdateHarness isNativeShell onCheckForUpdates={async () => ({ status: 'up-to-date' })}
+      onSubscribeToUpdate={(listener) => { publish = listener; return () => {}; }} />);
+    await act(async () => publish({ status: 'available', latestVersion: '1.2.3' }));
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+  });
+});
+
+test('a copy outside Applications offers Show in Finder instead of installing', async () => {
+  await withJsdomRoot(async (mount) => {
+    window.localStorage.clear();
+    let publish: (state: DesktopUpdaterState) => void = () => {};
+    let reveals = 0;
+    let installs = 0;
+    await mount(<UpdateHarness isNativeShell onCheckForUpdates={async () => ({ status: 'up-to-date' })}
+      onInstallUpdate={async () => { installs += 1; }}
+      onRevealUpdateApp={() => { reveals += 1; }}
+      onSubscribeToUpdate={(listener) => { publish = listener; return () => {}; }} />);
+    await act(async () => publish({ status: 'misplaced', latestVersion: '1.2.3' }));
+    assert.match(document.querySelector('[role="dialog"]')?.textContent ?? '', /Move Kordi to Applications/);
+    await clickButton('Show in Finder');
+    assert.equal(reveals, 1);
+    assert.equal(installs, 0);
+  });
 });
 
 test('desktop update button is wired through the signed updater controller', () => {
