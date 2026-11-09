@@ -479,4 +479,9 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
         "agent person exchanges",
         "0188_agent_person_exchanges.sql"
     ),
+    migration!(
+        189,
+        "provider login renewal",
+        "0189_provider_login_renewal.sql"
+    ),
 ];

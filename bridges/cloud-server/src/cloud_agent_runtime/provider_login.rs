@@ -28,9 +28,10 @@ use crate::cloud_agent_runtime::provider_auth::{
     snapshot_capacity_available, EnvProviderAuthCipher,
 };
 use crate::server::ServerState;
-use lifecycle::{expire, finish, settle, stored_response, worker_failure};
+use lifecycle::{expire, finish, settle, stored_response, worker_failure, AUTH_CHOICE_PREFIX};
 use responses::{
-    invalid_input, login_unsupported, not_awaiting_input, omp_busy, server_error, LookupFailure,
+    invalid_input, login_unsupported, not_awaiting_input, omp_busy, renewed_account_not_found,
+    server_error, LookupFailure,
 };
 pub(crate) use responses::{
     omp_not_configured, omp_unavailable, provider_auth_limit_reached, rate_limited,
@@ -71,6 +72,10 @@ struct StartLoginRequest {
     /// Kept as JSON so a non-string value is an invalid input, not a
     /// malformed request.
     method: Option<serde_json::Value>,
+    /// A saved hosted sign-in (`cloud-login:<id>`) to renew. The finished
+    /// login replaces that account under the same choice and label.
+    #[serde(rename = "renewAuthChoice")]
+    renew_auth_choice: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -115,11 +120,26 @@ fn login_target(input: &StartLoginRequest) -> Option<LoginTarget> {
         }
         Some(_) => return None,
     };
+    // Only accounts a hosted login saved can be renewed by one; a copy of a
+    // desktop sign-in is kept fresh by the Mac that owns it.
+    let renews_auth_choice = match input.renew_auth_choice.as_deref().map(str::trim) {
+        None => None,
+        Some(choice)
+            if choice.len() > AUTH_CHOICE_PREFIX.len()
+                && choice.starts_with(AUTH_CHOICE_PREFIX)
+                && choice.chars().count() <= 160
+                && !choice.chars().any(char::is_control) =>
+        {
+            Some(choice.to_string())
+        }
+        Some(_) => return None,
+    };
     Some(LoginTarget {
         provider: provider.to_string(),
         worker_provider,
         label: label.to_string(),
         method: method.to_string(),
+        renews_auth_choice,
     })
 }
 
@@ -129,7 +149,7 @@ async fn start_login(
     Extension(rate_limiter): Extension<Arc<CloudRateLimiter>>,
     Json(input): Json<StartLoginRequest>,
 ) -> Response {
-    let Some(target) = login_target(&input) else {
+    let Some(mut target) = login_target(&input) else {
         return invalid_input("Choose a provider and enter an account name.");
     };
     let Some(worker) = LoginWorker::from_env() else {
@@ -143,12 +163,36 @@ async fn start_login(
     if let Err(err) = store::sweep_stale(state.db_pool(), &session.account_id).await {
         eprintln!("[provider_login] end abandoned login sessions: {err}");
     }
-    match snapshot_capacity_available(state.db_pool(), &session.account_id).await {
-        Ok(true) => {}
-        Ok(false) => return provider_auth_limit_reached(),
-        Err(err) => {
-            eprintln!("[provider_login] count saved accounts: {err}");
-            return server_error();
+    if let Some(choice) = target.renews_auth_choice.as_deref() {
+        // A renewal replaces the caller's own live account and keeps its name,
+        // so it needs no free slot.
+        match store::renewable_label(
+            state.db_pool(),
+            &session.account_id,
+            &target.provider,
+            choice,
+        )
+        .await
+        {
+            Ok(Some(label)) => {
+                if let Some(label) = label.filter(|label| !label.trim().is_empty()) {
+                    target.label = label;
+                }
+            }
+            Ok(None) => return renewed_account_not_found(),
+            Err(err) => {
+                eprintln!("[provider_login] load renewed account: {err}");
+                return server_error();
+            }
+        }
+    } else {
+        match snapshot_capacity_available(state.db_pool(), &session.account_id).await {
+            Ok(true) => {}
+            Ok(false) => return provider_auth_limit_reached(),
+            Err(err) => {
+                eprintln!("[provider_login] count saved accounts: {err}");
+                return server_error();
+            }
         }
     }
     if let RateLimitDecision::Limited { retry_after } = rate_limiter
@@ -306,6 +350,7 @@ mod tests {
             label: Some(label.into()),
             mode: mode.map(Into::into),
             method: None,
+            renew_auth_choice: None,
         })
     }
 
@@ -317,6 +362,7 @@ mod tests {
                 label: Some("Keys".into()),
                 mode: mode.map(Into::into),
                 method: Some(serde_json::json!(method)),
+                renew_auth_choice: None,
             })
         };
         assert_eq!(with_method(None, "api-key").unwrap().method, "api-key");
@@ -330,8 +376,44 @@ mod tests {
             label: Some("Keys".into()),
             mode: None,
             method: Some(serde_json::json!(7)),
+            renew_auth_choice: None,
         };
         assert!(login_target(&numeric).is_none());
+    }
+
+    #[test]
+    fn only_hosted_sign_ins_can_be_renewed() {
+        let renewing = |choice: &str| {
+            login_target(&StartLoginRequest {
+                provider: Some("anthropic".into()),
+                label: Some("Work".into()),
+                mode: None,
+                method: None,
+                renew_auth_choice: Some(choice.into()),
+            })
+        };
+        let choice = "cloud-login:00000000-0000-4000-8000-000000000001";
+        assert_eq!(
+            renewing(&format!(" {choice} "))
+                .unwrap()
+                .renews_auth_choice
+                .as_deref(),
+            Some(choice)
+        );
+        assert!(target("anthropic", "Work", None)
+            .unwrap()
+            .renews_auth_choice
+            .is_none());
+        for rejected in [
+            "",
+            "cloud-login:",
+            "profile:work",
+            "local-active-oauth",
+            "cloud-login:line\nbreak",
+            &format!("cloud-login:{}", "x".repeat(150)),
+        ] {
+            assert!(renewing(rejected).is_none(), "{rejected:?}");
+        }
     }
 
     #[test]

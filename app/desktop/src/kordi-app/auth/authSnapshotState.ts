@@ -10,7 +10,9 @@ export function createAuthSnapshotState(onChange: (snapshots: DisplayAuthSnapsho
     complete(snapshot: DisplayAuthSnapshot) {
       // An older load must not erase a login that finished while it was pending.
       generation += 1;
-      snapshots = [...snapshots.filter((item) => item.snapshotId !== snapshot.snapshotId), snapshot];
+      // A renewed sign-in replaces the copy it reconnected, which keeps the same choice.
+      snapshots = [...snapshots.filter((item) => item.snapshotId !== snapshot.snapshotId
+        && !(item.authChoice === snapshot.authChoice && item.provider === snapshot.provider)), snapshot];
       onChange(snapshots);
     },
     async refresh(load: () => Promise<DisplayAuthSnapshot[]>) {
