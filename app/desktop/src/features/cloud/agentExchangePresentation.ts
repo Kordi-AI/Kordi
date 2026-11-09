@@ -17,21 +17,27 @@ export function publicAgentExchangeTurn(turn: DesktopChatTurnSnapshot): DesktopC
   };
 }
 
+/** Who a question to a person waits for; absent for a question to an agent. */
+export function agentExchangeWaitingFor(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim().slice(0, 120) : undefined;
+}
+
 /** The durable question owns one progress indicator through reply and continuation. */
 export function agentExchangeProgressTurn(
   state: unknown, text: string, id: string, sessionId: string,
-  turn?: DesktopChatTurnSnapshot | null,
+  turn?: DesktopChatTurnSnapshot | null, waitingFor?: unknown,
 ): DesktopChatTurnSnapshot | null {
   const status = agentExchangeStatus(state);
   if (status !== 'waiting' && status !== 'processing') return turn ?? null;
+  const person = agentExchangeWaitingFor(waitingFor);
   return {
     sessionId, prompt: '', message: '', assistantText: text, thinkingText: '', tools: [],
     ...turn, id: `collaboration-live-turn:exchange:${id}`, status: 'processing', completed: false, succeeded: false, error: null,
-    agentExchangeStatus: status,
+    agentExchangeStatus: status, ...(person ? { agentExchangeWaitingFor: person } : {}),
   };
 }
 
-export function withAgentExchangeProgress(message: Message, state: unknown): Message {
-  const turn = agentExchangeProgressTurn(state, message.text, `exchange-progress:${message.id}`, '', message.turn);
+export function withAgentExchangeProgress(message: Message, state: unknown, waitingFor?: unknown): Message {
+  const turn = agentExchangeProgressTurn(state, message.text, `exchange-progress:${message.id}`, '', message.turn, waitingFor);
   return turn === message.turn || !turn ? message : { ...message, turn };
 }

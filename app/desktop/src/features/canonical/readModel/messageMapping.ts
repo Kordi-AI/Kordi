@@ -483,7 +483,7 @@ export function mapCanonicalMessage(
             ? content.hostedRunStatus : undefined,
         }
       : undefined,
-  }, content.agentExchangeStatus);
+  }, content.agentExchangeStatus, content.agentExchangeWaitingFor);
 }
 
 export { contentRecord,numberValue,stringValue } from "./messageContent";

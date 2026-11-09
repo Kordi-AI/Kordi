@@ -398,6 +398,8 @@ export type DesktopBackgroundFollowUp = {
 
 export type DesktopChatTurnSnapshot = {
   agentExchangeStatus?: 'waiting' | 'processing';
+  /** The person an agent's question waits for. */
+  agentExchangeWaitingFor?: string;
   localExecutionStarted?: boolean;
   /** Server-confirmed state of a hosted request; never a local execution handle. */
   hostedRunStatus?: 'queued' | 'leased' | 'running';

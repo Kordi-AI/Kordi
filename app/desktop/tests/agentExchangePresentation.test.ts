@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AGENT_EXCHANGE_WAITING } from '../src/features/cloud/agentExchangeOutcome';
 import { publicAgentExchangeTurn, agentExchangeProgressTurn } from '../src/features/cloud/agentExchangePresentation';
+import { parseCloudAgentResponse } from '../src/features/cloud/cloudAgentMessages';
 import { mergeDesktopTurnSnapshot } from '../src/features/chat/desktopLiveTurns';
 import { liveTurnSnapshotKey } from '../src/features/chat/liveTurnSnapshotKey';
 import { TurnProgress } from '../src/kordi-app/components/TurnProgress';
@@ -39,6 +40,20 @@ test('the question retains waiting and processing feedback until durable complet
     assert.doesNotMatch(html, /agentExchangeStatus|agentExchangeOutcome/);
   }
   for (const status of ['completed', 'failed', 'cancelled']) assert.equal(agentExchangeProgressTurn(status, text, 'question', 'session'), null);
+});
+
+test('a question to a person names who the agent is waiting for', () => {
+  const text = '@Maya Which day works?';
+  const body = `kordi-cloud-agent-response:${Buffer.from(JSON.stringify({ kind: 'agent-response', requestId: 'agent-exchange:id:sent', text, deliveryState: 'complete', agentExchangeStatus: 'waiting', agentExchangeWaitingFor: 'Maya Chen' })).toString('base64url')}`;
+  const parsed = parseCloudAgentResponse(body)!;
+  assert.equal(parsed.agentExchangeWaitingFor, 'Maya Chen');
+  const waiting = agentExchangeProgressTurn(parsed.agentExchangeStatus, text, 'question', 'session', null, parsed.agentExchangeWaitingFor)!;
+  assert.equal(waiting.agentExchangeWaitingFor, 'Maya Chen');
+  const html = renderToStaticMarkup(createElement(TurnProgress, { turn: waiting, renderTool: () => null, legacyAnswer: text }));
+  assert.match(html, /Waiting for Maya Chen/);
+  const processing = agentExchangeProgressTurn('processing', text, 'question', 'session', null, 'Maya Chen')!;
+  assert.match(renderToStaticMarkup(createElement(TurnProgress, { turn: processing, renderTool: () => null, legacyAnswer: text })), /Processing reply/);
+  assert.equal(agentExchangeProgressTurn('waiting', text, 'question', 'session', null, '  ')!.agentExchangeWaitingFor, undefined);
 });
 
 test('ordinary text, ordered prose, and genuine errors survive presentation filtering', () => {
