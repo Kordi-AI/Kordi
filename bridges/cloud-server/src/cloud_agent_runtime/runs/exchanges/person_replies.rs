@@ -2,9 +2,17 @@
 //! messages after the question count; their agent's messages, forwards, and
 //! replies to other messages do not. A reply or quote of a question answers
 //! that question; any other message answers the oldest open question before it.
+//! A message that asks an agent for something is a new request, routed as
+//! usual, and never an answer; when the requester asks the same agent again,
+//! its open question to them is superseded and cancelled.
 //! Matching runs when the person sends a message and again in the sweep, so a
 //! missed hook is recovered from durable records.
 use super::*;
+use crate::cloud_agent_runtime::runs::{
+    envelopes::{CloudGroupMessage, CloudGroupParticipant},
+    group_target::human_group_target,
+    plain_group_request::conversation_participants,
+};
 
 /// Messages read per person and conversation on each pass.
 const SCAN: i64 = 50;
@@ -17,6 +25,8 @@ struct Question {
     exchange: Uuid,
     sequence: i64,
     refs: Vec<String>,
+    /// The asking agent, when the question is to the person who asked it.
+    requester_of: Option<String>,
 }
 
 #[derive(Debug)]
@@ -25,6 +35,8 @@ struct Reply {
     sequence: i64,
     text: String,
     refs: Vec<String>,
+    /// `Some` for a new request to an agent (the agent, when it resolves).
+    request: Option<Option<String>>,
 }
 
 /// A trailing UUID also identifies a prefixed reference such as
@@ -40,9 +52,49 @@ fn reference_forms(raw: &str) -> Vec<String> {
     forms
 }
 
+/// Whether a human message asks an agent for something, and which agent,
+/// judged as group routing judges it.
+fn agent_request(
+    person: &str,
+    message: Uuid,
+    attention: &Value,
+    participants: &[CloudGroupParticipant],
+) -> Option<Option<String>> {
+    let named = ["targetCloudAgentId", "targetCloudAgentOwnerAccountId"]
+        .iter()
+        .any(|key| {
+            attention[key]
+                .as_str()
+                .is_some_and(|v| !v.trim().is_empty())
+        })
+        || attention["mentions"].as_array().is_some_and(|mentions| {
+            mentions.iter().any(|m| {
+                matches!(
+                    m["targetKind"].as_str().map(str::trim),
+                    Some("agent" | "cloud-shared-agent")
+                )
+            })
+        });
+    let mut fields = attention.clone();
+    if !fields.is_object() {
+        return None;
+    }
+    fields["id"] = json!(message.to_string());
+    fields["senderAccountId"] = json!(person);
+    fields["createdAtMs"] = json!(0);
+    if !fields["text"].is_string() {
+        fields["text"] = json!("");
+    }
+    let target = serde_json::from_value::<CloudGroupMessage>(fields)
+        .ok()
+        .and_then(|m| human_group_target(&m, participants))
+        .map(|t| t.agent_id);
+    (named || target.is_some()).then_some(target)
+}
+
 /// The answer text of a human message from `person`, or `None` when the
 /// message is not a human answer.
-fn reply(person: &str, row: MessageRow) -> Option<Reply> {
+fn reply(person: &str, row: MessageRow, participants: &[CloudGroupParticipant]) -> Option<Reply> {
     let (message, sequence, kind, content, attention, reply_to, thread_root) = row;
     let flag = |key: &str| attention[key].as_bool() == Some(true);
     if kind == "system"
@@ -57,6 +109,7 @@ fn reply(person: &str, row: MessageRow) -> Option<Reply> {
     {
         return None;
     }
+    let request = agent_request(person, message, &attention, participants);
     let mut refs = Vec::new();
     for raw in [
         reply_to.map(|id| id.to_string()),
@@ -91,16 +144,29 @@ fn reply(person: &str, row: MessageRow) -> Option<Reply> {
         sequence,
         text,
         refs,
+        request,
     })
 }
 
-/// Pair answers with open questions, oldest first. Returns (exchange, reply index).
-fn assign(questions: &[Question], replies: &[Reply]) -> Vec<(Uuid, usize)> {
+/// Pair answers with open questions, oldest first. Returns the (exchange,
+/// reply index) pairs and the questions superseded by a new request.
+fn assign(questions: &[Question], replies: &[Reply]) -> (Vec<(Uuid, usize)>, Vec<Uuid>) {
     let mut open: Vec<&Question> = questions.iter().collect();
     open.sort_by_key(|q| q.sequence);
     let mut pairs = Vec::new();
+    let mut superseded = Vec::new();
     for (index, reply) in replies.iter().enumerate() {
         let eligible = |q: &&Question| q.sequence < reply.sequence;
+        if let Some(agent) = &reply.request {
+            open.retain(|q| {
+                let replaced = eligible(q) && agent.is_some() && q.requester_of == *agent;
+                if replaced {
+                    superseded.push(q.exchange);
+                }
+                !replaced
+            });
+            continue;
+        }
         let chosen = if reply.refs.is_empty() {
             open.iter().position(eligible)
         } else {
@@ -114,7 +180,7 @@ fn assign(questions: &[Question], replies: &[Reply]) -> Vec<(Uuid, usize)> {
             break;
         }
     }
-    pairs
+    (pairs, superseded)
 }
 
 /// Mark the pending questions to `person` in `conversation` that their later
@@ -134,7 +200,7 @@ pub(crate) async fn match_replies(
         .bind(format!("agent-exchange-person:{conversation}:{person}"))
         .execute(&mut *tx)
         .await?;
-    let rows: Vec<(Uuid, i64, Uuid, Uuid)> = query_as("SELECT e.exchange_id,m.conversation_sequence,m.message_id,m.client_message_id FROM cloud_agent_exchanges e JOIN cloud_chat_messages m ON m.message_id=e.request_message_id
+    let rows: Vec<(Uuid, i64, Uuid, Uuid, Option<String>)> = query_as("SELECT e.exchange_id,m.conversation_sequence,m.message_id,m.client_message_id,CASE WHEN p.requester_account_id=e.target_person_id THEN p.execution_agent_id END FROM cloud_agent_exchanges e JOIN cloud_chat_messages m ON m.message_id=e.request_message_id JOIN cloud_agent_fallback_runs p ON p.run_id=e.parent_run_id
          WHERE e.target_kind='person' AND e.status='pending' AND e.conversation_id=$1 AND e.target_person_id=$2 AND e.deadline_at>now()
          ORDER BY m.conversation_sequence FOR UPDATE OF e")
         .bind(conversation).bind(person).fetch_all(&mut *tx).await?;
@@ -143,18 +209,21 @@ pub(crate) async fn match_replies(
     };
     let questions: Vec<Question> = rows
         .into_iter()
-        .map(|(exchange, sequence, message, client)| Question {
-            exchange,
-            sequence,
-            refs: [
-                message.to_string(),
-                client.to_string(),
-                format!("{PREFIX}{exchange}:sent"),
-            ]
-            .iter()
-            .flat_map(|raw| reference_forms(raw))
-            .collect(),
-        })
+        .map(
+            |(exchange, sequence, message, client, requester_of)| Question {
+                exchange,
+                sequence,
+                requester_of,
+                refs: [
+                    message.to_string(),
+                    client.to_string(),
+                    format!("{PREFIX}{exchange}:sent"),
+                ]
+                .iter()
+                .flat_map(|raw| reference_forms(raw))
+                .collect(),
+            },
+        )
         .collect();
     let messages: Vec<MessageRow> = query_as(
         "SELECT m.message_id,m.conversation_sequence,m.message_kind,m.content,COALESCE(m.attention_content,'{}'::jsonb),m.reply_to_message_id,m.thread_root_message_id FROM cloud_chat_messages m
@@ -163,11 +232,17 @@ pub(crate) async fn match_replies(
          ORDER BY m.conversation_sequence LIMIT $4",
     )
     .bind(conversation).bind(person).bind(first).bind(SCAN).fetch_all(&mut *tx).await?;
+    let participants = conversation_participants(&mut tx, conversation).await?;
     let replies: Vec<Reply> = messages
         .into_iter()
-        .filter_map(|row| reply(person, row))
+        .filter_map(|row| reply(person, row, &participants))
         .collect();
-    let pairs = assign(&questions, &replies);
+    let (pairs, superseded) = assign(&questions, &replies);
+    for exchange in &superseded {
+        query("UPDATE cloud_agent_exchanges SET status='cancelled',processed_at=now() WHERE exchange_id=$1 AND status='pending'")
+            .bind(exchange).execute(&mut *tx).await?;
+        progress::update(&mut tx, *exchange, "cancelled").await?;
+    }
     for (exchange, index) in &pairs {
         let reply = &replies[*index];
         query("UPDATE cloud_agent_exchanges SET status='reply_received',response_text=$2,response_message_id=$3,received_at=now() WHERE exchange_id=$1 AND status='pending'")
@@ -175,7 +250,7 @@ pub(crate) async fn match_replies(
         progress::update(&mut tx, *exchange, "processing").await?;
     }
     tx.commit().await?;
-    Ok(pairs.len())
+    Ok(pairs.len() + superseded.len())
 }
 
 /// Recovery pass over open questions to people; the reconcile sweep runs it
@@ -198,6 +273,7 @@ mod tests {
             exchange: Uuid::new_v4(),
             sequence,
             refs: reference_forms(id),
+            requester_of: None,
         }
     }
     fn row(sequence: i64, attention: Value) -> MessageRow {
@@ -212,41 +288,38 @@ mod tests {
         )
     }
 
+    fn reply_of(row: MessageRow) -> Option<Reply> {
+        reply("p", row, &[])
+    }
+
     #[test]
     fn only_the_person_human_messages_are_answers() {
         assert_eq!(
-            reply(
-                "p",
-                row(
-                    5,
-                    json!({"text":" Tuesday ","senderKind":"human","senderAccountId":"p"})
-                )
-            )
+            reply_of(row(
+                5,
+                json!({"text":" Tuesday ","senderKind":"human","senderAccountId":"p"})
+            ))
             .unwrap()
             .text,
             "Tuesday"
         );
-        assert!(reply(
-            "p",
-            row(5, json!({"text":"Agent text","senderKind":"agent"}))
-        )
+        assert!(reply_of(row(5, json!({"text":"Agent text","senderKind":"agent"}))).is_none());
+        assert!(reply_of(row(
+            5,
+            json!({"kind":"agent-response","text":"Direct agent"})
+        ))
         .is_none());
-        assert!(reply(
-            "p",
-            row(5, json!({"kind":"agent-response","text":"Direct agent"}))
-        )
+        assert!(reply_of(row(5, json!({"hidden":true}))).is_none());
+        assert!(reply_of(row(
+            5,
+            json!({"text":"Fwd","messageAction":{"kind":"forward"}})
+        ))
         .is_none());
-        assert!(reply("p", row(5, json!({"hidden":true}))).is_none());
-        assert!(reply(
-            "p",
-            row(5, json!({"text":"Fwd","messageAction":{"kind":"forward"}}))
-        )
-        .is_none());
-        assert!(reply("p", row(5, json!({"text":"Other","senderAccountId":"q"}))).is_none());
+        assert!(reply_of(row(5, json!({"text":"Other","senderAccountId":"q"}))).is_none());
         let mut system = row(5, json!({"text":"Joined"}));
         system.2 = "system".into();
-        assert!(reply("p", system).is_none());
-        assert!(reply("p", row(5, json!({"text":""})))
+        assert!(reply_of(system).is_none());
+        assert!(reply_of(row(5, json!({"text":""})))
             .unwrap()
             .text
             .contains("attachment"));
@@ -256,16 +329,17 @@ mod tests {
     fn the_next_message_answers_the_oldest_open_question() {
         let questions = [question(10, "q-a"), question(4, "q-b")];
         let replies = [
-            reply("p", row(3, json!({"text":"Before any question"}))).unwrap(),
-            reply("p", row(6, json!({"text":"First"}))).unwrap(),
-            reply("p", row(12, json!({"text":"Second"}))).unwrap(),
-            reply("p", row(13, json!({"text":"Extra"}))).unwrap(),
+            reply_of(row(3, json!({"text":"Before any question"}))).unwrap(),
+            reply_of(row(6, json!({"text":"First"}))).unwrap(),
+            reply_of(row(12, json!({"text":"Second"}))).unwrap(),
+            reply_of(row(13, json!({"text":"Extra"}))).unwrap(),
         ];
-        let pairs = assign(&questions, &replies);
+        let (pairs, superseded) = assign(&questions, &replies);
         assert_eq!(
             pairs,
             vec![(questions[1].exchange, 1), (questions[0].exchange, 2)]
         );
+        assert!(superseded.is_empty());
     }
 
     #[test]
@@ -276,15 +350,66 @@ mod tests {
         let elsewhere =
             json!({"text":"About something else","replyToMessageId":Uuid::new_v4().to_string()});
         let replies = [
-            reply("p", row(9, elsewhere)).unwrap(),
-            reply("p", row(10, quoted)).unwrap(),
-            reply("p", row(11, json!({"text":"Plain"}))).unwrap(),
+            reply_of(row(9, elsewhere)).unwrap(),
+            reply_of(row(10, quoted)).unwrap(),
+            reply_of(row(11, json!({"text":"Plain"}))).unwrap(),
         ];
-        let pairs = assign(&questions, &replies);
+        let (pairs, _) = assign(&questions, &replies);
         assert_eq!(
             pairs,
             vec![(questions[1].exchange, 1), (questions[0].exchange, 2)],
             "a reply to another message answers nothing; a quote picks its question"
+        );
+    }
+
+    #[test]
+    fn a_new_agent_request_is_not_an_answer_and_supersedes_its_agent_question() {
+        let mine = "cloud-agent:p";
+        let explicit = json!({"text":"Book it","targetCloudAgentId":mine,"targetCloudAgentOwnerAccountId":"p"});
+        let mentioned =
+            json!({"text":"@Other check","mentions":[{"targetKind":"agent","label":"Other"}]});
+        assert_eq!(
+            reply_of(row(5, explicit.clone())).unwrap().request,
+            Some(None)
+        );
+        assert_eq!(
+            reply_of(row(5, mentioned.clone())).unwrap().request,
+            Some(None)
+        );
+        assert_eq!(
+            reply_of(row(5, json!({"text":"Anything works"})))
+                .unwrap()
+                .request,
+            None
+        );
+        let participants = [CloudGroupParticipant {
+            account_id: "p".into(),
+            display_name: "Pat".into(),
+            avatar_url: None,
+            agent_id: Some(mine.into()),
+            agent_display_name: Some("Kordi".into()),
+            agent_avatar_url: None,
+            role: Some("person".into()),
+        }];
+        let resolved = reply("p", row(6, explicit), &participants).unwrap();
+        assert_eq!(resolved.request, Some(Some(mine.to_string())));
+
+        let mut to_requester = question(4, "q-a");
+        to_requester.requester_of = Some(mine.into());
+        let mut other_agent = question(3, "q-b");
+        other_agent.requester_of = Some("cloud_agent_other".into());
+        let questions = [to_requester, other_agent];
+        let replies = [
+            resolved,
+            reply_of(row(7, mentioned)).unwrap(),
+            reply_of(row(8, json!({"text":"Anything works"}))).unwrap(),
+        ];
+        let (pairs, superseded) = assign(&questions, &replies);
+        assert_eq!(superseded, vec![questions[0].exchange]);
+        assert_eq!(
+            pairs,
+            vec![(questions[1].exchange, 2)],
+            "only the plain message answers"
         );
     }
 }

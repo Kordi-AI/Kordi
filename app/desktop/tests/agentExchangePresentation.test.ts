@@ -56,6 +56,19 @@ test('a question to a person names who the agent is waiting for', () => {
   assert.equal(agentExchangeProgressTurn('waiting', text, 'question', 'session', null, '  ')!.agentExchangeWaitingFor, undefined);
 });
 
+test('a question to the requester reads as waiting for their reply on their own Mac', () => {
+  const text = 'What time are you free?';
+  const body = `kordi-cloud-agent-response:${Buffer.from(JSON.stringify({ kind: 'agent-response', requestId: 'agent-exchange:id:sent', text, deliveryState: 'complete', agentExchangeStatus: 'waiting', agentExchangeWaitingFor: 'Sam Lee', agentExchangeWaitingForRequester: true })).toString('base64url')}`;
+  const parsed = parseCloudAgentResponse(body)!;
+  assert.equal(parsed.agentExchangeWaitingForRequester, true);
+  const label = (forViewer: boolean) => renderToStaticMarkup(createElement(TurnProgress, {
+    turn: agentExchangeProgressTurn(parsed.agentExchangeStatus, text, 'question', 'session', null, parsed.agentExchangeWaitingFor, forViewer)!,
+    renderTool: () => null, legacyAnswer: text,
+  }));
+  assert.match(label(true), /Waiting for your reply/);
+  assert.match(label(false), /Waiting for Sam Lee/);
+});
+
 test('ordinary text, ordered prose, and genuine errors survive presentation filtering', () => {
   const turn = { ...base, assistantText: '{"answer":19}', message: 'Provider failed', error: 'Provider failed', status: 'failed', completed: true, segments: [{ id: 'ordered', kind: 'text' as const, text: 'Useful result' }] };
   assert.deepEqual(publicAgentExchangeTurn(turn), turn);

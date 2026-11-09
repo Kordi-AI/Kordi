@@ -108,6 +108,12 @@ fn guidance(capabilities: &Value) -> Option<String> {
             capabilities["people"]
         ));
     }
+    let requester = capabilities["people"]
+        .as_array()
+        .is_some_and(|people| people.iter().any(|p| p["requester"] == true));
+    if requester {
+        text.push_str(" If you need information or a decision from the person who asked (marked requester) before you can finish, ask them with reach_out instead of ending your turn with a question; their reply continues the task.");
+    }
     text.push_str(" A successful call queues the request. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Do not poll or resend.");
     Some(text)
 }
@@ -132,6 +138,12 @@ mod tests {
         assert!(text.contains("\"accountId\":\"p\""));
         let people_only = json!({"available":true,"targets":[],"people":[{"accountId":"p"}]});
         assert!(guidance(&people_only).unwrap().contains("People:"));
+        assert!(!text.contains("marked requester"));
+        let shared =
+            json!({"available":true,"targets":[],"people":[{"accountId":"o","requester":true}]});
+        assert!(guidance(&shared)
+            .unwrap()
+            .contains("ask them with reach_out instead of ending your turn with a question"));
         let older = json!({"available":true,"targets":[{"agentId":"cloud-agent:a"}]});
         assert!(!guidance(&older).unwrap().contains("People:"));
         assert!(guidance(&json!({"available":true,"targets":[],"people":[]})).is_none());

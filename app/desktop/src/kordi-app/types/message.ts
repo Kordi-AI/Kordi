@@ -400,6 +400,8 @@ export type DesktopChatTurnSnapshot = {
   agentExchangeStatus?: 'waiting' | 'processing';
   /** The person an agent's question waits for. */
   agentExchangeWaitingFor?: string;
+  /** The viewer's own agent waits for the viewer's answer. */
+  agentExchangeWaitingForViewer?: boolean;
   localExecutionStarted?: boolean;
   /** Server-confirmed state of a hosted request; never a local execution handle. */
   hostedRunStatus?: 'queued' | 'leased' | 'running';

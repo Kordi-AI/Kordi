@@ -142,8 +142,9 @@ for that person by name; Mac shows "Waiting for <name>" on the question.
 
 The answer is the person's next human message in the conversation after the
 question, or their reply, quote, or thread reply to it. Their agent's
-messages, forwards, replies to other messages, and messages before the
-question never count. With several open questions to the same person, a reply
+messages, forwards, replies to other messages, messages before the question,
+and messages that ask an agent for something (a new request, routed as usual)
+never count. With several open questions to the same person, a reply
 to one question answers that question; any other message answers the oldest.
 Matching runs when the message is stored and again in the reconcile sweep, so
 a missed hook is recovered from durable records. The answer then resumes the
@@ -153,6 +154,16 @@ People get 24 hours. When the deadline passes, the continuation states that
 no answer arrived and the agent says so instead of inventing one. The same
 rules as agent requests apply: only a run requested by the agent's owner can
 ask, and each question counts toward the task's budget of eight. Targets are
-active members other than the requester and the agent's owner (the agent asks
-its owner by ending its turn with the question), not service accounts, and not
-blocked either way. Leaving the conversation cancels a pending question.
+active members, not service accounts, and not blocked either way. Leaving the
+conversation cancels a pending question.
+
+In a direct or group conversation a plain follow-up does not reach an agent,
+so the person who made the request is a target too (listed with `requester`).
+When the agent needs their input before it can finish, guidance tells it to ask
+with `reach_out` instead of ending its turn with a question; their next plain
+message, or a reply to the question, continues the task in the language of the
+request, never silently. The question carries `agentExchangeWaitingForRequester`,
+so their own Mac shows "Waiting for your reply" while others see the name. A
+new request from them to the same agent supersedes and cancels the open
+question. In the owner's private agent chat every message already reaches the
+agent, so nobody there is a target.

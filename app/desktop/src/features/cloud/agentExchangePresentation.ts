@@ -22,10 +22,13 @@ export function agentExchangeWaitingFor(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, 120) : undefined;
 }
 
-/** The durable question owns one progress indicator through reply and continuation. */
+/**
+ * The durable question owns one progress indicator through reply and continuation.
+ * `forViewer` marks a question the viewer's own agent asked the viewer, as the requester.
+ */
 export function agentExchangeProgressTurn(
   state: unknown, text: string, id: string, sessionId: string,
-  turn?: DesktopChatTurnSnapshot | null, waitingFor?: unknown,
+  turn?: DesktopChatTurnSnapshot | null, waitingFor?: unknown, forViewer = false,
 ): DesktopChatTurnSnapshot | null {
   const status = agentExchangeStatus(state);
   if (status !== 'waiting' && status !== 'processing') return turn ?? null;
@@ -34,10 +37,11 @@ export function agentExchangeProgressTurn(
     sessionId, prompt: '', message: '', assistantText: text, thinkingText: '', tools: [],
     ...turn, id: `collaboration-live-turn:exchange:${id}`, status: 'processing', completed: false, succeeded: false, error: null,
     agentExchangeStatus: status, ...(person ? { agentExchangeWaitingFor: person } : {}),
+    ...(person && forViewer ? { agentExchangeWaitingForViewer: true } : {}),
   };
 }
 
-export function withAgentExchangeProgress(message: Message, state: unknown, waitingFor?: unknown): Message {
-  const turn = agentExchangeProgressTurn(state, message.text, `exchange-progress:${message.id}`, '', message.turn, waitingFor);
+export function withAgentExchangeProgress(message: Message, state: unknown, waitingFor?: unknown, forViewer = false): Message {
+  const turn = agentExchangeProgressTurn(state, message.text, `exchange-progress:${message.id}`, '', message.turn, waitingFor, forViewer);
   return turn === message.turn || !turn ? message : { ...message, turn };
 }
