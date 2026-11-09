@@ -19,6 +19,8 @@ export type ResolvedMentionedCollaborationTarget = {
   displayLabel: string;
   targetKind: 'person' | 'agent';
   requestText: string;
+  /** Where the mention starts in the sent text; the first-mentioned agent leads. */
+  mentionStart?: number;
 };
 
 export type PendingCollaborationOutreach = {
