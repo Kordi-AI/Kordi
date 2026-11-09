@@ -55,7 +55,7 @@ impl Fixture {
             .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(value["acquired"], true, "{value}");
-        assert_eq!(value["leaseSeconds"], 45);
+        assert_eq!(value["leaseSeconds"], 120);
         let run = value["runId"].as_str().unwrap().to_string();
         assert!(run.starts_with("factory_"));
         run

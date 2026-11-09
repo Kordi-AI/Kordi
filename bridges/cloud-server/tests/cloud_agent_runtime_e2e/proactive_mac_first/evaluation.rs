@@ -57,7 +57,7 @@ async fn a_ready_mac_runs_the_held_evaluation_with_only_the_memory_search() {
 
     let claim_id = uuid::Uuid::new_v4();
     let claimed = fx.mac_takes(&run_id, claim_id).await;
-    assert_eq!(claimed["leaseSeconds"], 45);
+    assert_eq!(claimed["leaseSeconds"], 120);
     let evaluation = &claimed["proactive"];
     assert_eq!(evaluation["kind"], "evaluation");
     assert_eq!(tool_names(&evaluation["tools"]), vec!["search_memory"]);

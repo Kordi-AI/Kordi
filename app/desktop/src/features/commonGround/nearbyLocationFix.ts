@@ -14,9 +14,12 @@ export function nearbyLocationInput(fix: NearbyDeviceFix, now = Date.now()): Nea
   return { latitude: Math.round(fix.latitude * 1000) / 1000, longitude: Math.round(fix.longitude * 1000) / 1000, accuracy: Math.round(fix.accuracy), capturedAt: new Date(fix.timestamp).toISOString() };
 }
 
-/** A location failure; `settings` means System Settings can fix it. */
+/**
+ * A location failure; `settings` means System Settings can fix it, and `blocked` that asking again
+ * will not help until the person acts, so automatic requests stop.
+ */
 export class NearbyLocationError extends Error {
-  constructor(message: string, readonly settings = false) {
+  constructor(message: string, readonly settings = false, readonly blocked = settings) {
     super(message);
     this.name = 'NearbyLocationError';
   }
@@ -24,27 +27,34 @@ export class NearbyLocationError extends Error {
 
 const allowInSettings = 'Allow Kordi in Location Services, then try again.';
 const notFound = 'Could not find your location. Check Wi-Fi, then try again.';
-const NATIVE_FAILURES: Record<string, [message: string, settings: boolean]> = {
-  location_denied: [allowInSettings, true],
-  location_services_off: ['Turn on Location Services, then try again.', true],
-  location_permission_pending: ['Allow location access for Kordi, then try again.', true],
-  location_not_bundled: ['This build cannot ask for location. Start it with pnpm dev:desktop:profile.', false],
-  location_timeout: [notFound, false],
-  location_unavailable: [notFound, false],
-  location_busy: ['Already finding your location.', false],
+const NATIVE_FAILURES: Record<string, [message: string, settings: boolean, blocked: boolean]> = {
+  location_denied: [allowInSettings, true, true],
+  location_services_off: ['Turn on Location Services, then try again.', true, true],
+  location_permission_pending: ['Allow location access for Kordi, then try again.', true, true],
+  location_not_bundled: ['This build cannot ask for location. Start it with pnpm dev:desktop:profile.', false, true],
+  location_timeout: [notFound, false, false],
+  location_unavailable: [notFound, false, false],
+  location_busy: ['Already finding your location.', false, false],
 };
 
 /** Map a native failure code to copy; other errors pass through unchanged. */
 export function nearbyNativeLocationError(error: unknown): Error {
   const code = error instanceof Error ? error.message : String(error);
   const known = NATIVE_FAILURES[code];
-  if (known) return new NearbyLocationError(known[0], known[1]);
+  if (known) return new NearbyLocationError(known[0], known[1], known[2]);
   return error instanceof Error ? error : new Error(notFound);
 }
 
-/** A single foreground fix, only after the user chooses to use this device. */
+const nativeMac = () => isNativeDesktopShell() && /Mac/.test(navigator.platform);
+
+/** True when this device can be asked for a location: the Mac app, or a browser with geolocation. */
+export function nearbyLocationAvailable(): boolean {
+  return typeof navigator !== 'undefined' && (nativeMac() || Boolean(navigator.geolocation));
+}
+
+/** A single foreground fix: asked for while the Nearby screen is open, or when the person chooses this device. */
 export async function requestNearbyDeviceLocation(): Promise<NearbyLocationInput> {
-  if (isNativeDesktopShell() && /Mac/.test(navigator.platform)) {
+  if (nativeMac()) {
     let fix: NearbyDeviceFix;
     try {
       // Asks macOS for access on first use, then reads one fix.
@@ -54,13 +64,13 @@ export async function requestNearbyDeviceLocation(): Promise<NearbyLocationInput
     }
     return nearbyLocationInput(fix);
   }
-  if (!navigator.geolocation) throw new Error('Location is unavailable on this device. Use another signed-in device.');
+  if (!navigator.geolocation) throw new NearbyLocationError('Location is unavailable on this device. Use another signed-in device.', false, true);
   const fix = await new Promise<NearbyDeviceFix>((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       ({ coords, timestamp }) => resolve({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy, timestamp }),
-      (error) => reject(new Error(error.code === 1
-        ? 'Allow location access for Kordi in your browser or device settings, then try again.'
-        : 'Could not find your location. Check Location Services and try again.')),
+      (error) => reject(error.code === 1
+        ? new NearbyLocationError('Allow location access for Kordi in your browser or device settings, then try again.', true)
+        : new Error('Could not find your location. Check Location Services and try again.')),
       { enableHighAccuracy: false, maximumAge: 60_000, timeout: 20_000 },
     );
   });

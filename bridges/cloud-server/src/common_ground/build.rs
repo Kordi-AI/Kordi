@@ -6,11 +6,12 @@ use std::sync::Arc;
 
 mod documents;
 mod gather;
+mod links;
 mod related;
 
 pub(super) use gather::item;
 #[cfg(test)]
-pub(super) use gather::{link_url_for_tests, request_for_tests};
+pub(super) use gather::{link_entries_for_tests, link_url_for_tests, request_for_tests};
 #[cfg(test)]
 pub(super) use related::{related_ids, user_block, Candidate};
 
@@ -101,6 +102,8 @@ pub(super) async fn start(
     {
         return limited(retry_after);
     }
+    // Pages are read only for a build that may start, after the rate limit.
+    let unread_links = links::read(&mut evidence).await;
     // Clients that never send a profile build the work profile.
     let mut profile = match existing {
         Some(profile) => profile,
@@ -133,7 +136,7 @@ pub(super) async fn start(
         let sql = format!(
             "UPDATE cloud_common_ground_cards card SET active_run_id = $2, build_started_at = now(),
                  build_evidence_json = $3, build_candidates_json = $4, build_error_code = NULL,
-                 updated_at = now()
+                 link_errors_json = $5, updated_at = now()
              WHERE card.profile_id = $1 AND NOT ({})",
             card::BUILD_IN_FLIGHT_SQL
         );
@@ -142,6 +145,7 @@ pub(super) async fn start(
             .bind(&run_id)
             .bind(serde_json::to_value(&evidence).unwrap_or_default())
             .bind(related::stored_ids(&candidates))
+            .bind(serde_json::to_value(&unread_links).unwrap_or_default())
             .execute(&mut *tx)
             .await?;
         if reserved.rows_affected() == 0 {

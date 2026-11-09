@@ -19,6 +19,18 @@ final class AgentTurnSegmentTests: XCTestCase {
         XCTAssertEqual(execution.elapsedLabel(at: Date(timeIntervalSince1970: 2000)), "8s")
     }
 
+    func testReplyThatEndedEarlyReportsTheWorkDoneInsteadOfASecondStatus() {
+        let failed = AgentExecutionSnapshot(phase: .failed, summary: "Failed", steps: [], startedAtMs: 1000, updatedAtMs: 67000, completed: true)
+        XCTAssertEqual(failed.progressLabel(ending: .interrupted), "Worked for")
+        XCTAssertEqual(failed.progressLabel(ending: nil), "Needs attention")
+        let stopped = AgentExecutionSnapshot(phase: .cancelled, summary: "Stopped", steps: [], startedAtMs: 1000, updatedAtMs: 9000, completed: true)
+        XCTAssertEqual(stopped.progressLabel(ending: .stopped), "Worked for")
+        let untimed = AgentExecutionSnapshot(phase: .failed, summary: "Failed", steps: [], startedAtMs: nil, updatedAtMs: 9000, completed: true)
+        XCTAssertEqual(untimed.progressLabel(ending: .interrupted), "Activity")
+        let complete = AgentExecutionSnapshot(phase: .complete, summary: "Complete", steps: [], startedAtMs: nil, updatedAtMs: 9000, completed: true)
+        XCTAssertEqual(complete.progressLabel(ending: nil), "Activity")
+    }
+
     func testReasoningNeverBecomesStatusCopyAndLegacySnapshotsRemainReadable() throws {
         let data = Data(#"{"phase":"analyzing","summary":"Checking","steps":[],"thinkingText":"Private internal notes","updatedAtMs":9000,"completed":false}"#.utf8)
         let execution = try JSONDecoder().decode(AgentExecutionSnapshot.self, from: data)

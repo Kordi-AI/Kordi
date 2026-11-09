@@ -5,6 +5,7 @@ mod ai_consent_tests;
 mod block_visibility_tests;
 mod build_agents_tests;
 mod build_documents_tests;
+mod build_links_tests;
 mod card_relate_tests;
 mod card_relate_unit_tests;
 mod contact_permission_tests;

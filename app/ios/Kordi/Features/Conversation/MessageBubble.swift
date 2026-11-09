@@ -750,6 +750,7 @@ struct MessageBubble: View, Equatable {
                 if !execution.orderedGroups.isEmpty {
                     OrderedAgentExecution(
                         execution: execution,
+                        ending: message.author == .agent ? message.agentReplyEnding : nil,
                         stopRequestID: message.author == .agent && !execution.completed ? message.requestMessageId : nil,
                         conversationID: message.conversationId,
                         onExpansionChange: onContentExpansionChange

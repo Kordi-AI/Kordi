@@ -143,6 +143,11 @@ pub(super) async fn cancel_turn_by_id(
     snapshot_turn(&turn.snapshot)
 }
 
+/// The longest a renderer-provided lease deadline may reach ahead. The renderer
+/// derives the deadline from the server's lease, so a slow server keeps a turn
+/// alive while its lease holds; this cap only bounds a malformed deadline.
+pub(super) const MAX_EXECUTION_LEASE_WINDOW_MS: i64 = 10 * 60 * 1_000;
+
 pub(super) async fn renew_execution_lease(
     manager: &DesktopChatManager,
     turn_id: &str,
@@ -166,7 +171,8 @@ pub(super) async fn renew_execution_lease(
         .map_err(|_| "Execution lease unavailable")?;
     let start_watchdog = deadline.is_none();
     *deadline = Some(
-        std::time::Instant::now() + std::time::Duration::from_millis(remaining.min(40_000) as u64),
+        std::time::Instant::now()
+            + std::time::Duration::from_millis(remaining.min(MAX_EXECUTION_LEASE_WINDOW_MS) as u64),
     );
     drop(deadline);
     if start_watchdog {

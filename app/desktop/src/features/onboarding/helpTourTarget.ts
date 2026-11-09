@@ -1,4 +1,4 @@
-import type { TourRect } from './helpTourGeometry';
+import { helpTourRing, type TourRect } from './helpTourGeometry';
 
 const clips = /^(auto|scroll|hidden|clip)$/;
 const scrolls = /^(auto|scroll)$/;
@@ -41,17 +41,14 @@ export function trackHelpTourTarget(element: HTMLElement) {
       }
       const bounds = element.getBoundingClientRect();
       if (!bounds.width || !bounds.height || element.closest('[inert], [aria-hidden="true"]')) return null;
-      let left = 4, top = 4, right = innerWidth - 4, bottom = innerHeight - 4;
+      const clip = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
       for (const parent of ancestors) {
         const style = getComputedStyle(parent);
         const area = clientBounds(parent);
-        if (clips.test(style.overflowX)) { left = Math.max(left, area.left); right = Math.min(right, area.right); }
-        if (clips.test(style.overflowY)) { top = Math.max(top, area.top); bottom = Math.min(bottom, area.bottom); }
+        if (clips.test(style.overflowX)) { clip.left = Math.max(clip.left, area.left); clip.right = Math.min(clip.right, area.right); }
+        if (clips.test(style.overflowY)) { clip.top = Math.max(clip.top, area.top); clip.bottom = Math.min(clip.bottom, area.bottom); }
       }
-      if (bounds.right <= left || bounds.left >= right || bounds.bottom <= top || bounds.top >= bottom) return null;
-      left = Math.max(left, bounds.left - 5); top = Math.max(top, bounds.top - 5);
-      right = Math.min(right, bounds.right + 5); bottom = Math.min(bottom, bounds.bottom + 5);
-      return { left, top, width: right - left, height: bottom - top };
+      return helpTourRing(bounds, clip, { width: innerWidth, height: innerHeight });
     },
     dispose() {
       observer.disconnect();

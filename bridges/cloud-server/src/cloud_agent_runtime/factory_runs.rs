@@ -16,7 +16,7 @@ type Result<T> = std::result::Result<T, sqlx_core::Error>;
 /// same literal.
 pub(crate) const RUN_PREFIX: &str = "factory_";
 /// Seconds a Mac holds a Factory test before it must renew, as for chat.
-pub(crate) const LEASE_SECONDS: i64 = 45;
+pub(crate) const LEASE_SECONDS: i64 = super::DESKTOP_LEASE_SECONDS;
 /// A Factory test still open this long after it started has failed.
 const MAX_AGE_MINUTES: i32 = 10;
 const TIMEOUT_ERROR_CODE: &str = "factory_timeout";

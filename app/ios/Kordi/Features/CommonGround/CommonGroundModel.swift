@@ -9,6 +9,10 @@ final class CommonGroundModel: ObservableObject {
     typealias Context = @MainActor () throws -> (CloudAPIClient, String)
 
     nonisolated static let buildPollInterval: Duration = .seconds(3)
+    /// Looks at the card after a build request got no answer, this far apart.
+    nonisolated static let buildCheckInterval: Duration = .seconds(2)
+    static let buildStartChecks = 3
+    static let buildNotStarted = "Could not start building. Try again."
     nonisolated static let lobbyPollInterval: Duration = .seconds(2)
     nonisolated static let matchPollInterval: Duration = .seconds(3)
     /// Home reloads cards on appear and on foreground at most this often.
@@ -107,6 +111,7 @@ final class CommonGroundModel: ObservableObject {
         "common_ground_no_sources": "Turn on a source first.",
         // A build that found nothing for the profile; trying again cannot help.
         "no_topics": "Nothing here fits this profile. Add a note or choose other sources.",
+        "build_timed_out": "Building took too long. Try again.",
         "common_ground_build_in_progress": "Your card is already being built.",
         "common_ground_room_not_found": roomNotFound,
         "common_ground_code_not_found": "Code not found.",
@@ -214,12 +219,52 @@ final class CommonGroundModel: ObservableObject {
 
     // MARK: Card
 
-    func build(_ request: CommonGroundBuildRequest) async {
+    func build(_ request: CommonGroundBuildRequest, checkEvery interval: Duration = buildCheckInterval) async {
         var request = request
-        request.profileId = activeProfileID
-        if let view = await run("build", { try await $0.buildCommonGroundCard(token: $1, request: request) }) {
-            apply(view)
+        let profileId = activeProfileID
+        request.profileId = profileId
+        busy = "build"
+        notice = nil
+        defer { if busy == "build" { busy = nil } }
+        do {
+            apply(try await call { try await $0.buildCommonGroundCard(token: $1, request: request) })
+        } catch {
+            // No answer is not "never started": a slow server may have started the build, and a
+            // build already running (from an earlier attempt) is followed rather than reported.
+            let unknown = Self.isUnknownOutcome(error)
+            let running = (error as? CloudAPIError)?.code == "common_ground_build_in_progress"
+            if unknown || running, await followStartedBuild(profileId: profileId, every: interval) { return }
+            if unknown {
+                notice = Self.buildNotStarted
+            } else {
+                report(error)
+            }
         }
+    }
+
+    /// True for a failure that says nothing about whether the server did the work: no answer,
+    /// or a server error other than Grounding being unavailable.
+    static func isUnknownOutcome(_ error: Error) -> Bool {
+        if CloudTransportErrorPolicy.isCancellation(error) { return false }
+        if let error = error as? CloudAPIError {
+            return error.statusCode == 0 || error.statusCode == 408
+                || (error.statusCode >= 500 && error.code != "common_ground_unavailable")
+        }
+        return error is URLError || (error as NSError).domain == NSURLErrorDomain
+    }
+
+    /// Looks at the card a few times; true once it shows the build running, which then polls as usual.
+    private func followStartedBuild(profileId: String?, every interval: Duration) async -> Bool {
+        for check in 0..<Self.buildStartChecks {
+            if check > 0 { try? await Task.sleep(for: interval) }
+            guard !Task.isCancelled, activeProfileID == profileId else { return false }
+            if let view = try? await call({ try await $0.commonGroundCard(token: $1, profileId: profileId) }),
+               view.build.status == "building" {
+                apply(view)
+                return true
+            }
+        }
+        return false
     }
 
     func refreshCard() async {

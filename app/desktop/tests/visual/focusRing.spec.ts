@@ -117,6 +117,29 @@ for (const chatTheme of ['classic', 'ocean'] as const) {
   }
 }
 
+test('clicking a focusable region never draws a focus frame', async ({ page }) => {
+  for (const theme of ['light', 'dark'] as const) {
+    await page.goto(`/tests/visual/focusRingGallery.html?theme=${theme}&chatTheme=classic`);
+    await expect(page.locator('[data-focus-gallery-ready]')).toBeVisible();
+    for (const scope of ['canvas', 'dialog']) {
+      for (const kind of ['scroll-region', 'copy-surface']) {
+        const region = page.locator(`[data-focus-region="${scope}:${kind}"]`);
+        const label = `${scope} ${kind} (${theme})`;
+        // Typing in a field first makes WebKit carry :focus-visible to a script focus.
+        await page.locator(`[data-focus-kind="${scope}:textarea"]`).click();
+        await page.keyboard.type('a');
+        await region.click({ position: { x: 8, y: 8 } });
+        await expect(region, label).toBeFocused();
+        const after = await look(region);
+        expect(after.outlineStyle === 'none' || after.outlineWidth === '0px', `${label}: outline`).toBe(true);
+        expect(after.boxShadow, `${label}: box-shadow`).toBe('none');
+        await page.keyboard.press('ArrowDown');
+        expect((await look(region)).boxShadow, `${label}: box-shadow after a key`).toBe('none');
+      }
+    }
+  }
+});
+
 test('real settings surfaces focus without a ring', async ({ page }) => {
   for (const theme of ['light', 'dark'] as const) {
     await page.goto(`/tests/visual/authProviderConfig.html?variant=settings&theme=${theme}`);

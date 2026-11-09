@@ -6,7 +6,9 @@
 //!
 //! It also reads the person's agent instruction and memory files from their
 //! home directory, when the build screen asks, so the card can draw on them.
-//! Their contents are returned to the page only and never logged.
+//! Each file is titled by what it says it is (frontmatter description or
+//! name, or its first heading) and sent without its frontmatter; the path
+//! stays on this Mac. Contents are returned to the page only and never logged.
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -196,8 +198,12 @@ fn clean(items: Vec<CommonGroundDeviceItem>) -> Vec<CommonGroundDeviceItem> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct CommonGroundAgentFile {
-    /// Path relative to the home directory.
+    /// The title the card shows: the frontmatter `description`, else `name`,
+    /// else the first heading, else the file name.
     pub label: String,
+    /// Path relative to the home directory, for this Mac's build screen only.
+    pub path: String,
+    /// The text without its YAML frontmatter.
     pub text: String,
 }
 
@@ -271,15 +277,67 @@ fn read_agent_file(home: &Path, path: &Path) -> Option<CommonGroundAgentFile> {
         .take((MAX_AGENT_FILE_CHARS * 4) as u64)
         .read_to_end(&mut bytes)
         .ok()?;
-    let text: String = String::from_utf8_lossy(&bytes)
-        .chars()
-        .take(MAX_AGENT_FILE_CHARS)
-        .collect();
-    if text.trim().is_empty() {
+    let raw = String::from_utf8_lossy(&bytes);
+    let (front, body) = split_frontmatter(&raw);
+    let text: String = body.trim().chars().take(MAX_AGENT_FILE_CHARS).collect();
+    if text.is_empty() {
         return None;
     }
-    let label = path.strip_prefix(home).ok()?.to_string_lossy().into_owned();
-    Some(CommonGroundAgentFile { label, text })
+    let field = |key: &str| front.and_then(|front| frontmatter_value(front, key));
+    let label = field("description")
+        .or_else(|| field("name"))
+        .or_else(|| first_heading(&text))
+        .or_else(|| Some(path.file_name()?.to_string_lossy().into_owned()))?;
+    let path = path.strip_prefix(home).ok()?.to_string_lossy().into_owned();
+    Some(CommonGroundAgentFile { label, path, text })
+}
+
+/// Splits `---` frontmatter from the body; text without a closed block is all body.
+fn split_frontmatter(text: &str) -> (Option<&str>, &str) {
+    let trimmed = text.trim_start_matches('\u{feff}');
+    let Some(rest) = trimmed
+        .strip_prefix("---\n")
+        .or_else(|| trimmed.strip_prefix("---\r\n"))
+    else {
+        return (None, text);
+    };
+    let mut offset = 0;
+    for line in rest.split_inclusive('\n') {
+        if line.trim_end() == "---" {
+            return (Some(&rest[..offset]), &rest[offset + line.len()..]);
+        }
+        offset += line.len();
+    }
+    (None, text)
+}
+
+/// A top-level `key: value` from frontmatter, without quotes. Block scalars
+/// (`|`, `>`) and nested keys are skipped.
+fn frontmatter_value(front: &str, key: &str) -> Option<String> {
+    front.lines().find_map(|line| {
+        if line.starts_with([' ', '\t']) {
+            return None;
+        }
+        let (name, value) = line.split_once(':')?;
+        if name.trim() != key {
+            return None;
+        }
+        let value = value.trim();
+        let value = ['"', '\'']
+            .iter()
+            .find_map(|quote| value.strip_prefix(*quote)?.strip_suffix(*quote))
+            .unwrap_or(value)
+            .trim();
+        (!value.is_empty() && !matches!(value, "|" | ">" | "|-" | ">-")).then(|| value.to_string())
+    })
+}
+
+fn first_heading(body: &str) -> Option<String> {
+    body.lines().find_map(|line| {
+        let heading = line.trim_start().strip_prefix('#')?;
+        let heading = heading.trim_start_matches('#').trim();
+        (!heading.is_empty()).then(|| heading.to_string())
+    })
 }
 
 #[cfg(test)]
@@ -327,9 +385,9 @@ mod tests {
         write(".claude/CLAUDE.md", "  ");
         let files = agent_files(&home);
         std::fs::remove_dir_all(&home).unwrap();
-        let labels: Vec<&str> = files.iter().map(|file| file.label.as_str()).collect();
+        let paths: Vec<&str> = files.iter().map(|file| file.path.as_str()).collect();
         assert_eq!(
-            labels,
+            paths,
             vec![
                 "AGENTS.md",
                 ".codex/instructions/a.md",
@@ -337,6 +395,66 @@ mod tests {
             ]
         );
         assert_eq!(files[0].text.chars().count(), MAX_AGENT_FILE_CHARS);
+        let labels: Vec<&str> = files.iter().map(|file| file.label.as_str()).collect();
+        assert_eq!(labels, vec!["AGENTS.md", "a.md", "note.md"]);
+    }
+
+    #[test]
+    fn memory_frontmatter_titles_the_file_and_is_not_sent() {
+        let home = std::env::temp_dir().join(format!("cg-agent-front-{}", std::process::id()));
+        let write = |relative: &str, text: &str| {
+            let path = home.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        write(
+            ".claude/projects/p/memory/review.md",
+            "---\nname: Review style\ndescription: \"Prefer small reviewed changes\"\ntype: feedback\n---\n\nKeep pull requests small.\n",
+        );
+        write(
+            ".codex/instructions/named.md",
+            "---\nname: 'Evaluation notes'\ndescription: >\n  folded text\n---\nWeekly evals.",
+        );
+        write(
+            "AGENTS.md",
+            "Intro line\n\n## Repository rules\n\nUse English.",
+        );
+        write(".codex/AGENTS.md", "---\nname: x\nno closing line");
+        write(
+            ".claude/CLAUDE.md",
+            "---\ndescription: only frontmatter\n---\n  \n",
+        );
+        let files = agent_files(&home);
+        std::fs::remove_dir_all(&home).unwrap();
+        let found: Vec<(&str, &str, &str)> = files
+            .iter()
+            .map(|file| (file.label.as_str(), file.path.as_str(), file.text.as_str()))
+            .collect();
+        assert_eq!(
+            found,
+            vec![
+                (
+                    "Repository rules",
+                    "AGENTS.md",
+                    "Intro line\n\n## Repository rules\n\nUse English."
+                ),
+                (
+                    "AGENTS.md",
+                    ".codex/AGENTS.md",
+                    "---\nname: x\nno closing line"
+                ),
+                (
+                    "Evaluation notes",
+                    ".codex/instructions/named.md",
+                    "Weekly evals."
+                ),
+                (
+                    "Prefer small reviewed changes",
+                    ".claude/projects/p/memory/review.md",
+                    "Keep pull requests small."
+                ),
+            ]
+        );
     }
 
     #[test]
