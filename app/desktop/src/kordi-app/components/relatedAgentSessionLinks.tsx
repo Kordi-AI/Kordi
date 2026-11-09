@@ -42,8 +42,10 @@ function rememberFold(key: string, folded: boolean) {
 /**
  * Background sessions an agent started from this message, as child rows
  * under it: one bracket line down the left with an elbow into the last row,
- * the title on one line and a small status glyph that turns into "…" on hover.
- * A long group folds into one summary line; the chevron toggles it.
+ * the title on one line, then the status glyph and a "…" menu that appears
+ * beside it on hover. Hover never moves or swaps anything, so the row looks
+ * the same at any transcript width. A group of several rows folds into one
+ * summary line; the chevron toggles it. A single row has nothing to fold.
  */
 export function RelatedAgentSessionLinks({
   sessions,
@@ -63,8 +65,9 @@ export function RelatedAgentSessionLinks({
     setResolved(current => current[sessionId] === status ? current : { ...current, [sessionId]: status });
   }, []);
   if (sessions.length === 0) return null;
-  const folded = (userFold?.key === groupKey ? userFold.folded : undefined)
-    ?? rememberedFold(groupKey) ?? sessions.length > FOLDED_BACKGROUND_SESSION_ROWS;
+  const foldable = sessions.length > 1;
+  const folded = foldable && ((userFold?.key === groupKey ? userFold.folded : undefined)
+    ?? rememberedFold(groupKey) ?? sessions.length > FOLDED_BACKGROUND_SESSION_ROWS);
   const toggle = () => { rememberFold(groupKey, !folded); setUserFold({ key: groupKey, folded: !folded }); };
   const summary = backgroundSessionGroupSummary(sessions.map(session => resolved[session.sessionId]
     ?? statusBySessionId?.get(session.sessionId) ?? normalizedRelatedAgentSessionStatus(session.status)));
@@ -76,7 +79,7 @@ export function RelatedAgentSessionLinks({
       data-related-agent-session-style="bracket"
       data-related-agent-sessions-folded={folded ? 'true' : 'false'}
     >
-      {!folded ? <button type="button" onClick={toggle} aria-expanded={true}
+      {foldable && !folded ? <button type="button" onClick={toggle} aria-expanded={true}
         aria-label={`Fold ${summary.text}`}
         className="absolute -top-2.5 left-0 z-10 hidden h-4 w-4 place-items-center rounded-[4px] text-[color:var(--utility-muted-text)] hover:text-[color:var(--utility-foreground)] focus-visible:grid group-hover/sessions:grid">
         <ChevronDown className="h-3 w-3" aria-hidden="true" />
@@ -153,7 +156,7 @@ function SubsessionLink({ session, first, last, hidden, status, onStatus, onOpen
       {title}
     </button>
     <span
-      className={cn('grid h-5 w-5 shrink-0 place-items-center', presentation.tone, (menuOpen || onOpen) && 'group-hover:hidden', menuOpen && 'hidden')}
+      className={cn('grid h-5 w-5 shrink-0 place-items-center', presentation.tone)}
       data-related-agent-session-status={resolved}
       title={notice ?? presentation.label}
       aria-live="polite"
@@ -163,8 +166,8 @@ function SubsessionLink({ session, first, last, hidden, status, onStatus, onOpen
     </span>
     <button
       type="button"
-      className={cn('app-button-quiet hidden h-5 w-5 shrink-0 place-items-center rounded-[5px] text-[color:var(--utility-muted-text)] focus-visible:grid group-hover:grid',
-        menuOpen && 'grid')}
+      className={cn('app-button-quiet grid h-5 w-5 shrink-0 place-items-center rounded-[5px] text-[color:var(--utility-muted-text)] opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
+        menuOpen && 'opacity-100')}
       aria-label={`More actions for ${title}`}
       aria-haspopup="menu"
       aria-expanded={menuOpen}
@@ -194,7 +197,7 @@ function StatusGlyph({ status }: { status: RelatedAgentSessionRunStatus }) {
   return <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
     <circle cx="7" cy="7" r="5.75" stroke="currentColor" strokeWidth="1.3" />
     {status === 'done' ? <path d="M4.6 7.2l1.6 1.6 3.2-3.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /> : null}
-    {status === 'stopped' ? <rect x="5" y="5" width="4" height="4" rx=".8" fill="currentColor" /> : null}
+    {status === 'stopped' ? <path d="M4.6 7h4.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /> : null}
     {status === 'failed' ? <><path d="M7 4.2v3.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /><circle cx="7" cy="9.7" r=".75" fill="currentColor" /></> : null}
   </svg>;
 }
