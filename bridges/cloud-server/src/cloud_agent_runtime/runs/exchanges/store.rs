@@ -124,7 +124,7 @@ pub(super) async fn directory(pool: &PgPool, parent: &Parent) -> RunResult<Vec<T
         .collect())
 }
 
-fn resolve_target<'a>(targets: &'a [Target], value: &str) -> RunResult<&'a Target> {
+pub(super) fn resolve_target<'a>(targets: &'a [Target], value: &str) -> RunResult<&'a Target> {
     let value = value.trim();
     let mut exact = targets.iter().filter(|t| t.agent_id == value);
     if let Some(target) = exact.next() {
@@ -159,6 +159,9 @@ pub(super) async fn send(
     if text.is_empty() || text.len() > 32_000 || target_ref.len() > 256 {
         return Err(RunError::NotFound);
     }
+    if let Some(person) = super::person::requested(pool, parent, args, target_ref).await? {
+        return super::person::send(pool, parent, executor, account, key, text, &person).await;
+    }
     let targets = directory(pool, parent).await?;
     let target = resolve_target(&targets, target_ref)?;
     // Another person's agent runs only when its owner allowed AI; the
@@ -185,7 +188,7 @@ pub(super) async fn send(
     super::super::super::run_locks::lock_run(&mut tx, &parent.root).await?;
     // Revalidate the lease and membership after obtaining the root's budget lock.
     authorize(pool, &parent.run, Some((executor, account))).await?;
-    let existing: Option<(Uuid,String,String,String)> = query_as("SELECT exchange_id,status,target_agent_id,request_text FROM cloud_agent_exchanges WHERE parent_run_id=$1 AND (request_key=$2 OR (target_agent_id=$3 AND request_text=$4))")
+    let existing: Option<(Uuid,String,String,String)> = query_as("SELECT exchange_id,status,COALESCE(target_agent_id,''),request_text FROM cloud_agent_exchanges WHERE parent_run_id=$1 AND (request_key=$2 OR (target_agent_id=$3 AND request_text=$4))")
         .bind(&parent.run).bind(key).bind(&target.agent_id).bind(text).fetch_optional(&mut *tx).await?;
     if let Some((id, status, agent, request_text)) = existing {
         if agent != target.agent_id || request_text != text {

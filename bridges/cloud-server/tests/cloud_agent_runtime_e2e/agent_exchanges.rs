@@ -486,3 +486,6 @@ async fn overlapping_roots_keep_their_leases_and_downstream_replies_separate() {
 
 #[path = "agent_exchange_rounds.rs"]
 mod rounds;
+
+#[path = "agent_exchange_people.rs"]
+mod people;

@@ -21,7 +21,7 @@ pub(crate) async fn finish(
 ) -> RunResult<bool> {
     let mut tx = pool.begin().await?;
     super::super::super::run_locks::lock_run(&mut tx, run).await?;
-    let exchange: Option<(Uuid, bool, Option<Uuid>, bool)> = query_as("SELECT exchange_id,target_run_id=$1,request_message_id,response_message_id IS NOT NULL FROM cloud_agent_exchanges WHERE target_run_id=$1 OR resume_run_id=$1 FOR UPDATE")
+    let exchange: Option<(Uuid, bool, Option<Uuid>, bool)> = query_as("SELECT exchange_id,target_run_id IS NOT DISTINCT FROM $1,request_message_id,response_message_id IS NOT NULL FROM cloud_agent_exchanges WHERE target_run_id=$1 OR resume_run_id=$1 FOR UPDATE")
         .bind(run).fetch_optional(&mut *tx).await?;
     let Some((id, target, reply_to, has_public_reply)) = exchange else {
         return Ok(false);
@@ -101,6 +101,7 @@ pub(crate) async fn finish(
 /// Both desktop polling and cloud leasing run this sweep. No client cursor or
 /// process-local callback is needed to deliver a result after a restart.
 pub(crate) async fn reconcile(pool: &PgPool) -> RunResult<()> {
+    super::person_replies::sweep(pool).await?;
     let rows: Vec<(Uuid,String)> = query_as("SELECT e.exchange_id,e.parent_run_id FROM cloud_agent_exchanges e WHERE e.processed_at IS NULL ORDER BY e.checked_at,e.created_at LIMIT 64")
         .fetch_all(pool).await?;
     for (id, parent_run) in rows {
@@ -129,13 +130,15 @@ pub(crate) async fn reconcile(pool: &PgPool) -> RunResult<()> {
             Err(error) => return Err(error),
         };
         // Recheck the target's membership even when resuming the original owner.
-        let target_allowed = match target.as_deref() {
-            Some(run) => match authorize(pool, run, None).await {
+        let person = super::person::target(&mut tx, id).await?;
+        let target_allowed = match (target.as_deref(), &person) {
+            (Some(run), _) => match authorize(pool, run, None).await {
                 Ok(_) => true,
                 Err(RunError::NotFound) => false,
                 Err(e) => return Err(e),
             },
-            None => false,
+            (None, Some(p)) => super::person::reachable(&mut tx, &parent, &p.account_id).await?,
+            (None, None) => false,
         };
         if !target_allowed {
             query("UPDATE cloud_agent_exchanges SET status='cancelled',processed_at=now() WHERE exchange_id=$1").bind(id).execute(&mut *tx).await?;
@@ -161,7 +164,12 @@ pub(crate) async fn reconcile(pool: &PgPool) -> RunResult<()> {
             tx.commit().await?;
             continue;
         }
-        if status == "pending" {
+        if let (Some(p), true, "pending") = (&person, expired, status.as_str()) {
+            answer = Some(super::person::no_reply(&p.name));
+            query("UPDATE cloud_agent_exchanges SET status='reply_received',response_text=$2,received_at=now() WHERE exchange_id=$1")
+                .bind(id).bind(&answer).execute(&mut *tx).await?;
+            status = "reply_received".into();
+        } else if status == "pending" && person.is_none() {
             let (target_status,): (String,) =
                 query_as("SELECT status FROM cloud_agent_fallback_runs WHERE run_id=$1")
                     .bind(&target)
@@ -194,13 +202,13 @@ pub(crate) async fn reconcile(pool: &PgPool) -> RunResult<()> {
         let earlier = super::rounds::earlier(&mut tx, &parent.root, id, None).await?;
         let remaining =
             (super::rounds::LIMIT - super::rounds::sent(&mut tx, &parent.root).await?).max(0);
-        let prompt = continuation_prompt(
-            &original,
-            &request,
-            answer.as_deref().unwrap_or_default(),
-            &earlier,
-            remaining,
-        );
+        let reply = answer.as_deref().unwrap_or_default();
+        let prompt = match &person {
+            Some(p) => super::person::continuation_prompt(
+                &original, &request, p, reply, &earlier, remaining,
+            ),
+            None => continuation_prompt(&original, &request, reply, &earlier, remaining),
+        };
         let ready =
             super::super::super::desktop::agent_desktop_ready(pool, &parent.owner, &parent.agent)
                 .await?;
