@@ -1,0 +1,40 @@
+/* Kordi default palette (hue 250) as used by the desktop transient surfaces. */
+:root {
+  color-scheme: light;
+  --accent: #365F98;
+  --accent-ink: #fff;
+  --canvas: #eef0f4;
+  --page: #f7f8fa;
+  --surface: #ffffff;
+  --ink: #25272d;
+  --muted: #737985;
+  --line: #e3e5ea;
+  --field: #d9dce3;
+  --hover: #8888880f;
+  --going: #1e8a5f;
+  --danger: #9f1239;
+  --backdrop: #11182733;
+  --ios-bg: #ffffff;
+  --ios-chip: #eeeff2;
+  --ios-group: #f2f2f4;
+}
+[data-theme=dark] {
+  color-scheme: dark;
+  --accent: #AEC4E3;
+  --accent-ink: #1b2230;
+  --canvas: #0d0f13;
+  --page: #14161b;
+  --surface: #171a21;
+  --ink: #edf0f7;
+  --muted: #9aa1ad;
+  --line: #2a2e38;
+  --field: #3a3f4b;
+  --hover: #ffffff0d;
+  --going: #4cc38a;
+  --danger: #fb7185;
+  --backdrop: #00000066;
+  --ios-bg: #000000;
+  --ios-chip: #2c2c30;
+  --ios-group: #2c2c2e;
+}
+body { background: var(--canvas); }

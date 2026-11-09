@@ -205,3 +205,18 @@
 .digest-import-link > summary::-webkit-details-marker { display: none; }
 .digest-import-link > summary > svg { flex: none; }
 .digest-import-link[open] > summary > svg { rotate: 90deg; }
+/* A plan card's people in the event dialog. Selected answers use the neutral control fill. */
+.digest-sheet input[readonly] { color: var(--utility-muted-text, #737985); }
+.digest-plan-people { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--app-divider, #8883); }
+.digest-plan-head { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 12px; }
+.digest-plan-counts { flex: 1; min-width: 0; color: var(--utility-muted-text, #737985); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.digest-plan-actions { display: flex; flex: none; gap: 6px; }
+.digest-sheet .digest-plan-actions button { display: inline-flex; align-items: center; gap: 4px; min-height: 26px; padding: 3px 9px; font-size: 11px; font-weight: 500; border-radius: 8px; }
+.digest-sheet .digest-plan-actions button.digest-plan-selected { background: var(--app-quiet-control-hover-bg, #8888881a); border-color: color-mix(in oklab, currentColor 35%, transparent); cursor: default; }
+.digest-plan-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px 16px; margin-top: 8px; }
+.digest-plan-group-title { font-size: 11px; color: var(--utility-muted-text, #737985); margin-bottom: 2px; }
+.digest-plan-group ul { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.digest-plan-person { display: flex; align-items: center; gap: 7px; min-height: 28px; font-size: 12px; }
+.digest-plan-person .app-plan-card-avatar { width: 22px; height: 22px; font-size: 9.5px; }
+.digest-plan-person-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.digest-plan-person-role { flex: none; font-size: 10.5px; color: var(--utility-muted-text, #737985); }
