@@ -36,6 +36,12 @@ still apply. No laptop-to-laptop bridge or inbound Mac listener is needed.
 
 ## Ongoing discussions
 
+The agent mentioned first leads the request; agents mentioned later are its
+discussion partners. Only the leading agent runs, and its prompt keeps the
+partner's mention so it can `reach_out` to it. When the sender's own agent
+leads in a direct or group chat, it runs on the sender's Mac as the owner's
+own request, which is the only kind of run that may reach out.
+
 An owner can ask agents to keep talking, discuss, or align. Each continuation
 may answer back with one new `reach_out` to the same agent and yield with
 `waiting` again; the next reply queues the next continuation. The discussion

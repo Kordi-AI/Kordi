@@ -501,7 +501,7 @@ export function resolveMentionedCollaborationTarget(
         label: sharedMatch.handle,
         displayLabel: sharedMatch.displayLabel,
         targetKind: 'agent' as const,
-        requestText,
+        requestText, mentionStart,
       };
     }
 
@@ -565,7 +565,7 @@ export function resolveMentionedCollaborationTarget(
       label: match.handle,
       displayLabel: match.displayLabel,
       targetKind: match.targetKind,
-      requestText,
+      requestText, mentionStart,
     };
   }
 

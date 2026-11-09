@@ -15,10 +15,10 @@ export function selectedComposerAgentMentionTarget(
   option: ComposerMentionOption | null,
   collaborationState: DesktopCollaborationState | null,
 ): ResolvedMentionedCollaborationTarget | null {
-  if (
-    option?.targetKind !== 'agent'
-    || !text.toLocaleLowerCase().includes(`@${option.value}`.toLocaleLowerCase())
-  ) return null;
+  const mentionStart = option?.targetKind === 'agent'
+    ? text.toLocaleLowerCase().indexOf(`@${option.value}`.toLocaleLowerCase())
+    : -1;
+  if (!option || mentionStart < 0) return null;
   const host = collaborationState?.hosts.find(
     (candidate) => candidate.id === option.sourceHostId,
   ) ?? null;
@@ -42,7 +42,35 @@ export function selectedComposerAgentMentionTarget(
     displayLabel: option.label,
     targetKind: 'agent',
     requestText: text,
+    mentionStart,
   };
+}
+
+const mentionStartOf = (target: ResolvedMentionedCollaborationTarget | null) => target?.mentionStart ?? Number.POSITIVE_INFINITY;
+
+/**
+ * The agent mentioned first leads the request; agents mentioned later are
+ * discussion partners it can reach. On a tie the earlier candidate wins.
+ */
+export function leadingAgentMentionTarget(...candidates: Array<ResolvedMentionedCollaborationTarget | null>) {
+  return candidates.reduce<ResolvedMentionedCollaborationTarget | null>((lead, candidate) => (
+    candidate && (!lead || mentionStartOf(candidate) < mentionStartOf(lead)) ? candidate : lead
+  ), null);
+}
+
+/**
+ * The composer remembers only the last agent picked. It leads when it is the
+ * first mention; otherwise the text decides, so a partner named later never
+ * takes over the request.
+ */
+export async function resolveLeadingAgentMentionTarget(
+  text: string,
+  selected: ResolvedMentionedCollaborationTarget | null,
+  resolve: () => Promise<ResolvedMentionedCollaborationTarget | null>,
+) {
+  const firstMention = /(^|\s)@/u.exec(text);
+  if (selected && firstMention && selected.mentionStart === firstMention.index + firstMention[1].length) return selected;
+  return leadingAgentMentionTarget(selected, await resolve());
 }
 
 export async function resolvePreferredAgentMentionTarget(
@@ -83,7 +111,7 @@ export async function resolvePreferredAgentMentionTarget(
   const localTarget = localCandidate && localAgentMentionLabels(desktopChatState, collaborationState).some((label) => (
     normalizeMentionLabel(label) !== 'kordi' && mentionTextStartsWithLabel(afterAt, label)
   )) ? localCandidate : null;
-  return cachedRemoteTarget ?? localTarget ?? (skip ? null : resolveMentionedCollaborationAgentTargetWithSharedCloudAgentRefresh(
+  return leadingAgentMentionTarget(cachedRemoteTarget, localTarget) ?? (skip ? null : resolveMentionedCollaborationAgentTargetWithSharedCloudAgentRefresh(
     text, collaborationState, conversation, sharedCloudAgents, refreshSharedCloudAgents,
   ));
 }

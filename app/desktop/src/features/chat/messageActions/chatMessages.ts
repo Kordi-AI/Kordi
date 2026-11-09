@@ -52,7 +52,7 @@ initialCloudAgentSessionTitle,
 noProviderPendingLiveTurn,
 ownedAgentIdentityId,
 } from './agentMessageLifecycle';
-import { cloudAgentMentionIdentity,cloudGroupSendPlan,resolveCloudAgentMentionTargetIds,resolvePreferredAgentMentionTarget,selectedComposerAgentMentionTarget } from './cloudAgentMentionTarget';
+import { cloudAgentMentionIdentity,cloudGroupSendPlan,resolveCloudAgentMentionTargetIds,resolveLeadingAgentMentionTarget,resolvePreferredAgentMentionTarget,selectedComposerAgentMentionTarget } from './cloudAgentMentionTarget';
 import { prefetchNativeVideoRetry,terminalCollaborationRetryFailure } from './collaborationRetry';
 import {
 collaborationDirectSessionParticipants,
@@ -835,8 +835,8 @@ export function useChatMessageActions({
     const activeGroupSessionIsGroup = isCollaborationGroupSession(activeGroupSessionScope);
     const localAgentMentioned = mentionsLocalAgent(text, desktopChatState, desktopCollaborationState);
     const selectedMentionTarget = selectedComposerAgentMentionTarget(text, selectedChatAgentMentionRef.current, desktopCollaborationState); selectedChatAgentMentionRef.current = null;
-    const mentionedTarget = selectedMentionTarget
-      ?? await resolvePreferredAgentMentionTarget(text, desktopChatState, desktopCollaborationState, activeConvMentionScope, sharedCloudAgents, resolveSharedCloudAgentsForMention, isTransientDraftConversation, activeGroupSessionIsGroup || activeConvCollaborationTarget?.runtime === 'person');
+    const mentionedTarget = await resolveLeadingAgentMentionTarget(text, selectedMentionTarget, () => resolvePreferredAgentMentionTarget(
+      text, desktopChatState, desktopCollaborationState, activeConvMentionScope, sharedCloudAgents, resolveSharedCloudAgentsForMention, isTransientDraftConversation, activeGroupSessionIsGroup || activeConvCollaborationTarget?.runtime === 'person'));
     if (!hasConfiguredProviderAuth && retryMessage?.messageAction?.kind !== 'forward' && isOwnedAgentMention(mentionedTarget, text.startsWith('@') && localAgentMentioned)) {
       setDesktopChatError(cloudAgentNoProviderNoticeText());
       if (openAgentAuthentication) openAgentAuthentication(); else await handleLocalSlashCommand('/login');
