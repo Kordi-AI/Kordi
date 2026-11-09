@@ -14,7 +14,7 @@ const UPDATE_RELAUNCH_RECOVERY: &str =
     "The update was installed, but Kordi could not relaunch. Quit Kordi and open it from Applications.";
 
 #[cfg(any(target_os = "macos", test))]
-fn macos_app_bundle_path(executable: &Path) -> Option<PathBuf> {
+pub(crate) fn macos_app_bundle_path(executable: &Path) -> Option<PathBuf> {
     let macos = executable.parent()?;
     if macos.file_name()?.to_str()? != "MacOS" {
         return None;

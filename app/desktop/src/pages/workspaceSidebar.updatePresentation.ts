@@ -1,18 +1,18 @@
 import type { DesktopUpdaterState } from '@/features/updates/desktopUpdater';
 
+const TITLES: Partial<Record<DesktopUpdaterState['status'], string>> = {
+  available: 'Update available',
+  ready: 'Restart to update',
+  misplaced: 'Move Kordi to Applications',
+  checking: 'Checking for updates…',
+  downloading: 'Downloading update…',
+  installing: 'Installing update…',
+  relaunching: 'Restarting Kordi…',
+};
+
 export function desktopUpdateButtonPresentation(state: DesktopUpdaterState) {
-  const title = state.status === 'available'
-    ? 'Update available'
-    : state.status === 'checking'
-      ? 'Checking for updates…'
-      : state.status === 'downloading'
-        ? 'Downloading update…'
-        : state.status === 'installing'
-          ? 'Installing update…'
-          : state.status === 'relaunching'
-            ? 'Relaunching Kordi…'
-            : state.status === 'failed' && state.failureStage === 'install'
-              ? 'Retry update'
-              : 'Check for updates';
+  const title = state.status === 'failed' && state.failureStage === 'install'
+    ? 'Retry update'
+    : TITLES[state.status] ?? 'Check for updates';
   return { title };
 }

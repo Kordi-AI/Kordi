@@ -8,6 +8,9 @@ This file records notable user-facing changes to Kordi for macOS and iOS.
 
 ### Added
 
+- Added automatic updates on Mac: Kordi downloads updates in the background,
+  installs them on restart or quit, and updates itself in place in
+  Applications, with an update card and Settings › Updates ([#2409]).
 - Added reference chips in Grounding topics, contact profile Interests, and the
   default-profile card for accepted contacts who have card access ([#2402]).
 - Added Grounding card builds that read the links you give, including Google
@@ -1307,3 +1310,4 @@ This release is the comparison baseline for beta.8. See the
 [#2398]: https://github.com/Kordi-AI/Kordi/pull/2398
 [#2402]: https://github.com/Kordi-AI/Kordi/pull/2402
 [#2406]: https://github.com/Kordi-AI/Kordi/pull/2406
+[#2409]: https://github.com/Kordi-AI/Kordi/pull/2409

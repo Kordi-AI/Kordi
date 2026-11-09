@@ -8,6 +8,7 @@ import type { AddContactLookupResult } from '@/pages/ChatCreateDialog';
 import { defaultCloudAuthClient } from '@/features/cloud/authClient';
 import { loadSession } from '@/features/cloud/session';
 import { hostedAccountsState } from '@/features/cloud/hostedAccounts';
+import { desktopUpdaterController } from '@/features/updates/desktopUpdater';
 import {
   checkDesktopForUpdates,
   installDesktopUpdate,
@@ -134,6 +135,7 @@ function SidebarSlot({ args, chatActions }: SidebarSlotProps) {
         onRetryUpdate: retryDesktopUpdate,
         onSubscribeToUpdate: subscribeDesktopUpdater,
         onOpenUpdateUrl: async (url) => { await openDesktopExternalUrl(url); },
+        onRevealUpdateApp: () => desktopUpdaterController.revealApp(),
       }}
       chats={{
         chatConversations: args.chatConversations,
