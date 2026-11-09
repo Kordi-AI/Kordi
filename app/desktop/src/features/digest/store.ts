@@ -117,6 +117,21 @@ export class DigestStore {
     'Could not confirm the cancellation. The event was restored. Try again.',
   ) : Promise.reject(new Error('Choose an event to cancel.'));
 
+  /**
+   * Answers "Can't make it" on the plan behind a card event, then drops the row at once. The
+   * server removes it too when it applies the answer, so a row already gone is not an error.
+   */
+  declinePlan = (event: CalendarEvent, answer: () => Promise<unknown>) => this.mutate(
+    [`event:${event.id}`], state => removedEventsState(state, [event]),
+    async signal => {
+      await answer();
+      await digestClient.removeEvent(this.accountId, event, signal).catch(error => {
+        if ((error as { status?: number } | null)?.status !== 409) throw error;
+      });
+    },
+    'Could not update the plan. The event was restored. Try again.',
+  );
+
   refresh = (force = false): Promise<DigestResponse | null> => {
     if (this.disposed || this.controller.signal.aborted) return Promise.resolve(null);
     if (this.pending) {

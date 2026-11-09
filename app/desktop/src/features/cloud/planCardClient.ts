@@ -1,5 +1,6 @@
 import type { MessagePlanCard } from '@/kordi-app/types/message';
 import { CloudAuthError, defaultCloudAuthClient } from './authClient';
+import { normalizePlanCardSnapshot } from './planCardSnapshot';
 
 export type PlanCardActionRequest =
   | { action: 'rsvp'; eventId: string; participantId: string; rsvp: 'yes' | 'no'; note?: string }
@@ -47,4 +48,16 @@ export async function planCardAction(token: string, request: PlanCardActionReque
   }
   if (!response) throw new Error('Empty response from cloud server.');
   return { ...response, unresolvedFields: response.unresolvedFields ?? [], participants: response.participants ?? [] };
+}
+
+/** Reads the live card. The server answers only for active members of the card's chat. */
+export async function fetchPlanCard(token: string, eventId: string): Promise<MessagePlanCard> {
+  const response = await defaultCloudAuthClient().request<unknown>(
+    `/v1/cloud/plan_cards/${encodeURIComponent(eventId)}`,
+    { method: 'GET', headers: { authorization: `Bearer ${token}` } },
+    'Could not load the plan.',
+  );
+  const card = normalizePlanCardSnapshot(response);
+  if (!card) throw new Error('Could not load the plan.');
+  return card;
 }

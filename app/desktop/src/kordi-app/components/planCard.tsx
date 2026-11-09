@@ -6,7 +6,7 @@ import { planCardAction, type PlanCardActionRequest } from '@/features/cloud/pla
 import { cloudAvatarImageUrl } from '@/features/cloud/avatar';
 import { cachedSessionSnapshot, loadSession } from '@/features/cloud/session';
 import type { MessagePlanCard, MessagePlanCardOption } from '@/kordi-app/types/message';
-import { planCardView } from '@/features/cloud/planCardSnapshot';
+import { compactCount, planCardAttendance, planCardCountsLabel, planCardView } from '@/features/cloud/planCardSnapshot';
 import { shouldLoadAvatarThroughNativeProxy, useRemoteAvatarImage } from './remoteAvatarImage';
 import { PlanCardChangeTimeDialog } from './planCardChangeTime';
 import { planCardReviseRequest } from './planCardRevise';
@@ -41,7 +41,7 @@ function initials(name: string): string {
  * initials when the account has none. Remote images load through the desktop
  * proxy so plan cards match every other avatar in the app.
  */
-function PlanCardAvatar({ name, avatarUrl, className }: { name: string; avatarUrl?: string | null; className?: string }) {
+export function PlanCardAvatar({ name, avatarUrl, className }: { name: string; avatarUrl?: string | null; className?: string }) {
   const imageUrl = cloudAvatarImageUrl(avatarUrl);
   const needsNativeProxy = shouldLoadAvatarThroughNativeProxy(imageUrl);
   const remoteAvatar = useRemoteAvatarImage(imageUrl, needsNativeProxy);
@@ -314,11 +314,6 @@ export function PlanCardContent({
   );
 }
 
-function compactCount(value: number): string {
-  if (value < 1000) return String(value);
-  return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k`;
-}
-
 type PeopleSection = { title: string; people: { id: string; name: string; organizer: boolean; avatarUrl?: string | null }[] };
 
 const PEOPLE_RENDER_LIMIT = 200;
@@ -386,12 +381,11 @@ function PlanCardAttendees({ participants, ownAccountId, open, onToggle }: {
   open: boolean;
   onToggle: () => void;
 }) {
-  const going = participants.filter((participant) => participant.rsvp === 'yes');
-  const declined = participants.filter((participant) => participant.rsvp === 'no');
-  const waiting = participants.filter((participant) => participant.rsvp === 'pending');
+  const attendance = planCardAttendance(participants);
+  const { going, declined, waiting } = attendance;
   const shown = [...going, ...waiting, ...declined].slice(0, 4);
   const hidden = participants.length - shown.length;
-  const counts = [`${compactCount(going.length)} going`, ...(declined.length ? [`${compactCount(declined.length)} can't`] : []), ...(waiting.length ? [`${compactCount(waiting.length)} no reply`] : [])].join(' · ');
+  const counts = planCardCountsLabel(attendance);
   const toPeople = (list: typeof participants) => list.map((participant) => ({ id: participant.participantId, name: participant.displayName, organizer: participant.organizer, avatarUrl: participant.avatarUrl }));
   return (
     <div className="app-plan-card-attendees-wrap">
