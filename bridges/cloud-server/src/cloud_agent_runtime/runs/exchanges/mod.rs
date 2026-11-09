@@ -265,7 +265,7 @@ pub(crate) async fn guidance(pool: &PgPool, run: &str) -> RunResult<Option<Strin
         return Ok(None);
     }
     Ok(Some(format!(
-        "Use reach_out to contact another agent or ask a person in this conversation. For an agent, use its exact agentId or unique @handle. For a person, set targetKind to person and use their accountId or unique @handle; their next message here, or their reply to your question, is the answer. Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Do not resend or poll. Participant agent directory: {} People you can ask: {}",
+        "Use reach_out to contact another agent or ask a person in this conversation. For an agent, use its exact agentId or unique @handle. For a person, set targetKind to person and use their accountId or unique @handle; their next message here, or their reply to your question, is the answer. Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task, which you own until it has a result. Do not resend or poll. Participant agent directory: {} People you can ask: {}",
         json!(targets),
         json!(people)
     )))
