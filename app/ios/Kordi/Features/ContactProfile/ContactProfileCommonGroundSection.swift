@@ -69,6 +69,7 @@ struct ContactProfileTopicLines: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             line("Working on", ground.workingOn)
+            line("Interests", ground.interests)
             line("Can help", ground.canHelp)
             line("Looking for", ground.lookingFor)
         }

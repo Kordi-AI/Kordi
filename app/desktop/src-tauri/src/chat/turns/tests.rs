@@ -244,3 +244,48 @@ fn a_retry_shows_the_provider_reason_until_it_ends() {
     apply_desktop_turn_event(&snapshot, &TurnEvent::AutoRetryEnd);
     assert!(snapshot.lock().unwrap().retry_reason.is_none());
 }
+
+#[tokio::test]
+async fn a_server_lease_longer_than_forty_seconds_keeps_the_turn_running() {
+    let now = super::super::now_millis();
+    let handle = super::super::DesktopChatTurnHandle {
+        snapshot: Arc::new(Mutex::new(DesktopChatTurnSnapshot {
+            id: "leased".into(),
+            session_id: "leased".into(),
+            prompt: String::new(),
+            status: "starting".into(),
+            message: String::new(),
+            assistant_text: String::new(),
+            thinking_text: String::new(),
+            segments: Vec::new(),
+            tools: vec![],
+            completed: false,
+            succeeded: false,
+            started_at_ms: now,
+            completed_at_ms: None,
+            transcript_entry_id: None,
+            error: None,
+            retry_reason: None,
+            transcript_refresh_required: false,
+            background_follow_up: None,
+        })),
+        cancel: tokio_util::sync::CancellationToken::new(),
+        execution_lease_deadline: Arc::new(Mutex::new(None)),
+    };
+    let watched = handle.clone();
+    let manager = DesktopChatManager::default();
+    manager.turns.lock().await.insert("leased".into(), handle);
+    // A slow server answered with a 120 s lease; the renderer stops 5 s early.
+    renew_execution_lease(&manager, "leased", now + 115_000)
+        .await
+        .unwrap();
+    let deadline = watched.execution_lease_deadline.lock().unwrap().unwrap();
+    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+    assert!(
+        remaining > std::time::Duration::from_secs(100),
+        "the native watchdog must not cut the server lease to 40 s"
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(!watched.cancel.is_cancelled());
+    watched.cancel.cancel();
+}

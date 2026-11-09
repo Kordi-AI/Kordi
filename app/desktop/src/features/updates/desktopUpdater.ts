@@ -1,4 +1,5 @@
 import { clientDistribution } from '../cloud/distribution';
+import { readAutoUpdatePreference } from './autoUpdatePreference';
 const BETA_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
 
 export function manualUpdateUrlForVersion(version: string | undefined) {
@@ -19,14 +20,23 @@ export type DesktopUpdaterUpdate = {
   version: string;
   body?: string;
   date?: string;
-  downloadAndInstall(listener?: (event: DesktopUpdaterDownloadEvent) => void): Promise<void>;
-  close?(): Promise<void>;
+};
+
+/** Where the running Kordi.app lives. Updates only replace a copy in Applications. */
+export type DesktopUpdaterLocation = 'applications' | 'elsewhere';
+
+export type DesktopUpdaterCheck = {
+  update: DesktopUpdaterUpdate | null;
+  location: DesktopUpdaterLocation;
 };
 
 export type DesktopUpdaterAdapter = {
-  check(): Promise<DesktopUpdaterUpdate | null>;
-  currentVersion?(): Promise<string>;
+  check(): Promise<DesktopUpdaterCheck>;
+  download(listener: (event: DesktopUpdaterDownloadEvent) => void): Promise<void>;
+  install(): Promise<void>;
   relaunch(): Promise<void>;
+  revealApp?(): Promise<void>;
+  currentVersion?(): Promise<string>;
 };
 
 export type DesktopUpdaterStatus =
@@ -35,8 +45,10 @@ export type DesktopUpdaterStatus =
   | 'up-to-date'
   | 'available'
   | 'downloading'
+  | 'ready'
   | 'installing'
   | 'relaunching'
+  | 'misplaced'
   | 'failed';
 
 export type DesktopUpdaterState = {
@@ -46,6 +58,8 @@ export type DesktopUpdaterState = {
   notes?: string;
   receivedBytes?: number;
   totalBytes?: number;
+  /** True while an automatic download runs without the user asking. */
+  background?: boolean;
   error?: string;
   manualDownloadUrl?: string;
   failureStage?: 'check' | 'install';
@@ -54,6 +68,8 @@ export type DesktopUpdaterState = {
 type DesktopUpdaterControllerOptions = {
   adapter: DesktopUpdaterAdapter;
   isTauriRuntime: () => boolean;
+  /** Whether a found update downloads on its own. */
+  autoDownload?: () => boolean;
 };
 
 function errorMessage(error: unknown) {
@@ -86,19 +102,15 @@ function stateForUpdate(
 export function createDesktopUpdaterController(options: DesktopUpdaterControllerOptions) {
   let state: DesktopUpdaterState = { status: 'idle' };
   let checkedUpdate: DesktopUpdaterUpdate | null = null;
+  let downloadedVersion: string | null = null;
   let checkPromise: Promise<DesktopUpdaterState> | null = null;
+  let downloadPromise: Promise<void> | null = null;
   let installPromise: Promise<void> | null = null;
   const listeners = new Set<(nextState: DesktopUpdaterState) => void>();
 
   const publish = (nextState: DesktopUpdaterState) => {
     state = nextState;
     for (const listener of listeners) listener(state);
-  };
-
-  const closeCheckedUpdate = async () => {
-    const previous = checkedUpdate;
-    checkedUpdate = null;
-    if (previous?.close) await previous.close();
   };
 
   const readCurrentVersion = async () => {
@@ -110,36 +122,93 @@ export function createDesktopUpdaterController(options: DesktopUpdaterController
     }
   };
 
+  const download = (background: boolean) => {
+    if (downloadPromise) return downloadPromise;
+    const update = checkedUpdate;
+    if (!update) return Promise.reject(new Error('No checked Kordi update is available.'));
+    if (downloadedVersion === update.version) {
+      publish(stateForUpdate('ready', update));
+      return Promise.resolve();
+    }
+
+    let receivedBytes = 0;
+    let totalBytes: number | undefined;
+    publish(stateForUpdate('downloading', update, { receivedBytes, background }));
+    downloadPromise = (async () => {
+      try {
+        await options.adapter.download((event) => {
+          if (event.event === 'Started') {
+            receivedBytes = 0;
+            totalBytes = event.data.contentLength;
+          } else if (event.event === 'Progress') {
+            receivedBytes += event.data.chunkLength;
+          } else {
+            return;
+          }
+          publish(stateForUpdate('downloading', update, { receivedBytes, totalBytes, background }));
+        });
+        downloadedVersion = update.version;
+        publish(stateForUpdate('ready', update, { receivedBytes, totalBytes }));
+      } catch (error) {
+        // A silent download that fails falls back to the manual offer.
+        publish(background
+          ? stateForUpdate('available', update)
+          : stateForUpdate('failed', update, {
+            receivedBytes,
+            totalBytes,
+            failureStage: 'install',
+            error: errorMessage(error),
+          }));
+        throw error;
+      } finally {
+        downloadPromise = null;
+      }
+    })();
+    return downloadPromise;
+  };
+
   const check = () => {
     if (checkPromise) return checkPromise;
     if (!options.isTauriRuntime()) {
       publish({ status: 'idle' });
       return Promise.resolve(state);
     }
-    if (installPromise) return Promise.resolve(state);
+    if (installPromise || downloadPromise) return Promise.resolve(state);
 
     const previousState = state;
-    publish({
-      status: 'checking',
-      currentVersion: previousState.currentVersion,
-    });
+    // A downloaded update keeps its card while the recheck runs.
+    if (previousState.status !== 'ready') {
+      publish({ status: 'checking', currentVersion: previousState.currentVersion });
+    }
 
     checkPromise = (async () => {
       const currentVersionPromise = readCurrentVersion();
       try {
-        await closeCheckedUpdate();
-        const update = await options.adapter.check();
+        const { update, location } = await options.adapter.check();
         if (!update) {
-          publish({
-            status: 'up-to-date',
-            currentVersion: await currentVersionPromise,
-          });
+          checkedUpdate = null;
+          downloadedVersion = null;
+          publish({ status: 'up-to-date', currentVersion: await currentVersionPromise });
           return state;
         }
         checkedUpdate = update;
+        if (downloadedVersion !== update.version) downloadedVersion = null;
+        if (location !== 'applications') {
+          publish(stateForUpdate('misplaced', update));
+          return state;
+        }
+        if (downloadedVersion) {
+          publish(stateForUpdate('ready', update));
+          return state;
+        }
         publish(stateForUpdate('available', update));
+        if (options.autoDownload?.()) void download(true).catch(() => {});
         return state;
       } catch (error) {
+        if (previousState.status === 'ready') {
+          publish(previousState);
+          return state;
+        }
         checkedUpdate = null;
         publish({
           status: 'failed',
@@ -162,48 +231,28 @@ export function createDesktopUpdaterController(options: DesktopUpdaterController
     if (installPromise) return installPromise;
     const update = checkedUpdate;
     if (!update) return Promise.reject(new Error('No checked Kordi update is available.'));
+    if (state.status === 'misplaced') {
+      return Promise.reject(new Error('Move Kordi to Applications to update it.'));
+    }
 
-    let receivedBytes = 0;
-    publish(stateForUpdate('downloading', update, { receivedBytes }));
     installPromise = (async () => {
       try {
-        await update.downloadAndInstall((event) => {
-          if (event.event === 'Started') {
-            receivedBytes = 0;
-            publish(stateForUpdate('downloading', update, {
-              receivedBytes,
-              totalBytes: event.data.contentLength,
-            }));
-          } else if (event.event === 'Progress') {
-            receivedBytes += event.data.chunkLength;
-            publish(stateForUpdate('downloading', update, {
-              receivedBytes,
-              totalBytes: state.totalBytes,
-            }));
-          } else {
-            publish(stateForUpdate('installing', update, {
-              receivedBytes,
-              totalBytes: state.totalBytes,
-            }));
-          }
-        });
-        publish(stateForUpdate('installing', update, {
-          receivedBytes,
-          totalBytes: state.totalBytes,
-        }));
-        publish(stateForUpdate('relaunching', update, {
-          receivedBytes,
-          totalBytes: state.totalBytes,
-        }));
-        await options.adapter.relaunch();
-      } catch (error) {
-        publish(stateForUpdate('failed', update, {
-          receivedBytes,
-          totalBytes: state.totalBytes,
-          failureStage: 'install',
-          error: errorMessage(error),
-        }));
-        throw error;
+        if (downloadedVersion !== update.version) await download(false);
+        publish(stateForUpdate('installing', update));
+        try {
+          await options.adapter.install();
+        } catch (error) {
+          publish(stateForUpdate('failed', update, { failureStage: 'install', error: errorMessage(error) }));
+          throw error;
+        }
+        downloadedVersion = null;
+        publish(stateForUpdate('relaunching', update));
+        try {
+          await options.adapter.relaunch();
+        } catch (error) {
+          publish(stateForUpdate('failed', update, { failureStage: 'install', error: errorMessage(error) }));
+          throw error;
+        }
       } finally {
         installPromise = null;
       }
@@ -214,6 +263,14 @@ export function createDesktopUpdaterController(options: DesktopUpdaterController
   return {
     check,
     install,
+    /** Starts a silent download when automatic updates turn on. */
+    downloadInBackground() {
+      if (state.status !== 'available' || installPromise) return Promise.resolve();
+      return download(true).catch(() => {});
+    },
+    revealApp() {
+      return options.adapter.revealApp?.() ?? Promise.resolve();
+    },
     retry() {
       if (state.status === 'failed' && state.failureStage === 'check') return check();
       return install();
@@ -224,8 +281,9 @@ export function createDesktopUpdaterController(options: DesktopUpdaterController
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    async dispose() {
-      await closeCheckedUpdate();
+    dispose() {
+      checkedUpdate = null;
+      downloadedVersion = null;
       publish({ status: 'idle' });
     },
   };
@@ -235,28 +293,24 @@ function isTauriRuntime() {
   return typeof window !== 'undefined' && typeof window.__TAURI_INTERNALS__ !== 'undefined';
 }
 
-export async function checkNativeDesktopUpdate(
-  readMetadata: () => Promise<{ platform: string; osVersion: string }>,
-  check: (options: { headers: Record<string, string> }) => Promise<DesktopUpdaterUpdate | null>,
-): Promise<DesktopUpdaterUpdate | null> {
-  const metadata = await readMetadata();
-  const parts = metadata.osVersion.split('.');
-  if (metadata.platform !== 'macos'
-    || !/^[1-9][0-9]*\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?$/.test(metadata.osVersion)
-    || parts.some((part) => Number(part) > 65535)) {
-    throw new Error('Unable to determine this Mac’s compatibility with updates.');
-  }
-  return check({ headers: { 'X-Kordi-OS-Version': metadata.osVersion } });
-}
-
 export const tauriDesktopUpdaterAdapter: DesktopUpdaterAdapter = {
   async check() {
-    const updater = await import('@tauri-apps/plugin-updater');
     const { invoke } = await import('@tauri-apps/api/core');
-    return checkNativeDesktopUpdate(
-      () => invoke('cloud_device_system_metadata'),
-      (options) => updater.check(options),
-    );
+    return invoke<DesktopUpdaterCheck>('desktop_update_check');
+  },
+  async download(listener) {
+    const { Channel, invoke } = await import('@tauri-apps/api/core');
+    const onEvent = new Channel<DesktopUpdaterDownloadEvent>();
+    onEvent.onmessage = listener;
+    await invoke('desktop_update_download', { onEvent });
+  },
+  async install() {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('desktop_update_install');
+  },
+  async revealApp() {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('desktop_update_reveal_app');
   },
   async currentVersion() {
     const app = await import('@tauri-apps/api/app');
@@ -271,4 +325,5 @@ export const tauriDesktopUpdaterAdapter: DesktopUpdaterAdapter = {
 export const desktopUpdaterController = createDesktopUpdaterController({
   adapter: tauriDesktopUpdaterAdapter,
   isTauriRuntime,
+  autoDownload: readAutoUpdatePreference,
 });

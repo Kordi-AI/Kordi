@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { helpTourSteps, helpTours } from '../src/features/onboarding/helpTourSteps';
 import { HELP_TOUR_STEP_COUNT } from '../src/features/onboarding/helpProgress';
-import { helpTourGeometry } from '../src/features/onboarding/helpTourGeometry';
+import { helpTourGeometry, helpTourRing } from '../src/features/onboarding/helpTourGeometry';
 import { helpProgressKey, readHelpProgress, saveHelpProgress, markHelpWelcome } from '../src/features/onboarding/helpProgress';
 import { normalizePermission, permissionAction } from '../src/features/onboarding/permissionAccess';
 import { consumeHelpGrounding, consumeHelpGroundingScreen, hasHelpGrounding, requestHelpGrounding } from '../src/features/onboarding/helpNavigation';
@@ -107,4 +107,22 @@ test('coachmarks sit in open space beside the target instead of across the windo
   const low = helpTourGeometry({ left: 1200, top: 760, width: 200, height: 100 }, viewport, { width: 320, height: 200 });
   assert.equal(low.side, 'left');
   assert.equal(low.left, 1200 - 16 - 320);
+});
+
+test('the tour ring stays centered on targets near the window edge', () => {
+  const viewport = { width: 1280, height: 720 };
+  const whole = { left: 0, top: 0, right: 1280, bottom: 720 };
+  const center = (ring: { left: number; top: number; width: number; height: number }) => [ring.left + ring.width / 2, ring.top + ring.height / 2];
+  // A native rail icon 4px from the window edge: the pad shrinks evenly instead of only on the left.
+  const rail = helpTourRing({ left: 4, top: 170, right: 36, bottom: 202 }, whole, viewport)!;
+  assert.deepEqual(rail, { left: 0, top: 166, width: 40, height: 40 });
+  assert.deepEqual(center(rail), [20, 186]);
+  // With room on every side the ring keeps its full 5px pad.
+  assert.deepEqual(helpTourRing({ left: 100, top: 100, right: 132, bottom: 132 }, whole, viewport), { left: 95, top: 95, width: 42, height: 42 });
+  // A clipping container close to the target trims the pad evenly too.
+  const list = { left: 60, top: 40, right: 360, bottom: 700 };
+  assert.deepEqual(center(helpTourRing({ left: 62, top: 300, right: 358, bottom: 340 }, list, viewport)!), [210, 320]);
+  // A target cut off by a scrolling list falls back to its visible part.
+  assert.deepEqual(helpTourRing({ left: 80, top: 680, right: 340, bottom: 760 }, list, viewport), { left: 75, top: 675, width: 270, height: 25 });
+  assert.equal(helpTourRing({ left: 80, top: 720, right: 340, bottom: 760 }, list, viewport), null);
 });

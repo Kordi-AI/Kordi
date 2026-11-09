@@ -81,12 +81,14 @@ struct CommonGroundTimeline: View {
     }
 }
 
-/// The evidence behind one topic, newest first; rows with a URL open it.
+/// The evidence behind one topic, newest first, as chips; tapping one opens
+/// its detail below, and a reference with a web page gets Open.
 /// Topics on the card can be hidden from others here.
 struct CommonGroundReferences: View {
     @EnvironmentObject private var model: CommonGroundModel
     let topic: String
     let profile: CommonGroundProfile?
+    @State private var openId: String?
 
     private var onCard: Bool { model.card?.topics.all.contains(topic) ?? false }
 
@@ -119,15 +121,21 @@ struct CommonGroundReferences: View {
                 CommonGroundSection {
                     if items.isEmpty {
                         CommonGroundRow(title: "No references")
-                    }
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, entry in
-                        if index > 0 { SessionDetailSeparator(leading: SessionDetailMetrics.rowHorizontalInset) }
-                        if let raw = entry.item.url, let url = URL(string: raw) {
-                            Link(destination: url) { row(entry.item, linked: true) }
-                                .buttonStyle(SessionRowButtonStyle())
-                        } else {
-                            row(entry.item, linked: false)
+                    } else {
+                        VStack(alignment: .leading, spacing: 12) {
+                            FlowLayout(spacing: 8) {
+                                ForEach(items, id: \.id) { entry in
+                                    chip(entry.item, selected: entry.id == openId) {
+                                        openId = entry.id == openId ? nil : entry.id
+                                    }
+                                }
+                            }
+                            if let open = items.first(where: { $0.id == openId }) {
+                                detail(open.item)
+                            }
                         }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -138,36 +146,72 @@ struct CommonGroundReferences: View {
         .background(Color(uiColor: .systemGroupedBackground))
     }
 
-    private func row(_ item: CommonGroundProfile.Evidence, linked: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.title)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                Text([item.source, commonGroundDisplayDate(item.date)].compactMap { $0 }.joined(separator: " · "))
+    /// A note's title is generic, so its chip shows its own words.
+    private func label(_ item: CommonGroundProfile.Evidence) -> String {
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isNote = item.source.lowercased().contains("note")
+        if !title.isEmpty, !isNote { return title }
+        let words = item.snippet.trimmingCharacters(in: .whitespacesAndNewlines)
+        return words.isEmpty ? (title.isEmpty ? item.source : title) : words
+    }
+
+    private func chip(_ item: CommonGroundProfile.Evidence, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: CommonGroundCardDetail.symbol(forSource: item.source))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if !item.snippet.isEmpty {
-                    Text(item.snippet)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
+                Text(label(item))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            .multilineTextAlignment(.leading)
-            Spacer(minLength: 0)
-            if linked {
-                Image(systemName: "arrow.up.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 4)
+            .font(.subheadline)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 11)
+            .frame(height: 32)
+            .background(Capsule().fill(Color(uiColor: .systemGroupedBackground)))
+            .overlay(
+                Capsule().strokeBorder(selected ? Color.primary : Color(uiColor: .separator), lineWidth: selected ? 1 : 0.5)
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func detail(_ item: CommonGroundProfile.Evidence) -> some View {
+        let isNote = item.source.lowercased().contains("note")
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = item.snippet.trimmingCharacters(in: .whitespacesAndNewlines)
+        let meta = [item.source, commonGroundDisplayDate(item.date)].compactMap { $0 }.joined(separator: " · ")
+        return VStack(alignment: .leading, spacing: 3) {
+            if !title.isEmpty, !isNote {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+            }
+            if !meta.isEmpty {
+                Text(meta)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if !words.isEmpty, words != title {
+                Text(words)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+            if let raw = item.url, let url = URL(string: raw), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+                Link(destination: url) {
+                    Label("Open", systemImage: "arrow.up.right")
+                        .labelStyle(.titleAndIcon)
+                        .font(.subheadline)
+                }
+                .padding(.top, 4)
             }
         }
-        .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: SessionDetailMetrics.rowMinHeight, alignment: .leading)
-        .contentShape(Rectangle())
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(uiColor: .tertiarySystemFill)))
     }
 
     private func seenLine(_ info: CommonGroundProfile.TopicInfo?) -> String? {

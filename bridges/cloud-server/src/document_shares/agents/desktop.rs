@@ -21,7 +21,7 @@ use crate::cloud_agent_runtime::runs::identity::identity_for_run;
 use crate::cloud_agent_runtime::runs::{AgentRuntimeRoute, ClaimRunRequest, RunError, RunResult};
 
 /// Seconds a desktop claim holds the run before it must renew, as for chat.
-const DESKTOP_LEASE_SECONDS: i64 = 45;
+const DESKTOP_LEASE_SECONDS: i64 = crate::cloud_agent_runtime::DESKTOP_LEASE_SECONDS;
 
 /// Error code of a run its desktop reported as failed.
 const DESKTOP_FAILED: &str = "desktop_execution_failed";

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Update card · Kordi proposal</title>
+<style>
+:root{
+  --font:-apple-system,"SF Pro Text",Inter,system-ui,sans-serif;
+  --page:#e9e9ee;--chrome-text:#1c1c1e;--chrome-muted:rgba(60,60,67,.6);--chip:rgba(120,120,128,.12);
+  --canvas:#fafafa;--rail:#f3f3f4;--ink:#1c1c1e;--muted:rgba(60,60,67,.72);--faint:rgba(60,60,67,.45);
+  --card:#fff;--card-border:rgba(0,0,0,.08);--card-shadow:0 8px 24px rgb(0 0 0 / .08),0 1px 2px rgb(0 0 0 / .04);
+  --primary:#222;--primary-ink:#fff;--track:rgba(0,0,0,.08);--danger:#9f1239;--hover:rgba(0,0,0,.05);
+  --divider:rgba(0,0,0,.08);--switch-off:rgba(120,120,128,.24);--switch-on:#222;
+}
+:root[data-theme="dark"]{
+  --page:#141416;--chrome-text:#f2f2f7;--chrome-muted:rgba(235,235,245,.6);--chip:rgba(120,120,128,.24);
+  --canvas:#1b1b1d;--rail:#161618;--ink:#f2f2f7;--muted:rgba(235,235,245,.7);--faint:rgba(235,235,245,.4);
+  --card:#262628;--card-border:rgba(255,255,255,.1);--card-shadow:0 10px 28px rgb(0 0 0 / .4);
+  --primary:#f2f2f7;--primary-ink:#1c1c1e;--track:rgba(255,255,255,.12);--danger:#fda4af;--hover:rgba(255,255,255,.07);
+  --divider:rgba(255,255,255,.1);--switch-off:rgba(120,120,128,.4);--switch-on:#f2f2f7;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#141416;--chrome-text:#f2f2f7;--chrome-muted:rgba(235,235,245,.6);--chip:rgba(120,120,128,.24);
+  --canvas:#1b1b1d;--rail:#161618;--ink:#f2f2f7;--muted:rgba(235,235,245,.7);--faint:rgba(235,235,245,.4);
+  --card:#262628;--card-border:rgba(255,255,255,.1);--card-shadow:0 10px 28px rgb(0 0 0 / .4);
+  --primary:#f2f2f7;--primary-ink:#1c1c1e;--track:rgba(255,255,255,.12);--danger:#fda4af;--hover:rgba(255,255,255,.07);
+  --divider:rgba(255,255,255,.1);--switch-off:rgba(120,120,128,.4);--switch-on:#f2f2f7;
+}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--chrome-text);font:13px/1.4 var(--font);-webkit-font-smoothing:antialiased;padding:20px 16px 48px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;max-width:1100px;margin:0 auto 18px}
+.seg{display:inline-flex;background:var(--chip);border-radius:9px;padding:2px}
+.seg button{border:0;background:transparent;color:var(--chrome-text);font:inherit;font-size:12px;padding:5px 10px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+.seg button:focus-visible{outline:none;background:var(--hover)}
+.label{font-size:12px;color:var(--chrome-muted);margin-right:2px}
+
+/* Mac window */
+.win{max-width:1100px;margin:0 auto;height:560px;border-radius:12px;overflow:hidden;display:grid;grid-template-columns:240px 1fr;background:var(--canvas);border:1px solid var(--card-border);box-shadow:0 20px 50px rgb(0 0 0 / .14);position:relative}
+.rail{background:var(--rail);border-right:1px solid var(--divider);position:relative;padding:44px 10px 10px}
+.lights{position:absolute;top:14px;left:14px;display:flex;gap:8px}
+.lights i{width:12px;height:12px;border-radius:50%;background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+.row{height:28px;border-radius:7px;margin:2px 0;background:var(--hover);opacity:.6}
+.row.s{width:70%}.row.m{width:85%}
+.corner{position:absolute;left:12px;bottom:12px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.help{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--faint);color:var(--faint);display:grid;place-items:center;font-size:12px;font-weight:600}
+.avatar{width:22px;height:28px;border-radius:5px;background:linear-gradient(160deg,#9aa6bb,#5f6b80)}
+.main{padding:24px}
+#card{display:contents}
+
+/* The card: MacAppPrompt layout (w-60, rounded-xl, border, p-4) */
+.card{position:absolute;left:58px;bottom:14px;width:240px;border-radius:12px;border:1px solid var(--card-border);background:var(--card);box-shadow:var(--card-shadow);padding:16px;color:var(--ink);text-align:left}
+.card .t{font-size:13px;font-weight:600;margin:0}
+.card .c{font-size:12px;line-height:20px;margin:8px 0;color:var(--ink)}
+.card .c.danger{color:var(--danger)}
+.actions{display:flex;align-items:center;gap:12px}
+.primary{border:0;border-radius:8px;padding:8px 12px;font:inherit;font-size:12px;background:var(--primary);color:var(--primary-ink);cursor:pointer}
+.text{border:0;background:transparent;padding:0;font:inherit;font-size:12px;color:var(--ink);cursor:pointer}
+.primary:focus-visible,.text:focus-visible{outline:none;opacity:.8}
+.progress{height:4px;border-radius:999px;background:var(--track);overflow:hidden;margin-top:12px}
+.progress i{display:block;height:100%;width:38%;border-radius:999px;background:var(--primary)}
+.meta{font-size:11px;color:var(--muted);margin-top:6px;font-variant-numeric:tabular-nums}
+
+/* Settings mock */
+.settings{display:grid;grid-template-columns:200px 1fr;height:100%;margin:-24px}
+.snav{border-right:1px solid var(--divider);padding:20px 10px}
+.snav .g{font-size:11px;color:var(--muted);margin:10px 8px 4px}
+.snav .i{font-size:12px;padding:6px 8px;border-radius:6px;color:var(--ink)}
+.snav .i.on{background:var(--hover);font-weight:500}
+.spane{padding:28px 32px;max-width:560px}
+.spane h2{font-size:15px;font-weight:600;margin:0 0 16px;color:var(--ink)}
+.srow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid var(--divider);font-size:13px;color:var(--ink)}
+.srow:last-child{border-bottom:1px solid var(--divider)}
+.srow .v{color:var(--muted);font-variant-numeric:tabular-nums}
+.sw{width:32px;height:20px;border-radius:999px;background:var(--switch-on);position:relative;border:0;cursor:pointer;padding:0}
+.sw::after{content:"";position:absolute;top:2px;left:14px;width:16px;height:16px;border-radius:50%;background:var(--card);transition:left .15s}
+.sw[aria-checked="false"]{background:var(--switch-off)}
+.sw[aria-checked="false"]::after{left:2px}
+.sbtn{border:1px solid var(--divider);background:transparent;color:var(--ink);font:inherit;font-size:12px;border-radius:8px;padding:6px 10px;cursor:pointer}
+.sbtn:hover{background:var(--hover)}
+
+.notes{max-width:1100px;margin:16px auto 0;font-size:12px;color:var(--chrome-muted);line-height:1.6}
+.notes b{color:var(--chrome-text);font-weight:600}
+@media (max-width:700px){.win{grid-template-columns:72px 1fr}.row{display:none}.settings{grid-template-columns:1fr}.snav{display:none}}
+</style>
+</head>
+<body>
+<div class="bar">
+  <span class="label">State</span>
+  <div class="seg" id="state"></div>
+</div>
+<div class="bar">
+  <span class="label">Theme</span>
+  <div class="seg" id="theme"></div>
+</div>
+
+<div class="win">
+  <div class="rail">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="row m"></div><div class="row s"></div><div class="row m"></div><div class="row s"></div><div class="row m"></div>
+    <div class="corner"><div class="help">?</div><div class="avatar"></div></div>
+  </div>
+  <div class="main" id="main"></div>
+  <div id="card"></div>
+</div>
+<div class="notes" id="notes"></div>
+
+<script>
+const V = '0.0.2-beta.8', CUR = '0.0.2-beta.7';
+const STATES = {
+  ready: {
+    label: 'Ready (auto)',
+    note: '<b>Default with automatic updates on.</b> The update downloaded in the background. The card appears once, at the help corner. "Not now" hides it, and the update installs the next time Kordi quits.',
+    card: `<p class="t">Kordi ${V}</p><p class="c">Restart to finish updating.</p>
+      <div class="actions"><button class="primary">Restart to update</button><button class="text">Not now</button></div>`,
+  },
+  available: {
+    label: 'Available (manual)',
+    note: '<b>Automatic updates off.</b> Same card; the primary action downloads first.',
+    card: `<p class="t">Kordi ${V}</p><p class="c">A new version is available.</p>
+      <div class="actions"><button class="primary">Update now</button><button class="text">Not now</button></div>`,
+  },
+  downloading: {
+    label: 'Downloading',
+    note: '<b>Only seen after a manual "Update now" or "Check for updates".</b> Automatic downloads stay silent. No buttons while it runs.',
+    card: `<p class="t">Updating Kordi</p><div class="progress"><i></i></div><div class="meta">18.2 of 48.0 MB</div>`,
+  },
+  restarting: {
+    label: 'Restarting',
+    note: 'The installed app was replaced in place. Kordi reopens from the same path.',
+    card: `<p class="t">Restarting Kordi</p><p class="c" style="margin-bottom:0">Kordi reopens in a moment.</p>`,
+  },
+  checking: {
+    label: 'Checking',
+    note: 'From "Check for updates" in the account menu.',
+    card: `<p class="t">Checking for updates</p><div class="progress"><i style="width:30%;animation:slide 1.1s ease-in-out infinite"></i></div>`,
+  },
+  current: {
+    label: 'Up to date',
+    note: 'From "Check for updates" when nothing is new.',
+    card: `<p class="t">Kordi is up to date</p><p class="c">Version ${CUR}</p>
+      <div class="actions"><button class="text">Close</button></div>`,
+  },
+  failed: {
+    label: 'Failed',
+    note: 'Download or install failed. The current app is untouched.',
+    card: `<p class="t">Couldn’t update Kordi</p><p class="c">Your current version still works.</p>
+      <div class="actions"><button class="primary">Try again</button><button class="text">Download manually</button></div>`,
+  },
+  move: {
+    label: 'Not in Applications',
+    note: '<b>Guard against a second copy.</b> Kordi is running from the disk image, Downloads, or a temporary macOS path. Nothing downloads; "Show in Finder" reveals the running app so it can be dragged into Applications, replacing the old one.',
+    card: `<p class="t">Move Kordi to Applications</p><p class="c">Kordi can only update itself from there.</p>
+      <div class="actions"><button class="primary">Show in Finder</button><button class="text">Not now</button></div>`,
+  },
+  settings: {
+    label: 'Settings',
+    note: '<b>New Updates section</b> under Settings, Mac only. The toggle is on by default.',
+    card: '',
+    main: `<div class="settings">
+      <div class="snav">
+        <div class="g">Account</div><div class="i">Profile</div><div class="i">Active sessions</div>
+        <div class="g">Settings</div><div class="i">Authentication</div><div class="i">Notifications</div><div class="i">Privacy</div><div class="i">Usage</div><div class="i">Appearance</div><div class="i on">Updates</div>
+      </div>
+      <div class="spane">
+        <h2>Updates</h2>
+        <div class="srow"><span>Version</span><span class="v">${CUR}</span></div>
+        <div class="srow"><span>Automatic updates</span><button class="sw" role="switch" aria-checked="true" aria-label="Automatic updates"></button></div>
+        <div class="srow"><span>Check for updates</span><button class="sbtn">Check now</button></div>
+      </div>
+    </div>`,
+  },
+};
+const style = document.createElement('style');
+style.textContent='@keyframes slide{0%{margin-left:-30%}100%{margin-left:100%}}';
+document.head.appendChild(style);
+
+const params = new URLSearchParams(location.search);
+let state = STATES[params.get('state')] ? params.get('state') : 'ready';
+let theme = ['light','dark'].includes(params.get('theme')) ? params.get('theme') : 'light';
+
+function seg(el, options, current, onPick){
+  el.innerHTML = options.map(([k,l]) => `<button aria-pressed="${k===current}" data-k="${k}">${l}</button>`).join('');
+  el.onclick = (e) => { const k = e.target.dataset.k; if (k) onPick(k); };
+}
+function render(){
+  document.documentElement.dataset.theme = theme;
+  seg(document.getElementById('state'), Object.entries(STATES).map(([k,s]) => [k,s.label]), state, k => {state=k;render();});
+  seg(document.getElementById('theme'), [['light','Light'],['dark','Dark']], theme, k => {theme=k;render();});
+  const s = STATES[state];
+  document.getElementById('main').innerHTML = s.main || '';
+  document.getElementById('card').innerHTML = s.card ? `<aside class="card" aria-label="Kordi update">${s.card}</aside>` : '';
+  document.getElementById('notes').innerHTML = s.note;
+  const sw = document.querySelector('.sw');
+  if (sw) sw.onclick = () => sw.setAttribute('aria-checked', sw.getAttribute('aria-checked') !== 'true');
+  history.replaceState(null, '', `?state=${state}&theme=${theme}`);
+}
+render();
+</script>
+</body>
+</html>

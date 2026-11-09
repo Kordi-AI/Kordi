@@ -33,7 +33,7 @@ export function commonGroundBuildRequest(choices: CgBuildChoices): CgBuildReques
     links: choices.links,
     notes: choices.notes,
   };
-  if (choices.useAgents && choices.agentFiles?.length) request.agents = choices.agentFiles;
+  if (choices.useAgents && choices.agentFiles?.length) request.agents = choices.agentFiles.map(({ label, text }) => ({ label, text }));
   if (choices.picks) {
     request.connectorProviders = choices.connectors;
     request.documents = choices.documents ?? [];
@@ -51,7 +51,7 @@ export function canBuildProfile(choices: CgBuildChoices): boolean {
 /** "AGENTS.md, CLAUDE.md +3", from the file names. */
 export function agentFilesSummary(files: CgAgentFile[] | null): string {
   if (files === null) return 'Reading…';
-  const names = files.map((file) => file.label.split('/').pop() ?? file.label);
+  const names = files.map((file) => (file.path ?? file.label).split('/').pop() ?? file.label);
   if (!names.length) return 'No agent files found';
   const head = names.slice(0, 2).join(', ');
   return names.length > 2 ? `${head} +${names.length - 2}` : head;
@@ -76,9 +76,25 @@ export function emptySourcesMessage(request: CgBuildRequest): string {
 
 /** A build that found nothing for the profile cannot succeed again with the same sources. */
 export function buildFailureMessage(errorCode: string | null) {
-  return errorCode === 'no_topics'
-    ? 'Nothing here fits this profile. Add a note or choose other sources.'
-    : 'Could not build your card. Try again.';
+  switch (errorCode) {
+    case 'no_topics': return 'Nothing here fits this profile. Add a note or choose other sources.';
+    case 'build_timed_out': return 'Building took too long. Try again.';
+    default: return 'Could not build your card. Try again.';
+  }
+}
+
+/** The start request got no answer and the card shows no build: it did not start. */
+export const BUILD_NOT_STARTED = 'Could not start building. Try again.';
+
+/** "Couldn't read scholar.google.com", for a link the last build could not read. */
+export function unreadLinkLine(url: string): string {
+  let host = url;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    // Keep the link as given.
+  }
+  return `Couldn't read ${host}`;
 }
 
 /** The hint in the build screen's notes box: what this profile keeps. Work when there is no profile, as the server builds. */

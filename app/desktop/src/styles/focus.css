@@ -61,20 +61,12 @@
   box-shadow: inset 0 0 0 100vmax var(--app-focus-fill);
 }
 
-/* Focusable regions (scroll areas, code blocks, live status) show the neutral
- * border inside their edge instead of a fill. */
-:root :is(
-  [tabindex]:not([role]),
-  [role='region'],
-  [role='status'],
-  [role='separator'],
-  [role='tabpanel'],
-  [role='listbox'],
-  [role='grid'],
-  [role='log']
-):focus-visible:not([tabindex^='-'], button, a, input, textarea, select, summary, [contenteditable]) {
-  box-shadow: inset 0 0 0 1px var(--app-focus-border);
-}
+/* Focusable regions (scroll areas, panes, code and copy surfaces, tables, live
+ * status, panels) draw no focus look at all. A click focuses them, and WebKit
+ * also matches :focus-visible for a script focus from a pointer handler (the
+ * transcript) and after a key press, so a border here showed as a gray frame
+ * around the whole pane on every click. Separators keep their own
+ * :focus-visible fill (digest.css, shell-companion.css). */
 
 /* Ink-filled primary buttons tint with their own text color instead. */
 :root .app-button-primary:focus-visible:not(:disabled, .app-dense-menu *, .app-group-invitation-dialog:not([data-keyboard-nav]) *, .app-cloud-browser-signin:not([data-keyboard-focus]) *) {

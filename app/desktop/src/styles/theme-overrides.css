@@ -83,124 +83,37 @@
   box-shadow: var(--app-transient-shadow) !important;
 }
 
-/* Update feedback keeps status-specific accents inside the shared shell. */
-.kordi-app .app-popover.app-update-popover {
-  --app-update-surface: var(--app-transient-surface-bg);
-  --app-update-edge: var(--app-transient-border);
-  --app-update-shadow: var(--app-transient-shadow);
-  --app-update-active: rgb(147 197 253);
-  --app-update-active-soft: rgba(96, 165, 250, 0.1);
-  --app-update-success: rgb(110 231 183);
-  --app-update-success-soft: rgba(52, 211, 153, 0.1);
-  --app-update-danger: var(--app-error-text);
-  --app-update-danger-soft: rgba(244, 63, 94, 0.1);
-  --app-update-progress-track: rgba(255, 255, 255, 0.07);
-  --app-update-action-bg: rgba(255, 255, 255, 0.1);
-  --app-update-action-hover: rgba(255, 255, 255, 0.15);
-  --app-update-action-text: rgba(255, 255, 255, 0.9);
-  --app-update-focus: var(--app-focus-border);
-  background: var(--app-update-surface) !important;
-  border: 1px solid var(--app-update-edge) !important;
-  box-shadow: var(--app-update-shadow) !important;
+/* The update card shares the Kordi for Mac prompt layout; only the progress
+ * bar and the plain text action need their own colors. */
+.app-update-card-track {
+  background: color-mix(in oklab, var(--app-transient-text) 10%, transparent);
 }
 
-.kordi-app.theme-light .app-popover.app-update-popover {
-  --app-update-surface: var(--app-transient-surface-bg);
-  --app-update-edge: var(--app-transient-border);
-  --app-update-shadow: var(--app-transient-shadow);
-  --app-update-active: rgb(37 99 235);
-  --app-update-active-soft: rgba(37, 99, 235, 0.085);
-  --app-update-success: rgb(4 120 87);
-  --app-update-success-soft: rgba(5, 150, 105, 0.085);
-  --app-update-danger-soft: rgba(225, 29, 72, 0.08);
-  --app-update-progress-track: rgba(15, 23, 42, 0.09);
-  --app-update-action-bg: var(--app-transient-text);
-  --app-update-action-hover: color-mix(in oklab, var(--app-transient-text) 88%, var(--app-transient-surface-fallback));
-  --app-update-action-text: var(--app-transient-surface-fallback);
-  --app-update-focus: var(--app-focus-border);
+.app-update-card-fill {
+  background: var(--app-transient-text);
+  transition: width 160ms ease-out;
 }
 
-.app-update-popover-title {
-  color: var(--utility-foreground);
+.app-update-card-fill[data-indeterminate='true'] {
+  width: 30%;
+  animation: app-update-card-slide 1.1s ease-in-out infinite;
 }
 
-.app-update-popover-copy,
-.app-update-popover-meta {
-  color: var(--utility-muted-text);
+@keyframes app-update-card-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
 }
 
-.app-update-popover-tail {
-  position: absolute;
-  bottom: 0.875rem;
-  left: -0.4rem;
-  width: 0.75rem;
-  height: 0.75rem;
-  border-bottom: 1px solid var(--app-update-edge);
-  border-left: 1px solid var(--app-update-edge);
-  background: var(--app-update-surface);
-  transform: rotate(45deg);
+@media (prefers-reduced-motion: reduce) {
+  .app-update-card-fill[data-indeterminate='true'] {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
+  }
 }
 
-.app-update-popover-symbol {
-  background: var(--app-update-active-soft);
-  color: var(--app-update-active);
-}
-
-.app-update-popover-symbol-success {
-  background: var(--app-update-success-soft);
-  color: var(--app-update-success);
-}
-
-.app-update-popover-symbol-danger {
-  background: var(--app-update-danger-soft);
-  color: var(--app-update-danger);
-}
-
-.app-update-popover-status {
-  color: var(--app-update-active);
-}
-
-.app-update-popover-status-danger {
-  color: var(--app-error-text);
-}
-
-.app-update-popover-progress {
-  background: var(--app-update-progress-track);
-}
-
-.app-update-popover-progress-value {
-  background: var(--app-update-active);
-}
-
-.app-update-popover-success-dot {
-  background: var(--app-update-success);
-}
-
-.app-update-popover-action-secondary {
-  color: var(--utility-muted-text);
-}
-
-.app-update-popover-action-secondary:hover {
-  background: var(--app-control-hover);
-  color: var(--utility-foreground);
-}
-
-.app-update-popover-action-primary {
-  background: var(--app-update-action-bg);
-  color: var(--app-update-action-text);
-}
-
-.app-update-popover-action-primary:hover:not(:disabled) {
-  background: var(--app-update-action-hover);
-}
-
-.app-update-popover-close {
-  color: var(--utility-meta-text);
-}
-
-.app-update-popover-close:hover {
-  background: var(--app-control-hover);
-  color: var(--utility-foreground);
+.app-update-card-meta {
+  color: var(--app-transient-muted-text);
 }
 
 /* Avatar-anchored profile menus keep their placement animation while sharing

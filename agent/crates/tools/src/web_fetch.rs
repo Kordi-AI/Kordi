@@ -1,5 +1,6 @@
 mod html;
 mod output;
+mod public_page;
 
 use async_trait::async_trait;
 use kordi_core::error::{KordiError, KordiResult};
@@ -18,6 +19,7 @@ use crate::{Tool, ToolContext, ToolResult};
 
 pub(crate) use html::{extract_main_content_text, extract_title};
 pub(crate) use output::{build_citation_markdown, build_web_fetch_output, truncate_for_output};
+pub use public_page::{PublicPage, fetch_public_page, page_text};
 
 const DEFAULT_MAX_CHARS: usize = 20_000;
 const MAX_MAX_CHARS: usize = 100_000;

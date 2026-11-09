@@ -124,3 +124,85 @@ test('a refused admission or an unreachable server past the deadline still fails
     await pending;
   } finally { refused.dispose(); unreachable.dispose(); mock.timers.reset(); }
 });
+
+test('a timed-out claim is sent again with the same claim id', async () => {
+  const identity = { requestId: 'request', agentId: 'agent', ownerAccountId: 'owner', requesterAccountId: 'owner', agentName: 'Kordi' };
+  const claims: Record<string, unknown>[] = [];
+  const client = {
+    desktopAgentExecution: async (_token: string, action: string, body: Record<string, unknown>) => {
+      assert.equal(action, 'claim');
+      claims.push(body);
+      if (claims.length === 1) throw new CloudAuthError('network_error', 'Cloud request timed out. Check your connection and try again.', 0);
+      return { acquired: true, runId: 'run', turnIdentity: identity };
+    },
+  } as unknown as Pick<CloudAuthClient, 'desktopAgentExecution'>;
+  const input = { requestMessageId: 'request', sessionId: 'session', ownerAccountId: 'owner', requesterAccountId: 'owner', prompt: 'hello', idempotencyKey: 'request' };
+  const lease = await acquireDesktopExecutionLease(client, 'fixture-token', input, { claimRetryMs: 0 });
+  assert.ok(lease);
+  try {
+    assert.equal(claims.length, 2);
+    // The server answers a resent claim with the lease the first one took.
+    assert.equal(claims[1]?.claimId, claims[0]?.claimId);
+    assert.equal(lease.claimId, claims[0]?.claimId);
+  } finally { lease.dispose(); }
+});
+
+test('a refused claim is not sent again and a slow server is retried through the Mac-first window', async () => {
+  const input = { requestMessageId: 'request', sessionId: 'session', ownerAccountId: 'owner', requesterAccountId: 'owner', prompt: 'hello', idempotencyKey: 'request' };
+  let refusedCalls = 0;
+  const refused = { desktopAgentExecution: async () => { refusedCalls += 1; throw new CloudAuthError('desktop_execution_denied', 'Denied', 403); } } as unknown as Pick<CloudAuthClient, 'desktopAgentExecution'>;
+  await assert.rejects(acquireDesktopExecutionLease(refused, 'fixture-token', input, { claimRetryMs: 0 }), /Denied/);
+  assert.equal(refusedCalls, 1);
+  let slowCalls = 0;
+  const slow = { desktopAgentExecution: async () => { slowCalls += 1; throw new CloudAuthError('network_error', 'Cloud request timed out. Check your connection and try again.', 0); } } as unknown as Pick<CloudAuthClient, 'desktopAgentExecution'>;
+  const started = Date.now();
+  await assert.rejects(acquireDesktopExecutionLease(slow, 'fixture-token', input, { claimRetryMs: 1, claimRetryWindowMs: 60 }), /timed out/);
+  // Several attempts, and it stops at the end of the window.
+  assert.ok(slowCalls >= 3, `expected several claims, got ${slowCalls}`);
+  assert.ok(Date.now() - started < 1_000);
+});
+
+async function leaseFromServer(claimLeaseSeconds: number | undefined, renew: (options: { timeoutMs?: number } | undefined) => Promise<unknown>) {
+  const identity = { requestId: 'request', agentId: 'agent', ownerAccountId: 'owner', requesterAccountId: 'owner', agentName: 'Kordi' };
+  const client = {
+    desktopAgentExecution: async (_token: string, action: string, _body: unknown, options?: { timeoutMs?: number }) => (action === 'claim'
+      ? { acquired: true, runId: 'run', turnIdentity: identity, ...(claimLeaseSeconds === undefined ? {} : { leaseSeconds: claimLeaseSeconds }) }
+      : renew(options)),
+  } as unknown as Pick<CloudAuthClient, 'desktopAgentExecution'>;
+  const input = { requestMessageId: 'request', sessionId: 'session', ownerAccountId: 'owner', requesterAccountId: 'owner', prompt: 'Fill the form', idempotencyKey: 'request' };
+  const lease = await acquireDesktopExecutionLease(client, 'fixture-token', input);
+  assert.ok(lease);
+  return lease;
+}
+
+test('the server lease length bounds how long a slow server can go unanswered', async () => {
+  mock.timers.enable({ apis: ['setInterval', 'Date'], now: 1_000_000 });
+  // A slow server: every renewal times out, as on 2026-11-08 when queries took 15-28 s.
+  const unreachable = async () => { throw new CloudAuthError('network_error', 'Cloud request timed out. Check your connection and try again.', 0); };
+  const long = await leaseFromServer(120, unreachable);
+  const legacy = await leaseFromServer(undefined, unreachable);
+  try {
+    await advance(60_000);
+    assert.equal(legacy.lost, true, 'a server that names no lease keeps the 40 s window');
+    assert.equal(long.lost, false, 'a 120 s server lease survives a minute of timed-out renewals');
+    await advance(60_000);
+    assert.equal(long.lost, true, 'the Mac still stops before the server lease lapses');
+  } finally { long.dispose(); legacy.dispose(); mock.timers.reset(); }
+});
+
+test('a renewal waits for a slow answer and adopts the renewed lease length', async () => {
+  mock.timers.enable({ apis: ['setInterval', 'Date'], now: 1_000_000 });
+  const timeouts: (number | undefined)[] = [];
+  const lease = await leaseFromServer(undefined, async (options) => {
+    timeouts.push(options?.timeoutMs);
+    return { ok: true, cancelRequested: false, leaseSeconds: 120 };
+  });
+  try {
+    await advance(6_000);
+    // Longer than the 15 s default request timeout, and never past the deadline.
+    assert.ok((timeouts[0] ?? 0) > 15_000 && (timeouts[0] ?? 0) <= 35_000, String(timeouts[0]));
+    // The renewal named a 120 s lease, so the deadline moves past the 40 s default.
+    assert.equal(lease.lost, false);
+    assert.ok(lease.deadline - Date.now() > 100_000);
+  } finally { lease.dispose(); mock.timers.reset(); }
+});

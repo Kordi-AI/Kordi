@@ -86,12 +86,13 @@ struct CloudContactProfile: Decodable, Hashable {
 
     struct CommonGround: Decodable, Hashable {
         var workingOn: [String] = []
+        var interests: [String] = []
         var canHelp: [String] = []
         var lookingFor: [String] = []
         /// The Grounding match with this person; nil when there is none or the server predates it.
         var match: Match? = nil
 
-        var hasTopics: Bool { !(workingOn.isEmpty && canHelp.isEmpty && lookingFor.isEmpty) }
+        var hasTopics: Bool { !(workingOn.isEmpty && interests.isEmpty && canHelp.isEmpty && lookingFor.isEmpty) }
         var isEmpty: Bool { !hasTopics && match == nil }
     }
 
@@ -195,11 +196,12 @@ private struct FailableGroup: Decodable {
 }
 
 extension CloudContactProfile.CommonGround {
-    private enum CodingKeys: String, CodingKey { case workingOn, canHelp, lookingFor, match }
+    private enum CodingKeys: String, CodingKey { case workingOn, interests, canHelp, lookingFor, match }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         workingOn = (try? c.decodeIfPresent([String].self, forKey: .workingOn)) ?? []
+        interests = (try? c.decodeIfPresent([String].self, forKey: .interests)) ?? []
         canHelp = (try? c.decodeIfPresent([String].self, forKey: .canHelp)) ?? []
         lookingFor = (try? c.decodeIfPresent([String].self, forKey: .lookingFor)) ?? []
         // A malformed match drops only itself.
