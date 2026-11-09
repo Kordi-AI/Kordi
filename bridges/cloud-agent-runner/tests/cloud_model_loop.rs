@@ -24,6 +24,7 @@ struct RecordingClient {
     exports: Arc<Mutex<Vec<ArtifactExportInput>>>,
     spawns: Mutex<Vec<Value>>,
     calendar: Option<Value>,
+    calendar_arguments: Mutex<Vec<Value>>,
 }
 
 #[async_trait]
@@ -78,6 +79,7 @@ impl CloudAgentRunClient for RecordingClient {
     ) -> Result<Value, RunnerClientError> {
         assert_eq!(run_id, run().run_id);
         if tool == "read_calendar" {
+            self.calendar_arguments.lock().unwrap().push(arguments);
             return self
                 .calendar
                 .clone()

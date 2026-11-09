@@ -276,14 +276,18 @@ pub(crate) async fn execute_model_tool<C: CloudAgentRunClient + Sync>(
             )
             .into());
         }
+        // In a shared conversation the server returns busy windows only unless the
+        // owner explicitly asked to share event details.
+        let mut arguments = call.arguments.clone();
         if (run.session_id.starts_with("session:group:")
             || run.session_id.starts_with("session:direct-person:"))
-            && call.arguments["shareInConversation"] != true
+            && arguments["shareInConversation"] != true
+            && arguments.is_object()
         {
-            return Err(format!("Calendar disclosure requires the owner's explicit request in this conversation. {}", kordi_tools::calendar::CALENDAR_UNAVAILABLE).into());
+            arguments["disclosure"] = "availability".into();
         }
         return match client
-            .read_context(&run.run_id, &call.name, call.arguments.clone())
+            .read_context(&run.run_id, &call.name, arguments)
             .await
         {
             Ok(value) => Ok(value.to_string().into()),
