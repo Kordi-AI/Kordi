@@ -109,7 +109,9 @@ export function collaborationPendingAgentReplyState(
   const pendingRequestId = awaitingReply && normalizeDeliveryState(latestRequest?.deliveryState) !== 'sending'
     ? latestRequest?.clientMessageId?.trim() === requestId ? latestRequest?.id.trim() || requestId : requestId
     : null;
-  const activeAgentReplyMessage = awaitingReply
+  // An active outreach keeps its reply row even while a later plain message is
+  // sending, so the fallback live row never duplicates it.
+  const activeAgentReplyMessage = awaitingReply || outreachRequestId
     ? [...conversation.messages].reverse().find((message) => (
         isCollaborationAgentResponseDirection(message)
         && normalizeDeliveryState(message.deliveryState) === 'processing'
