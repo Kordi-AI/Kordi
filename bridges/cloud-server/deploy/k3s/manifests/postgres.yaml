@@ -32,6 +32,15 @@ spec:
         - name: postgres
           image: postgres:16-alpine
           imagePullPolicy: IfNotPresent
+          # Size the buffer cache to the container limit below. The image
+          # default (128MB shared_buffers) left most of the memory unused.
+          args:
+            - "-c"
+            - "shared_buffers=1GB"
+            - "-c"
+            - "effective_cache_size=3GB"
+            - "-c"
+            - "maintenance_work_mem=128MB"
           ports:
             - name: postgres
               containerPort: 5432
@@ -65,13 +74,22 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            # Parallel queries use POSIX shared memory; the container
+            # default /dev/shm is only 64Mi.
+            - name: dshm
+              mountPath: /dev/shm
           resources:
             requests:
-              cpu: "100m"
-              memory: "256Mi"
-            limits:
-              cpu: "1"
+              cpu: "250m"
               memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
   volumeClaimTemplates:
     - metadata:
         name: data
