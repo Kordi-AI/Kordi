@@ -1,17 +1,19 @@
-import { Ban, Bell, Brain, Gauge, KeyRound, Laptop, Palette, Plug, Shield, User } from 'lucide-react';
+import { Ban, Bell, Brain, Gauge, KeyRound, Laptop, Palette, Plug, RefreshCw, Shield, User } from 'lucide-react';
 
 import type { SettingsNavGroup } from '@/kordi-app/components';
 
-export type CloudAccountSettingsTabId = 'profile' | 'devices' | 'blocked' | 'auth' | 'notifications' | 'privacy' | 'connectors' | 'memory' | 'usage' | 'appearance';
+export type CloudAccountSettingsTabId = 'profile' | 'devices' | 'blocked' | 'auth' | 'notifications' | 'privacy' | 'connectors' | 'memory' | 'usage' | 'appearance' | 'updates';
 
 export function cloudAccountSettingsNavGroups({
   connectorsAvailable,
   memoryAvailable = false,
   blockedAvailable = false,
+  updatesAvailable = false,
 }: {
   connectorsAvailable: boolean;
   memoryAvailable?: boolean;
   blockedAvailable?: boolean;
+  updatesAvailable?: boolean;
 }): Array<SettingsNavGroup<CloudAccountSettingsTabId>> {
   return [
     {
@@ -36,6 +38,9 @@ export function cloudAccountSettingsNavGroups({
           : []),
         { id: 'usage', label: 'Usage', icon: Gauge, keywords: ['limits', 'runs', 'spend', 'quota', 'system agent', 'grounding'] },
         { id: 'appearance', label: 'Appearance', icon: Palette, keywords: ['theme', 'dark', 'light', 'chat', 'threads', 'message layout'] },
+        ...(updatesAvailable
+          ? [{ id: 'updates' as const, label: 'Updates', icon: RefreshCw, keywords: ['version', 'automatic', 'install', 'restart'] }]
+          : []),
       ],
     },
   ];
