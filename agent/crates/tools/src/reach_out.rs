@@ -21,7 +21,7 @@ fn default_context_policy() -> String {
 pub struct ReachOutInput {
     /// Bridge person/agent display name, owner name, node id, human id, or agent id.
     pub target: String,
-    /// Optional target kind: bridge-agent or bridge-person.
+    /// Optional target kind: agent or person (bridge-agent and bridge-person are aliases).
     pub target_kind: Option<String>,
     /// The question or request to send.
     pub message: String,
@@ -49,12 +49,13 @@ impl Tool for ReachOutTool {
     }
 
     fn description(&self) -> &str {
-        "Send an explicit request to another agent in the current conversation. Use an exact agent ID or unique @handle from the participant directory. A successful request is durable and returns a receipt. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Never resend or poll while waiting."
+        "Send an explicit request to another agent, or ask a person, in the current conversation. Use an exact agent ID, person account ID, or unique @handle from the participant directory, and set targetKind to person when asking a person. A person's next message in the conversation, or their reply to the question, is the answer. A successful request is durable and returns a receipt. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Never resend or poll while waiting."
     }
 
     fn parameters_schema(&self) -> Value {
         json!({"type":"object","properties":{
-            "target":{"type":"string","description":"Exact agent ID or unique @handle from this conversation's directory."},
+            "target":{"type":"string","description":"Exact agent ID, person account ID, or unique @handle from this conversation's directory."},
+            "targetKind":{"type":"string","enum":["agent","person"],"description":"Whether the target is an agent or a person in this conversation. Defaults to whichever one the target names."},
             "message":{"type":"string","description":"The explicit request to share with all conversation members. Never include private files, credentials, or hidden context."}
         },"required":["target","message"],"additionalProperties":false})
     }
@@ -83,10 +84,7 @@ impl Tool for ReachOutTool {
         let request = ReachOutRequest {
             tool_call_id: ctx.invocation_id.clone(),
             target: input.target.trim().to_string(),
-            target_kind: input
-                .target_kind
-                .as_ref()
-                .map(|value| value.trim().to_ascii_lowercase()),
+            target_kind: input.target_kind.as_deref().and_then(normalize_target_kind),
             message: input.message.trim().to_string(),
             context,
             context_policy: normalize_context_policy(&input.context_policy)?,
@@ -161,15 +159,24 @@ fn validate_input(input: &ReachOutInput) -> KordiResult<()> {
         ));
     }
     let _ = normalize_context_policy(&input.context_policy)?;
-    if let Some(kind) = input.target_kind.as_deref() {
-        let normalized = kind.trim().to_ascii_lowercase();
-        if normalized != "bridge-agent" && normalized != "bridge-person" {
-            return Err(KordiError::Tool(
-                "reach_out targetKind must be bridge-agent or bridge-person".to_string(),
-            ));
-        }
+    if let Some(kind) = input.target_kind.as_deref()
+        && !kind.trim().is_empty()
+        && normalize_target_kind(kind).is_none()
+    {
+        return Err(KordiError::Tool(
+            "reach_out targetKind must be agent or person".to_string(),
+        ));
     }
     Ok(())
+}
+
+/// The runtime kind for a requested target kind: `agent` or `person`.
+pub fn normalize_target_kind(value: &str) -> Option<String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "agent" | "bridge-agent" => Some("agent".to_string()),
+        "person" | "bridge-person" => Some("person".to_string()),
+        _ => None,
+    }
 }
 
 fn normalize_context_policy(value: &str) -> KordiResult<String> {
@@ -253,4 +260,43 @@ fn build_project_context(ctx: &ToolContext) -> Option<String> {
         }
     }
     (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn input(kind: Option<&str>) -> ReachOutInput {
+        serde_json::from_value(
+            json!({"target":"@MayaChen","message":"Which day?","targetKind":kind}),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn schema_offers_people_and_agents() {
+        let schema = ReachOutTool.parameters_schema();
+        assert_eq!(
+            schema["properties"]["targetKind"]["enum"],
+            json!(["agent", "person"])
+        );
+        assert_eq!(schema["required"], json!(["target", "message"]));
+        assert!(ReachOutTool.description().contains("ask a person"));
+    }
+
+    #[test]
+    fn target_kinds_accept_tool_and_bridge_spellings() {
+        for (kind, expected) in [
+            ("person", Some("person")),
+            ("Bridge-Person", Some("person")),
+            ("agent", Some("agent")),
+            ("bridge-agent", Some("agent")),
+            ("group", None),
+        ] {
+            assert_eq!(normalize_target_kind(kind).as_deref(), expected);
+        }
+        assert!(validate_input(&input(Some("person"))).is_ok());
+        assert!(validate_input(&input(None)).is_ok());
+        assert!(validate_input(&input(Some("group"))).is_err());
+    }
 }

@@ -14,6 +14,32 @@ pub(super) async fn update(
     if state != "waiting" {
         retire_unanswered(tx, exchange).await?;
     }
+    patch(tx, exchange, &[("agentExchangeStatus", json!(state))]).await
+}
+
+/// A question to a person names who the agent is waiting for, so every client
+/// can say so instead of a generic waiting label.
+pub(super) async fn waiting_for(
+    tx: &mut Transaction<'_, Postgres>,
+    exchange: Uuid,
+    name: &str,
+) -> RunResult<()> {
+    patch(
+        tx,
+        exchange,
+        &[
+            ("agentExchangeStatus", json!("waiting")),
+            ("agentExchangeWaitingFor", json!(name)),
+        ],
+    )
+    .await
+}
+
+async fn patch(
+    tx: &mut Transaction<'_, Postgres>,
+    exchange: Uuid,
+    fields: &[(&str, Value)],
+) -> RunResult<()> {
     let row: Option<(String, Uuid, Value)> = query_as(
         "SELECT m.sender_account_id,m.client_message_id,m.content FROM cloud_agent_exchanges e JOIN cloud_chat_messages m ON m.message_id=e.request_message_id WHERE e.exchange_id=$1 AND m.deleted_at IS NULL FOR UPDATE OF m",
     ).bind(exchange).fetch_optional(&mut **tx).await?;
@@ -49,7 +75,9 @@ pub(super) async fn update(
     if !metadata.is_object() {
         *metadata = json!({});
     }
-    metadata["agentExchangeStatus"] = json!(state);
+    for (key, value) in fields {
+        metadata[*key] = value.clone();
+    }
     block["text"] = json!(format!(
         "{prefix}:{}",
         URL_SAFE_NO_PAD.encode(wire.to_string())

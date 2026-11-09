@@ -1,4 +1,4 @@
-import { agentExchangeStatus, type AgentExchangeStatus } from './agentExchangePresentation';
+import { agentExchangeStatus, agentExchangeWaitingFor, type AgentExchangeStatus } from './agentExchangePresentation';
 import { decodeBase64UrlUtf8, encodeBase64UrlUtf8 } from './cloudBase64Url';
 import { cloudAgentReplyEnding, type CloudAgentReplyEnding } from './cloudAgentReplyEnding';
 export { cloudAgentReplyEnding, type CloudAgentReplyEnding } from './cloudAgentReplyEnding';
@@ -40,6 +40,7 @@ export type CloudAgentResponseEnvelope = {
   failureCode?: CloudAgentFailureCode;
   synchronizationOnly?: boolean;
   agentExchangeStatus?: AgentExchangeStatus;
+  agentExchangeWaitingFor?: string;
   ending?: CloudAgentReplyEnding;
   execution?: CloudAgentExecutionSnapshot;
   backgroundSessions?: CloudAgentBackgroundSession[];
@@ -223,7 +224,7 @@ export function parseCloudAgentResponse(body: string): CloudAgentResponseEnvelop
       || parsed.deliveryState === 'cancelled'
       ? parsed.deliveryState
       : undefined;
-    const exchangeStatus = agentExchangeStatus(parsed.agentExchangeStatus);
+    const exchangeStatus = agentExchangeStatus(parsed.agentExchangeStatus), waitingFor = agentExchangeWaitingFor(parsed.agentExchangeWaitingFor);
     const ending = cloudAgentReplyEnding(parsed.ending);
     const execution = parseCloudAgentExecutionSnapshot(parsed.execution);
     const backgroundSessions = parseCloudAgentBackgroundSessions(parsed.backgroundSessions);
@@ -236,7 +237,7 @@ export function parseCloudAgentResponse(body: string): CloudAgentResponseEnvelop
       kind: 'agent-response',
       requestId: parsed.requestId,
       text: parsed.text,
-      ...(exchangeStatus ? { agentExchangeStatus: exchangeStatus } : {}),
+      ...(exchangeStatus ? { agentExchangeStatus: exchangeStatus } : {}), ...(waitingFor ? { agentExchangeWaitingFor: waitingFor } : {}),
       ...(parsed.synchronizationOnly === true ? { synchronizationOnly: true } : {}),
       ...(deliveryState ? { deliveryState } : {}),
       ...(deliveryState === 'failed' ? cloudAgentFailureCodeField(parsed.failureCode) : {}),

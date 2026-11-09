@@ -17,12 +17,15 @@ use uuid::Uuid;
 
 mod lifecycle;
 mod outcome;
+mod person;
+mod person_replies;
 mod progress;
 mod rounds;
 pub(crate) use outcome::{
     control_safe_body, is_control_progress, is_control_response, parent_completion,
     parent_completion_body, separate_control_outcome,
 };
+pub(crate) use person_replies::match_replies as match_person_replies;
 mod store;
 pub(crate) use lifecycle::{finish, reconcile};
 use store::{authorize, directory, send};
@@ -103,7 +106,10 @@ async fn execute(
         return Err(RunError::NotFound);
     }
     if input.action == "capabilities" {
-        return Ok(json!({"available":true,"targets":directory(pool, &parent).await?}));
+        let people = person::directory(pool, &parent).await?;
+        return Ok(
+            json!({"available":true,"targets":directory(pool, &parent).await?,"people":people}),
+        );
     }
     if input.tool_call_id.trim().is_empty() || input.tool_call_id.len() > 256 {
         return Err(RunError::NotFound);
@@ -254,12 +260,14 @@ pub(crate) async fn guidance(pool: &PgPool, run: &str) -> RunResult<Option<Strin
         return Ok(None);
     }
     let targets = directory(pool, &parent).await?;
-    if targets.is_empty() {
+    let people = person::directory(pool, &parent).await?;
+    if targets.is_empty() && people.is_empty() {
         return Ok(None);
     }
     Ok(Some(format!(
-        "Use reach_out to contact another agent in this conversation by exact agentId or unique @handle. Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task, which you own until it has a result. Do not resend or poll. Participant agent directory: {}",
-        json!(targets)
+        "Use reach_out to contact another agent or ask a person in this conversation. For an agent, use its exact agentId or unique @handle. For a person, set targetKind to person and use their accountId or unique @handle; their next message here, or their reply to your question, is the answer. Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task, which you own until it has a result. Do not resend or poll. Participant agent directory: {} People you can ask: {}",
+        json!(targets),
+        json!(people)
     )))
 }
 

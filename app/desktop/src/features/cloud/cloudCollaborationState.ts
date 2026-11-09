@@ -207,7 +207,7 @@ export function cloudMessageToCollaborationMessage(
     messageAction: directMessageAction,
     messageKind: message.messageKind ?? null, voiceMessage: message.voiceMessage ? cloudVoiceMessageToMessageVoice(message.voiceMessage) : null, planCard: message.planCard ?? null, reactionConversationId: message.conversationId ?? null, reactionTargetMessageId: message.messageId, cloudMessageVersion: message.version ?? null, editedAt: agentResponse?.agentExchangeStatus ? null : message.editedAt ?? null, reactions: message.reactions ?? [], ...cloudAgentFailureCodeField(agentResponse?.failureCode),
     localTurn: agentExchangeProgressTurn(agentResponse?.agentExchangeStatus, displayText, message.messageId, message.sessionId ?? '',
-      agentResponse?.requestId ? options.localAgentTurnsByRequestId?.[agentResponse.requestId] ?? syncedExecutionTurn ?? syncedBackgroundTurn : null),
+      agentResponse?.requestId ? options.localAgentTurnsByRequestId?.[agentResponse.requestId] ?? syncedExecutionTurn ?? syncedBackgroundTurn : null, agentResponse?.agentExchangeWaitingFor),
   };
 }
 

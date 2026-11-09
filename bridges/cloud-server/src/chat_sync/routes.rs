@@ -35,6 +35,7 @@ mod channels;
 mod group_envelope;
 mod http;
 mod message_mutations;
+mod message_sent;
 mod organization_check;
 mod reaction;
 mod thread_reads;
@@ -223,11 +224,7 @@ async fn send_message(
                 Ok(message) => message,
                 Err(error) => return store_error("project message", error),
             };
-            if let Some(notifications) = state.notifications() {
-                notifications
-                    .send_message_attention(state.db_pool(), &outcome.value)
-                    .await;
-            }
+            message_sent::message_sent(&state, &outcome.value).await;
             (
                 if outcome.inserted {
                     StatusCode::CREATED

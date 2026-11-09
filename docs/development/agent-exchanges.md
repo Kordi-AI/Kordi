@@ -131,3 +131,28 @@ group space, which can differ from the channel's session ID.
 The client replay coordinator acknowledges each message revision separately.
 A completed replay key for the question must not suppress its later processing
 or completion revision, even though all revisions share one canonical message.
+
+## Asking a person
+
+`reach_out` also asks a person in the same conversation (`targetKind`
+`person`, an exact account ID or a unique @handle). Nothing runs for the
+person. The server records a person exchange (migration 188), posts the
+question as the agent's visible message mentioning them, and marks it waiting
+for that person by name; Mac shows "Waiting for <name>" on the question.
+
+The answer is the person's next human message in the conversation after the
+question, or their reply, quote, or thread reply to it. Their agent's
+messages, forwards, replies to other messages, and messages before the
+question never count. With several open questions to the same person, a reply
+to one question answers that question; any other message answers the oldest.
+Matching runs when the message is stored and again in the reconcile sweep, so
+a missed hook is recovered from durable records. The answer then resumes the
+asking agent through the ordinary continuation, with person-specific wording.
+
+People get 24 hours. When the deadline passes, the continuation states that
+no answer arrived and the agent says so instead of inventing one. The same
+rules as agent requests apply: only a run requested by the agent's owner can
+ask, and each question counts toward the task's budget of eight. Targets are
+active members other than the requester and the agent's owner (the agent asks
+its owner by ending its turn with the question), not service accounts, and not
+blocked either way. Leaving the conversation cancels a pending question.
