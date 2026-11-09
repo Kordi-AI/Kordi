@@ -31,7 +31,8 @@ export function appendOptimisticCollaborationMessage(
       subtitle: subtitleText,
       updatedAtMs: timestampMs,
       updatedAtLabel: sentAt,
-      awaitingReply: expectsAgentReply,
+      // A plain follow-up must not end the wait for an earlier agent request.
+      awaitingReply: expectsAgentReply || conversation.awaitingReply,
       messages: [
         ...conversation.messages,
         {
