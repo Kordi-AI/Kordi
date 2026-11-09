@@ -53,6 +53,14 @@ impl Fixture {
         query_as("SELECT status,response_text,request_message_id FROM cloud_agent_exchanges WHERE exchange_id=$1::uuid")
             .bind(id.as_str().unwrap()).fetch_one(&self.pool).await.unwrap()
     }
+    async fn capabilities(&self) -> Value {
+        self.post(
+            0,
+            &format!("/v1/cloud/agent-runs/desktop/{}/agent-exchange", self.root),
+            json!({"claimId":self.claim,"action":"capabilities"}),
+        )
+        .await
+    }
     async fn question_wire(&self, id: &Value) -> Value {
         let (body,): (String,) = query_as("SELECT m.content #>> '{blocks,0,text}' FROM cloud_agent_exchanges e JOIN cloud_chat_messages m ON m.message_id=e.request_message_id WHERE e.exchange_id=$1::uuid")
             .bind(id.as_str().unwrap()).fetch_one(&self.pool).await.unwrap();
@@ -65,6 +73,15 @@ impl Fixture {
     }
 }
 
+/// A direct message from `sender` that asks the agent `agent` of `owner`.
+fn agent_request(text: &str, agent: &str, owner: &str) -> String {
+    let envelope = json!({"schemaVersion":1,"kind":"message","text":text,"targetCloudAgentId":agent,"targetCloudAgentOwnerAccountId":owner});
+    format!(
+        "kordi-cloud-message:{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(envelope.to_string())
+    )
+}
+
 fn data(run: &Value) -> Value {
     let prompt = run["prompt"].as_str().unwrap();
     serde_json::from_str(prompt.split_once('\n').unwrap().1).unwrap()
@@ -75,13 +92,7 @@ async fn a_person_answer_resumes_the_asking_agent() {
     let Some(f) = Fixture::new().await else {
         return;
     };
-    let capabilities = f
-        .post(
-            0,
-            &format!("/v1/cloud/agent-runs/desktop/{}/agent-exchange", f.root),
-            json!({"claimId":f.claim,"action":"capabilities"}),
-        )
-        .await;
+    let capabilities = f.capabilities().await;
     let people: Vec<&str> = capabilities["people"]
         .as_array()
         .unwrap()
@@ -89,12 +100,6 @@ async fn a_person_answer_resumes_the_asking_agent() {
         .map(|p| p["accountId"].as_str().unwrap())
         .collect();
     assert!(people.contains(&f.people[1].account_id.as_str()));
-    assert!(
-        !people.contains(&f.people[0].account_id.as_str()),
-        "the owner is not a target"
-    );
-    let owner = f.ask("self", 0, "Are you sure?").await;
-    assert_ne!(owner.status(), StatusCode::OK);
 
     let early = f.say(1, "Said before the question", None).await;
     let receipt = f.ask_ok("ask-beta", 1, "Which day works?").await;
@@ -220,4 +225,98 @@ async fn an_unanswered_person_question_times_out_and_leaving_cancels() {
     f.end_parent().await;
     assert!(f.pending(0).await.is_empty());
     assert_eq!(f.exchange(&receipt["exchangeId"]).await.0, "cancelled");
+}
+
+#[tokio::test]
+async fn the_requester_is_asked_and_their_plain_reply_continues() {
+    let Some(f) = Fixture::kind(false).await else {
+        return;
+    };
+    let people = f.capabilities().await["people"].clone();
+    let requester = people
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["accountId"] == f.people[0].account_id.as_str())
+        .expect("the requester can be asked in a shared conversation");
+    assert_eq!(requester["requester"], true);
+    let receipt = f
+        .ask_ok("ask-requester", 0, "What time are you free?")
+        .await;
+    let wire = f.question_wire(&receipt["exchangeId"]).await;
+    assert_eq!(
+        wire["text"], "What time are you free?",
+        "no self-mention in a direct chat"
+    );
+    assert_eq!(wire["agentExchangeWaitingFor"], "Exchange Alpha");
+    assert_eq!(wire["agentExchangeWaitingForRequester"], true);
+    f.end_parent().await;
+
+    f.say(1, "Not the requester", None).await;
+    let other_agent = format!("cloud-agent:{}", f.people[1].account_id);
+    f.say(
+        0,
+        &agent_request("Check your calendar", &other_agent, &f.people[1].account_id),
+        None,
+    )
+    .await;
+    assert_eq!(
+        f.exchange(&receipt["exchangeId"]).await.0,
+        "pending",
+        "a request to an agent is not an answer"
+    );
+    f.say(0, "Anything works", None).await;
+    let (status, text, _) = f.exchange(&receipt["exchangeId"]).await;
+    assert_eq!(status, "reply_received");
+    assert_eq!(text.as_deref(), Some("Anything works"));
+    let resumed = data(&f.pending(0).await.remove(0));
+    assert_eq!(resumed["personIsRequester"], true);
+    assert_eq!(resumed["personReply"], "Anything works");
+}
+
+#[tokio::test]
+async fn a_new_request_to_the_same_agent_supersedes_its_question() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    let receipt = f.ask_ok("ask-requester", 0, "Which area?").await;
+    assert!(
+        f.question_wire(&receipt["exchangeId"]).await["message"]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("@ExchangeAlpha Which area?")
+    );
+    f.end_parent().await;
+    let owner = &f.people[0].account_id;
+    f.say(
+        0,
+        &agent_request("Plan lunch instead", &format!("cloud-agent:{owner}"), owner),
+        None,
+    )
+    .await;
+    assert_eq!(f.exchange(&receipt["exchangeId"]).await.0, "cancelled");
+    f.say(0, "Downtown", None).await;
+    assert_eq!(f.exchange(&receipt["exchangeId"]).await.0, "cancelled");
+    assert!(
+        f.pending(0).await.is_empty(),
+        "a superseded question never resumes"
+    );
+
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    query("UPDATE cloud_chat_conversations SET kind='ai' WHERE legacy_session_id=$1")
+        .bind(&f.session)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let people = f.capabilities().await["people"].clone();
+    assert!(
+        !people
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["accountId"] == f.people[0].account_id.as_str()),
+        "in the private agent chat every owner message already reaches the agent"
+    );
 }

@@ -49,7 +49,7 @@ impl Tool for ReachOutTool {
     }
 
     fn description(&self) -> &str {
-        "Send an explicit request to another agent, or ask a person, in the current conversation. Use an exact agent ID, person account ID, or unique @handle from the participant directory, and set targetKind to person when asking a person. A person's next message in the conversation, or their reply to the question, is the answer. A successful request is durable and returns a receipt. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Never resend or poll while waiting."
+        "Send an explicit request to another agent, or ask a person, in the current conversation. Use an exact agent ID, person account ID, or unique @handle from the participant directory, and set targetKind to person when asking a person. A person's next message in the conversation, or their reply to the question, is the answer. In a shared conversation, ask the person who made the request this way, instead of ending the turn with a question, when you need their input to finish. A successful request is durable and returns a receipt. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Never resend or poll while waiting."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -282,6 +282,11 @@ mod tests {
         );
         assert_eq!(schema["required"], json!(["target", "message"]));
         assert!(ReachOutTool.description().contains("ask a person"));
+        assert!(
+            ReachOutTool
+                .description()
+                .contains("ask the person who made the request")
+        );
     }
 
     #[test]
