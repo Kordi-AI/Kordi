@@ -40,7 +40,7 @@ The agent mentioned first leads the request; agents mentioned later are its
 discussion partners. Only the leading agent runs, and its prompt keeps the
 partner's mention so it can `reach_out` to it. When the sender's own agent
 leads in a direct or group chat, it runs on the sender's Mac as the owner's
-own request, which is the only kind of run that may reach out.
+own request, which is the only kind of run that may reach other agents.
 
 An owner can ask agents to keep talking, discuss, or align. Each continuation
 may answer back with one new `reach_out` to the same agent and yield with
@@ -79,7 +79,8 @@ leases, rather than adopting a second message server or chat read cursor.
 
 ## Authorization
 
-Only a live execution lease for an owner's own request can send outreach.
+Only a live execution lease for an owner's own request can send outreach to
+agents; another person's request can only ask that person (see below).
 Targets must be active agents belonging to current conversation members;
 custom agents must allow participant conversations. Handles must be unique,
 or the caller must supply the exact agent ID. Both execution and publication
@@ -151,10 +152,9 @@ a missed hook is recovered from durable records. The answer then resumes the
 asking agent through the ordinary continuation, with person-specific wording.
 
 People get 24 hours. When the deadline passes, the continuation states that
-no answer arrived and the agent says so instead of inventing one. The same
-rules as agent requests apply: only a run requested by the agent's owner can
-ask, and each question counts toward the task's budget of eight. Targets are
-active members, not service accounts, and not blocked either way. Leaving the
+no answer arrived and the agent says so instead of inventing one. Each
+question counts toward the task's budget of eight. Targets are active
+members, not service accounts, and not blocked either way. Leaving the
 conversation cancels a pending question.
 
 In a direct or group conversation a plain follow-up does not reach an agent,
@@ -162,8 +162,27 @@ so the person who made the request is a target too (listed with `requester`).
 When the agent needs their input before it can finish, guidance tells it to ask
 with `reach_out` instead of ending its turn with a question; their next plain
 message, or a reply to the question, continues the task in the language of the
-request, never silently. The question carries `agentExchangeWaitingForRequester`,
-so their own Mac shows "Waiting for your reply" while others see the name. A
-new request from them to the same agent supersedes and cancels the open
-question. In the owner's private agent chat every message already reaches the
-agent, so nobody there is a target.
+request, never silently. The question carries `agentExchangeWaitingForAccountId`,
+so the asked person's own Mac shows "Waiting for your reply" while others see
+the name (`agentExchangeWaitingForRequester` additionally marks the owner's own
+question to themselves, for older clients). A new request from them to the
+same agent supersedes and cancels the open question. In the owner's private
+agent chat every message already reaches the agent, so nobody there is a target.
+
+A run requested by someone other than the agent's owner may ask only that
+requester: the capability lists no agents and only them, any other target is
+refused, and owner-private tools, calendar, and connectors stay unavailable.
+The continuation keeps the same owner and requester and the same limits. A
+run that answers another agent's request, or a child task, cannot ask anyone.
+
+## Conversation context
+
+Every run in a direct or group conversation carries a data-only block in its
+turn identity (`conversationContext`), built once on the server and shown by
+both the cloud runner and the Mac: the conversation kind and title, the active
+people with display name and @handle (owner and requester marked), their
+agents and whose they are, each person's profile location and time zone when
+set (not for people who declined AI), and the current time in the owner's
+time zone, else UTC. Names and profile fields are marked untrusted. The agent
+is told to use it instead of asking who is in the chat or where they are.
+Model and thinking-effort change notices never appear in run history.

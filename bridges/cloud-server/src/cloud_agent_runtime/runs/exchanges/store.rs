@@ -5,7 +5,17 @@ use sqlx_core::transaction::Transaction;
 use sqlx_postgres::Postgres;
 use unicode_normalization::UnicodeNormalization;
 
-type AuthorizedRunRow = (String, String, String, String, Uuid, String, String, String);
+type AuthorizedRunRow = (
+    String,
+    String,
+    String,
+    String,
+    Uuid,
+    String,
+    String,
+    String,
+    bool,
+);
 
 pub(super) struct Parent {
     pub run: String,
@@ -16,6 +26,24 @@ pub(super) struct Parent {
     pub agent: String,
     pub conversation: Uuid,
     pub kind: String,
+    /// The run answers another agent's request or is a child task; it never
+    /// starts outreach of its own on behalf of someone other than its owner.
+    pub delegated: bool,
+}
+
+impl Parent {
+    /// Someone other than the owner made the request: the run may ask only
+    /// that requester, never another agent or person.
+    pub fn requester_only(&self) -> bool {
+        self.owner != self.requester
+    }
+
+    /// Whether this run may use reach_out at all. The owner's own request
+    /// keeps every target; another person's request may only ask them back,
+    /// and only from its own top-level run in a shared conversation.
+    pub fn may_reach_out(&self) -> bool {
+        !self.requester_only() || (!self.delegated && self.kind != "ai")
+    }
 }
 
 pub(super) async fn authorize(
@@ -28,7 +56,8 @@ pub(super) async fn authorize(
         .unwrap_or_default();
     let row: Option<AuthorizedRunRow> = query_as(&format!(
         "SELECT r.session_id,r.owner_account_id,r.requester_account_id,r.execution_agent_id,c.conversation_id,c.kind,
-                COALESCE(e.root_run_id,r.run_id),root.request_message_id
+                COALESCE(e.root_run_id,r.run_id),root.request_message_id,
+                e.target_run_id IS NOT DISTINCT FROM r.run_id OR r.subsession_id IS NOT NULL OR r.parent_run_id IS NOT NULL
          FROM cloud_agent_fallback_runs r JOIN cloud_chat_conversations c ON c.legacy_session_id=r.session_id
          LEFT JOIN cloud_agent_exchanges e ON r.run_id=e.target_run_id OR r.run_id=e.resume_run_id
          JOIN cloud_agent_fallback_runs root ON root.run_id=COALESCE(e.root_run_id,r.run_id)
@@ -46,7 +75,7 @@ pub(super) async fn authorize(
         root_access = crate::agent_access::access_allows_sql("r.owner_account_id", "root.requester_account_id", "r.execution_agent_id"),
         go_between_access = crate::agent_access::access_allows_sql("r.owner_account_id", "COALESCE((SELECT parent.owner_account_id FROM cloud_agent_fallback_runs parent WHERE parent.run_id=e.parent_run_id),r.owner_account_id)", "r.execution_agent_id"),
     )).bind(run).bind(who).bind(account).fetch_optional(pool).await?;
-    let (session, owner, requester, agent, conversation, kind, root, original_request) =
+    let (session, owner, requester, agent, conversation, kind, root, original_request, delegated) =
         row.ok_or(RunError::NotFound)?;
     // A deleted source request cannot authorize new work or restored context.
     if super::super::request_identity(pool, &session, &original_request)
@@ -64,6 +93,7 @@ pub(super) async fn authorize(
         agent,
         conversation,
         kind,
+        delegated,
     })
 }
 
@@ -86,8 +116,12 @@ fn normalized(value: &str) -> String {
 
 /// The agents a run may reach out to; agents whose owner stopped the run's
 /// requester, or the owner of the agent reaching out, from using them, and
-/// agents whose Access is private to their owner, are left out.
+/// agents whose Access is private to their owner, are left out. A request
+/// made by someone other than the owner reaches no agent.
 pub(super) async fn directory(pool: &PgPool, parent: &Parent) -> RunResult<Vec<Target>> {
+    if parent.requester_only() {
+        return Ok(Vec::new());
+    }
     let rows: Vec<(String,String,String,String)> = query_as(&format!(
         "SELECT 'cloud-agent:'||a.account_id,a.account_id,COALESCE(p.display_name,'Kordi'),a.display_name FROM cloud_chat_conversation_members m JOIN cloud_accounts a USING(account_id) LEFT JOIN cloud_default_agent_profiles p ON p.owner_account_id=a.account_id WHERE m.conversation_id=$1 AND m.membership_state='active' AND {member_allowed} AND {member_go_between} AND {member_access} AND {member_go_between_access}
          UNION ALL SELECT d.agent_id,d.owner_account_id,d.name,a.display_name FROM cloud_agent_definitions d JOIN cloud_accounts a ON a.account_id=d.owner_account_id JOIN cloud_chat_conversation_members m ON m.account_id=d.owner_account_id WHERE m.conversation_id=$1 AND m.membership_state='active' AND d.status='active' AND d.access_scope='participant_conversations' AND {definition_allowed} AND {definition_go_between}",
@@ -161,6 +195,10 @@ pub(super) async fn send(
     }
     if let Some(person) = super::person::requested(pool, parent, args, target_ref).await? {
         return super::person::send(pool, parent, executor, account, key, text, &person).await;
+    }
+    // Another person's request may only ask that person back.
+    if parent.requester_only() {
+        return Err(RunError::NotFound);
     }
     let targets = directory(pool, parent).await?;
     let target = resolve_target(&targets, target_ref)?;

@@ -1,4 +1,4 @@
-import { withAgentExchangeProgress } from '@/features/cloud/agentExchangePresentation';
+import { agentExchangeWaitsForViewer, withAgentExchangeProgress } from '@/features/cloud/agentExchangePresentation';
 import { canonicalTools } from './toolMapping';
 export { canonicalTools } from './toolMapping';
 import { parseTurnSegments } from '@/features/chat/turnSegments';
@@ -270,6 +270,11 @@ export function cancelledCollaborationAgentDelegationMessage(
   };
 }
 
+/** The viewer's cloud account, from their profile identity. */
+function viewerAccountId(identityById: Map<string, CanonicalIdentity>, profileHumanIdentityId: string | null) {
+  return profileHumanIdentityId ? identityById.get(profileHumanIdentityId)?.humanId?.trim() || null : null;
+}
+
 export type MapCanonicalMessageContext = {
   senderIdentityIdByMessageId?: ReadonlyMap<string, string> | null;
   visibleReplyTargetByMessageId?: ReadonlyMap<string, string> | null;
@@ -483,7 +488,11 @@ export function mapCanonicalMessage(
             ? content.hostedRunStatus : undefined,
         }
       : undefined,
-  }, content.agentExchangeStatus, content.agentExchangeWaitingFor, content.agentExchangeWaitingForRequester === true && role === 'owned-agent');
+  }, content.agentExchangeStatus, content.agentExchangeWaitingFor, agentExchangeWaitsForViewer(
+    content.agentExchangeWaitingForAccountId,
+    viewerAccountId(identityById, trimmedProfileIdentityId),
+    content.agentExchangeWaitingForRequester === true && role === 'owned-agent',
+  ));
 }
 
 export { contentRecord,numberValue,stringValue } from "./messageContent";

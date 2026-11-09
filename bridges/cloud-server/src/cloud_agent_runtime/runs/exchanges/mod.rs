@@ -101,8 +101,9 @@ async fn execute(
     input: Input,
 ) -> RunResult<Value> {
     let parent = authorize(pool, run, Some((executor, account))).await?;
-    // Another person's agent cannot use this tool to acquire owner authority.
-    if parent.owner != parent.requester {
+    // Another person's request cannot use this tool to acquire owner
+    // authority: it may only ask that person back (see `Parent`).
+    if !parent.may_reach_out() {
         return Err(RunError::NotFound);
     }
     if input.action == "capabilities" {
@@ -256,13 +257,16 @@ pub(crate) async fn guidance(pool: &PgPool, run: &str) -> RunResult<Option<Strin
         Err(RunError::NotFound) => return Ok(None),
         Err(e) => return Err(e),
     };
-    if parent.owner != parent.requester {
+    if !parent.may_reach_out() {
         return Ok(None);
     }
     let targets = directory(pool, &parent).await?;
     let people = person::directory(pool, &parent).await?;
     if targets.is_empty() && people.is_empty() {
         return Ok(None);
+    }
+    if parent.requester_only() {
+        return Ok(Some(requester_only_guidance(&people)));
     }
     Ok(Some(format!(
         "Use reach_out to contact another agent or ask a person in this conversation. For an agent, use its exact agentId or unique @handle. For a person, set targetKind to person and use their accountId or unique @handle; their next message here, or their reply to your question, is the answer. {}Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task, which you own until it has a result. Do not resend or poll. Participant agent directory: {} People you can ask: {}",
@@ -275,6 +279,14 @@ pub(crate) async fn guidance(pool: &PgPool, run: &str) -> RunResult<Option<Strin
 /// In a shared conversation a plain follow-up does not reach the agent, so a
 /// question to the requester must go through reach_out to be answered.
 const ASK_REQUESTER: &str = "If you need information or a decision from the person who asked (marked requester) before you can finish, ask them with reach_out instead of ending your turn with a question; their reply continues the task. ";
+
+/// A request from someone other than the owner may only ask that person back.
+fn requester_only_guidance(people: &[person::Person]) -> String {
+    format!(
+        "If you need information or a decision from the person who asked before you can finish, ask them with reach_out (targetKind person, their accountId) instead of ending your turn with a question; their next message here, or their reply to your question, continues the task. They are the only one you can ask for this request: do not contact other agents or people. Ask only for what is actually missing, in one message. Send only the explicit question. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn. Do not resend or poll. Person you can ask: {}",
+        json!(people)
+    )
+}
 
 async fn is_authorized(pool: &PgPool, run: &str) -> RunResult<bool> {
     match authorize(pool, run, None).await {

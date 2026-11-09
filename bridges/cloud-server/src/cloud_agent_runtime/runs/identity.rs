@@ -36,6 +36,10 @@ pub(crate) async fn identity_for_run(pool: &PgPool, run_id: &str) -> RunResult<V
     if let Some(policy) = policy {
         identity["requestPolicy"] = Value::String(policy);
     }
+    // Who is in a shared conversation, where they are, and the current time.
+    if let Some(context) = super::conversation_context::for_run(pool, run_id).await? {
+        identity["conversationContext"] = Value::String(context);
+    }
     // Atomic first-writer wins, including competing lease attempts. Avoid holding
     // a pool connection while reading the request envelope on another connection.
     let (identity,): (Value,) = query_as("UPDATE cloud_agent_fallback_runs SET turn_identity=COALESCE(turn_identity,$2) WHERE run_id=$1 RETURNING turn_identity")

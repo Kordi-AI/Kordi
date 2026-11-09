@@ -1,4 +1,4 @@
-import { agentExchangeProgressTurn } from './agentExchangePresentation';
+import { agentExchangeProgressTurn, agentExchangeWaitsForViewer } from './agentExchangePresentation';
 import { agentExchangeTurnIsWaiting, agentExchangeTurnIsYielding } from './agentExchangeOutcome';
 import {
   cloudCollaborationConversationId,
@@ -207,7 +207,7 @@ export function cloudMessageToCollaborationMessage(
     messageAction: directMessageAction,
     messageKind: message.messageKind ?? null, voiceMessage: message.voiceMessage ? cloudVoiceMessageToMessageVoice(message.voiceMessage) : null, planCard: message.planCard ?? null, reactionConversationId: message.conversationId ?? null, reactionTargetMessageId: message.messageId, cloudMessageVersion: message.version ?? null, editedAt: agentResponse?.agentExchangeStatus ? null : message.editedAt ?? null, reactions: message.reactions ?? [], ...cloudAgentFailureCodeField(agentResponse?.failureCode),
     localTurn: agentExchangeProgressTurn(agentResponse?.agentExchangeStatus, displayText, message.messageId, message.sessionId ?? '',
-      agentResponse?.requestId ? options.localAgentTurnsByRequestId?.[agentResponse.requestId] ?? syncedExecutionTurn ?? syncedBackgroundTurn : null, agentResponse?.agentExchangeWaitingFor, isOwn && agentResponse?.agentExchangeWaitingForRequester === true),
+      agentResponse?.requestId ? options.localAgentTurnsByRequestId?.[agentResponse.requestId] ?? syncedExecutionTurn ?? syncedBackgroundTurn : null, agentResponse?.agentExchangeWaitingFor, agentExchangeWaitsForViewer(agentResponse?.agentExchangeWaitingForAccountId, account.accountId, isOwn && agentResponse?.agentExchangeWaitingForRequester === true)),
   };
 }
 

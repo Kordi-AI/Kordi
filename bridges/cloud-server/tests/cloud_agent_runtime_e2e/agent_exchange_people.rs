@@ -320,3 +320,6 @@ async fn a_new_request_to_the_same_agent_supersedes_its_question() {
         "in the private agent chat every owner message already reaches the agent"
     );
 }
+
+#[path = "agent_exchange_shared_requests.rs"]
+mod shared_requests;

@@ -2,6 +2,7 @@ mod authorization;
 mod claims;
 pub(crate) mod completion;
 pub(super) mod context_read;
+pub(crate) mod conversation_context;
 mod delivery;
 mod desktop_takeover;
 mod envelopes;
