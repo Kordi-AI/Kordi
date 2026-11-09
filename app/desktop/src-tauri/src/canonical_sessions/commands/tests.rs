@@ -122,6 +122,7 @@ fn cloud_message_cleanup_covers_versions_self_agent_and_authoritative_pruning() 
     assert_eq!(synced_rows, 0);
 }
 
+mod agent_slot_prune;
 mod catalog;
 mod delivery;
 mod membership;

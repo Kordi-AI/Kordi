@@ -318,6 +318,32 @@ enum CloudGroupAgentLifecycleProjector {
         return visibleIds
     }
 
+    /// A reply replaces the agent's waiting row and takes over its place in
+    /// the timeline, so it stays under the request instead of moving below
+    /// messages sent while the agent worked. Keyed by message id; a reply
+    /// without an earlier row keeps its own sequence.
+    static func replySlotSequences(
+        in rows: [(sequence: Int64?, payload: CloudGroupMessagePayload)]
+    ) -> [String: Int64] {
+        func responseKey(_ payload: CloudGroupMessagePayload) -> ResponseKey? {
+            guard payload.senderKind == "agent",
+                  let requestId = payload.requestId?.nonEmpty else { return nil }
+            return ResponseKey(requestId: requestId, senderAccountId: payload.senderAccountId)
+        }
+        var slotByKey: [ResponseKey: Int64] = [:]
+        for row in rows {
+            guard let key = responseKey(row.payload),
+                  let sequence = row.sequence, sequence > 0 else { continue }
+            slotByKey[key] = min(slotByKey[key] ?? sequence, sequence)
+        }
+        var slotByMessageId: [String: Int64] = [:]
+        for row in rows {
+            guard let key = responseKey(row.payload), let slot = slotByKey[key] else { continue }
+            slotByMessageId[row.payload.id] = slot
+        }
+        return slotByMessageId
+    }
+
     static func readRequestIds(in payloads: [CloudGroupMessagePayload]) -> Set<String> {
         Set(payloads.compactMap { payload in
             payload.senderKind == "agent" && payload.deliveryState != "queued"

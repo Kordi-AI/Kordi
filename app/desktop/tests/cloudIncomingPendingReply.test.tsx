@@ -6,6 +6,7 @@ import { cloudContactToContact } from '../src/features/cloud/useCloudContacts';
 import { encodeCloudDirectMessageEnvelope } from '../src/features/cloud/cloudDirectMessages';
 import { encodeCloudAgentCancel, encodeCloudAgentResponse } from '../src/features/cloud/cloudAgentMessages';
 import { mapCollaborationConversationToViewModel } from '../src/features/collaboration/transcript';
+import { appendOptimisticCollaborationMessage } from '../src/features/chat/messageActions/optimisticCollaboration';
 import { cloudAccountAvatarFixture as avatar } from './helpers/cloudAccountAvatarFixture';
 
 const owner: CloudAccount = {
@@ -97,4 +98,24 @@ test('completed outreach metadata does not hide a newer outgoing pending request
   projected.outreach = { ...projected.outreach!, sourceRequestId: 'old-request', status: 'completed' };
   const view = mapCollaborationConversationToViewModel(projected, undefined, 'Target Agent');
   assert.equal(view.messages.filter(message => message.turn && !message.turn.completed).length, 1);
+});
+
+test('a plain follow-up sent while a person DM agent request is waiting keeps one waiting row', () => {
+  const now = Date.now();
+  const pending = request('request', peer, now - 2_000);
+  const waiting: CloudMessage = { ...pending, messageId: 'waiting', clientMessageId: 'waiting-client',
+    fromAccountId: owner.accountId, toAccountId: peer.accountId, direction: 'incoming',
+    createdAt: new Date(now - 1_000).toISOString(),
+    body: encodeCloudAgentResponse({ requestId: pending.messageId, text: '', deliveryState: 'processing' }) };
+  for (const messages of [[pending], [pending, waiting]]) {
+    const projected = conversation(peer, messages);
+    const state = appendOptimisticCollaborationMessage(
+      { activeHostId: 'cloud', hosts: [], conversations: [projected], localAgentRouting: null },
+      projected.id, 'one more thing', '12:00', 'optimistic-follow-up',
+    );
+    const view = mapCollaborationConversationToViewModel(state!.conversations[0], undefined, 'Target Agent', now);
+    const rows = view.messages.filter(message => message.turn && !message.turn.completed);
+    assert.equal(rows.length, 1, `server waiting row present: ${messages.length > 1}`);
+    assert.equal(rows[0].turn?.pendingCollaborationAgentRequest?.requestId, pending.messageId);
+  }
 });
