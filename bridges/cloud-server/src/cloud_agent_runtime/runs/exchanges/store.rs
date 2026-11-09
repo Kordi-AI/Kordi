@@ -193,11 +193,7 @@ pub(super) async fn send(
         }
         return Ok(receipt(id, &status, target));
     }
-    let count: (i64,) = query_as("SELECT count(*) FROM cloud_agent_exchanges WHERE root_run_id=$1")
-        .bind(&parent.root)
-        .fetch_one(&mut *tx)
-        .await?;
-    if count.0 >= 8 {
+    if rounds::sent(&mut tx, &parent.root).await? >= rounds::LIMIT {
         return Err(RunError::ContextUnavailable(
             "The collaboration request limit has been reached for this task.",
         ));
@@ -215,6 +211,9 @@ pub(super) async fn send(
         &target.agent_id,
     )
     .await?;
+    // A follow-up in the same task continues the discussion with this agent.
+    let earlier = rounds::earlier(&mut tx, &parent.root, id, Some(&target.agent_id)).await?;
+    let prompt = rounds::target_prompt(text, &earlier);
     query("INSERT INTO cloud_agent_exchanges(exchange_id,parent_run_id,root_run_id,request_key,target_owner_id,target_agent_id,request_text) VALUES($1,$2,$3,$4,$5,$6,$7)")
         .bind(id).bind(&parent.run).bind(&parent.root).bind(key).bind(&target.owner_account_id).bind(&target.agent_id).bind(text).execute(&mut *tx).await?;
     insert_run(
@@ -224,7 +223,7 @@ pub(super) async fn send(
         parent,
         &target.owner_account_id,
         &target.agent_id,
-        text,
+        &prompt,
         &system,
         &route,
         &sandbox.sandbox_id,
