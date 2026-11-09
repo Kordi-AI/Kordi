@@ -9,6 +9,7 @@ enum CloudDirectMessageProjector {
         let sorted = CloudAgentLifecycleProjector.visibleRows(messages)
         let executionByResponseKey = CloudAgentLifecycleProjector
             .executionByResponseKey(in: messages)
+        let replySlotByMessageId = CloudAgentLifecycleProjector.replySlotSequences(in: messages)
         let cancellations = Dictionary(
             sorted.compactMap { message -> (String, CloudMessageDTO)? in
                 guard let requestId = CloudMessageCodec.agentCancelEnvelope(message.body)?.requestId.nonEmpty else {
@@ -55,6 +56,9 @@ enum CloudDirectMessageProjector {
                 conversation: conversation,
                 ownAccountId: ownAccountId,
                 createdAt: anchoredCreatedAt,
+                timelineSequence: replySlotByMessageId[wire.messageId].flatMap { slot in
+                    slot < (wire.conversationSequence ?? .max) ? slot : nil
+                },
                 ownerExecution: ownerExecution,
                 agentTarget: responseRequestId.flatMap { requestTargetsById[$0] }
             ))
@@ -102,6 +106,7 @@ enum CloudDirectMessageProjector {
         conversation: ConversationSummary,
         ownAccountId: String,
         createdAt: Date? = nil,
+        timelineSequence: Int64? = nil,
         ownerExecution: AgentExecutionSnapshot? = nil,
         agentTarget: CloudMessageCodec.DirectEnvelope? = nil
     ) -> ChatMessage {
@@ -146,6 +151,7 @@ enum CloudDirectMessageProjector {
             clientMessageId: message.clientMessageId,
             conversationId: conversation.id,
             conversationSequence: message.conversationSequence,
+            timelineSequence: timelineSequence,
             author: author,
             authorName: authorName,
             senderOwnerName: author == .agent ? (message.fromAccountId == ownAccountId ? "You" : agentOwnerName) : nil,

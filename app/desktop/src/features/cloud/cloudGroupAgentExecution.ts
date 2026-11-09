@@ -391,7 +391,7 @@ export async function respondToCloudGroupAgentMention(
       completedAtMs: finalTurn.completedAtMs,
       ...(failureMessage ? { error: failureMessage, failureCode: sharedFailure?.failureCode } : {}),
     },
-    createdAtMs: responseCreatedAtMs,
+    createdAtMs: persistedProcessingMessage.createdAtMs, // keeps the waiting row's place if rewritten
     status: responseDeliveryState,
     sourceEventId: `cloud-group-agent:${responseMessageId}`,
   } satisfies AppendCanonicalMessageRequest;

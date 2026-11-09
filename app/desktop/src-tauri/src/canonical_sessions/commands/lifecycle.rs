@@ -1,7 +1,7 @@
 //! Identity, session lifecycle, presence, and read-cursor command orchestration.
 
 use super::super::{
-    adopt_cloud_profile_identity_in_db, mark_session_read_in_db, open_db,
+    adopt_cloud_profile_identity_in_db, mark_session_read_in_db, now_ms, open_db,
     open_or_create_session_in_db, update_presence_in_db, upsert_identity_in_db,
     AdoptCloudProfileIdentityRequest, CanonicalIdentity, CanonicalProfileIdentityDelta,
     CanonicalReadCursorDelta, CanonicalSessionState, MarkCanonicalSessionReadRequest,
@@ -50,6 +50,9 @@ fn canonical_cloud_message_id(source_transport: &str, source_event_id: &str) -> 
         "cloud-self-agent" | "canonical-fork-snapshot" => Some(source_event_id),
         "cloud-group" | "cloud-group-agent" => source_event_id
             .strip_prefix(&format!("{source_transport}:"))
+            // A row this Mac wrote under its own id, such as an agent's
+            // waiting slot, has no Cloud id until its server copy arrives.
+            .filter(|value| !value.starts_with("msg:"))
             .and_then(|value| value.split(':').next()),
         _ => None,
     }
@@ -179,9 +182,28 @@ pub(in crate::canonical_sessions) fn desktop_canonical_prune_missing_cloud_messa
     prune_missing_cloud_messages_in_db(&mut conn, account_id)
 }
 
+/// How long a freshly written row is exempt from pruning. A published
+/// message is applied from the send response before the sync stream stores
+/// its durable copy, so for a short time its absence proves nothing. Pruning
+/// an agent's waiting slot then made the finished reply re-create the row at
+/// the reply time, below messages sent while the agent worked.
+const PRUNE_RECENT_ROW_GRACE_MS: i64 = 5 * 60 * 1_000;
+
 pub(super) fn prune_missing_cloud_messages_in_db(
     conn: &mut rusqlite::Connection,
     account_id: &str,
+) -> Result<Vec<String>, String> {
+    prune_missing_cloud_messages_updated_before(
+        conn,
+        account_id,
+        now_ms() - PRUNE_RECENT_ROW_GRACE_MS,
+    )
+}
+
+pub(super) fn prune_missing_cloud_messages_updated_before(
+    conn: &mut rusqlite::Connection,
+    account_id: &str,
+    updated_before_ms: i64,
 ) -> Result<Vec<String>, String> {
     let transaction = conn.transaction().map_err(|error| error.to_string())?;
     let live_message_ids = {
@@ -203,11 +225,12 @@ pub(super) fn prune_missing_cloud_messages_in_db(
                  WHERE source_transport IN (
                    'cloud-group', 'cloud-group-agent',
                    'cloud-self-agent', 'canonical-fork-snapshot'
-                 ) AND source_event_id IS NOT NULL",
+                 ) AND source_event_id IS NOT NULL
+                   AND updated_at_ms < ?1",
             )
             .map_err(|error| error.to_string())?;
         let rows = statement
-            .query_map([], |row| {
+            .query_map([updated_before_ms], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,

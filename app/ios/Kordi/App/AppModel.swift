@@ -3348,6 +3348,7 @@ final class AppModel: ObservableObject {
                     conversationId: conversation.id,
                     conversationSequence: message.conversationSequence,
                     localTimelineAnchorID: message.localTimelineAnchorID,
+                    timelineSequence: message.timelineSequence,
                     author: message.author,
                     authorName: message.authorName,
                     senderOwnerName: message.senderOwnerName,
@@ -6659,6 +6660,11 @@ final class AppModel: ObservableObject {
         let createdAtByMessageId = Dictionary(
             uniqueKeysWithValues: representativePayloads.map { ($0.id, $0.createdAtMs) }
         )
+        let replySlotByMessageId = CloudGroupAgentLifecycleProjector.replySlotSequences(
+            in: rowsByMessageId.values.flatMap { rows in
+                rows.map { (sequence: $0.0.conversationSequence, payload: $0.1) }
+            }
+        )
         var chatMessages = rowsByMessageId.compactMap { messageId, rows -> ChatMessage? in
             guard visibleMessageIds.contains(messageId) else { return nil }
             guard let (wire, payload) = rows.max(by: { $0.1.createdAtMs < $1.1.createdAtMs }) else { return nil }
@@ -6682,6 +6688,9 @@ final class AppModel: ObservableObject {
                 clientMessageId: wire.clientMessageId,
                 conversationId: conversation.id,
                 conversationSequence: wire.conversationSequence,
+                timelineSequence: replySlotByMessageId[messageId].flatMap { slot in
+                    slot < (wire.conversationSequence ?? .max) ? slot : nil
+                },
                 author: author,
                 authorName: author == .me
                     ? "You"

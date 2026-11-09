@@ -239,8 +239,12 @@ export async function applyCloudGroupMessageControl({
     const existingStableRow = stableAgentNoticeId
       ? existingCloudGroupMessages.find((candidate) => candidate.id === stableAgentNoticeId) ?? null
       : null;
-    if (existingStableRow && isTerminalCloudAgentTurn(existingStableRow)
-      && isPendingAgentDeliveryState(agentDeliveryState)) return null;
+    // History can replay a reply before its waiting row. The waiting row
+    // cannot reopen the reply, but the reply takes over its earlier place
+    // in the timeline, as it does when the rows arrive live.
+    const replayedWaitingRow = Boolean(existingStableRow && isTerminalCloudAgentTurn(existingStableRow)
+      && isPendingAgentDeliveryState(agentDeliveryState));
+    if (replayedWaitingRow && !(message.createdAtMs < existingStableRow!.createdAtMs)) return null;
     const replacementAgentSlot = existingStableRow ?? responseProcessingSlot;
     const messageStatus = senderIsAgent && isPendingAgentDeliveryState(
       agentDeliveryState,
@@ -320,6 +324,7 @@ export async function applyCloudGroupMessageControl({
     const persistedMessage = await persistence.upsertCanonicalMessageFast(messageRequest);
     nextState = mergeCanonicalMessageRow(nextState, persistedMessage) ?? nextState;
     setCanonicalState((current) => mergeCanonicalMessageRow(current, persistedMessage));
+    if (replayedWaitingRow) return null;
     if (senderIsAgent && messageRequestId) {
       const offlinePlaceholderId = `msg:cloud-agent-offline:${messageRequestId}:${message.senderAccountId}`;
       nextState = isPendingAgentDeliveryState(agentDeliveryState)

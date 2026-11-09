@@ -116,6 +116,7 @@ final class CachedMessageRecord {
     var conversationId: String
     var conversationSequence: Int64?
     var localTimelineAnchorID: String? = nil
+    var timelineSequence: Int64? = nil
     var author: String
     var authorName: String
     var senderOwnerName: String?
@@ -148,6 +149,7 @@ final class CachedMessageRecord {
         conversationId = message.conversationId
         conversationSequence = message.conversationSequence
         localTimelineAnchorID = message.localTimelineAnchorID
+        timelineSequence = message.timelineSequence
         author = message.author.rawValue
         authorName = message.authorName
         senderOwnerName = message.senderOwnerName
@@ -178,6 +180,7 @@ final class CachedMessageRecord {
         conversationId = message.conversationId
         conversationSequence = message.conversationSequence
         localTimelineAnchorID = message.localTimelineAnchorID
+        timelineSequence = message.timelineSequence
         author = message.author.rawValue
         authorName = message.authorName
         senderOwnerName = message.senderOwnerName
@@ -213,6 +216,7 @@ final class CachedMessageRecord {
             conversationId: conversationId,
             conversationSequence: conversationSequence,
             localTimelineAnchorID: localTimelineAnchorID,
+            timelineSequence: timelineSequence,
             author: author,
             authorName: authorName,
             senderOwnerName: senderOwnerName,
