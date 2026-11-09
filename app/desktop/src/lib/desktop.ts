@@ -1,11 +1,8 @@
 import { invokeDesktop } from './desktopInvoke';
 export { invokeDesktop } from './desktopInvoke';
 import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
-import {
-  beginChatPerformanceSpan,
-  chatPerformancePayloadBytes,
-  finishChatPerformanceSpan,
-} from '@/features/performance/chatPerformance';
+import { beginChatPerformanceSpan, chatPerformancePayloadBytes, finishChatPerformanceSpan } from '@/features/performance/chatPerformance';
+import { observeStartedTurn, observeTurnModelAvailability, routeWithAvailableModel } from '@/features/chat/modelAvailabilityRoutes';
 import { desktopUpdaterController, type DesktopUpdaterState } from '@/features/updates/desktopUpdater';
 import { rememberSessionOrganization } from '@/features/organizations/sessionOrganization';
 import type {
@@ -895,17 +892,15 @@ export async function startDesktopChatMessage(
   requestMessageId: string | null = null,
   executionLeaseDeadlineMs: number | null = null,
 ) {
-  return invokeDesktop<DesktopChatTurnSnapshot>('desktop_chat_start_message', {
-    sessionId,
-    text,
-    attachmentPaths,
-    route: route ?? null,
-    contextMessages,
+  // A model the provider refused for the sign-in gives way to its best available model.
+  const runRoute = routeWithAvailableModel(route ?? null);
+  return observeStartedTurn(runRoute, await invokeDesktop<DesktopChatTurnSnapshot>('desktop_chat_start_message', {
+    sessionId, text, attachmentPaths, route: runRoute, contextMessages,
     visibleTaskRecords,
     scheduledTaskSessionId,
     requestMessageId,
     executionLeaseDeadlineMs,
-  });
+  }));
 }
 
 export function renewDesktopChatExecutionLease(turnId: string, deadlineMs: number) {
@@ -936,7 +931,7 @@ export async function cancelDesktopChatTurn(turnId: string) {
 }
 
 export async function fetchDesktopChatTurnState(turnId: string) {
-  return invokeDesktop<DesktopChatTurnSnapshot>('desktop_chat_turn_state', { turnId });
+  return observeTurnModelAvailability(await invokeDesktop<DesktopChatTurnSnapshot>('desktop_chat_turn_state', { turnId }));
 }
 
 export async function fetchDesktopChatArtifactPreview(path: string, baseRoot?: string | null) {

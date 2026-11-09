@@ -67,6 +67,7 @@ import type { useChatTranscriptNavigation } from '@/pages/useChatTranscriptNavig
 import { SupportConversationEmptyState } from '@/features/support/SupportReportDialog';
 import { SupportReportSubmissionProvider } from '@/features/support/SupportReportSubmissionContext';
 import { ConversationCallBanner } from '@/features/cloud/ConversationCallBanner';
+import { ModelRecoveryProvider } from '@/features/chat/ModelRecoveryProvider';
 
 type ChatMainWorkspaceProps = {
   layout: ChatsPageLayout;
@@ -254,6 +255,7 @@ export function ChatMainWorkspace({
                 }}
               />
 
+            <ModelRecoveryProvider messages={presentation.messages}>
             <SupportReportSubmissionProvider
               accountId={supportAccountId}
               sessionId={supportReportSessionId}
@@ -422,6 +424,7 @@ export function ChatMainWorkspace({
               }}
               />
             </SupportReportSubmissionProvider>
+            </ModelRecoveryProvider>
           </div>
         ) : (
           <div
