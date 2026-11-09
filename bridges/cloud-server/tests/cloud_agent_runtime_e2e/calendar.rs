@@ -80,19 +80,35 @@ async fn chat_calendar_enforces_owner_disclosure_membership_and_live_runner_scop
     .await;
     let input =
         json!({"sessionId":session,"requestMessageId":owner_request,"shareInConversation":true});
-    for (token, request, allowed) in [
-        (&owner.token, input.clone(), true),
+    // The owner's own request unlocks availability; details need the explicit opt-in.
+    for (token, request, disclosure) in [
+        (&owner.token, input.clone(), Some("details")),
         (
             &owner.token,
             json!({"sessionId":session,"requestMessageId":owner_request}),
-            false,
+            Some("availability"),
+        ),
+        (
+            &owner.token,
+            json!({"sessionId":session,"requestMessageId":owner_request,"disclosure":"details"}),
+            None,
         ),
         (
             &owner.token,
             json!({"sessionId":session,"requestMessageId":peer_request,"shareInConversation":true}),
-            false,
+            None,
         ),
-        (&peer.token, input.clone(), false),
+        (
+            &owner.token,
+            json!({"sessionId":session,"requestMessageId":peer_request}),
+            None,
+        ),
+        (&peer.token, input.clone(), None),
+        (
+            &peer.token,
+            json!({"sessionId":session,"requestMessageId":owner_request}),
+            None,
+        ),
     ] {
         let response = router
             .clone()
@@ -103,7 +119,13 @@ async fn chat_calendar_enforces_owner_disclosure_membership_and_live_runner_scop
             ))
             .await
             .unwrap();
-        assert_eq!(response.status().is_success(), allowed);
+        assert_eq!(response.status().is_success(), disclosure.is_some());
+        if let Some(disclosure) = disclosure {
+            let body = read_json(response).await;
+            assert_eq!(body["disclosure"], disclosure);
+            let titled = body.to_string().contains("Saved appointment");
+            assert_eq!(titled, disclosure == "details");
+        }
     }
     // Model arguments cannot change the run's admitted account or conversation.
     let run = insert_leased_scheduled_run(&pool, &owner, &owner, &session, "calendar-runner").await;
@@ -113,7 +135,7 @@ async fn chat_calendar_enforces_owner_disclosure_membership_and_live_runner_scop
     for (runner, arguments, allowed) in [
         ("calendar-runner", json!({"shareInConversation":true}), true),
         ("other-runner", json!({"shareInConversation":true}), false),
-        ("calendar-runner", json!({}), false),
+        ("calendar-runner", json!({"disclosure":"details"}), false),
         (
             "calendar-runner",
             json!({"accountId":peer.account_id,"shareInConversation":true}),
@@ -135,6 +157,23 @@ async fn chat_calendar_enforces_owner_disclosure_membership_and_live_runner_scop
             assert_eq!(read_json(response).await["events"][0]["status"], "saved");
         }
     }
+    let availability = router
+        .clone()
+        .oneshot(post_json_with_runner_token(
+            &uri,
+            "runner-test-token",
+            json!({"runnerId":"calendar-runner","tool":"read_calendar","arguments":{}}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(availability.status(), StatusCode::OK);
+    let availability = read_json(availability).await;
+    assert_eq!(availability["disclosure"], "availability");
+    assert_eq!(
+        availability["busyWindows"][0]["startAt"],
+        "2026-09-09T12:00:00Z"
+    );
+    assert!(!availability.to_string().contains("Saved appointment"));
     query("UPDATE cloud_agent_fallback_runs SET requester_account_id=$2 WHERE run_id=$1")
         .bind(&run)
         .bind(&peer.account_id)
