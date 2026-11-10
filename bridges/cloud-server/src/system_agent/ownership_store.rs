@@ -180,10 +180,50 @@ fn mentioned_agent(content: &Value, system_agent: &str) -> Option<Owner> {
             mention["targetKind"] == "agent" && !mention.to_string().contains(system_agent)
         })
         .map(|mention| Owner {
-            account_id: None,
+            account_id: mention_owner(mention),
             agent_name: non_empty(&mention["label"])
                 .map(|label| label.trim_start_matches('@').to_string()),
         })
+}
+
+/// The account behind an agent mention: its owner field, or the owner in a
+/// default agent id (`cloud-agent:<account>`).
+fn mention_owner(mention: &Value) -> Option<String> {
+    non_empty(&mention["ownerAccountId"]).or_else(|| {
+        ["agentId", "targetIdentityId"].iter().find_map(|key| {
+            let id = non_empty(&mention[*key])?;
+            let id = id.strip_prefix("agent:").unwrap_or(&id);
+            let owner = id.strip_prefix("cloud-agent:")?;
+            (!owner.is_empty() && !owner.contains(':')).then(|| owner.to_string())
+        })
+    })
+}
+
+/// The member whose agent goes by `name`, for a task whose owner was only
+/// named: the agent's handle (`@KordiMaya`) or "Maya's agent".
+fn owner_by_agent_name(input: &Value, name: &str) -> Option<String> {
+    let wanted = super::mentions::mention_handle(name).to_lowercase();
+    let matches: Vec<&str> = input["members"]
+        .as_array()?
+        .iter()
+        .filter(|member| member["isSystemAgent"] != true)
+        .filter(|member| {
+            let display = member["displayName"].as_str().unwrap_or_default();
+            let agent = member["agentHandle"].as_str().unwrap_or_default();
+            [
+                agent.trim_start_matches('@').to_string(),
+                super::mentions::mention_handle(&format!("{display}s agent")),
+                super::mentions::mention_handle(&format!("{display}s Kordi")),
+            ]
+            .iter()
+            .any(|candidate| !candidate.is_empty() && candidate.to_lowercase() == wanted)
+        })
+        .filter_map(|member| member["participantId"].as_str())
+        .collect();
+    match matches.as_slice() {
+        [account_id] => Some(account_id.to_string()),
+        _ => None,
+    }
 }
 
 /// Facts for messages after `after`, ascending. `flagged` holds the ids the
@@ -364,7 +404,7 @@ pub(super) async fn prepare(
     };
     let working = work.open_owner(clock.now, clock.stall).is_some();
     let stepped_in_through = stepped_in.as_ref().map_or(0, |stepped| stepped.through);
-    let assessment = assess(
+    let mut assessment = assess(
         stored.clone(),
         stepped_in_through,
         candidate.seen_sequence,
@@ -372,6 +412,14 @@ pub(super) async fn prepare(
         &work,
         &clock,
     );
+    // A stalled task whose agent was only named keeps its owner's account, so
+    // every later step-in record and `ask` still has it.
+    if let Outcome::Stalled(task) = &mut assessment.outcome {
+        if task.owner.account_id.is_none() {
+            let name = task.owner.agent_name.clone().unwrap_or_default();
+            task.owner.account_id = owner_by_agent_name(&input, &name);
+        }
+    }
     // An unreadable `deferred` value is cleared too, so it never keeps waking
     // the sweep.
     if let Some(patch) = state_patch(
@@ -393,7 +441,7 @@ pub(super) async fn prepare(
         candidate.seen_sequence = task.from_sequence.min(candidate.seen_sequence);
         input = build_input(pool, config, &candidate).await?;
         mark(&mut input, &Default::default(), &assessment.agents);
-        step_in(&mut input, &task.owner);
+        step_in(&mut input, &task.owner, task.cause.unwrap_or_default());
         return Ok((candidate, input, gate));
     }
     mark(&mut input, &assessment.owned, &assessment.agents);
@@ -401,7 +449,7 @@ pub(super) async fn prepare(
     if let Some(stepped) = stepped_in.filter(|stepped| {
         candidate.seen_sequence < stepped.through && retried_step_in(&input, stepped.through)
     }) {
-        step_in(&mut input, &stepped.owner);
+        step_in(&mut input, &stepped.owner, stepped.cause);
         gate.stepping_in = true;
     }
     Ok((candidate, input, gate))

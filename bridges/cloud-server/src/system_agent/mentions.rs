@@ -44,81 +44,92 @@ pub(crate) struct MentionMember {
     pub agent_name: Option<Option<String>>,
 }
 
-fn person_mention(member: &MentionMember, handle: &str) -> Value {
-    json!({
+fn person_mention(member: &MentionMember) -> (String, Value) {
+    let visible = format!("@{}", member.display_name);
+    let mention = json!({
         "label": mention_handle(&member.display_name),
         "targetKind": "person",
-        "targetIdentityId": member.account_id,
+        // Clients accept a person mention only under the `human:` identity.
+        "targetIdentityId": format!("human:{}", member.account_id),
         "humanId": member.account_id,
-        "displayText": format!("@{handle}"),
         "displayLabel": member.display_name,
-    })
+    });
+    (visible, mention)
 }
 
-fn agent_mention(member: &MentionMember, agent_name: Option<&str>, handle: &str) -> Value {
+fn agent_mention(member: &MentionMember, agent_name: Option<&str>) -> (String, Value) {
     let agent_id = format!("cloud-agent:{}", member.account_id);
-    json!({
+    let label = format!(
+        "{}'s {}",
+        member.display_name,
+        agent_name.unwrap_or("Kordi")
+    );
+    let mention = json!({
         "label": agent_mention_handle(agent_name, &member.display_name),
         "targetKind": "agent",
         "targetIdentityId": format!("agent:{agent_id}"),
         "agentId": agent_id,
         "ownerAccountId": member.account_id,
         "sourceHostId": "cloud",
-        "displayText": format!("@{handle}"),
-        "displayLabel": format!("{}'s {}", member.display_name, agent_name.unwrap_or("Kordi")),
-    })
+        "displayLabel": label,
+    });
+    (format!("@{label}"), mention)
 }
 
-/// Resolves `@Handle` tokens in the System agent's text to member and agent
-/// mentions in the shape the clients render and notify on. Unknown or
-/// ambiguous handles stay plain text.
-pub(crate) fn resolve_mentions(text: &str, members: &[MentionMember]) -> Vec<Value> {
+/// Replaces each `@Handle` the System agent wrote with the name people see
+/// (`@Maya Patel`, `@Maya Patel's Kordi`), as the clients render mentions,
+/// and returns the text with one structured mention per name. The mention's
+/// range carries the account; unknown or ambiguous handles stay as written.
+pub(crate) fn render_mentions(text: &str, members: &[MentionMember]) -> (String, Vec<Value>) {
+    let mut out = String::with_capacity(text.len());
+    let mut out_utf16 = 0usize;
     let mut mentions = Vec::new();
-    let mut utf16_offset = 0usize;
     let mut chars = text.chars().peekable();
     let mut previous: Option<char> = None;
     while let Some(c) = chars.next() {
-        if c == '@' && previous.is_none_or(|p| !p.is_alphanumeric()) {
-            let start_utf16 = utf16_offset;
-            let mut handle = String::new();
-            let mut token_utf16 = c.len_utf16();
-            while let Some(next) = chars.peek().copied().filter(|next| next.is_alphanumeric()) {
-                handle.push(next);
-                token_utf16 += next.len_utf16();
-                chars.next();
-            }
-            utf16_offset += token_utf16;
-            previous = handle.chars().last().or(Some(c));
-            if handle.is_empty() {
-                continue;
-            }
-            let is = |candidate: &str| candidate.eq_ignore_ascii_case(&handle);
-            let mut matched: Vec<Value> = Vec::new();
-            for member in members {
-                if is(&mention_handle(&member.display_name)) {
-                    matched.push(person_mention(member, &handle));
-                }
-                if let Some(agent_name) = &member.agent_name {
-                    if is(&agent_mention_handle(
-                        agent_name.as_deref(),
-                        &member.display_name,
-                    )) {
-                        matched.push(agent_mention(member, agent_name.as_deref(), &handle));
-                    }
-                }
-            }
-            // An ambiguous handle must never pick a member by position.
-            if let [mention] = matched.as_mut_slice() {
-                mention["startUtf16"] = json!(start_utf16);
-                mention["lengthUtf16"] = json!(token_utf16);
-                mentions.push(mention.take());
-            }
+        if c != '@' || previous.is_some_and(|p| p.is_alphanumeric()) {
+            out.push(c);
+            out_utf16 += c.len_utf16();
+            previous = Some(c);
             continue;
         }
-        utf16_offset += c.len_utf16();
-        previous = Some(c);
+        let mut handle = String::new();
+        while let Some(next) = chars.peek().copied().filter(|next| next.is_alphanumeric()) {
+            handle.push(next);
+            chars.next();
+        }
+        previous = handle.chars().last().or(Some(c));
+        let is = |candidate: &str| !handle.is_empty() && candidate.eq_ignore_ascii_case(&handle);
+        let mut matched: Vec<(String, Value)> = Vec::new();
+        for member in members {
+            if is(&mention_handle(&member.display_name)) {
+                matched.push(person_mention(member));
+            }
+            if let Some(agent_name) = &member.agent_name {
+                if is(&agent_mention_handle(
+                    agent_name.as_deref(),
+                    &member.display_name,
+                )) {
+                    matched.push(agent_mention(member, agent_name.as_deref()));
+                }
+            }
+        }
+        // An ambiguous handle must never pick a member by position.
+        let visible = match matched.as_mut_slice() {
+            [(visible, mention)] => {
+                let length = visible.encode_utf16().count();
+                mention["displayText"] = json!(visible);
+                mention["startUtf16"] = json!(out_utf16);
+                mention["lengthUtf16"] = json!(length);
+                mentions.push(mention.take());
+                visible.clone()
+            }
+            _ => format!("@{handle}"),
+        };
+        out_utf16 += visible.encode_utf16().count();
+        out.push_str(&visible);
     }
-    mentions
+    (out, mentions)
 }
 
 #[cfg(test)]
@@ -134,23 +145,28 @@ mod tests {
     }
 
     #[test]
-    fn handles_resolve_to_one_member_with_utf16_offsets() {
+    fn handles_resolve_to_one_member_and_show_their_name() {
         let members = vec![
             member("acct_mina", "Mina Park", None),
             member("acct_theo", "Theo", None),
             member("acct_theo2", "Theo", None),
         ];
-        let mentions = resolve_mentions("\u{1f44b} @MinaPark and @theo, email a@b", &members);
+        let (text, mentions) =
+            render_mentions("\u{1f44b} @MinaPark and @theo, email a@b", &members);
+        assert_eq!(text, "\u{1f44b} @Mina Park and @theo, email a@b");
         assert_eq!(mentions.len(), 1);
-        assert_eq!(mentions[0]["targetIdentityId"], "acct_mina");
+        assert_eq!(mentions[0]["targetIdentityId"], "human:acct_mina");
+        assert_eq!(mentions[0]["displayText"], "@Mina Park");
         assert_eq!(mentions[0]["startUtf16"], 3);
-        assert_eq!(mentions[0]["lengthUtf16"], 9);
+        assert_eq!(mentions[0]["lengthUtf16"], 10);
     }
 
+    /// The exact message and mentions that
+    /// `app/desktop/tests/systemAgentMentions.test.tsx` feeds to the renderer.
     #[test]
-    fn agent_handles_resolve_to_that_members_agent() {
+    fn rendered_mentions_match_the_desktop_fixture() {
         let members = vec![
-            member("acct_mina", "Mina Park", None),
+            member("acct_maya", "Maya Patel Synthetic", None),
             member("acct_ana", "Ana", Some("Scout")),
             MentionMember {
                 account_id: "acct_system".to_string(),
@@ -158,20 +174,30 @@ mod tests {
                 agent_name: None,
             },
         ];
-        let mentions = resolve_mentions(
-            "@KordiMinaPark pick one. @ScoutAna too. @KordiSystem",
+        let (text, mentions) = render_mentions(
+            "@MayaPatelSynthetic does 7pm work? @ScoutAna can confirm. @KordiSystem",
             &members,
         );
-        assert_eq!(mentions.len(), 2);
-        assert_eq!(mentions[0]["targetKind"], "agent");
-        assert_eq!(mentions[0]["agentId"], "cloud-agent:acct_mina");
         assert_eq!(
-            mentions[0]["targetIdentityId"],
-            "agent:cloud-agent:acct_mina"
+            text,
+            "@Maya Patel Synthetic does 7pm work? @Ana's Scout can confirm. @KordiSystem"
         );
-        assert_eq!(mentions[0]["startUtf16"], 0);
-        assert_eq!(mentions[0]["lengthUtf16"], 14);
-        assert_eq!(mentions[1]["ownerAccountId"], "acct_ana");
+        assert_eq!(
+            mentions[0],
+            json!({"label": "MayaPatelSynthetic", "targetKind": "person",
+                "targetIdentityId": "human:acct_maya", "humanId": "acct_maya",
+                "displayLabel": "Maya Patel Synthetic", "displayText": "@Maya Patel Synthetic",
+                "startUtf16": 0, "lengthUtf16": 21})
+        );
+        assert_eq!(
+            mentions[1],
+            json!({"label": "ScoutAna", "targetKind": "agent",
+                "targetIdentityId": "agent:cloud-agent:acct_ana", "agentId": "cloud-agent:acct_ana",
+                "ownerAccountId": "acct_ana", "sourceHostId": "cloud",
+                "displayLabel": "Ana's Scout", "displayText": "@Ana's Scout",
+                "startUtf16": 37, "lengthUtf16": 12})
+        );
+        assert_eq!(mentions.len(), 2);
         assert_eq!(agent_mention_handle(Some("My Kordi"), "Ana"), "KordiAna");
     }
 }
