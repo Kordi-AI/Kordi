@@ -1,4 +1,4 @@
-import { Pause, Play, RotateCcw, Scissors, Send, X } from 'lucide-react';
+import { Pause, Play, RotateCcw, Scissors, ArrowUp, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { VoiceMessageRecorderState } from '@/features/chat/useVoiceMessageRecorder';
@@ -113,7 +113,7 @@ export function VoiceRecordingRail({ state, onCancel, onSend, onRetry, onTrimRan
       <Button className="app-composer-send app-composer-send-compact h-8 w-8 shrink-0 rounded-full p-0" onClick={onSend}
         disabled={!canSend} data-composer-send={canSend ? 'true' : undefined}
         aria-label={recording ? 'Stop and send voice message' : 'Send voice message'} title={recording ? 'Stop and send' : 'Send voice message'}>
-        <Send className="h-[15px] w-[15px]" />
+        <ArrowUp className="h-[15px] w-[15px]" strokeWidth={2.5} aria-hidden="true" />
       </Button>
     </div>
     {permissionIssue ? <MediaPermissionDialog

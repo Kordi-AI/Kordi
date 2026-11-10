@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Plus, Send } from 'lucide-react';
+import { ArrowUp, Plus } from 'lucide-react';
 import { VoiceRecordingRail } from '../../src/kordi-app/components/voiceMessage';
 import type { VoiceMessageRecorderState } from '../../src/features/chat/useVoiceMessageRecorder';
 import { ComposerDropSurface } from '../../src/pages/chatsPage.composerDropSurface';
@@ -42,7 +42,7 @@ function Fixture() {
         {active ? <VoiceRecordingRail state={state} onCancel={() => setMode('Idle')} onSend={noop} onRetry={noop} onTrimRange={(a, b) => setRange([a, b])} />
           : <div className="flex h-10 items-center gap-2 pr-1">
             <button className="app-button-quiet grid h-9 w-9 place-items-center rounded-full" aria-label="Record voice message">Mic</button>
-            <button className="app-button-primary app-composer-send app-composer-send-compact grid h-8 w-8 place-items-center rounded-full" aria-label="Send message" disabled><Send size={15} /></button>
+            <button className="app-button-primary app-composer-send app-composer-send-compact grid h-8 w-8 place-items-center rounded-full" aria-label="Send message" disabled><ArrowUp size={15} strokeWidth={2.5} /></button>
           </div>}
       </div>
     </ComposerDropSurface>

@@ -11,7 +11,7 @@
 // agent chat path).
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Paperclip, Send, X } from 'lucide-react';
+import { Paperclip, ArrowUp, X } from 'lucide-react';
 
 import { IdentityAvatar } from '@/kordi-app/components/IdentityAvatar';
 import { AttachmentPreview } from '@/kordi-app/components/transcriptAttachments';
@@ -212,7 +212,7 @@ export function CloudPeerChatPanel({ account, contact, onClose }: CloudPeerChatP
               className="h-9 w-9 shrink-0 rounded-[12px] p-0"
               aria-label="Send"
             >
-              <Send className="h-4 w-4" />
+              <ArrowUp className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" />
             </Button>
           </form>
         </div>
