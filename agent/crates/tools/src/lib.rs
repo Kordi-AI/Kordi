@@ -21,6 +21,7 @@ pub mod memory_import_prompt;
 pub mod memory_prompt;
 pub mod metadata;
 pub(crate) mod path;
+pub mod plan_card;
 pub mod plan_tool;
 pub mod reach_out;
 pub mod read;
@@ -41,6 +42,7 @@ pub mod web_search;
 pub mod write;
 
 pub use metadata::{ToolDefinition, ToolLayer, ToolMetadata, ToolRiskLevel};
+pub use plan_card::{PlanCardFn, PlanCardFuture, PlanCardRequest, PlanCardRuntime};
 pub use registry::builtin_tools;
 pub use registry_plan::{ToolRegistryPlan, ToolRegistryPlanEntry};
 pub use schedule_task::{

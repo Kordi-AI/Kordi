@@ -70,8 +70,20 @@ async fn handle(
             // System agent's message that carries this card is refreshed in
             // place for everyone, with no new line and no model run. The System
             // agent is not in direct chats or Grounding groups, so it has
-            // nothing there.
-            if let Some(system_agent) = state.system_agent() {
+            // nothing there. A card a person's agent opened travels in its
+            // owner's messages, which also show a resolved vote's plan.
+            if let Some(agent) = row.agent.as_ref() {
+                if let Err(error) = crate::system_agent::cards::sync_card_messages_as(
+                    state.db_pool(),
+                    &agent.owner_account_id,
+                    crate::common_ground::SYSTEM_NOTICE_KIND,
+                    &row,
+                )
+                .await
+                {
+                    eprintln!("[plan-card] Could not update the agent's plan card: {error}");
+                }
+            } else if let Some(system_agent) = state.system_agent() {
                 let system_agent_account = system_agent.config().account_id.as_str();
                 let in_chat = match Uuid::parse_str(&row.conversation_id) {
                     Ok(id) => is_active_member(state.db_pool(), id, system_agent_account).await,
@@ -258,6 +270,41 @@ async fn organizer_revision(
     Ok(args)
 }
 
+/// One owner per plan: when a person's agent opened the card for a plan, the
+/// System agent keeps its answers, votes, and confirmation, but neither
+/// revises that card nor opens another one for an overlapping time in the
+/// same chat within a day.
+async fn system_agent_defers_to_person_agent(
+    pool: &PgPool,
+    args: &PlanCardProposeArgs,
+) -> Result<(), Rejection> {
+    let owner = match args.existing_event_id.as_deref() {
+        Some(event_id) => super::agent::opened_by_agent(pool, event_id)
+            .await
+            .map_err(|err| store_error(err.into()))?
+            .map(|name| (event_id.to_string(), name)),
+        None => super::agent::agent_card_for_same_plan(
+            pool,
+            args.conversation_id,
+            args.start_at.as_deref(),
+            args.end_at.as_deref(),
+        )
+        .await
+        .map_err(|err| store_error(err.into()))?,
+    };
+    match owner {
+        Some((event_id, name)) => Err(error(
+            "plan_card_owned_by_agent",
+            &format!(
+                "{name} is planning this in card {event_id}. Do not open or revise a card for \
+                 it; record answers on that card with rsvp, vote, or confirm instead."
+            ),
+            StatusCode::CONFLICT,
+        )),
+        None => Ok(()),
+    }
+}
+
 fn forbidden(message: &str) -> Rejection {
     error("plan_card_forbidden", message, StatusCode::FORBIDDEN)
 }
@@ -295,6 +342,7 @@ async fn apply(pool: &PgPool, actor: &Actor, request: Request) -> Result<PlanCar
         }
         Request::Propose(propose) => {
             let mut args = propose.into_args(actor.on_behalf_of_conversation)?;
+            system_agent_defers_to_person_agent(pool, &args).await?;
             // The System agent manages the card but never attends it. The model
             // sometimes lists the agent among the participants; never store it
             // as one.

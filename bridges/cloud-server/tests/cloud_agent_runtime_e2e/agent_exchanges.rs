@@ -2,19 +2,19 @@
 use super::*;
 use sqlx_core::{query::query, query_as::query_as};
 
-struct Fixture {
-    pool: sqlx_postgres::PgPool,
-    router: axum::Router,
-    people: Vec<TestAccount>,
-    session: String,
-    root: String,
-    claim: uuid::Uuid,
+pub(super) struct Fixture {
+    pub(super) pool: sqlx_postgres::PgPool,
+    pub(super) router: axum::Router,
+    pub(super) people: Vec<TestAccount>,
+    pub(super) session: String,
+    pub(super) root: String,
+    pub(super) claim: uuid::Uuid,
 }
 impl Fixture {
-    async fn new() -> Option<Self> {
+    pub(super) async fn new() -> Option<Self> {
         Self::kind(true).await
     }
-    async fn kind(group: bool) -> Option<Self> {
+    pub(super) async fn kind(group: bool) -> Option<Self> {
         let pool = try_pool().await?;
         let router = test_router(Arc::new(signup_email_fixture::state(pool.clone())));
         let mut people = vec![];
@@ -115,7 +115,7 @@ impl Fixture {
             claim,
         })
     }
-    async fn post(&self, person: usize, path: &str, body: Value) -> Value {
+    pub(super) async fn post(&self, person: usize, path: &str, body: Value) -> Value {
         let response = self
             .router
             .clone()
@@ -127,10 +127,10 @@ impl Fixture {
         assert_eq!(status, StatusCode::OK, "{body}");
         body
     }
-    async fn send(&self, key: &str, target: usize) -> Value {
+    pub(super) async fn send(&self, key: &str, target: usize) -> Value {
         self.post(0,&format!("/v1/cloud/agent-runs/desktop/{}/agent-exchange",self.root),json!({"claimId":self.claim,"toolCallId":key,"arguments":{"target":format!("cloud-agent:{}",self.people[target].account_id),"message":"Return the synthetic status."}})).await
     }
-    async fn pending(&self, person: usize) -> Vec<Value> {
+    pub(super) async fn pending(&self, person: usize) -> Vec<Value> {
         let response = self
             .router
             .clone()
@@ -145,7 +145,7 @@ impl Fixture {
         assert_eq!(status, StatusCode::OK, "{body}");
         body.as_array().unwrap().clone()
     }
-    async fn claim(&self, person: usize, run: &Value) -> uuid::Uuid {
+    pub(super) async fn claim(&self, person: usize, run: &Value) -> uuid::Uuid {
         let claim = uuid::Uuid::new_v4();
         let body = json!({"claimId":claim,"requestMessageId":run["requestMessageId"],"sessionId":self.session,"ownerAccountId":self.people[person].account_id,"requesterAccountId":run["requesterAccountId"],"prompt":run["prompt"],"idempotencyKey":run["runId"]});
         let claimed = self
@@ -162,7 +162,7 @@ impl Fixture {
         )
         .await;
     }
-    async fn end_parent(&self) {
+    pub(super) async fn end_parent(&self) {
         // Simulates the ordinary chat publisher finishing the first turn.
         query("UPDATE cloud_agent_fallback_runs SET status='completed',completed_at=now()::text WHERE run_id=$1").bind(&self.root).execute(&self.pool).await.unwrap();
     }

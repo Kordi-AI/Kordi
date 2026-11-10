@@ -190,6 +190,7 @@ fn memory_row(id: &str, scope: &str, scope_id: &str, text: &str, at: &str) -> Ru
 fn run() -> CloudAgentRun {
     CloudAgentRun {
         agent_communication: false,
+        plan_cards: false,
         turn_identity: None,
         history_messages: Vec::new(),
         subsession_id: None,

@@ -6,8 +6,8 @@ use sqlx_postgres::{PgConnection, PgPool, Postgres};
 use uuid::Uuid;
 
 use super::models::{
-    PlanCardOption, PlanCardParticipantStatus, PlanCardProposeArgs, PlanCardRow, PlanCardRsvp,
-    PlanCardState, PlanCardStoreError,
+    PlanCardAgent, PlanCardOption, PlanCardParticipantStatus, PlanCardProposeArgs, PlanCardRow,
+    PlanCardRsvp, PlanCardState, PlanCardStoreError,
 };
 use super::revise::{carry_votes, keeps_answers, revised_rsvp};
 
@@ -46,6 +46,9 @@ type PlanCardRowTuple = (
     serde_json::Value,
     Option<String>,
     serde_json::Value,
+    String,
+    Option<String>,
+    Option<String>,
 );
 
 pub(super) fn options_from_json(value: serde_json::Value) -> Vec<PlanCardOption> {
@@ -87,7 +90,8 @@ pub(super) async fn fetch_row(
     let card: Option<PlanCardRowTuple> = query_as(
         "SELECT event_id, conversation_id, revision, state, title, \
                 start_at::text, end_at::text, location, \
-                unresolved_fields, source_message_ids, note, options \
+                unresolved_fields, source_message_ids, note, options, \
+                created_by_account_id, created_by_agent_id, created_by_agent_name \
          FROM cloud_plan_cards WHERE event_id = $1",
     )
     .bind(event_id)
@@ -106,6 +110,9 @@ pub(super) async fn fetch_row(
         source_message_ids,
         note,
         options,
+        created_by,
+        agent_id,
+        agent_name,
     )) = card
     else {
         return Ok(None);
@@ -164,6 +171,11 @@ pub(super) async fn fetch_row(
         manager_ids: managers.into_iter().map(|(id,)| id).collect(),
         options: options_from_json(options),
         note,
+        agent: agent_id.map(|agent_id| PlanCardAgent {
+            agent_id,
+            owner_account_id: created_by,
+            name: agent_name.unwrap_or_else(|| "Kordi".to_string()),
+        }),
     }))
 }
 
@@ -200,7 +212,26 @@ pub async fn propose(
     acting_account_id: &str,
     args: PlanCardProposeArgs,
 ) -> Result<PlanCardRow, PlanCardStoreError> {
-    propose_inner(pool, acting_account_id, args, None).await
+    propose_inner(pool, acting_account_id, args, None, None).await
+}
+
+/// A person's agent opens a card for its owner, who is the acting account,
+/// and the card records the agent and the task. An update through here never
+/// replaces a confirmed plan.
+pub(super) async fn propose_for_agent(
+    pool: &PgPool,
+    args: PlanCardProposeArgs,
+    author: &PlanCardAgent,
+    task_run_id: &str,
+) -> Result<PlanCardRow, PlanCardStoreError> {
+    propose_inner(
+        pool,
+        &author.owner_account_id,
+        args,
+        None,
+        Some((author, task_run_id)),
+    )
+    .await
 }
 
 /// A scoped System agent proposal replaces a confirmed plan atomically. A
@@ -211,7 +242,14 @@ pub(super) async fn propose_for_system_agent(
     args: PlanCardProposeArgs,
     source_message_ids: &[String],
 ) -> Result<PlanCardRow, PlanCardStoreError> {
-    propose_inner(pool, acting_account_id, args, Some(source_message_ids)).await
+    propose_inner(
+        pool,
+        acting_account_id,
+        args,
+        Some(source_message_ids),
+        None,
+    )
+    .await
 }
 
 async fn propose_inner(
@@ -219,6 +257,7 @@ async fn propose_inner(
     acting_account_id: &str,
     args: PlanCardProposeArgs,
     source_message_ids: Option<&[String]>,
+    agent: Option<(&PlanCardAgent, &str)>,
 ) -> Result<PlanCardRow, PlanCardStoreError> {
     let allow_confirmed = source_message_ids.is_some();
     if !matches!(
@@ -360,8 +399,10 @@ async fn propose_inner(
         query(
             "INSERT INTO cloud_plan_cards ( \
                 event_id, conversation_id, state, title, start_at, end_at, location, \
-                unresolved_fields, source_message_ids, revision, created_by_account_id, options \
-             ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7, $8, $9, 1, $10, $11)",
+                unresolved_fields, source_message_ids, revision, created_by_account_id, options, \
+                created_by_agent_id, created_by_agent_name, created_by_task_run_id \
+             ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7, $8, $9, 1, $10, $11, \
+                       $12, $13, $14)",
         )
         .bind(&event_id)
         .bind(args.conversation_id)
@@ -386,6 +427,9 @@ async fn propose_inner(
         ))
         .bind(acting_account_id)
         .bind(options_to_json(&args.options))
+        .bind(agent.map(|(author, _)| author.agent_id.as_str()))
+        .bind(agent.map(|(author, _)| author.name.as_str()))
+        .bind(agent.map(|(_, task)| task))
         .execute(&mut *tx)
         .await?;
         (event_id, None)

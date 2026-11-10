@@ -148,6 +148,7 @@ fn descriptor(
 fn group_run(run_id: &str) -> CloudAgentRun {
     CloudAgentRun {
         agent_communication: false,
+        plan_cards: false,
         turn_identity: None,
         history_messages: Vec::new(),
         subsession_id: None,

@@ -477,3 +477,5 @@ mod signup_email_fixture;
 
 #[path = "cloud_agent_runtime_e2e/agent_exchanges.rs"]
 mod agent_exchanges;
+#[path = "cloud_agent_runtime_e2e/agent_plan_cards.rs"]
+mod agent_plan_cards;

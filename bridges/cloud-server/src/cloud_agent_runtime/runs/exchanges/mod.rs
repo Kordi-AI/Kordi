@@ -24,7 +24,8 @@ pub(crate) use outcome::{
 };
 mod store;
 pub(crate) use lifecycle::{finish, reconcile};
-use store::{authorize, directory, send};
+pub(crate) use store::authorize;
+use store::{directory, send};
 
 pub(crate) const PREFIX: &str = "agent-exchange:";
 

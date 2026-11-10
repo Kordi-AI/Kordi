@@ -7,7 +7,7 @@ use unicode_normalization::UnicodeNormalization;
 
 type AuthorizedRunRow = (String, String, String, String, Uuid, String, String, String);
 
-pub(super) struct Parent {
+pub(crate) struct Parent {
     pub run: String,
     pub root: String,
     pub session: String,
@@ -18,7 +18,7 @@ pub(super) struct Parent {
     pub kind: String,
 }
 
-pub(super) async fn authorize(
+pub(crate) async fn authorize(
     pool: &PgPool,
     run: &str,
     executor: Option<(&str, Option<&str>)>,

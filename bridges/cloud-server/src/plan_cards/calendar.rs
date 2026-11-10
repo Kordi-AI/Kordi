@@ -16,6 +16,21 @@ fn calendar_event_id(event_id: &str) -> String {
     format!("plan:{event_id}")
 }
 
+/// "Planned with <agent> in <chat>.": the person's agent that opened the card,
+/// or the System agent.
+fn planned_with(row: &PlanCardRow, group: Option<&str>) -> String {
+    let planner = row
+        .agent
+        .as_ref()
+        .map(|agent| agent.name.trim())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("the System agent");
+    match group {
+        Some(group) => format!("Planned with {planner} in {group}."),
+        None => format!("Planned with {planner}."),
+    }
+}
+
 pub(super) async fn sync_plan(
     tx: &mut sqlx_core::transaction::Transaction<'_, Postgres>,
     row: &PlanCardRow,
@@ -38,10 +53,7 @@ pub(super) async fn sync_plan(
     let group = title
         .and_then(|(shared, group)| group.or(shared))
         .filter(|value| !value.trim().is_empty());
-    let mut description = match group {
-        Some(group) => format!("Planned with the System agent in {group}."),
-        None => "Planned with the System agent.".to_string(),
-    };
+    let mut description = planned_with(row, group.as_deref());
     if let Some(location) = row
         .location
         .as_deref()
@@ -121,4 +133,51 @@ pub(super) async fn sync_plan(
     // A calendar the System agent changed is a digest change for that person.
     crate::digest::changes::mark_accounts(&mut **tx, &calendar_changed).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::plan_cards::models::PlanCardAgent;
+
+    fn row(agent: Option<PlanCardAgent>) -> PlanCardRow {
+        PlanCardRow {
+            event_id: "plan_a".to_string(),
+            conversation_id: Uuid::nil().to_string(),
+            revision: 1,
+            state: PlanCardState::Confirmed,
+            title: "Coffee".to_string(),
+            start_at: None,
+            end_at: None,
+            location: None,
+            unresolved_fields: Vec::new(),
+            source_message_ids: Vec::new(),
+            participants: Vec::new(),
+            manager_ids: Vec::new(),
+            options: Vec::new(),
+            note: None,
+            agent,
+        }
+    }
+
+    #[test]
+    fn the_description_names_the_agent_that_planned_it() {
+        assert_eq!(
+            planned_with(&row(None), Some("Team")),
+            "Planned with the System agent in Team."
+        );
+        let agent = PlanCardAgent {
+            agent_id: "cloud-agent:acct_a".to_string(),
+            owner_account_id: "acct_a".to_string(),
+            name: "Ada's Kordi".to_string(),
+        };
+        assert_eq!(
+            planned_with(&row(Some(agent.clone())), Some("Team")),
+            "Planned with Ada's Kordi in Team."
+        );
+        assert_eq!(
+            planned_with(&row(Some(agent)), None),
+            "Planned with Ada's Kordi."
+        );
+    }
 }
