@@ -327,7 +327,7 @@ async fn a_stalled_agent_task_gets_one_addressed_step_in() {
     chat.let_window_pass().await;
     assert_eq!(chat.sweep().await, 1, "the agent stalled");
     let prompts = chat.system_agent_prompts().await;
-    assert_eq!(trigger(&prompts[0]), ("stall", ""));
+    assert_eq!(trigger(&prompts[0]), ("stall", "silent"));
     assert_eq!(prompts[0]["trigger"]["ask"]["mention"], "@Alice");
     let posted = chat.finish_run(Some("Does 7pm work for you?")).await;
     let text = posted["text"].as_str().unwrap();
@@ -350,4 +350,46 @@ async fn a_step_in_that_publishes_a_card_needs_no_mention() {
     let posted = chat.finish_run(Some("Card is up.")).await;
     assert_eq!(posted["text"], "Card is up.");
     assert!(posted["mentions"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn a_failed_agent_run_is_named_as_a_failure_and_keeps_its_owner() {
+    let chat = Chat::new().await;
+    chat.name_people().await;
+    // An older client mentions the agent by label only.
+    let request = group(
+        chat.chat,
+        json!({"id": Uuid::new_v4().to_string(), "senderAccountId": chat.bob, "createdAtMs": 1,
+            "text": "@KordiAlice plan Friday dinner for us.",
+            "mentions": [{"label": "KordiAlice", "targetKind": "agent"}]}),
+    );
+    let request_id = say(&chat.pool, &chat.bob, chat.chat, &request).await;
+    let now = chrono::Utc::now().to_rfc3339();
+    query("INSERT INTO cloud_agent_fallback_runs(run_id,idempotency_key,request_message_id,session_id,owner_account_id,requester_account_id,status,prompt,error_code,created_at,updated_at) VALUES($1,$1,$2,$3,$4,$5,'failed','task','missing_provider_auth',$6,$6)")
+        .bind(format!("car_{}", Uuid::new_v4().simple()))
+        .bind(&request_id)
+        .bind(&chat.session)
+        .bind(&chat.alice)
+        .bind(&chat.bob)
+        .bind(&now)
+        .execute(&chat.pool)
+        .await
+        .unwrap();
+    assert_eq!(chat.sweep().await, 1, "a definite failure steps in at once");
+    let prompts = chat.system_agent_prompts().await;
+    assert_eq!(prompts[0]["stepIn"]["reason"], "failed");
+    assert_eq!(prompts[0]["trigger"]["reason"], "failed");
+    assert_eq!(
+        prompts[0]["trigger"]["ask"]["participantId"],
+        json!(chat.alice)
+    );
+    let stepped = &chat.hooks().await["steppedIn"];
+    assert_eq!(stepped["owner"]["accountId"], json!(chat.alice));
+    assert_eq!(stepped["cause"], "failed");
+    let posted = chat.finish_run(Some("Which time works for you?")).await;
+    assert_eq!(
+        posted["text"],
+        "KordiAlice couldn't answer, so I'm picking this up.\n@Alice Which time works for you?"
+    );
 }

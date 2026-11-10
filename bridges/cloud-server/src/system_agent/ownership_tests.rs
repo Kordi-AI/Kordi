@@ -144,6 +144,7 @@ fn messages_while_a_task_waits_join_it() {
         last_human_at: at(0),
         owner: agent_owner(),
         check_after: at(1),
+        cause: None,
     };
     let messages = [addressed(2, 0), person(3, 4)];
     let result = assess(Some(stored), 0, 2, &messages, &Work::default(), &clock(5));
@@ -163,6 +164,7 @@ fn deferred_answer() -> (Deferral, Vec<MessageFact>) {
         last_human_at: at(1),
         owner: agent_owner(),
         check_after: at(2),
+        cause: None,
     };
     (task, messages)
 }
@@ -170,18 +172,22 @@ fn deferred_answer() -> (Deferral, Vec<MessageFact>) {
 #[test]
 fn a_failed_or_expired_run_is_a_stall() {
     let (task, messages) = deferred_answer();
-    for runs in [
-        vec![run("failed", None, 2)],
-        vec![run("cancelled", None, 2)],
-        vec![run("running", Some(2), 2)],
+    let cause = |result: &Assessment| match &result.outcome {
+        Outcome::Stalled(task) => task.cause,
+        other => panic!("expected a stall, got {other:?}"),
+    };
+    for (runs, expected) in [
+        (vec![run("failed", None, 2)], StallCause::Failed),
+        (vec![run("cancelled", None, 2)], StallCause::Failed),
+        (vec![run("running", Some(2), 2)], StallCause::Unreachable),
     ] {
         let result = assess(Some(task.clone()), 0, 2, &messages, &work(runs), &clock(4));
-        assert!(matches!(result.outcome, Outcome::Stalled(_)), "{result:?}");
+        assert_eq!(cause(&result), Some(expected), "{result:?}");
     }
     let mut failed_reply = messages.clone();
     failed_reply.push(agent(3, 2, false, Delivery::Failed));
     let result = assess(Some(task), 0, 3, &failed_reply, &Work::default(), &clock(4));
-    assert!(matches!(result.outcome, Outcome::Stalled(_)));
+    assert_eq!(cause(&result), Some(StallCause::Failed));
 }
 
 #[test]
@@ -212,7 +218,11 @@ fn the_window_passing_without_a_reply_is_a_stall() {
         &Work::default(),
         &clock(11),
     );
-    assert_eq!(late.outcome, Outcome::Stalled(task));
+    let silent = Deferral {
+        cause: Some(StallCause::Silent),
+        ..task
+    };
+    assert_eq!(late.outcome, Outcome::Stalled(silent));
     // A run that finished for an earlier request is not this task's failure.
     let (task, messages) = deferred_answer();
     let earlier = work(vec![run("failed", None, 0)]);
@@ -261,9 +271,16 @@ fn the_sweep_row_keeps_waiting_tasks_and_drops_finished_ones() {
     let waiting = state_patch(false, &Outcome::Waiting(task.clone()), 9).unwrap();
     assert_eq!(Deferral::read(&waiting), Some(task.clone()));
     assert!(waiting["deferred"]["checkAfter"].is_string());
-    let stalled = state_patch(true, &Outcome::Stalled(task), 9).unwrap();
+    let failed = Deferral {
+        cause: Some(StallCause::Failed),
+        ..task
+    };
+    let stalled = state_patch(true, &Outcome::Stalled(failed), 9).unwrap();
     assert!(stalled.get(DEFERRED_KEY).is_none());
-    assert_eq!(SteppedIn::read(&stalled).unwrap().through, 9);
+    let stepped = SteppedIn::read(&stalled).unwrap();
+    assert_eq!(stepped.through, 9);
+    assert_eq!(stepped.cause, StallCause::Failed);
+    assert_eq!(stepped.owner.account_id, agent_owner().account_id);
     assert_eq!(state_patch(true, &Outcome::Replied, 9), Some(json!({})));
     assert_eq!(state_patch(false, &Outcome::Free, 9), None);
 }
@@ -281,7 +298,7 @@ fn input_marks_and_step_in_line() {
     assert_eq!(input["messages"][1]["fromAgent"], true);
     assert_eq!(input["messages"][1]["agentName"], "KordiAlice");
     assert_eq!(with_step_in_line(&input, "Card is up."), "Card is up.");
-    step_in(&mut input, &agent_owner());
+    step_in(&mut input, &agent_owner(), StallCause::Silent);
     assert!(input["messages"][0].get("addressesAgent").is_none());
     assert!(input["messages"][2].get("agentOwned").is_none());
     assert_eq!(input["messages"][1]["fromAgent"], true);
@@ -289,8 +306,19 @@ fn input_marks_and_step_in_line() {
         with_step_in_line(&input, "Card is up."),
         "KordiAlice hasn't replied, so I'm picking this up.\nCard is up."
     );
-    step_in(&mut input, &Owner::default());
+    step_in(&mut input, &Owner::default(), StallCause::Silent);
     assert!(with_step_in_line(&input, "x").starts_with("The agent hasn't replied"));
+    // The line says what happened: a failure, or no way to reach the agent.
+    step_in(&mut input, &agent_owner(), StallCause::Failed);
+    assert_eq!(
+        with_step_in_line(&input, "x"),
+        "KordiAlice couldn't answer, so I'm picking this up.\nx"
+    );
+    step_in(&mut input, &agent_owner(), StallCause::Unreachable);
+    assert_eq!(
+        with_step_in_line(&input, "x"),
+        "I couldn't reach KordiAlice, so I'm picking this up.\nx"
+    );
 }
 
 #[test]

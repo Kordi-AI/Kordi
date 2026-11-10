@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::chat_sync::models::SendMessageRequest;
 
-use super::mentions::{encode_system_agent_message_with_mentions, resolve_mentions, MentionMember};
+use super::mentions::{encode_system_agent_message_with_mentions, render_mentions, MentionMember};
 
 /// Triggers where the System agent steps in and must move the chat forward.
 const STEP_IN_TRIGGERS: [&str; 4] = ["silence", "loop", "conflict", "stall"];
@@ -58,7 +58,7 @@ pub(super) fn forward_text(
     let handle = input["trigger"]["ask"]["mention"].as_str();
     match handle {
         Some(handle)
-            if stepping_in && !card_touched && resolve_mentions(text, members).is_empty() =>
+            if stepping_in && !card_touched && render_mentions(text, members).1.is_empty() =>
         {
             format!("{handle} {text}")
         }
@@ -67,7 +67,7 @@ pub(super) fn forward_text(
 }
 
 /// Posts the System agent's words as their own message, with `@Handle`
-/// mentions resolved.
+/// mentions shown by name and resolved.
 pub(super) async fn post_text(
     pool: &PgPool,
     run_id: &str,
@@ -80,7 +80,7 @@ pub(super) async fn post_text(
     let members = mention_members(pool, conversation_id, sender).await?;
     let text = forward_text(input, text, card_touched, &members);
     let text = super::ownership::with_step_in_line(input, &text);
-    let mentions = resolve_mentions(&text, &members);
+    let (text, mentions) = render_mentions(&text, &members);
     let request = SendMessageRequest {
         client_message_id: Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("{run_id}:text").as_bytes()),
         kind: "text".to_string(),
@@ -125,7 +125,7 @@ mod tests {
         let members = members();
         let addressed = forward_text(&input("silence"), "Still Friday?", false, &members);
         assert_eq!(addressed, "@Bob Still Friday?");
-        assert_eq!(resolve_mentions(&addressed, &members).len(), 1);
+        assert_eq!(render_mentions(&addressed, &members).1.len(), 1);
         // Its own mention of a person or an agent stands.
         for text in ["@Ana does 7 work?", "@KordiAna please decide."] {
             assert_eq!(forward_text(&input("loop"), text, false, &members), text);

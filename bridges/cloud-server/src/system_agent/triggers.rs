@@ -234,6 +234,7 @@ pub(super) fn apply(input: &mut Value, trigger: &Trigger, marks: Map<String, Val
         Trigger::Stall => json!({
             "kind": "stall",
             "agentName": input["stepIn"]["agentName"].clone(),
+            "reason": input["stepIn"]["reason"].clone(),
         }),
         Trigger::Request { .. } => json!({"kind": "request"}),
         Trigger::Silence { quiet, .. } => json!({
