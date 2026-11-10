@@ -161,12 +161,17 @@ export type MemoryDocumentApiOptions = {
   collabInit?: (attachmentId: string) => Promise<DocumentCollabInit>;
   /** Renames answer an error. */
   renameFails?: boolean;
+  /**
+   * Plays the server's room rules: documents carry `outsideRoomRevision`, a revisioned save sets it to its revision,
+   * and a snapshot whose `baseRevision` is older than it answers 409 with the current document.
+   */
+  outsideRoom?: boolean;
 };
 
 /** In-memory document routes with recorded calls. Saves bump the revision and re-split the blocks. */
 export function createMemoryDocumentApi(document: DocumentResponse = sampleDocument(), latencyMs = 0, options: MemoryDocumentApiOptions = {}) {
   const calls: RecordedCall[] = [];
-  let stored = document;
+  let stored = options.outsideRoom ? { ...document, outsideRoomRevision: document.outsideRoomRevision ?? 0 } : document;
   let conflict = options.conflictWith ?? null;
   let reactions = [...document.reactions];
   let share: DocumentShare | null = document.share;
@@ -183,13 +188,18 @@ export function createMemoryDocumentApi(document: DocumentResponse = sampleDocum
         return { status: 'conflict' as const, document: stored };
       }
       if (input.mode !== 'snapshot' && input.baseRevision !== (stored.revision ?? 0)) return { status: 'conflict' as const, document: stored };
+      if (options.outsideRoom && input.mode === 'snapshot' && input.baseRevision !== undefined && input.baseRevision < (stored.outsideRoomRevision ?? 0)) {
+        return { status: 'conflict' as const, document: { ...stored, reactions, share } };
+      }
       // Like the server: ids come from the `<!-- k:… -->` comments, sources come back without them,
       // and a first stamped save moves annotations from index ids to the new ids.
       const blocks = blocksFromSource(input.source).map((block) => ({ id: block.id, source: block.source, html: '' }));
       const remap = (blockId: string) => input.blockIds?.[blockId] ?? blockId;
       reactions = reactions.map((entry) => ({ ...entry, blockId: remap(entry.blockId) }));
       const unchanged = input.mode === 'snapshot' && blocks.length === stored.blocks.length && blocks.every((block, index) => block.id === stored.blocks[index].id && block.source === stored.blocks[index].source);
-      stored = { ...stored, blocks, revision: (stored.revision ?? 0) + (unchanged ? 0 : 1), comments: stored.comments.map((entry) => ({ ...entry, blockId: remap(entry.blockId) })) };
+      const revision = (stored.revision ?? 0) + (unchanged ? 0 : 1);
+      const outside = options.outsideRoom && input.mode !== 'snapshot' ? { outsideRoomRevision: revision } : {};
+      stored = { ...stored, ...outside, blocks, revision, comments: stored.comments.map((entry) => ({ ...entry, blockId: remap(entry.blockId) })) };
       return { status: 'saved' as const, document: { ...stored, reactions, share } };
     },
     async renameDocument(attachmentId, title) {

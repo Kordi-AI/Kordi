@@ -1,5 +1,5 @@
 import type { Editor, JSONContent } from '@tiptap/core';
-import { Selection, TextSelection } from '@tiptap/pm/state';
+import { Selection, TextSelection, type Transaction } from '@tiptap/pm/state';
 
 import { parseBlocks, serializeBlocks, type SourceBlock } from './documentBlockIds';
 import { mergeBlocks } from './documentBlockMerge';
@@ -8,8 +8,10 @@ import { selectionBlockId } from './documentEditorCommands';
 /** Meta flag on transactions that bring in outside content (load, remote update); they are not user edits. */
 export const OUTSIDE_CONTENT = 'documentOutsideContent';
 
-/** Where the caret was, as block id plus offsets inside that block, so it survives a content swap. */
-function selectionAnchor(editor: Editor) {
+/** Where the caret is, as block id plus offsets inside that block, so it survives a content swap. */
+export type SelectionAnchor = { id: string; from: number; to: number };
+
+export function selectionAnchor(editor: Editor): SelectionAnchor | null {
   const id = selectionBlockId(editor);
   if (!id) return null;
   let start = -1;
@@ -19,6 +21,24 @@ function selectionAnchor(editor: Editor) {
   return { id, from: from - start, to: to - start };
 }
 
+/** The anchor's selection in `doc`, or null when its block is not there. */
+function anchoredSelection(doc: Transaction['doc'], anchor: SelectionAnchor) {
+  let start = -1;
+  let size = 0;
+  doc.forEach((child, offset) => { if (start < 0 && child.attrs.id === anchor.id) { start = offset; size = child.nodeSize; } });
+  if (start < 0) return null;
+  const clamp = (value: number) => Math.max(start + 1, Math.min(start + size - 1, start + value));
+  return TextSelection.between(doc.resolve(clamp(anchor.from)), doc.resolve(clamp(anchor.to)));
+}
+
+/** Puts the caret back at the anchor (another editor's, for the same content); false while its block is missing. */
+export function placeAnchor(editor: Editor, anchor: SelectionAnchor) {
+  const selection = anchoredSelection(editor.state.doc, anchor);
+  if (!selection) return false;
+  editor.view.dispatch(editor.state.tr.setSelection(selection).setMeta('addToHistory', false));
+  return true;
+}
+
 /** Replaces the document without touching undo history, keeping the caret in its block when that block survives. */
 export function replaceDocument(editor: Editor, doc: JSONContent) {
   const anchor = selectionAnchor(editor);
@@ -26,13 +46,8 @@ export function replaceDocument(editor: Editor, doc: JSONContent) {
   const transaction = editor.state.tr.replaceWith(0, editor.state.doc.content.size, node.content);
   transaction.setMeta('addToHistory', false).setMeta(OUTSIDE_CONTENT, true);
   if (anchor) {
-    let start = -1;
-    let size = 0;
-    transaction.doc.forEach((child, offset) => { if (start < 0 && child.attrs.id === anchor.id) { start = offset; size = child.nodeSize; } });
-    if (start >= 0) {
-      const clamp = (value: number) => Math.max(start + 1, Math.min(start + size - 1, start + value));
-      transaction.setSelection(TextSelection.between(transaction.doc.resolve(clamp(anchor.from)), transaction.doc.resolve(clamp(anchor.to))));
-    }
+    const selection = anchoredSelection(transaction.doc, anchor);
+    if (selection) transaction.setSelection(selection);
   } else {
     // Without a caret to keep, start at the top; a mapped selection can land on a trailing rule or image as a node selection.
     transaction.setSelection(Selection.atStart(transaction.doc));

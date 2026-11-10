@@ -247,7 +247,7 @@ async fn upgrade_from_125_adds_document_collab() {
     execute(&pool, "INSERT INTO cloud_attachments(attachment_id,owner_account_id,object_key,content_type,size_bytes,created_at,finalized_at) VALUES('att-doc','fixture-owner','attachments/fixture-owner/att-doc','text/markdown',10,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')").await;
     execute(&pool, "INSERT INTO cloud_document_contents(attachment_id,source,updated_at) VALUES('att-doc','# Notes','2026-01-02T00:00:00Z')").await;
     let before: Vec<(Value,)> =
-        query_as("SELECT to_jsonb(c) - 'updated_by_agent_id' FROM cloud_document_contents c")
+        query_as("SELECT to_jsonb(c) - 'updated_by_agent_id' - 'outside_room_revision' FROM cloud_document_contents c")
             .fetch_all(&pool)
             .await
             .unwrap();
@@ -256,7 +256,7 @@ async fn upgrade_from_125_adds_document_collab() {
     b.unwrap();
     latest_version(&pool).await;
     let after: Vec<(Value,)> =
-        query_as("SELECT to_jsonb(c) - 'updated_by_agent_id' FROM cloud_document_contents c")
+        query_as("SELECT to_jsonb(c) - 'updated_by_agent_id' - 'outside_room_revision' FROM cloud_document_contents c")
             .fetch_all(&pool)
             .await
             .unwrap();

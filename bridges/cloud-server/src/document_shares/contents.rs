@@ -22,6 +22,9 @@ pub(crate) struct DocumentSource {
     pub revision: i64,
     /// When a save last changed the source; `None` before the first save.
     pub updated_at: Option<String>,
+    /// The revision of the latest save that did not come from a
+    /// collaboration room; 0 when there has been none.
+    pub outside_room_revision: i64,
 }
 
 /// Decodes stored bytes as text. Postgres text cannot hold NUL, so it is
@@ -58,19 +61,22 @@ async fn stored_source(
     state: &ServerState,
     attachment_id: &str,
 ) -> Result<Option<DocumentSource>, Box<Response>> {
-    let row: Option<(String, i64, String)> = query_as(
-        "SELECT source, revision, updated_at FROM cloud_document_contents \
-         WHERE attachment_id = $1",
+    let row: Option<(String, i64, String, i64)> = query_as(
+        "SELECT source, revision, updated_at, outside_room_revision \
+         FROM cloud_document_contents WHERE attachment_id = $1",
     )
     .bind(attachment_id)
     .fetch_optional(state.db_pool())
     .await
     .map_err(|_| db_error())?;
-    Ok(row.map(|(text, revision, updated_at)| DocumentSource {
-        text,
-        revision,
-        updated_at: (revision > 1).then_some(updated_at),
-    }))
+    Ok(row.map(
+        |(text, revision, updated_at, outside_room_revision)| DocumentSource {
+            text,
+            revision,
+            updated_at: (revision > 1).then_some(updated_at),
+            outside_room_revision,
+        },
+    ))
 }
 
 /// The document source and its revision. Markdown documents are seeded from
@@ -84,6 +90,7 @@ pub(crate) async fn document_source(
             text: attachment_text(state, record).await?,
             revision: 1,
             updated_at: None,
+            outside_room_revision: 0,
         });
     }
     if let Some(source) = stored_source(state, &record.attachment_id).await? {

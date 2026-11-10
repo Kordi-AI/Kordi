@@ -113,6 +113,7 @@ pub(crate) async fn document_response(
             .then_some(raw_path)
             .flatten(),
         revision: document.revision,
+        outside_room_revision: (viewer != Viewer::Public).then_some(document.outside_room_revision),
         reactions,
         comments,
         share: owner_share,

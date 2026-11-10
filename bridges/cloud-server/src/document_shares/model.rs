@@ -24,6 +24,10 @@ pub struct DocumentResponse {
     pub blocks: Vec<DocumentBlock>,
     pub raw_path: Option<String>,
     pub revision: i64,
+    /// The revision of the latest save that did not come from a
+    /// collaboration room, 0 when there has been none. Signed-in routes only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outside_room_revision: Option<i64>,
     pub reactions: Vec<DocumentReaction>,
     pub comments: Vec<DocumentComment>,
     pub share: Option<DocumentShare>,
@@ -247,7 +251,9 @@ pub struct PatchCommentRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveContentRequest {
-    /// Required for revisioned saves; ignored for `"mode": "snapshot"`.
+    /// Required for revisioned saves. Optional for `"mode": "snapshot"`:
+    /// when sent, the snapshot conflicts if a save from outside the
+    /// collaboration room is newer than it.
     pub base_revision: Option<i64>,
     pub source: String,
     /// `"snapshot"` for Markdown snapshots of a collaboration room.
