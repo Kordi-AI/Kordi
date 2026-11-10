@@ -34,6 +34,7 @@ body[data-kordi-chat-theme='sand'],
 
 :where(body, .kordi-app, .app-chat-theme-preview) {
   --app-palette-accent: var(--app-palette-accent-dark);
+  --app-copy-selection-strength: 30%;
   --app-palette-ink: oklch(92% calc(0.016 * var(--app-palette-chroma)) var(--app-palette-hue));
   --app-palette-muted: oklch(73% calc(0.023 * var(--app-palette-chroma)) var(--app-palette-hue));
   --app-palette-meta: oklch(71% calc(0.018 * var(--app-palette-chroma)) var(--app-palette-hue));
@@ -62,6 +63,7 @@ body[data-kordi-chat-theme='sand'],
   .app-compact-model-menu-light, .app-composer-mention-menu-light,
   .kordi-app.theme-light .app-chat-theme-preview) {
   --app-palette-accent: var(--app-palette-accent-light);
+  --app-copy-selection-strength: 18%;
   --app-palette-ink: oklch(26% calc(0.025 * var(--app-palette-chroma)) var(--app-palette-hue));
   --app-palette-muted: oklch(46% calc(0.025 * var(--app-palette-chroma)) var(--app-palette-hue));
   --app-palette-meta: oklch(49% calc(0.018 * var(--app-palette-chroma)) var(--app-palette-hue));
@@ -229,7 +231,8 @@ body[data-kordi-chat-theme] .kordi-app:is(.theme-light, .theme-dark),
   --app-mode-tab-active-text: var(--app-palette-accent-ink);
   --app-badge-primary-bg: var(--app-palette-accent);
   --app-badge-primary-text: var(--app-palette-accent-ink);
-  --app-copy-selection-bg: color-mix(in oklab, var(--app-palette-accent) 32%, transparent);
+  /* A soft tint: 18% of the accent on light surfaces, 30% on dark ones. */
+  --app-copy-selection-bg: color-mix(in oklab, var(--app-palette-accent) var(--app-copy-selection-strength, 30%), transparent);
   --app-copy-selection-surface-bg: color-mix(in oklab, var(--app-palette-accent) 18%, transparent);
   --app-copy-selection-text: var(--app-palette-ink);
 }
