@@ -85,24 +85,48 @@ async fn owner_requested_shared_calendar_reads_default_to_availability_only() {
         let result = messages[1].last().unwrap()["content"].as_str().unwrap();
         assert_eq!(serde_json::from_str::<Value>(result).unwrap(), windows);
     }
-    // Another person's request, including an agent-to-agent request, never reaches the server.
-    let client = RecordingClient::default();
+}
+
+/// Sends one `read_calendar` call for `run` and returns the arguments that
+/// reached the server, if any.
+async fn sent_calendar_arguments(run: &CloudAgentRun, arguments: Value) -> Option<Value> {
+    let client = RecordingClient {
+        calendar: Some(json!({"status":"empty","disclosure":"availability","busyWindows":[]})),
+        ..Default::default()
+    };
     let provider = FakeProvider::new(vec![
         ModelProviderResponse::ToolCalls(vec![ModelToolCall {
             id: "calendar".into(),
             name: "read_calendar".into(),
-            arguments: json!({}),
+            arguments,
         }]),
-        ModelProviderResponse::FinalText("Declined".into()),
+        ModelProviderResponse::FinalText("Answered".into()),
     ]);
-    run_model_loop(
-        &client,
-        &provider,
-        &run(),
-        &sandbox_handle(),
-        provider_auth(),
-    )
-    .await
-    .unwrap();
-    assert!(client.calendar_arguments.lock().unwrap().is_empty());
+    run_model_loop(&client, &provider, run, &sandbox_handle(), provider_auth())
+        .await
+        .unwrap();
+    let sent = client.calendar_arguments.lock().unwrap().clone();
+    assert!(sent.len() <= 1);
+    sent.into_iter().next()
+}
+
+#[tokio::test]
+async fn another_members_request_reads_only_the_owners_availability_in_a_shared_chat() {
+    // Another member (or their agent) asks the owner's agent: availability only.
+    let sent = sent_calendar_arguments(&run(), json!({})).await.unwrap();
+    assert_eq!(sent["disclosure"], "availability");
+    for details in [
+        json!({"shareInConversation":true}),
+        json!({"disclosure":"details"}),
+    ] {
+        assert!(sent_calendar_arguments(&run(), details).await.is_none());
+    }
+    // Outside a shared conversation, and in execution subsessions, nothing is read.
+    let mut private = run();
+    private.session_id = "session:self-agent:owner".into();
+    assert!(sent_calendar_arguments(&private, json!({})).await.is_none());
+    let mut child = run();
+    child.requester_account_id = child.owner_account_id.clone();
+    child.subsession_id = Some("child".into());
+    assert!(sent_calendar_arguments(&child, json!({})).await.is_none());
 }

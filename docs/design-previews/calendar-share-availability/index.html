@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Share busy/free · Kordi proposal</title>
+<style>
+:root{
+  --font:-apple-system,"SF Pro Text",Inter,system-ui,sans-serif;
+  --page:#e9e9ee;--chrome-text:#1c1c1e;--chrome-muted:rgba(60,60,67,.6);--chip:rgba(120,120,128,.12);
+  --canvas:#fafafa;--rail:#f3f3f4;--ink:#1c1c1e;--muted:rgba(60,60,67,.72);--faint:rgba(60,60,67,.45);
+  --card:#fff;--card-border:rgba(0,0,0,.08);--shadow:0 20px 50px rgb(0 0 0 / .14);
+  --divider:rgba(0,0,0,.08);--hover:rgba(0,0,0,.05);--primary:#222;--primary-ink:#fff;
+  --switch-off:rgba(120,120,128,.24);--switch-on:#34c759;--scrim:rgba(0,0,0,.18);
+  --sheet:#fff;--group:#f2f2f7;
+}
+:root[data-theme="dark"]{
+  --page:#141416;--chrome-text:#f2f2f7;--chrome-muted:rgba(235,235,245,.6);--chip:rgba(120,120,128,.24);
+  --canvas:#1b1b1d;--rail:#161618;--ink:#f2f2f7;--muted:rgba(235,235,245,.7);--faint:rgba(235,235,245,.4);
+  --card:#262628;--card-border:rgba(255,255,255,.1);--shadow:0 20px 50px rgb(0 0 0 / .45);
+  --divider:rgba(255,255,255,.1);--hover:rgba(255,255,255,.07);--primary:#f2f2f7;--primary-ink:#1c1c1e;
+  --switch-off:rgba(120,120,128,.4);--switch-on:#30d158;--scrim:rgba(0,0,0,.4);
+  --sheet:#1c1c1e;--group:#000;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#141416;--chrome-text:#f2f2f7;--chrome-muted:rgba(235,235,245,.6);--chip:rgba(120,120,128,.24);
+  --canvas:#1b1b1d;--rail:#161618;--ink:#f2f2f7;--muted:rgba(235,235,245,.7);--faint:rgba(235,235,245,.4);
+  --card:#262628;--card-border:rgba(255,255,255,.1);--shadow:0 20px 50px rgb(0 0 0 / .45);
+  --divider:rgba(255,255,255,.1);--hover:rgba(255,255,255,.07);--primary:#f2f2f7;--primary-ink:#1c1c1e;
+  --switch-off:rgba(120,120,128,.4);--switch-on:#30d158;--scrim:rgba(0,0,0,.4);
+  --sheet:#1c1c1e;--group:#000;
+}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--chrome-text);font:13px/1.4 var(--font);-webkit-font-smoothing:antialiased;padding:20px 16px 48px}
+button,input{font:inherit}
+:focus-visible{outline:none}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;max-width:1180px;margin:0 auto 18px}
+.seg{display:inline-flex;background:var(--chip);border-radius:9px;padding:2px}
+.seg button{border:0;background:transparent;color:var(--chrome-text);font-size:12px;padding:5px 10px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+.seg button:focus-visible{background:var(--hover)}
+.label{font-size:12px;color:var(--chrome-muted);margin-right:2px}
+.stage{display:flex;flex-wrap:wrap;gap:24px;justify-content:center;align-items:flex-start;max-width:1180px;margin:0 auto}
+#mac{flex:0 1 720px;min-width:0}
+#ios{flex:none;max-width:100%}
+.frame-label{font-size:12px;color:var(--chrome-muted);margin:0 0 8px}
+
+/* Mac: Digest page with the existing Calendar settings sheet open */
+.win{width:100%;height:600px;border-radius:12px;overflow:hidden;display:grid;grid-template-columns:200px 1fr;background:var(--canvas);border:1px solid var(--card-border);box-shadow:var(--shadow);position:relative}
+.rail{background:var(--rail);border-right:1px solid var(--divider);padding:44px 10px 10px;position:relative}
+.lights{position:absolute;top:14px;left:14px;display:flex;gap:8px}
+.lights i{width:12px;height:12px;border-radius:50%;background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+.stub{height:26px;border-radius:7px;margin:4px 0;background:var(--hover)}
+.stub.s{width:64%}.stub.m{width:82%}
+.main{padding:24px;position:relative}
+.main .stub{height:14px;margin:10px 0}
+.scrim{position:absolute;inset:0;background:var(--scrim);display:grid;place-items:center}
+.msheet{width:420px;max-width:calc(100% - 32px);background:var(--card);color:var(--ink);border:1px solid var(--card-border);border-radius:14px;box-shadow:var(--shadow);padding:20px}
+.msheet h2{font-size:15px;font-weight:600;margin:0 0 10px}
+.msheet p{margin:0 0 12px;font-size:13px;line-height:1.45}
+.msheet .meta{color:var(--muted);font-size:12px}
+.choice{display:flex;gap:8px;align-items:center;padding:5px 0;font-size:13px;cursor:pointer}
+.choice input{margin:0;accent-color:var(--primary)}
+.msheet hr{border:0;border-top:1px solid var(--divider);margin:12px 0}
+.share{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.share .t{font-size:13px}
+.share .d{font-size:12px;color:var(--muted);margin-top:2px}
+.msheet footer{display:flex;justify-content:flex-end;margin-top:16px}
+.done{border:0;border-radius:8px;padding:7px 14px;background:var(--primary);color:var(--primary-ink);cursor:pointer;font-size:13px}
+.done:focus-visible{opacity:.85}
+
+/* Switch shared by both platforms */
+.sw{flex:none;width:42px;height:26px;border-radius:999px;background:var(--switch-on);position:relative;border:0;cursor:pointer;padding:0}
+.sw::after{content:"";position:absolute;top:2px;left:18px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgb(0 0 0 / .2);transition:left .15s}
+.sw[aria-checked="false"]{background:var(--switch-off)}
+.sw[aria-checked="false"]::after{left:2px}
+.sw:focus-visible{box-shadow:0 0 0 3px var(--hover)}
+.win .sw{width:32px;height:20px}
+.win .sw::after{width:16px;height:16px;left:14px}
+.win .sw[aria-checked="false"]::after{left:2px}
+
+/* iPhone: flat Settings-sheet style */
+.phone{width:375px;max-width:100%;height:740px;border-radius:44px;border:10px solid #0b0b0c;background:var(--scrim);overflow:hidden;position:relative;box-shadow:var(--shadow)}
+.isheet{position:absolute;inset:44px 0 0;background:var(--sheet);color:var(--ink);border-radius:12px 12px 0 0;overflow:auto}
+.ihd{height:52px;display:flex;align-items:center;justify-content:center;position:relative}
+.ihd .title{font-size:17px;font-weight:600}
+.ihd .back{position:absolute;left:8px;top:6px;width:40px;height:40px;border:0;background:transparent;border-radius:50%;color:var(--ink);display:grid;place-items:center;cursor:pointer}
+.ihd .back:hover{background:var(--hover)}
+.ihd .back svg{width:22px;height:22px}
+.ish{font-size:13px;color:var(--muted);padding:18px 20px 6px}
+.irow{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:0 20px;font-size:16px;position:relative}
+.irow+.irow::before{content:"";position:absolute;top:0;left:20px;right:0;border-top:1px solid var(--divider)}
+.irow .v{color:var(--muted)}
+.ift{font-size:13px;color:var(--muted);padding:6px 20px 4px;line-height:1.35}
+@media (max-width:640px){.win{grid-template-columns:1fr}.rail{display:none}.main{padding:16px}}
+</style>
+</head>
+<body>
+<!-- Standalone design preview for issue #2422: one owner setting that lets people in the owner's chats ask the owner's agent for busy/free times. Synthetic data, no network calls, system fonts only. -->
+<div class="bar">
+  <span class="label">Device</span>
+  <div class="seg" data-param="device"><button data-value="both">Both</button><button data-value="mac">Mac</button><button data-value="ios">iPhone</button></div>
+  <span class="label">Setting</span>
+  <div class="seg" data-param="state"><button data-value="on">On</button><button data-value="off">Off</button></div>
+  <span class="label">Theme</span>
+  <div class="seg" data-param="theme"><button data-value="light">Light</button><button data-value="dark">Dark</button></div>
+</div>
+<main class="stage">
+  <section id="mac">
+    <div class="frame-label">Mac · Digest › Calendar settings</div>
+    <div class="win">
+      <div class="rail"><div class="lights"><i></i><i></i><i></i></div><div class="stub m"></div><div class="stub s"></div><div class="stub m"></div><div class="stub s"></div></div>
+      <div class="main">
+        <div class="stub m"></div><div class="stub s"></div><div class="stub m"></div>
+        <div class="scrim">
+          <div class="msheet" role="dialog" aria-labelledby="mac-title">
+            <h2 id="mac-title">Calendar settings</h2>
+            <p>Every calendar on this Mac stays in sync with your private Kordi calendar automatically. Turn a calendar off to keep it out of Kordi.</p>
+            <label class="choice"><input type="checkbox" checked>Home</label>
+            <label class="choice"><input type="checkbox" checked>Work</label>
+            <label class="choice"><input type="checkbox">Add events created in Kordi to my device calendar</label>
+            <p class="meta">Turning a calendar off removes its events from Kordi. Source calendars are never changed by that choice. No invitations are sent.</p>
+            <hr>
+            <div class="share">
+              <div><div class="t" id="mac-share">Share busy/free with people in my chats</div><div class="d">Their agents can ask yours when you're free. Event details stay private.</div></div>
+              <button class="sw" role="switch" aria-labelledby="mac-share" data-toggle></button>
+            </div>
+            <footer><button class="done">Done</button></footer>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section id="ios">
+    <div class="frame-label">iPhone · Digest › Calendar settings</div>
+    <div class="phone">
+      <div class="isheet">
+        <div class="ihd"><button class="back" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><span class="title">Calendar settings</span></div>
+        <div class="ish">Calendars on this iPhone</div>
+        <div class="irow">Home<button class="sw" role="switch" aria-checked="true" aria-label="Home"></button></div>
+        <div class="irow">Work<button class="sw" role="switch" aria-checked="true" aria-label="Work"></button></div>
+        <div class="ift">Every calendar stays in sync with your private Kordi calendar automatically. Turning one off removes its events from Kordi; the source calendar is never changed.</div>
+        <div class="ish">&nbsp;</div>
+        <div class="irow">Add events created in Kordi to my calendar<button class="sw" role="switch" aria-checked="false" aria-label="Add events created in Kordi to my calendar"></button></div>
+        <div class="ift">No invitations are sent.</div>
+        <div class="ish">&nbsp;</div>
+        <div class="irow"><span id="ios-share">Share busy/free with people in my chats</span><button class="sw" role="switch" aria-labelledby="ios-share" data-toggle></button></div>
+        <div class="ift">Their agents can ask yours when you're free. Event details stay private.</div>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+const params = new URLSearchParams(location.search);
+const state = {
+  device: ['both','mac','ios'].includes(params.get('device')) ? params.get('device') : 'both',
+  state: params.get('state') === 'off' ? 'off' : 'on',
+  theme: ['light','dark'].includes(params.get('theme')) ? params.get('theme') : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+};
+function render() {
+  document.documentElement.dataset.theme = state.theme;
+  document.getElementById('mac').hidden = state.device === 'ios';
+  document.getElementById('ios').hidden = state.device === 'mac';
+  document.querySelectorAll('[data-toggle]').forEach(el => el.setAttribute('aria-checked', String(state.state === 'on')));
+  document.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(state[seg.dataset.param] === b.dataset.value))));
+  const next = new URLSearchParams(state);
+  history.replaceState(null, '', `?${next}`);
+}
+document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', event => {
+  const button = event.target.closest('button');
+  if (!button) return;
+  state[seg.dataset.param] = button.dataset.value;
+  render();
+}));
+document.querySelectorAll('[data-toggle]').forEach(el => el.addEventListener('click', () => { state.state = state.state === 'on' ? 'off' : 'on'; render(); }));
+document.querySelectorAll('.sw:not([data-toggle])').forEach(el => el.addEventListener('click', () => el.setAttribute('aria-checked', String(el.getAttribute('aria-checked') !== 'true'))));
+render();
+</script>
+</body>
+</html>

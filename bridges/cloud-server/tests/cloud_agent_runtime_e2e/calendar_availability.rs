@@ -1,7 +1,7 @@
 use super::*;
 use sqlx_core::query::query;
 
-async fn insert_run(
+pub(super) async fn insert_run(
     pool: &sqlx_postgres::PgPool,
     session: &str,
     request: &str,
@@ -17,7 +17,7 @@ async fn insert_run(
 
 /// Records an exchange whose original run is `root` and returns the synthetic
 /// request ids of the target run and the owner's continuation run.
-async fn insert_exchange(
+pub(super) async fn insert_exchange(
     pool: &sqlx_postgres::PgPool,
     session: &str,
     root: &str,
@@ -36,7 +36,11 @@ async fn insert_exchange(
     (target_request, resume_request)
 }
 
-async fn read(router: &axum::Router, account: &TestAccount, body: Value) -> (StatusCode, Value) {
+pub(super) async fn read(
+    router: &axum::Router,
+    account: &TestAccount,
+    body: Value,
+) -> (StatusCode, Value) {
     let response = router
         .clone()
         .oneshot(post_json_with_token(
@@ -137,9 +141,11 @@ async fn shared_availability_reads_strip_event_content_and_follow_only_the_owner
     let denied = [
         // Details are never unlocked by a continuation.
         json!({"sessionId":session,"requestMessageId":resume_request,"disclosure":"details"}),
-        // A request another agent sent never unlocks the calendar, even for the owner's own agent.
+        // A request sent to another person's agent never reads this owner's calendar.
         json!({"sessionId":session,"requestMessageId":target_request}),
-        json!({"sessionId":session,"requestMessageId":peer_request}),
+        // Another member's request never unlocks details.
+        json!({"sessionId":session,"requestMessageId":peer_request,"shareInConversation":true}),
+        json!({"sessionId":session,"requestMessageId":peer_request,"disclosure":"details"}),
         json!({"sessionId":"session:direct-person:other","requestMessageId":resume_request}),
     ];
     for body in denied {
@@ -153,16 +159,24 @@ async fn shared_availability_reads_strip_event_content_and_follow_only_the_owner
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 
-    // A continuation of a run another person requested cannot read the owner's calendar.
+    // Another member asking the owner's agent (directly, or in a run that
+    // continues after another agent replied) gets availability only.
     let peer_root = insert_run(&pool, &session, &peer_request, &owner, &peer).await;
     let (_, peer_resume) = insert_exchange(&pool, &session, &peer_root, &owner, &peer, &peer).await;
-    let (status, _) = read(
-        &router,
-        &owner,
-        json!({"sessionId":session,"requestMessageId":peer_resume}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    for request in [&peer_request, &peer_resume] {
+        let (status, body) = read(
+            &router,
+            &owner,
+            json!({"sessionId":session,"requestMessageId":request}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["disclosure"], "availability");
+        assert_eq!(body["scope"], "member_requested_shared_availability");
+        let shared =
+            json!({"sessionId":session,"requestMessageId":request,"shareInConversation":true});
+        assert_eq!(read(&router, &owner, shared).await.0, StatusCode::FORBIDDEN);
+    }
 
     // An agent-authored message cannot unlock availability either.
     query("UPDATE cloud_chat_messages SET message_kind='assistant' WHERE message_id::text=$1")

@@ -130,9 +130,8 @@ async fn read_for_actor(
     let pool = state.db_pool();
     let scope = authorize(pool, run_id, actor).await?;
     if tool == "read_calendar" {
-        if scope.owner != scope.requester {
-            return Err(RunError::NotFound);
-        }
+        // Another member's request reaches only the run owner's calendar, and
+        // only in a shared conversation; the reader decides the disclosure.
         let child:(bool,)=query_as("SELECT subsession_id IS NOT NULL OR parent_run_id IS NOT NULL FROM cloud_agent_fallback_runs WHERE run_id=$1").bind(run_id).fetch_one(pool).await?;
         if child.0 {
             return Err(RunError::NotFound);
@@ -147,7 +146,10 @@ async fn read_for_actor(
         {
             input.session_id = Some(scope.session_id);
             input.request_message_id = Some(scope.request_message_id);
-        } else if !scope.session_id.starts_with("session:self-agent:") {
+            input.run_requester = Some(scope.requester);
+        } else if !scope.session_id.starts_with("session:self-agent:")
+            || scope.owner != scope.requester
+        {
             return Err(RunError::NotFound);
         }
         return crate::digest::chat_calendar::read(pool, &scope.owner, input).await;

@@ -31,6 +31,9 @@ pub(crate) struct CalendarReadInput {
     pub disclosure: Option<Disclosure>,
     pub session_id: Option<String>,
     pub request_message_id: Option<String>,
+    /// The admitted run's requester; set by the server, never by a client.
+    #[serde(skip)]
+    pub run_requester: Option<String>,
 }
 
 pub(super) async fn route(
@@ -54,16 +57,23 @@ pub(crate) async fn read(
     if input.offset > super::sync_routes::CALENDAR_CAPACITY as usize {
         return Err(RunError::NotFound);
     }
-    let (shared, disclosure) = match (&input.session_id, &input.request_message_id) {
-        (None, None) => (false, input.disclosure.unwrap_or(Disclosure::Details)),
+    let (request_kind, disclosure) = match (&input.session_id, &input.request_message_id) {
+        (None, None) => (None, input.disclosure.unwrap_or(Disclosure::Details)),
         (Some(session), Some(request)) => {
-            let request = shared_scope::authorize_request(pool, account, session, request).await?;
+            let request = shared_scope::authorize_request(
+                pool,
+                account,
+                session,
+                request,
+                input.run_requester.as_deref(),
+            )
+            .await?;
             let disclosure = shared_scope::shared_disclosure(
                 input.disclosure,
                 input.share_in_conversation,
                 request,
             )?;
-            (true, disclosure)
+            (Some(request), disclosure)
         }
         _ => return Err(RunError::NotFound),
     };
@@ -85,10 +95,13 @@ pub(crate) async fn read(
     let mut result = page(
         &events,
         input.offset,
-        shared,
+        request_kind.is_some(),
         disclosure,
         timezone.map(|row| row.0),
     );
+    if let (Some(kind), Disclosure::Availability) = (request_kind, disclosure) {
+        result["scope"] = json!(kind.scope());
+    }
     result["startAt"] = json!(input.start_at);
     result["endAt"] = json!(input.end_at);
     Ok(result)

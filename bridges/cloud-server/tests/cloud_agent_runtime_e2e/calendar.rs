@@ -80,7 +80,7 @@ async fn chat_calendar_enforces_owner_disclosure_membership_and_live_runner_scop
     .await;
     let input =
         json!({"sessionId":session,"requestMessageId":owner_request,"shareInConversation":true});
-    // The owner's own request unlocks availability; details need the explicit opt-in.
+    // The owner's own request unlocks availability; details need the owner's explicit opt-in.
     for (token, request, disclosure) in [
         (&owner.token, input.clone(), Some("details")),
         (
@@ -98,16 +98,18 @@ async fn chat_calendar_enforces_owner_disclosure_membership_and_live_runner_scop
             json!({"sessionId":session,"requestMessageId":peer_request,"shareInConversation":true}),
             None,
         ),
+        // Another member may ask the owner's agent for busy/free only.
         (
             &owner.token,
             json!({"sessionId":session,"requestMessageId":peer_request}),
-            None,
+            Some("availability"),
         ),
         (&peer.token, input.clone(), None),
+        // The peer's agent answering the owner reads only the peer's own calendar.
         (
             &peer.token,
             json!({"sessionId":session,"requestMessageId":owner_request}),
-            None,
+            Some("availability"),
         ),
     ] {
         let response = router

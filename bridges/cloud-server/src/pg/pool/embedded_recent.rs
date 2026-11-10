@@ -485,4 +485,9 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
         "0189_provider_login_renewal.sql"
     ),
     migration!(190, "profile field modes", "0190_profile_field_modes.sql"),
+    migration!(
+        191,
+        "calendar share availability",
+        "0191_calendar_share_availability.sql"
+    ),
 ];
