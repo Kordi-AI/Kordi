@@ -67,7 +67,7 @@ struct CloudChatConversation: Codable, Hashable {
     let latestMessageSequence: Int64
     let createdAt: String
     let updatedAt: String
-    let members: [CloudChatMember]
+    var members: [CloudChatMember]
     let preferences: CloudChatPreferences
 
     enum CodingKeys: String, CodingKey {

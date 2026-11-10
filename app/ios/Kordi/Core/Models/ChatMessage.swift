@@ -6,26 +6,6 @@ enum MessageAuthor: String, Codable, Hashable {
     case agent
 }
 
-enum MessageDeliveryState: String, Codable, Hashable {
-    case sending
-    case sent
-    case delivered
-    case read
-    case failed
-    case cancelled
-
-    var label: String {
-        switch self {
-        case .sending: "Sending"
-        case .sent: "Sent"
-        case .delivered: "Delivered"
-        case .read: "Seen"
-        case .failed: "Failed to send"
-        case .cancelled: "Canceled"
-        }
-    }
-}
-
 struct AgentExecutionStep: Identifiable, Codable, Hashable {
     enum State: String, Codable, Hashable {
         case pending
@@ -1508,7 +1488,7 @@ enum PinHistoryTimeline {
             guard event.kind == "pinned" || event.kind == "unpinned", let date = event.timestamp else { return nil }
             return ChatMessage(id: "pin-history:\(event.id)", conversationId: conversationID,
                 author: .person, authorName: "", text: label(event), createdAt: date,
-                deliveryState: .delivered, errorMessage: nil, requestMessageId: nil, messageKind: "session_pin_activity")
+                deliveryState: .sent, errorMessage: nil, requestMessageId: nil, messageKind: "session_pin_activity")
         }
         var result: [ChatMessage] = []
         var index = 0

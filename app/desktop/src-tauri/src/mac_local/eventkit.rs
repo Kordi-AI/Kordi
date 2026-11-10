@@ -1,12 +1,21 @@
 //! Shared EventKit access for the digest calendar sync and the Mac-local
-//! Calendar and Reminders connector. EventKit objects stay on the calling
-//! blocking thread; only owned values cross thread boundaries.
+//! Calendar and Reminders connector. EventKit objects stay inside
+//! [`with_store`]; only owned values leave it.
+//!
+//! Every `EKEventStore` opens its own connection to the system calendar
+//! service, and macOS refuses a process after about twenty. So the app keeps
+//! one store for its lifetime instead of creating one per call.
+use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
 use kordi_tools::mac_local::{
     MacCalendarEventsRequest, MacRemindersRequest, MAX_EVENTS, MAX_REMINDERS,
 };
-use objc2::{rc::Retained, runtime::Bool, sel, AnyThread};
+use objc2::{
+    rc::{autoreleasepool, Retained},
+    runtime::Bool,
+    sel, AnyThread,
+};
 use objc2_event_kit::{
     EKAuthorizationStatus, EKCalendarItem, EKEntityType, EKEvent, EKEventStore, EKReminder,
 };
@@ -17,8 +26,35 @@ use super::MacLocalPermission;
 
 const MAX_ATTENDEES: usize = 50;
 
-pub(crate) fn store() -> Retained<EKEventStore> {
+fn new_store() -> Retained<EKEventStore> {
     unsafe { EKEventStore::init(EKEventStore::alloc()) }
+}
+
+struct SharedStore(Mutex<Retained<EKEventStore>>);
+
+// SAFETY: the store is only used while its mutex is held, one thread at a time.
+unsafe impl Send for SharedStore {}
+unsafe impl Sync for SharedStore {}
+
+static SHARED: OnceLock<SharedStore> = OnceLock::new();
+
+fn shared() -> &'static SharedStore {
+    SHARED.get_or_init(|| SharedStore(Mutex::new(autoreleasepool(|_| new_store()))))
+}
+
+/// Runs `work` with the app's one event store. Calls are serialized, and the
+/// autorelease pool frees the EventKit objects `work` touched, which a blocking
+/// thread would otherwise keep until it exits. Do not call this from `work`.
+pub(crate) fn with_store<T>(work: impl FnOnce(&EKEventStore) -> T) -> T {
+    let store = shared().0.lock().unwrap_or_else(PoisonError::into_inner);
+    autoreleasepool(|_| work(&store))
+}
+
+/// A store made before access was granted may not see any calendars, so a
+/// new grant swaps in a fresh one.
+fn replace_store() {
+    let mut store = shared().0.lock().unwrap_or_else(PoisonError::into_inner);
+    autoreleasepool(|_| *store = new_store());
 }
 
 pub(crate) fn status(entity: EKEntityType) -> EKAuthorizationStatus {
@@ -40,13 +76,21 @@ pub(crate) fn permission(entity: EKEntityType) -> MacLocalPermission {
 /// Asks for full access with the completion-handler API (macOS 14 or later).
 /// Returns whether access is granted; the system prompt appears only while
 /// the status is still not determined.
-pub(crate) fn request_full_access(
-    store: &EKEventStore,
-    entity: EKEntityType,
-) -> Result<bool, String> {
+///
+/// The prompt can wait minutes for an answer, so this uses its own short-lived
+/// store instead of holding the shared one.
+pub(crate) fn request_full_access(entity: EKEntityType) -> Result<bool, String> {
     if status(entity) == EKAuthorizationStatus::FullAccess {
         return Ok(true);
     }
+    let granted = autoreleasepool(|_| ask_full_access(&new_store(), entity))?;
+    if granted {
+        replace_store();
+    }
+    Ok(granted)
+}
+
+fn ask_full_access(store: &EKEventStore, entity: EKEntityType) -> Result<bool, String> {
     let events = entity == EKEntityType::Event;
     let selector = if events {
         sel!(requestFullAccessToEventsWithCompletion:)
@@ -128,7 +172,15 @@ pub(crate) fn read_events(request: &MacCalendarEventsRequest) -> Result<Value, S
     if status(EKEntityType::Event) != EKAuthorizationStatus::FullAccess {
         return Err("Calendar access is off. Allow Kordi in System Settings > Privacy & Security > Calendars.".into());
     }
-    let store = store();
+    with_store(|store| events_in(store, request, from, to))
+}
+
+fn events_in(
+    store: &EKEventStore,
+    request: &MacCalendarEventsRequest,
+    from: chrono::DateTime<chrono::FixedOffset>,
+    to: chrono::DateTime<chrono::FixedOffset>,
+) -> Result<Value, String> {
     let calendars = unsafe { store.calendarsForEntityType(EKEntityType::Event) };
     let selected = if request.calendar_ids.is_empty() {
         None
@@ -196,7 +248,10 @@ pub(crate) fn read_reminders(request: &MacRemindersRequest) -> Result<Value, Str
     if status(EKEntityType::Reminder) != EKAuthorizationStatus::FullAccess {
         return Err("Reminders access is off. Allow Kordi in System Settings > Privacy & Security > Reminders.".into());
     }
-    let store = store();
+    with_store(|store| reminders_in(store, request))
+}
+
+fn reminders_in(store: &EKEventStore, request: &MacRemindersRequest) -> Result<Value, String> {
     let predicate = unsafe {
         if request.include_completed {
             store.predicateForRemindersInCalendars(None)
@@ -238,4 +293,17 @@ pub(crate) fn read_reminders(request: &MacRemindersRequest) -> Result<Value, Str
     let truncated = reminders.len() > MAX_REMINDERS;
     reminders.truncate(MAX_REMINDERS);
     Ok(json!({ "reminders": reminders, "truncated": truncated }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_call_shares_one_store() {
+        let address = || with_store(|store| store as *const EKEventStore as usize);
+        let first = address();
+        let others: Vec<usize> = (0..50).map(|_| address()).collect();
+        assert!(others.iter().all(|other| *other == first));
+    }
 }

@@ -86,13 +86,13 @@ struct InitialAgentModelNoticeTests {
         }
     }
 
-    @Test(arguments: [MessageDeliveryState.sending, .sent, .delivered, .read, .failed, .cancelled])
+    @Test(arguments: [MessageDeliveryState.sending, .sent, .read, .failed, .cancelled])
     func acceptedPendingAgentRequestShowsProgressWithoutRunEvents(state: MessageDeliveryState) {
         let request = ChatMessage(id: "request", conversationId: "agent-session:test", author: .me,
             authorName: "You", text: "Hello", createdAt: .distantPast, deliveryState: state,
             errorMessage: nil, requestMessageId: nil)
         for kind: ConversationKind in [.agent, .person, .group] {
-            let expected: AgentExecutionSnapshot.Phase? = [.sent, .delivered, .read].contains(state)
+            let expected: AgentExecutionSnapshot.Phase? = [.sent, .read].contains(state)
                 ? .preparing : nil
             #expect(AgentSessionQueuePresentation.pendingPhase(requestID: request.id, createdAt: request.createdAt,
                 messages: [request], kind: kind, locallyQueued: false) == expected)
@@ -103,7 +103,7 @@ struct InitialAgentModelNoticeTests {
         }
     }
 
-    @Test(arguments: [MessageDeliveryState.sending, .sent, .delivered, .read, .failed, .cancelled])
+    @Test(arguments: [MessageDeliveryState.sending, .sent, .read, .failed, .cancelled])
     func serverRunProcessingStillRequiresAnAcceptedRequest(state: MessageDeliveryState) {
         let request = ChatMessage(id: "request", conversationId: "agent-session:test", author: .me,
             authorName: "You", text: "Hello", createdAt: .distantPast, deliveryState: state,
@@ -113,7 +113,7 @@ struct InitialAgentModelNoticeTests {
                 createdAt: request.createdAt, messages: [request], kind: .agent,
                 locallyQueued: false, confirmedRunStatus: status)
             let expected: AgentExecutionSnapshot.Phase? = !["failed", "cancelled"].contains(status)
-                && [.sent, .delivered, .read].contains(state) ? .preparing : nil
+                && [.sent, .read].contains(state) ? .preparing : nil
             #expect(phase == expected)
         }
     }
@@ -136,7 +136,7 @@ struct InitialAgentModelNoticeTests {
                 #expect(model.messages(for: conversation).last?.agentExecution?.phase == .preparing)
                 model.upsertPreviewMessage(ChatMessage(id: "final", conversationId: conversation.id, author: .agent,
                     authorName: "Agent", text: "Done", createdAt: request.createdAt.addingTimeInterval(1),
-                    deliveryState: .delivered, errorMessage: nil, requestMessageId: request.id))
+                    deliveryState: .sent, errorMessage: nil, requestMessageId: request.id))
                 #expect(model.messages(for: conversation).filter { $0.author == .agent }.map(\.text) == ["Done"])
             })
             #expect(model.messages(for: conversation).allSatisfy { $0.agentExecution == nil })

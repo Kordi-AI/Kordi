@@ -62,7 +62,7 @@ final class LocalMessageStoreTests: XCTestCase {
             authorName: "You",
             text: "",
             createdAt: Date(timeIntervalSince1970: 2),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             attachments: [sticker],
@@ -248,7 +248,7 @@ final class LocalMessageStoreTests: XCTestCase {
                 authorName: "Paged contact",
                 text: "Message \(index)",
                 createdAt: Date(timeIntervalSince1970: TimeInterval(index)),
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: nil
             )
@@ -298,7 +298,7 @@ final class LocalMessageStoreTests: XCTestCase {
                 authorName: "Sequenced contact",
                 text: "Message \(sequence)",
                 createdAt: Date(timeIntervalSince1970: TimeInterval(101 - sequence)),
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: nil
             )
@@ -397,7 +397,7 @@ final class LocalMessageStoreTests: XCTestCase {
             senderOwnerName: "Shu Yang",
             text: "Background session started",
             createdAt: Date(timeIntervalSince1970: 2),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: "request",
             backgroundAgentSessions: [session]
@@ -436,7 +436,7 @@ final class LocalMessageStoreTests: XCTestCase {
             authorName: "Shared contact",
             text: "@Alex please review",
             createdAt: Date(timeIntervalSince1970: 8),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             mentions: [mention]
@@ -593,7 +593,7 @@ final class LocalMessageStoreTests: XCTestCase {
             senderOwnerName: senderOwnerName,
             text: text,
             createdAt: Date(timeIntervalSince1970: id == "earlier" ? 1 : 2),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: requestMessageID
         )

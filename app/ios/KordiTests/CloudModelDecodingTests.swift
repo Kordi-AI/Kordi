@@ -460,7 +460,7 @@ final class CloudModelDecodingTests: XCTestCase {
         let wire = try JSONDecoder().decode(CloudChatEventPayload.self, from: JSONSerialization.data(withJSONObject: ["pinHistoryEvent": eventObject]))
         XCTAssertEqual(wire.pinHistoryEvent, pin)
         func message(_ id: String, _ offset: TimeInterval) -> ChatMessage {
-            ChatMessage(id: id, conversationId: "chat", author: .person, authorName: "Peer", text: id, createdAt: pin.timestamp!.addingTimeInterval(offset), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil)
+            ChatMessage(id: id, conversationId: "chat", author: .person, authorName: "Peer", text: id, createdAt: pin.timestamp!.addingTimeInterval(offset), deliveryState: .sent, errorMessage: nil, requestMessageId: nil)
         }
         let rows = PinHistoryTimeline.inserting([unpin, pin, pin], into: [message("before", -60), message("between", 30), message("after", 90)], conversationID: "chat", label: { $0.kind })
         XCTAssertEqual(rows.map(\.id), ["before", "pin-history:pin-event", "between", "pin-history:unpin-event", "after"])
@@ -871,7 +871,7 @@ final class CloudModelDecodingTests: XCTestCase {
             authorName: "Maya",
             text: "The video call ended.",
             createdAt: Date(timeIntervalSince1970: 1_000),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             messageKind: ChatCallActivity.messageKind(for: .ended, callId: callID)
