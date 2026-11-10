@@ -31,7 +31,14 @@ export type AuthAddMethod = {
 };
 
 /** Route inside a provider page: absent for the page, `{}` for the picker, a method for the login page. */
-export type AuthAddRoute = { method?: string; provider?: string; /** A Custom API account being edited. */ account?: string };
+export type AuthAddRoute = {
+  method?: string;
+  provider?: string;
+  /** A Custom API account being edited. */
+  account?: string;
+  /** A saved hosted sign-in being reconnected; the login renews it instead of adding an account. */
+  renew?: string;
+};
 
 function hostedDescription(hosted: AuthHostedLogin, kind: LoginMethodKind) {
   const instructions = hosted.login.instructions;
@@ -94,6 +101,11 @@ export function addMethodsSummary(methods: AuthAddMethod[]) {
 }
 
 /** Finds the login page method from a route: an exact key, or a kind with an optional provider id. */
+/** Only a hosted login's own account can be renewed by one; other copies are kept fresh by their Mac. */
+export function renewableAuthChoice(authChoice: string) {
+  return /^cloud-login:./.test(authChoice) ? authChoice : null;
+}
+
 export function resolveAddMethod(methods: AuthAddMethod[], route: AuthAddRoute | null | undefined) {
   if (!route) return null;
   if (!route.method) return methods.length === 1 ? methods[0] : null;

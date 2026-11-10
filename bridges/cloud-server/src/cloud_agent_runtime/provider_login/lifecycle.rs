@@ -22,7 +22,7 @@ use crate::cloud_agent_runtime::provider_auth::{
 };
 use crate::server::ServerState;
 
-const AUTH_CHOICE_PREFIX: &str = "cloud-login:";
+pub(super) const AUTH_CHOICE_PREFIX: &str = "cloud-login:";
 const CLAIM_WAIT_POLLS: u32 = 100;
 const CLAIM_WAIT_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -163,6 +163,29 @@ async fn claim_and_save(
         return omp_not_configured();
     };
     let pool = state.db_pool();
+    // A renewal whose account was removed while the user signed in ends
+    // without claiming, so the removal stands.
+    if let Some(choice) = login.target.renews_auth_choice.as_deref() {
+        match store::renewable_label(pool, &login.account_id, &login.target.provider, choice).await
+        {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                let _ = worker.cancel(&login.session_id).await;
+                return finish(
+                    state,
+                    login,
+                    &["running"],
+                    "failed",
+                    Some("account_removed"),
+                )
+                .await;
+            }
+            Err(err) => {
+                eprintln!("[provider_login] load renewed account: {err}");
+                return server_error();
+            }
+        }
+    }
     match store::transition(
         pool,
         &login.session_id,
@@ -206,11 +229,16 @@ async fn claim_and_save(
         Err(_) => return finish(state, login, &["claiming"], "failed", Some("claim_failed")).await,
     };
     // A device login is a sign-in method of the chosen provider, so the saved
-    // account keeps the provider the user picked.
+    // account keeps the provider the user picked. A renewal replaces the
+    // account it names: publishing revokes the old copy of that choice.
     let claimed_provider = claimed.provider.trim();
     let request = PublishProviderAuthSnapshotRequest {
         provider: login.target.provider.clone(),
-        auth_choice: format!("{AUTH_CHOICE_PREFIX}{}", login.session_id),
+        auth_choice: login
+            .target
+            .renews_auth_choice
+            .clone()
+            .unwrap_or_else(|| format!("{AUTH_CHOICE_PREFIX}{}", login.session_id)),
         label: Some(login.target.label.clone()),
         payload: claimed.material,
     };

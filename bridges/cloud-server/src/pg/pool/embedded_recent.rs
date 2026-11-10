@@ -479,4 +479,9 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
         "common ground auto rebuild",
         "0188_common_ground_auto_rebuild.sql"
     ),
+    migration!(
+        189,
+        "provider login renewal",
+        "0189_provider_login_renewal.sql"
+    ),
 ];
