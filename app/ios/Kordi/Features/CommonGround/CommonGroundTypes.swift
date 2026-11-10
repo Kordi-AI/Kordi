@@ -253,8 +253,12 @@ struct CommonGroundOwnerView: Decodable, Hashable {
     var profile: CommonGroundProfileTag?
     /// Routed memories saved after the card was built; nil before `memoryVersion` 2.
     var memoriesSinceBuild: Int?
+    /// Whether the card rebuilds itself; nil from servers that predate it.
+    var autoRebuild: Bool?
+    /// True while an automatic update runs; `build.status` stays idle then.
+    var autoUpdating: Bool?
 
-    private enum CodingKeys: String, CodingKey { case card, sharing, build, profile, memoriesSinceBuild }
+    private enum CodingKeys: String, CodingKey { case card, sharing, build, profile, memoriesSinceBuild, autoRebuild, autoUpdating }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -263,6 +267,8 @@ struct CommonGroundOwnerView: Decodable, Hashable {
         build = c.cgValue(.build, CommonGroundBuildState(status: "idle", errorCode: nil))
         profile = c.cgValue(.profile, nil as CommonGroundProfileTag?)
         memoriesSinceBuild = c.cgValue(.memoriesSinceBuild, nil as Int?)
+        autoRebuild = c.cgValue(.autoRebuild, nil as Bool?)
+        autoUpdating = c.cgValue(.autoUpdating, nil as Bool?)
     }
 }
 
