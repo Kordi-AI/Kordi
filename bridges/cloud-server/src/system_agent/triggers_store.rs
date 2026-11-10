@@ -36,12 +36,13 @@ type CardRow = (
     String,
 );
 
-/// root run, requester agent's owner and name, target owner and name, created_at
+/// root run, requester agent's owner and name, target owner and name, created_at.
+/// The target owner is empty for a question to a person, which is not an agent round.
 type ExchangeRow = (
     String,
     String,
     Option<String>,
-    String,
+    Option<String>,
     Option<String>,
     String,
 );
@@ -103,6 +104,7 @@ async fn recent_exchanges(
          LEFT JOIN cloud_accounts requester ON requester.account_id = parent.owner_account_id
          LEFT JOIN cloud_accounts target ON target.account_id = exchange.target_owner_id
          WHERE parent.session_id = $1
+           AND exchange.target_owner_id IS NOT NULL
            AND exchange.created_at > now() - make_interval(hours => $3)
            AND parent.requester_account_id IN (
                SELECT member.account_id FROM cloud_chat_conversation_members member
@@ -123,7 +125,7 @@ async fn recent_exchanges(
                 root_run_id: root,
                 from_account: from,
                 from_agent: agent_name(from_name),
-                to_account: to,
+                to_account: to?,
                 to_agent: agent_name(to_name),
                 created_at: instant(&created)?,
             })
