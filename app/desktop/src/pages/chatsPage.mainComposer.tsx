@@ -9,12 +9,10 @@ import type { AttachmentItem } from '@/features/chat/composerController.types';
 import { CHAT_COMPOSER_TEXTAREA_SELECTOR, focusComposerTextareaForNativeInput } from '@/features/chat/composerController.shared';
 import { useImeCompositionGuard } from '@/features/chat/imeComposition';
 import { useComposerRouteAccountGuard } from '@/features/chat/useRouteAccountFallback';
+import { useModelRecoveryRegistration } from '@/features/chat/modelRecovery';
 import { extractClipboardFiles, extractPastedLocalFilePaths } from '@/features/chat/pasteAttachments';
 import { ComposerExpressivePicker } from '@/features/emoji/ComposerExpressivePicker';
-import {
-  BlobEmojiComposerInput,
-  type BlobEmojiComposerInputHandle,
-} from '@/features/emoji/BlobEmojiComposerInput';
+import { BlobEmojiComposerInput, type BlobEmojiComposerInputHandle } from '@/features/emoji/BlobEmojiComposerInput';
 import { blobEmojiComposerValue } from '@/features/emoji/blobEmojiComposerDom';
 import { insertEmojiAtSelection } from '@/features/emoji/emojiText';
 import {
@@ -146,6 +144,8 @@ export function MainComposer({
     paneKind: localRouting.paneKind, canConfigureModelRoute, selection: routeSelection, providerOptions: composerProviderOptions,
     modelOptions: chatModelOptions ?? [], applyRoute: collaborationRouting.onSaveCompact });
   const onSend: MainComposerProps['onSend'] = (draft, attachments) => (sendGate.blocked ? undefined : sendMessage(draft, attachments));
+  useModelRecoveryRegistration(canConfigureModelRoute && (useCompactRouteMenu || (collaborationRouting.enabled && collaborationRouting.model)) ? { selection: routeSelection,
+    providerOptions: composerProviderOptions, modelOptions: chatModelOptions ?? [], applyRoute: collaborationRouting.onSaveCompact, send: (text) => onSend(text, []) } : null);
   const voice = useVoiceComposer({
     conversation,
     cloudAccountId,
