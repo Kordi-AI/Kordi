@@ -1,0 +1,262 @@
+//! When the System agent acts, against a real database: plan talk waits for
+//! silence, and loops and conflicts step in once, even across restarts.
+
+use serde_json::{json, Value};
+use sqlx_core::query::query;
+use sqlx_core::query_as::query_as;
+use uuid::Uuid;
+
+use super::ownership_sweep_tests::{group, say, Chat};
+use crate::plan_cards::models::{PlanCardProposeArgs, PlanCardState};
+use crate::plan_cards::tests::participant;
+
+impl Chat {
+    /// Pretends the conversation has been quiet for longer than the silence
+    /// window.
+    async fn let_silence_pass(&self) {
+        query("UPDATE cloud_chat_messages SET created_at = now() - interval '15 minutes' WHERE conversation_id = $1")
+            .bind(self.chat)
+            .execute(&self.pool)
+            .await
+            .unwrap();
+        query(
+            "UPDATE cloud_pip_conversation_state SET hooks_fired = jsonb_set(hooks_fired,
+                 '{planDiscussion,checkAfter}', to_jsonb(now() - interval '1 second'))
+             WHERE conversation_id = $1 AND hooks_fired ? 'planDiscussion'
+               AND jsonb_typeof(hooks_fired->'planDiscussion') = 'object'",
+        )
+        .bind(self.chat)
+        .execute(&self.pool)
+        .await
+        .unwrap();
+    }
+
+    /// Finishes the System agent's active run silently, as a runner would.
+    async fn finish_run(&self) {
+        let (run_id,): (String,) = query_as(
+            "SELECT active_run_id FROM cloud_pip_conversation_state WHERE conversation_id = $1",
+        )
+        .bind(self.chat)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap();
+        query("UPDATE cloud_agent_fallback_runs SET status = 'leased', claimed_by = 'test-runner' WHERE run_id = $1")
+            .bind(&run_id)
+            .execute(&self.pool)
+            .await
+            .unwrap();
+        super::store::complete(
+            &self.pool,
+            &run_id,
+            "test-runner",
+            r#"{"message":null,"hooksHandled":[]}"#,
+        )
+        .await
+        .unwrap();
+    }
+
+    async fn agent_says(&self, owner: &str, text: &str) {
+        let message = group(
+            self.chat,
+            json!({"id": Uuid::new_v4().to_string(), "senderAccountId": owner, "createdAtMs": 1,
+                "senderKind": "agent", "deliveryState": "complete", "text": text}),
+        );
+        say(&self.pool, owner, self.chat, &message).await;
+    }
+
+    /// One finished collaboration request from `from`'s agent to `to`'s.
+    async fn exchange(&self, from: &str, to: &str) {
+        let run = format!("car_{}", Uuid::new_v4().simple());
+        let requester = if from == self.alice {
+            &self.bob
+        } else {
+            &self.alice
+        };
+        let now = chrono::Utc::now().to_rfc3339();
+        query("INSERT INTO cloud_agent_fallback_runs(run_id,idempotency_key,request_message_id,session_id,owner_account_id,requester_account_id,status,prompt,created_at,updated_at) VALUES($1,$1,$1,$2,$3,$4,'completed','task',$5,$5)")
+            .bind(&run)
+            .bind(&self.session)
+            .bind(from)
+            .bind(requester)
+            .bind(&now)
+            .execute(&self.pool)
+            .await
+            .unwrap();
+        query("INSERT INTO cloud_agent_exchanges(exchange_id,parent_run_id,root_run_id,request_key,target_owner_id,target_agent_id,request_text,status) VALUES($1,$2,$2,'key',$3,$4,'Does Friday work?','completed')")
+            .bind(Uuid::new_v4())
+            .bind(&run)
+            .bind(to)
+            .bind(format!("cloud-agent:{to}"))
+            .execute(&self.pool)
+            .await
+            .unwrap();
+    }
+
+    async fn card(&self, by: &str, title: &str, hours_ahead: i64) {
+        let start = chrono::Utc::now() + chrono::Duration::hours(hours_ahead);
+        crate::plan_cards::store::propose(
+            &self.pool,
+            by,
+            PlanCardProposeArgs {
+                conversation_id: self.chat,
+                existing_event_id: None,
+                existing_revision: None,
+                title: title.to_string(),
+                start_at: Some(start.to_rfc3339()),
+                end_at: None,
+                location: None,
+                state: PlanCardState::AwaitingConfirmation,
+                unresolved_fields: Vec::new(),
+                participants: vec![participant(&self.bob, "Bob", true)],
+                source_message_ids: Vec::new(),
+                options: Vec::new(),
+            },
+        )
+        .await
+        .expect("propose");
+    }
+}
+
+fn trigger(input: &Value) -> (&str, &str) {
+    (
+        input["trigger"]["kind"].as_str().unwrap_or_default(),
+        input["trigger"]["reason"].as_str().unwrap_or_default(),
+    )
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn plan_talk_waits_for_silence_and_a_new_message_resets_it() {
+    let chat = Chat::new().await;
+    say(&chat.pool, &chat.bob, chat.chat, "Dinner Friday at 7?").await;
+    assert_eq!(chat.sweep().await, 0, "people are still talking");
+    let discussion = chat.hooks().await["planDiscussion"].clone();
+    assert!(discussion["fromSequence"].is_i64(), "{discussion}");
+    assert_eq!(chat.sweep().await, 0, "not quiet yet");
+
+    chat.let_silence_pass().await;
+    say(&chat.pool, &chat.alice, chat.chat, "haha nice").await;
+    assert_eq!(chat.sweep().await, 0, "a new message resets the silence");
+    assert!(chat.hooks().await["planDiscussion"].is_object());
+
+    chat.let_silence_pass().await;
+    assert_eq!(chat.sweep().await, 1, "the discussion went quiet");
+    let prompts = chat.system_agent_prompts().await;
+    assert_eq!(trigger(&prompts[0]), ("silence", ""));
+    let plan = prompts[0]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["text"] == "Dinner Friday at 7?")
+        .unwrap();
+    assert_eq!(plan["isNew"], true, "the discussion is the run's news");
+
+    chat.finish_run().await;
+    assert!(chat.hooks().await["planDiscussion"].is_null());
+    assert_eq!(chat.sweep().await, 0, "once");
+    assert_eq!(chat.system_agent_prompts().await.len(), 1);
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn a_discussion_an_agent_takes_never_reaches_the_system_agent() {
+    let chat = Chat::new().await;
+    say(&chat.pool, &chat.bob, chat.chat, "Dinner Friday at 7?").await;
+    assert_eq!(chat.sweep().await, 0);
+    chat.ask_alices_agent().await;
+    assert_eq!(chat.sweep().await, 0, "Alice's agent owns the dinner");
+    chat.let_silence_pass().await;
+    assert_eq!(
+        chat.sweep().await,
+        0,
+        "its agent took it, so no silence run"
+    );
+    assert!(chat.hooks().await["planDiscussion"].is_null());
+    assert!(chat.system_agent_prompts().await.is_empty());
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn agents_going_back_and_forth_get_one_step_in() {
+    let chat = Chat::new().await;
+    let (alice, bob) = (chat.alice.clone(), chat.bob.clone());
+    for round in 0..3 {
+        let (from, to) = if round % 2 == 0 {
+            (&alice, &bob)
+        } else {
+            (&bob, &alice)
+        };
+        chat.exchange(from, to).await;
+    }
+    chat.agent_says(&alice, "Still checking with Bob's agent.")
+        .await;
+    assert_eq!(
+        chat.sweep().await,
+        0,
+        "three rounds are still a conversation"
+    );
+    chat.exchange(&bob, &alice).await;
+    chat.agent_says(&bob, "Asking Alice's agent again.").await;
+    assert_eq!(chat.sweep().await, 1, "four rounds without a card");
+    let prompts = chat.system_agent_prompts().await;
+    assert_eq!(trigger(&prompts[0]), ("loop", "repeated_rounds"));
+    assert!(prompts[0]["hooks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|hook| hook["name"] != "new_messages"));
+
+    // A restart reads the same row: the loop never fires again.
+    chat.finish_run().await;
+    chat.agent_says(&alice, "Any update from Bob's agent?")
+        .await;
+    assert_eq!(chat.sweep().await, 0, "once");
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn overlapping_cards_get_one_step_in() {
+    let chat = Chat::new().await;
+    chat.card(&chat.config.account_id.clone(), "Friday dinner", 30)
+        .await;
+    chat.card(&chat.alice.clone(), "Dinner on Friday", 30).await;
+    // Distinct change times keep the newest card (the open one) stable.
+    query(
+        "UPDATE cloud_plan_cards SET updated_at = now() - CASE WHEN created_by_account_id = $2
+             THEN interval '5 minutes' ELSE interval '4 minutes' END WHERE conversation_id = $1",
+    )
+    .bind(chat.chat)
+    .bind(&chat.config.account_id)
+    .execute(&chat.pool)
+    .await
+    .unwrap();
+    // Both cards are new to the System agent, so it looks at them anyway; the
+    // run is about the conflict.
+    assert_eq!(chat.sweep().await, 1);
+    let prompts = chat.system_agent_prompts().await;
+    assert_eq!(trigger(&prompts[0]), ("conflict", "overlap"));
+    let cards = prompts[0]["trigger"]["cards"].as_array().unwrap();
+    assert_eq!(
+        cards
+            .iter()
+            .filter(|card| card["createdBySystemAgent"] == true)
+            .count(),
+        1
+    );
+
+    chat.finish_run().await;
+    assert!(chat
+        .hooks()
+        .await
+        .as_object()
+        .unwrap()
+        .keys()
+        .any(|key| key.starts_with("conflict:")));
+    query("UPDATE cloud_plan_cards SET updated_at = now() - interval '2 minutes' WHERE conversation_id = $1 AND created_by_account_id = $2")
+        .bind(chat.chat)
+        .bind(&chat.alice)
+        .execute(&chat.pool)
+        .await
+        .unwrap();
+    assert_eq!(chat.sweep().await, 0, "once");
+}

@@ -16,7 +16,6 @@ use uuid::Uuid;
 
 use crate::chat_sync::models::SendMessageRequest;
 
-use super::addressing;
 use super::cards::{mark_card_seen, sync_card_messages};
 use super::config::SystemAgentConfig;
 use super::input::Candidate;
@@ -80,6 +79,22 @@ pub(super) const SWEEP_SQL: &str = concat!(
          OR CASE WHEN jsonb_typeof(s.hooks_fired #> '{deferred,checkAfter}') = 'string'
               THEN (s.hooks_fired #>> '{deferred,checkAfter}')::timestamptz <= now()
               ELSE false END
+         -- A held plan discussion may have gone quiet, or a loop or conflict waited.
+         OR CASE WHEN jsonb_typeof(s.hooks_fired #> '{planDiscussion,checkAfter}') = 'string'
+              THEN (s.hooks_fired #>> '{planDiscussion,checkAfter}')::timestamptz <= now()
+              ELSE false END
+         OR CASE WHEN jsonb_typeof(s.hooks_fired -> 'triggerCheckAfter') = 'string'
+              THEN (s.hooks_fired ->> 'triggerCheckAfter')::timestamptz <= now()
+              ELSE false END
+         -- A live card changed since the last conflict check, 45 seconds ago or more.
+         OR EXISTS (SELECT 1 FROM cloud_plan_cards card
+              WHERE card.conversation_id = c.conversation_id
+                AND card.updated_at <= now() - interval '45 seconds'
+                AND card.updated_at > CASE WHEN jsonb_typeof(s.hooks_fired -> 'cardsCheckedAt') = 'string'
+                  THEN (s.hooks_fired ->> 'cardsCheckedAt')::timestamptz ELSE '-infinity' END
+                AND ",
+    crate::plan_cards::live_plan_card_sql!(),
+    ")
          -- A reminder is due: one window at a time, as the run input offers it.
          OR (card.start_at > now() AND (
                (card.start_at <= now() + interval '2 hours'
@@ -185,22 +200,14 @@ async fn enqueue(
 ) -> Result<bool, sqlx_core::Error> {
     // A person's agent owns its task: its messages stay context until it
     // replies, or come back as new here once it stalls.
-    let (candidate, input) = super::ownership_store::prepare(pool, config, candidate).await?;
-    let candidate = &candidate;
-    let hook_names: Vec<&str> = input["hooks"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|hook| hook["name"].as_str())
-        .collect();
-    // New chat alone is checked for free first: small talk with no day, time,
-    // place, or plan word (or no answer while a card is open), and messages
+    let (prepared, input, gate) = super::ownership_store::prepare(pool, config, candidate).await?;
+    // The System agent acts only on a trigger: plan talk waits for silence,
+    // and loops, conflicts and stalls step in once. Small talk, and messages
     // for an agent or already answered by one, never reach the model.
-    let only_new_messages = hook_names == ["new_messages"];
-    let worth_a_look = !only_new_messages || addressing::new_chat_worth_a_look(&input);
-    if hook_names.is_empty() || !worth_a_look {
-        // Nothing to react to after all (for example a card whose reminder
-        // already fired). Advance the cursor so the row stops looking dirty.
+    let planned = super::triggers_store::plan(pool, config, prepared, input, gate).await?;
+    let Some((candidate, input)) = planned else {
+        // Nothing to react to now. Advance the cursor so the row stops
+        // looking dirty; a held plan discussion keeps its own place.
         query(
             "UPDATE cloud_pip_conversation_state SET seen_sequence = $2, updated_at = now()
              WHERE conversation_id = $1 AND active_run_id IS NULL",
@@ -210,7 +217,8 @@ async fn enqueue(
         .execute(pool)
         .await?;
         return Ok(false);
-    }
+    };
+    let candidate = &candidate;
 
     let run_id = format!("{RUN_PREFIX}{}", Uuid::new_v4().simple());
     let mut tx = pool.begin().await?;
@@ -410,7 +418,7 @@ pub async fn complete(
         _ => None,
     };
 
-    let hooks = offered_reminders(&run.input);
+    let hooks = super::triggers::finish_marks(&run.input);
 
     let now = Utc::now().to_rfc3339();
     let mut tx = pool.begin().await?;

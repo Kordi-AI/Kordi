@@ -34,6 +34,8 @@ pub(crate) use store::authorize;
 use store::{directory, send};
 
 pub(crate) const PREFIX: &str = "agent-exchange:";
+/// Collaboration requests one task (its root run) may send in all.
+pub(crate) const REQUEST_LIMIT: i64 = 8;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

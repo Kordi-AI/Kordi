@@ -9,9 +9,11 @@ mod addressing;
 mod agent;
 pub(crate) mod cards;
 mod config;
+mod conflicts;
 pub(crate) mod context;
 mod input;
 mod limits;
+mod loops;
 pub mod membership;
 mod mentions;
 mod ownership;
@@ -19,6 +21,8 @@ mod ownership_store;
 mod prompt;
 mod retry;
 pub mod store;
+mod triggers;
+mod triggers_store;
 mod worker;
 
 pub use agent::bootstrap_system_agent;
@@ -76,5 +80,7 @@ mod ownership_sweep_tests;
 pub(crate) mod pool_tests;
 #[cfg(test)]
 mod sweep_tests;
+#[cfg(test)]
+mod triggers_sweep_tests;
 #[cfg(test)]
 mod usage_pause_tests;

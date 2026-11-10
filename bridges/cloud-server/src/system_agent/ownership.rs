@@ -153,7 +153,7 @@ impl Work {
     /// The owner of work still open now, which every new message defers to:
     /// a recently queued run, a run holding a live lease, or a pending
     /// exchange. A run whose lease lapsed (its Mac went to sleep) owns nothing.
-    fn open_owner(&self, now: DateTime<Utc>, stall: Duration) -> Option<Owner> {
+    pub(super) fn open_owner(&self, now: DateTime<Utc>, stall: Duration) -> Option<Owner> {
         let horizon = now - Duration::minutes(OPEN_RUN_HORIZON_MINUTES);
         self.runs
             .iter()
