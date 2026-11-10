@@ -5,12 +5,14 @@
 //! updates it as details settle. It is the same shared card the System agent
 //! opens: answers, votes, confirmation, and calendar entries work unchanged.
 //!
-//! The run's lease and the active membership of its owner and requester in
-//! the run's conversation authorize it (the agent-exchange gate). Execution
-//! subsessions, child runs, an agent answering another agent's request, and
+//! The run's lease and its task's request authorize it: the task's root run
+//! must pass the agent-exchange gate (active membership of its owner and
+//! requester, agent access, contact permissions), and a run that resumes the
+//! task (after another agent or a person answered) acts for that root.
+//! Execution subsessions, an agent answering another agent's request, and
 //! background feature runs (the System agent among them) cannot use it. The
-//! card records the agent, its owner, and the task, so one task opens one
-//! card and only the agent that opened a card updates it.
+//! card records the agent, its owner, and the task's root run, so one task
+//! opens one card and only the agent that opened a card updates it.
 
 use std::sync::Arc;
 
@@ -156,49 +158,100 @@ pub(crate) async fn available(pool: &PgPool, run: &str) -> bool {
 /// Binds a card action to a run of a person's agent in a direct chat or
 /// group. `executor` is the lease holder and, for the Mac, the signed-in
 /// owner; `None` checks the run itself, as its lease is handed out.
+///
+/// A run continues its task: a resume run after another agent or a person
+/// answered (and any run whose parent is in the same task) acts for the
+/// task's root request, which a member of this conversation made of the
+/// same owner's agent; the run keeps its owner, requester, agent, and
+/// conversation. An execution
+/// subsession, and an agent answering another agent's request, never plan.
 pub(crate) async fn authorize(
     pool: &PgPool,
     run: &str,
     executor: Option<(&str, Option<&str>)>,
 ) -> Result<AgentRun, Rejection> {
     let not_allowed = || forbidden("This run cannot open plan cards in this conversation.");
-    if crate::cloud_agent_runtime::runs::route_fill::FEATURE_RUN_PREFIXES
-        .iter()
-        .any(|prefix| run.starts_with(prefix))
-    {
+    let root = task_root(pool, run).await.map_err(db)?;
+    let feature_run = |id: &str| {
+        crate::cloud_agent_runtime::runs::route_fill::FEATURE_RUN_PREFIXES
+            .iter()
+            .any(|prefix| id.starts_with(prefix))
+    };
+    if feature_run(run) || feature_run(&root) {
         return Err(not_allowed());
     }
-    let parent = match exchanges::authorize(pool, run, executor).await {
-        Ok(parent) => parent,
+    let (who, account) = executor.map_or((None, None), |(who, account)| (Some(who), account));
+    let checked: Option<(bool, bool, bool)> = query_as(
+        "SELECT r.subsession_id IS NOT NULL OR root.subsession_id IS NOT NULL
+                OR EXISTS(SELECT 1 FROM cloud_agent_exchanges e
+                          WHERE e.target_run_id IN (r.run_id, root.run_id)),
+                root.owner_account_id = r.owner_account_id
+                AND root.requester_account_id = r.requester_account_id
+                AND root.execution_agent_id = r.execution_agent_id
+                AND root.session_id = r.session_id,
+                ($2::text IS NULL OR (r.claimed_by = $2 AND r.status IN ('leased', 'running')
+                    AND r.lease_expires_at::timestamptz > now() AND r.cancel_requested_at IS NULL))
+                AND ($3::text IS NULL OR r.owner_account_id = $3)
+         FROM cloud_agent_fallback_runs r
+         JOIN cloud_agent_fallback_runs root ON root.run_id = $4
+         WHERE r.run_id = $1",
+    )
+    .bind(run)
+    .bind(who)
+    .bind(account)
+    .bind(&root)
+    .fetch_optional(pool)
+    .await
+    .map_err(db)?;
+    let Some((child, same_task, leased)) = checked else {
+        return Err(not_allowed());
+    };
+    if child || !same_task || !leased {
+        return Err(not_allowed());
+    }
+    // The task's request: membership, agent access, and contact permissions
+    // as the agent-exchange gate checks them, and a source request that was
+    // not deleted.
+    let task = match exchanges::authorize(pool, &root, None).await {
+        Ok(task) => task,
         Err(RunError::NotFound) => return Err(not_allowed()),
         Err(_) => return Err(unavailable()),
     };
-    if !matches!(parent.kind.as_str(), "direct" | "group")
-        || crate::system_account::is_service_account(&parent.owner)
-        || crate::system_account::is_service_account(&parent.requester)
+    if !matches!(task.kind.as_str(), "direct" | "group")
+        || crate::system_account::is_service_account(&task.owner)
+        || crate::system_account::is_service_account(&task.requester)
     {
         return Err(not_allowed());
     }
-    // Not an execution subsession or child run, and not another agent
-    // answering this agent's request: the agent that owns the task plans.
-    let (child,): (bool,) = query_as(
-        "SELECT r.parent_run_id IS NOT NULL OR r.subsession_id IS NOT NULL
-                OR EXISTS(SELECT 1 FROM cloud_agent_exchanges e WHERE e.target_run_id = r.run_id)
-         FROM cloud_agent_fallback_runs r WHERE r.run_id = $1",
+    Ok(AgentRun {
+        root,
+        owner: task.owner,
+        agent: task.agent,
+        conversation: task.conversation,
+    })
+}
+
+/// The root run of `run`'s task: through the exchanges it resumes and, for a
+/// run that is not an execution subsession, its parent runs.
+async fn task_root(pool: &PgPool, run: &str) -> Result<String, sqlx_core::Error> {
+    let (root,): (String,) = query_as(
+        "WITH RECURSIVE chain(run_id, depth) AS (
+             SELECT $1::text, 0
+             UNION ALL
+             SELECT COALESCE(
+                        (SELECT e.root_run_id FROM cloud_agent_exchanges e
+                         WHERE e.resume_run_id = chain.run_id AND e.root_run_id <> chain.run_id
+                         ORDER BY e.created_at LIMIT 1),
+                        (SELECT r.parent_run_id FROM cloud_agent_fallback_runs r
+                         WHERE r.run_id = chain.run_id AND r.subsession_id IS NULL)),
+                    chain.depth + 1
+             FROM chain WHERE chain.run_id IS NOT NULL AND chain.depth < 16)
+         SELECT run_id FROM chain WHERE run_id IS NOT NULL ORDER BY depth DESC LIMIT 1",
     )
     .bind(run)
     .fetch_one(pool)
-    .await
-    .map_err(db)?;
-    if child {
-        return Err(not_allowed());
-    }
-    Ok(AgentRun {
-        root: parent.root,
-        owner: parent.owner,
-        agent: parent.agent,
-        conversation: parent.conversation,
-    })
+    .await?;
+    Ok(root)
 }
 
 /// Runs one tool action for an authorized run.
