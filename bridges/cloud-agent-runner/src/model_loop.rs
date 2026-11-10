@@ -65,10 +65,11 @@ pub fn run_tool_catalog(run: &CloudAgentRun, memory: &RunMemory) -> Vec<Value> {
     tools.extend(crate::connectors::tool_definitions(run));
     tools.retain(|tool| {
         let name = tool["function"]["name"].as_str().unwrap_or_default();
+        // The server grants reach_out per run and limits whom it reaches: a
+        // run for someone other than the owner (another person's request, or
+        // an answer to another agent) may still ask that one person.
         if name == "reach_out" {
-            return run.agent_communication
-                && run.subsession_id.is_none()
-                && run.owner_account_id == run.requester_account_id;
+            return run.agent_communication && run.subsession_id.is_none();
         }
         if name == kordi_tools::plan_card::NAME {
             return run.plan_cards && run.subsession_id.is_none();
@@ -231,10 +232,7 @@ pub(crate) async fn execute_model_tool<C: CloudAgentRunClient + Sync>(
         return output;
     }
     if call.name == "reach_out" {
-        if !run.agent_communication
-            || run.subsession_id.is_some()
-            || run.owner_account_id != run.requester_account_id
-        {
+        if !run.agent_communication || run.subsession_id.is_some() {
             return Err("Agent communication is not authorized for this run.".into());
         }
         return client

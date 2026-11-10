@@ -188,3 +188,52 @@ async fn an_answering_run_keeps_one_reply_row_through_asking_its_owner() {
     assert_eq!(answered_id, pending_id, "one row from processing to answer");
     assert_eq!(answered["text"], "Beta is free Friday at 7pm.");
 }
+
+#[tokio::test]
+async fn an_answering_agent_waiting_on_its_owner_never_fails_and_its_question_is_asked_once() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    let exchange = f.send("ask-agent", 1).await["exchangeId"].clone();
+    let target = f.pending(1).await.remove(0);
+    let run = target["runId"].as_str().unwrap().to_owned();
+    let claim = f.claim(1, &target).await;
+    let path = format!("/v1/cloud/agent-runs/desktop/{run}/agent-exchange");
+    f.post(1, &path, json!({"claimId":claim,"toolCallId":"owner","arguments":{"target":f.people[1].account_id,"targetKind":"person","message":"Saturday or Sunday?"}})).await;
+    f.finish(1, &run, claim, r#"{"agentExchangeOutcome":"waiting"}"#)
+        .await;
+    let (status, error): (String, Option<String>) =
+        query_as("SELECT status,error_code FROM cloud_agent_fallback_runs WHERE run_id=$1")
+            .bind(&run)
+            .fetch_one(&f.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        (status.as_str(), error),
+        ("completed", None),
+        "waiting is not a failure"
+    );
+    assert_eq!(f.exchange(&exchange).await.0, "pending");
+    // The asking task also asks the same person: it waits on that question.
+    let again = f.ask_ok("again", 1, "Which day works for you?").await;
+    let questions: Vec<(Option<uuid::Uuid>,)> = query_as("SELECT DISTINCT request_message_id FROM cloud_agent_exchanges WHERE root_run_id=$1 AND target_kind='person'")
+        .bind(&f.root).fetch_all(&f.pool).await.unwrap();
+    assert_eq!(questions.len(), 1, "asked once: {questions:?}");
+    f.end_parent().await;
+    // The cleanup sweep leaves exchange runs to their exchange.
+    kordi_cloud_server::cloud_agent_runtime::runs::terminal_backfill::backfill_terminal_responses(
+        &f.pool, 15,
+    )
+    .await
+    .unwrap();
+    let (failures,): (i64,) = query_as("SELECT count(*) FROM cloud_chat_messages m JOIN cloud_chat_conversations c USING(conversation_id) WHERE c.legacy_session_id=$1 AND m.content::text LIKE '%could not%'")
+        .bind(&f.session).fetch_one(&f.pool).await.unwrap();
+    assert_eq!(failures, 0, "no failure after a successful yield");
+    // One answer resumes both runs.
+    f.say(1, "Saturday", None).await;
+    assert_eq!(
+        f.exchange(&again["exchangeId"]).await.1.as_deref(),
+        Some("Saturday")
+    );
+    assert_eq!(f.pending(1).await.len(), 1, "the answering agent resumes");
+}

@@ -267,6 +267,14 @@ async fn failed_object_upload_does_not_create_visible_placeholder_or_artifact_ro
         "runner-upload-fail",
     )
     .await;
+    // The runner's lease may already show the run's processing reply.
+    let leased_response: (Option<String>,) = sqlx_core::query_as::query_as(
+        "SELECT response_message_id FROM cloud_agent_fallback_runs WHERE run_id = $1",
+    )
+    .bind(&run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
 
     let export = router
         .clone()
@@ -286,7 +294,10 @@ async fn failed_object_upload_does_not_create_visible_placeholder_or_artifact_ro
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(run_response_message.0, None);
+    assert_eq!(
+        run_response_message.0, leased_response.0,
+        "a failed upload adds no placeholder"
+    );
 
     let artifact_rows: (i64,) = sqlx_core::query_as::query_as(
         "SELECT COUNT(*)::BIGINT FROM cloud_agent_run_artifacts WHERE run_id = $1",

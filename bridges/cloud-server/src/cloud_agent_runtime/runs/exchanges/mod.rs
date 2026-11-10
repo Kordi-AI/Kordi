@@ -22,6 +22,7 @@ mod outcome;
 mod person;
 mod person_replies;
 mod progress;
+mod publish;
 mod rounds;
 mod slots;
 pub(crate) use outcome::{

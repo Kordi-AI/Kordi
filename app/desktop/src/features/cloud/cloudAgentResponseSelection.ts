@@ -23,8 +23,9 @@ export function selectVisibleCloudAgentResponses(
   for (const message of messages) {
     const response = parseCloudAgentResponse(message.body);
     if (!response || response.executionClaimId) continue;
-    // An exchange slot row has no heartbeat: the server always ends it.
-    if (response.deliveryState === 'processing' && !response.requestId.startsWith('agent-exchange:')) {
+    // An exchange slot row, or a task slot waiting on an exchange, has no
+    // heartbeat: the server always ends it.
+    if (response.deliveryState === 'processing' && !response.requestId.startsWith('agent-exchange:') && !response.agentExchangeStatus) {
       const createdAtMs = Date.parse(message.createdAt);
       if (
         !Number.isFinite(createdAtMs)

@@ -22,6 +22,8 @@ export class ChatSyncMessageDelivery {
     capturedScope?: ChatDeliveryScope,
   ): Promise<CloudMessage> {
     const attachments = options.attachments ?? [];
+    // An empty text message is never meant to be seen; the server refuses it too.
+    if (!body.trim() && attachments.length === 0 && !options.voiceMessage) throw new Error('Empty message.');
     const sessionId = options.sessionId?.trim() ?? '';
     const conversationKind = options.conversationKind
       ?? (body.startsWith('kordi-cloud-group:') ? 'group' : undefined);

@@ -270,7 +270,7 @@ fn vertex_service_token_uses_google_endpoint_with_chat_completions() {
 }
 
 #[test]
-fn agent_communication_requires_server_capability_and_owner_authority() {
+fn agent_communication_follows_the_server_capability() {
     let mut run = run();
     let memory = crate::memory::RunMemory::disabled();
     let advertised = |run: &CloudAgentRun| {
@@ -281,9 +281,10 @@ fn agent_communication_requires_server_capability_and_owner_authority() {
     assert!(!advertised(&run));
     run.agent_communication = true;
     assert!(advertised(&run));
+    // Another person's request or an answer to another agent: the server
+    // limits whom it reaches, so the tool stays available.
     run.requester_account_id = "other-person".into();
-    assert!(!advertised(&run));
-    run.requester_account_id = run.owner_account_id.clone();
+    assert!(advertised(&run));
     run.subsession_id = Some("child".into());
     assert!(!advertised(&run));
 }

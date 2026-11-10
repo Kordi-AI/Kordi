@@ -115,8 +115,19 @@ pub(super) async fn patch(
     if !metadata.is_object() {
         *metadata = json!({});
     }
+    let before = metadata.clone();
+    let object = metadata.as_object_mut().expect("object");
     for (key, value) in fields {
-        metadata[*key] = value.clone();
+        // A cleared field is removed, so clearing a plain question is a no-op.
+        if value.is_null() {
+            object.remove(*key);
+        } else {
+            object.insert((*key).to_owned(), value.clone());
+        }
+    }
+    // Only a real change makes a new version of the message.
+    if *metadata == before {
+        return Ok(());
     }
     block["text"] = json!(format!(
         "{prefix}:{}",

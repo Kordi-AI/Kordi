@@ -8,9 +8,10 @@
 //! the agent's owner may ask only that requester, and a run answering another
 //! agent may ask only its own owner.
 use super::*;
+use publish::publish;
 use serde::Serialize;
 use sqlx_postgres::PgConnection;
-use store::{authorize, publish, Parent};
+use store::{authorize, Parent};
 use unicode_normalization::UnicodeNormalization;
 
 /// People get far longer than agents to answer.
@@ -214,12 +215,23 @@ pub(super) async fn send(
     let id = Uuid::new_v4();
     query("INSERT INTO cloud_agent_exchanges(exchange_id,parent_run_id,root_run_id,request_key,target_kind,target_person_id,conversation_id,request_text,deadline_at) VALUES($1,$2,$3,$4,'person',$5,$6,$7,now()+make_interval(hours=>$8))")
         .bind(id).bind(&parent.run).bind(&parent.root).bind(key).bind(&person.account_id).bind(parent.conversation).bind(text).bind(DEADLINE_HOURS).execute(&mut *tx).await?;
+    // Another run of the same task already asked this person: wait on that
+    // question instead of asking again; one answer resumes both.
+    let pending: Option<(Uuid, chrono::DateTime<chrono::Utc>)> = query_as("SELECT request_message_id,deadline_at FROM cloud_agent_exchanges WHERE root_run_id=$1 AND target_kind='person' AND target_person_id=$2 AND status='pending' AND exchange_id<>$3 AND parent_run_id<>$4 AND request_message_id IS NOT NULL ORDER BY created_at LIMIT 1")
+        .bind(&parent.root).bind(&person.account_id).bind(id).bind(&parent.run).fetch_optional(&mut *tx).await?;
+    if let Some((question, deadline)) = pending {
+        query("UPDATE cloud_agent_exchanges SET request_message_id=$2,deadline_at=$3 WHERE exchange_id=$1")
+            .bind(id).bind(question).bind(deadline).execute(&mut *tx).await?;
+        tx.commit().await?;
+        return Ok(receipt(id, "pending", person));
+    }
     // In a direct chat the requester is plainly the one asked; elsewhere the
     // mention says who should answer.
-    let question = if person.requester && parent.kind == "direct" {
-        text.to_owned()
+    let (question, mentions) = if person.requester && parent.kind == "direct" {
+        (text.to_owned(), Vec::new())
     } else {
-        format!("@{} {}", person.handle, text)
+        let mention = super::publish::person_mention(&person.account_id, &person.handle);
+        super::publish::addressed(&person.name, text, mention)
     };
     let message = publish(
         &mut tx,
@@ -229,6 +241,7 @@ pub(super) async fn send(
         &format!("{PREFIX}{id}:sent"),
         &question,
         None,
+        mentions,
     )
     .await?;
     query("UPDATE cloud_agent_exchanges SET request_message_id=$2 WHERE exchange_id=$1")

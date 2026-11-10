@@ -149,7 +149,14 @@ export function typedAgentMentionIsAmbiguous(
   for (const candidate of sharedCloudAgentMentionCandidatesForConversation(sharedCloudAgents, conversation, self || null)) {
     if (named(candidate.baseHandle ?? candidate.handle)) agents.add(candidate.targetAgentId);
   }
-  return agents.size > 1;
+  if (agents.size > 0) return agents.size > 1;
+  // Nothing here matches by id, yet several known agents share the handle:
+  // the person picks one instead of sending a mention that reaches no one.
+  const known = new Set<string>();
+  for (const candidate of buildCollaborationMentionCandidates(collaborationState)) {
+    if (candidate.targetKind === 'agent' && named(candidate.baseHandle ?? candidate.handle)) known.add(candidate.peer.agentId?.trim() || candidate.peer.humanId?.trim() || candidate.peer.nodeId);
+  }
+  return known.size > 1;
 }
 
 export function cloudAgentMentionIdentity(target: ResolvedMentionedCollaborationTarget | null) {

@@ -32,6 +32,7 @@ const MAX_IMAGE_PIXEL_DIMENSION: u64 = 100_000;
 
 mod attachment_actions;
 mod channels;
+mod empty_message;
 mod group_envelope;
 mod http;
 mod message_mutations;

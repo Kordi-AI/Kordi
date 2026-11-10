@@ -104,3 +104,31 @@ test("a contact who shares a member's name is not offered in a chat they are not
   const byId = filterCollaborationMentionCandidatesForConversation(candidates, withIds).filter((c) => c.targetKind === 'agent').map((c) => c.peer.humanId);
   assert.deepEqual(byId, ['acctmember']);
 });
+
+test('in a direct chat a typed handle reaches the member, not a contact who shares their name', () => {
+  const base = state([agentPeer('acctmember', 'Alex Kim'), agentPeer('acctnonmember', 'Alex Kim')]);
+  const collaboration = { ...base, hosts: [{ ...base.hosts[0], ownerName: 'Robin', humanId: 'acctself', nodeId: 'acctself' }] } as DesktopCollaborationState;
+  const handle = buildCollaborationMentionCandidates(collaboration).find((candidate) => candidate.targetKind === 'agent')!;
+  const text = `@${handle.baseHandle ?? handle.handle} find a time for a 1-hour call on Saturday`;
+  const direct = (id: string, canonicalParticipants: unknown[]) => ({
+    id, canonicalSessionId: id.startsWith('session:') ? id : undefined, name: 'Alex Kim', type: 'person', subtitle: '', unread: 0,
+    collaborationSources: ['Cloud'], trust: 'Cloud', directness: 'Direct chat', participants: ['Alex Kim'], messages: [], canonicalParticipants,
+  }) as unknown as Conversation;
+  const nameOnly = [{ id: 'identity:peer', name: 'Alex Kim', kind: 'human', role: 'person', source: 'cloud' }];
+  for (const conversation of [
+    direct('session:direct-person:acctmember:acctself', nameOnly),
+    direct('session:direct-person:acctmember:acctself', []),
+    direct('cloud:conversation:acctmember:person', nameOnly),
+  ]) {
+    const offered = filterCollaborationMentionCandidatesForConversation(buildCollaborationMentionCandidates(collaboration), conversation)
+      .filter((candidate) => candidate.targetKind === 'agent');
+    assert.deepEqual(offered.map((candidate) => candidate.peer.humanId), ['acctmember'], 'only the member\'s agent is offered');
+    assert.equal(typedAgentMentionIsAmbiguous(text, null, collaboration, conversation, []), false);
+    const target = resolveMentionedCollaborationTarget(text, collaboration, conversation, { targetKind: 'agent' });
+    assert.equal(target?.peer.humanId, 'acctmember', conversation.id);
+  }
+  // Without ids to tell them apart, the composer asks instead of sending plain text.
+  const unknown = direct('legacy-direct', nameOnly);
+  assert.equal(resolveMentionedCollaborationTarget(text, collaboration, unknown, { targetKind: 'agent' }), null);
+  assert.equal(typedAgentMentionIsAmbiguous(text, null, collaboration, unknown, []), true);
+});

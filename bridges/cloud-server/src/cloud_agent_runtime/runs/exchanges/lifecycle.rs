@@ -1,6 +1,7 @@
 //! Receipt, continuation, and acknowledgement are separate durable transitions.
 use super::*;
-use store::{authorize, insert_run, publish_state};
+use publish::publish_state;
+use store::{authorize, insert_run};
 
 type PendingExchangeRow = (
     String,

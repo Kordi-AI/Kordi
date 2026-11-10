@@ -224,19 +224,29 @@ that agent's owner directly as a person instead of posting open questions.
 An agent task keeps one visible row: the reply slot of the run a person
 started (#2416), which becomes its reply in place and keeps its place. When
 the agent asks another agent or a person, that slot shows whom it waits for
-instead of being emptied; when the answer arrives it shows processing; the
-resumed task's result replaces it in place. The question stays a plain
-message without progress (until the task has a slot, a cloud run's question
-carries the state). A resumed task that ends silently hides the slot, a
-failure shows the failure, and a stop shows "Stopped". The owner's own Mac
-keeps a yielding turn's slot visible as waiting too.
+instead of being emptied: it stays `processing` with the text "Waiting for
+<name>." while the task is open, never a finished empty row; when the answer
+arrives it shows processing; the resumed task's result replaces it in place.
+A cloud runner shows the slot as processing as soon as it takes the run, as
+the owner's Mac does. The question stays a plain message from its first
+version (no exchange status; until the task has a slot, the question carries
+the state). Questions and requests address their target by the name people
+know ("@Maya Patel", "@Maya's Kordi") and carry a structured mention with
+the account or agent id; the unique handle is only the mention's label. A
+resumed task that ends silently hides the slot, a failure shows the failure,
+and a stop shows "Stopped". The owner's own Mac keeps a yielding turn's slot
+visible as waiting too, past the usual processing timeout.
 
 Only the agent answering another agent's request, which has no row of its
 own, gets an added processing row: its reply row is created with the
 question, retired while it asks its own owner, reopened when the owner
-replies, and replaced by its answer. Continuation prompts tell the agent to
-write in the request's language even when its owner's memories or the other
-side use another.
+replies, and replaced by its answer; on the cloud runner it has `reach_out`
+for that one question too. Every turn's runtime note names the current
+request's language (for a continuation, its original request), and the
+continuation prompts repeat it, so owner memories, Chinese history, or the
+other side's language never decide the reply's language. A later run of the
+same task that asks the same person waits on the pending question instead of
+asking again.
 
 Only a person's message starts an agent: neither the server nor a Mac runs
 or claims anything for a mention inside an agent's reply, and an
