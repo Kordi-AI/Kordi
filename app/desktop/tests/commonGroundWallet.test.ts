@@ -167,7 +167,10 @@ test('wallet: the card page shows the header, references and sources', () => {
   };
   store.set({ profiles: [{ ...work, focus: 'Agent memory research' }], profileId: 'cgp_work', owner: owner({ card: withRefs }) });
   const html = renderToStaticMarkup(createElement(CardScreen, { state: store.getSnapshot(), store }));
-  assert.match(html, /Rebuild from memory/);
+  assert.match(html, /<\/svg>Rebuild<\/button>/);
+  assert.doesNotMatch(html, /Rebuild from memory/);
+  // An owner view without `autoRebuild` (an older server) shows no switch.
+  assert.doesNotMatch(html, /Rebuild automatically/);
   assert.match(html, />Rename</);
   assert.match(html, />Delete</);
   assert.match(html, /class="cg-cardpage-focus">Agent memory research</);

@@ -3,6 +3,7 @@ import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
 import { sessionPinMessageIds } from './cloudSessionPinTypes';
 import { notifyDocumentSyncEvents } from '@/features/documents/documentSyncEvents';
 import { notifyCommonGroundNearbyEvents } from '@/features/commonGround/nearbyHints';
+import { notifyCommonGroundCardEvents } from '@/features/commonGround/cardHints';
 import { notifyDocumentAgentRequests } from '@/features/documents/documentAgentRequests';
 import { notifyDigestRunRequests } from '@/features/digest/digestMacRuns';
 import { notifyProactiveProposalEvents } from '@/features/proactive/proactiveProposalEvents';
@@ -481,6 +482,7 @@ export async function syncCloudDiffOnce(input: SyncCloudDiffOnceInput): Promise<
   notifyProactiveProposalEvents(events);
   notifyProactiveRunRequests(events, input.accountId);
   notifyCommonGroundNearbyEvents(events);
+  notifyCommonGroundCardEvents(events);
   const sessionForksById = applyCloudSyncEventsToSessionForks(input.sessionForksById ?? {}, events);
   const sessionPinsById = applyCloudSyncEventsToSessionPins(input.sessionPinsById ?? {}, events);
   const sessionTitlesById = applyCloudSyncEventsToSessionTitles(input.sessionTitlesById ?? {}, events);

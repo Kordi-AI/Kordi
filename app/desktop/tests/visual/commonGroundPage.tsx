@@ -23,6 +23,8 @@ import '../../src/index.css';
 // "look" is the card page with the background and icon popover open; "pair" is Home with the
 // Pair popover open, and "pair-off" the same with sharing off.
 // ?noPrompt makes Allow end without a macOS prompt; ?buildEmpty makes Build find nothing in the sources.
+// ?auto=off|on|updating gives the Work card "Rebuild automatically" (off or on); "updating" shows an
+// automatic update running, which lands one new topic about eight seconds after the page opens.
 const params = new URLSearchParams(location.search);
 const theme = params.get('theme') === 'light' ? 'light' : 'dark';
 const screen = params.get('screen') ?? 'home';
@@ -30,6 +32,18 @@ localStorage.setItem('kordi.themeMode.v1', theme);
 const fx = commonGroundFixtures(theme);
 if (params.has('emptyCard')) {
   fx.profiles = fx.profiles.map((profile) => ({ ...profile, hasCard: false }));
+}
+
+const autoParam = params.get('auto');
+const auto = autoParam === 'off' || autoParam === 'on' || autoParam === 'updating' ? autoParam : null;
+const autoSetting = { on: auto === 'on' || auto === 'updating', landsAt: Date.now() + 8_000 };
+/** The Work card's owner view, with the setting and the quiet update when `?auto` asks for them. */
+function workOwner() {
+  if (!auto) return fx.owner;
+  const updating = auto === 'updating' && Date.now() < autoSetting.landsAt;
+  const landed = auto === 'updating' && !updating;
+  const card = landed ? { ...fx.owner.card, workingOn: [...fx.owner.card.workingOn, 'Memory benchmarks'] } : fx.owner.card;
+  return { ...fx.owner, card, autoRebuild: autoSetting.on, autoUpdating: updating, ...(landed ? { memoriesSinceBuild: 0 } : {}) };
 }
 
 // Workshops reuses the Work topics so clicking it in the rail opens a filled card page.
@@ -40,7 +54,13 @@ const ROUTES: Record<string, (query: string, body: Record<string, unknown>) => u
   'GET profiles': () => ({ profiles: fx.profiles }),
   'GET card': (query) => params.has('emptyCard') ? { ...fx.owner, card: null }
     : screen === 'build' || query.includes('cgp_health') ? fx.healthOwner
-      : query.includes('cgp_ws') ? workshopsOwner : fx.owner,
+      : query.includes('cgp_ws') ? workshopsOwner : workOwner(),
+  // Share my card and Rebuild automatically on the Work card.
+  'PUT settings': (_query, body) => {
+    if (typeof body.sharing === 'boolean') fx.owner.sharing = body.sharing;
+    if (typeof body.autoRebuild === 'boolean') autoSetting.on = body.autoRebuild;
+    return workOwner();
+  },
   'GET recent': () => fx.recent,
   'GET profiles/cgp_work/memories': () => ({ memories: fx.memories }),
   'GET documents': () => ({ documents: fx.documents }),

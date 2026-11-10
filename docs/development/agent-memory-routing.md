@@ -48,8 +48,9 @@ what kind of information it is. Product copy keeps saying "memory".
   (`common_ground/build/gather.rs`) reads the owner's own memories in every
   scope, up to 200, newest first, for every profile alike; the profile's
   lens prompt (`common_ground/prompt.rs`) is what keeps work out of the
-  health card. A memory reaches a card only when the owner rebuilds it
-  ("Rebuild from memory" on the card page). Topics cite evidence; a cited
+  health card. A memory reaches a card when the owner rebuilds it
+  ("Rebuild" on the card page), or through an automatic update when the card's
+  "Rebuild automatically" setting is on. Topics cite evidence; a cited
   memory shows as a reference with source "Memory".
 - The keyword guard (`agent/crates/tools/src/memory_guard.rs`) rejects
   diagnosis-level health terms, financial details, credentials and
