@@ -21,7 +21,7 @@ use super::{
     SourcePicks,
 };
 use super::{MAX_FOCUS_CHARS, MAX_NAME_CHARS};
-use crate::common_ground::card::Topics;
+use crate::common_ground::card::{Topics, CAUGHT_UP_SQL};
 use crate::common_ground::{db_error, err};
 use crate::memory_store::ProfileTarget;
 use crate::{auth::routes::CloudSession, server::ServerState};
@@ -39,22 +39,22 @@ type ListRow = (
     Option<String>,
     Option<String>,
     Option<Value>,
+    Option<DateTime<Utc>>,
 );
 
 /// Every profile of the account as the owner sees it in the list, with its
 /// saved sources: owner only.
 async fn views(pool: &PgPool, account: &str) -> sqlx_core::Result<Vec<Value>> {
-    let rows: Vec<ListRow> = query_as(
+    let sql = format!(
         "SELECT profile.profile_id, profile.kind, profile.name, profile.focus, profile.position,
                 COALESCE(card.built_at IS NOT NULL, false), card.sharing_enabled, card.built_at,
-                card.topics_json, profile.design, profile.icon, profile.sources_json
+                card.topics_json, profile.design, profile.icon, profile.sources_json,
+                ({CAUGHT_UP_SQL})
          FROM cloud_common_ground_profiles profile
          LEFT JOIN cloud_common_ground_cards card ON card.profile_id = profile.profile_id
-         WHERE profile.account_id = $1 ORDER BY profile.position",
-    )
-    .bind(account)
-    .fetch_all(pool)
-    .await?;
+         WHERE profile.account_id = $1 ORDER BY profile.position"
+    );
+    let rows: Vec<ListRow> = query_as(&sql).bind(account).fetch_all(pool).await?;
     let mut views = Vec::with_capacity(rows.len());
     for (
         id,
@@ -69,6 +69,7 @@ async fn views(pool: &PgPool, account: &str) -> sqlx_core::Result<Vec<Value>> {
         design,
         icon,
         sources,
+        caught_up_at,
     ) in rows
     {
         let topics: Topics = topics
@@ -78,7 +79,7 @@ async fn views(pool: &PgPool, account: &str) -> sqlx_core::Result<Vec<Value>> {
             profile_id: Some(&id),
             kind: &kind,
         };
-        let since = crate::memory_store::count_since(pool, account, target, built_at).await?;
+        let since = crate::memory_store::count_since(pool, account, target, caught_up_at).await?;
         views.push(json!({
             "profileId": id,
             "kind": kind,

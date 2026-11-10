@@ -19,7 +19,7 @@ export type CgBuildChoices = {
 
 export const NO_PICKS: CgSourcePicks = { memory: false, connectors: [], device: [], agents: false, documents: [], links: '', notes: '' };
 
-/** The picks a Build screen opens with: the saved ones, or none; Rebuild from memory turns Memory on. */
+/** The picks a Build screen opens with: the saved ones, or none; Rebuild on the card page turns Memory on. */
 export function initialPicks(saved: CgSourcePicks | null | undefined, memory = false): CgSourcePicks {
   const picks = { ...NO_PICKS, ...saved };
   return memory ? { ...picks, memory: true } : picks;

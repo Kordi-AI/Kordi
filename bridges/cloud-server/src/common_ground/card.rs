@@ -77,6 +77,13 @@ pub(super) struct CardRow {
     pub error_code: Option<String>,
     /// Links the last build could not read, with why.
     pub unread_links: Vec<UnreadLink>,
+    /// The owner's "Rebuild automatically" setting.
+    pub auto_rebuild: bool,
+    /// An automatic update is in flight. It never shows as building.
+    pub auto_updating: bool,
+    /// When the card last took in changes ([`CAUGHT_UP_SQL`]); `None`
+    /// when it was never built.
+    pub caught_up_at: Option<DateTime<Utc>>,
 }
 
 /// A link source a build could not read.
@@ -105,6 +112,9 @@ type RawCardRow = (
     bool,
     bool,
     Value,
+    bool,
+    bool,
+    Option<DateTime<Utc>>,
 );
 
 /// A build counts as in flight while its run is still queued or running.
@@ -114,6 +124,20 @@ pub(super) const BUILD_IN_FLIGHT_SQL: &str = "card.active_run_id IS NOT NULL AND
     SELECT 1 FROM cloud_agent_fallback_runs run
     WHERE run.run_id = card.active_run_id AND run.status IN ('queued', 'leased', 'running'))
     AND card.build_started_at > now() - interval '15 minutes'";
+
+/// An automatic update counts as in flight on the same terms as a build.
+pub(super) const AUTO_IN_FLIGHT_SQL: &str = "card.auto_run_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM cloud_agent_fallback_runs run
+    WHERE run.run_id = card.auto_run_id AND run.status IN ('queued', 'leased', 'running'))
+    AND card.auto_started_at > now() - interval '15 minutes'";
+
+/// When the card last took in changes: its build, or a later automatic
+/// update that read them, even one that changed nothing (`auto_seen_at`).
+/// Null for a card never built, so every memory counts as new. A manual
+/// build clears `auto_seen_at`; turning the setting off keeps it, since it
+/// only covers changes an update really read.
+pub(super) const CAUGHT_UP_SQL: &str = "CASE WHEN card.built_at IS NULL THEN NULL
+    ELSE GREATEST(card.built_at, card.auto_seen_at) END";
 
 /// The card of this profile.
 pub(super) async fn load<'e, E>(executor: E, profile_id: &str) -> sqlx_core::Result<Option<CardRow>>
@@ -127,7 +151,8 @@ where
                 EXISTS (SELECT 1 FROM cloud_agent_fallback_runs run
                         WHERE run.run_id = card.active_run_id
                           AND run.status IN ('queued', 'leased', 'running')),
-                card.link_errors_json
+                card.link_errors_json, card.auto_rebuild, ({AUTO_IN_FLIGHT_SQL}),
+                ({CAUGHT_UP_SQL})
          FROM cloud_common_ground_cards card WHERE card.profile_id = $1"
     );
     let row: Option<RawCardRow> = query_as(&sql)
@@ -147,6 +172,9 @@ where
             pending,
             run_active,
             unread_links,
+            auto_rebuild,
+            auto_updating,
+            caught_up_at,
         )| CardRow {
             topics: serde_json::from_value(topics).unwrap_or_default(),
             evidence: serde_json::from_value(evidence).unwrap_or_default(),
@@ -157,6 +185,9 @@ where
             building,
             error_code: build_error(building, error_code, pending, run_active),
             unread_links: serde_json::from_value(unread_links).unwrap_or_default(),
+            auto_rebuild,
+            auto_updating,
+            caught_up_at,
         },
     ))
 }
@@ -216,7 +247,13 @@ impl CardRow {
             "unreadLinks": self.unread_links,
         });
         if !self.has_card() {
-            return json!({ "card": Value::Null, "sharing": self.sharing, "build": build });
+            return json!({
+                "card": Value::Null,
+                "sharing": self.sharing,
+                "autoRebuild": self.auto_rebuild,
+                "autoUpdating": self.auto_updating,
+                "build": build,
+            });
         }
         let topics = &self.topics;
         json!({
@@ -231,6 +268,8 @@ impl CardRow {
                 "profile": profile::build(topics, &self.evidence, &self.hidden, today),
             },
             "sharing": self.sharing,
+            "autoRebuild": self.auto_rebuild,
+            "autoUpdating": self.auto_updating,
             "build": build,
         })
     }
@@ -240,6 +279,8 @@ pub(super) fn empty_view() -> Value {
     json!({
         "card": Value::Null,
         "sharing": true,
+        "autoRebuild": false,
+        "autoUpdating": false,
         "build": { "status": "idle", "errorCode": Value::Null, "unreadLinks": [] },
     })
 }
