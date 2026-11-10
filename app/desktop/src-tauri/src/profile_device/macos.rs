@@ -13,7 +13,7 @@ use objc2_foundation::{NSArray, NSError, NSLocale, NSString};
 use tokio::sync::oneshot;
 
 use super::{city_label, same_city, Placemark};
-use crate::nearby_location::{failure, macos as location, CITY};
+use crate::nearby_location::{failure, macos as location};
 
 /// Reverse geocoding normally answers within a second or two.
 const GEOCODE_WAIT: Duration = Duration::from_secs(15);
@@ -33,25 +33,38 @@ fn fail(code: &'static str, detail: impl std::fmt::Display) -> &'static str {
     code
 }
 
-pub(super) async fn city(app: tauri::AppHandle) -> Result<String, &'static str> {
-    let status = location::permission(app.clone())
+/// This Mac's city. With `prompt` (the person tapped the arrow), asks for
+/// location access when it was never asked for and waits for the answer.
+pub(super) async fn city(app: tauri::AppHandle, prompt: bool) -> Result<String, &'static str> {
+    let before = location::permission(app.clone())
         .await
         .map_err(|error| fail(failure::UNAVAILABLE, error))?;
-    match status.as_str() {
+    if prompt {
+        eprintln!("[profile-location] status before: {before}");
+    }
+    match before.as_str() {
         "granted" => {}
+        "not_determined" if prompt => {}
         "not_determined" => {
             return Err(fail(failure::NOT_DETERMINED, "access was never asked for"))
         }
-        "denied" | "restricted" => return Err(fail(failure::DENIED, &status)),
-        _ => return Err(fail(failure::UNAVAILABLE, format!("permission {status}"))),
+        "denied" | "restricted" => return Err(fail(failure::DENIED, &before)),
+        _ => return Err(fail(failure::UNAVAILABLE, format!("permission {before}"))),
     }
-    let fix = location::request(
+    let request = location::request(
         app.clone(),
-        location::Options::silent(CITY, "profile-location"),
+        location::Options::city(prompt, "profile-location"),
     )
-    .await
-    .map_err(|code| fail(code, "location request failed"))?
-    .ok_or_else(|| fail(failure::UNAVAILABLE, "location request returned no fix"))?;
+    .await;
+    if prompt {
+        let after = location::permission(app.clone())
+            .await
+            .unwrap_or_else(|error| error);
+        eprintln!("[profile-location] status after: {after}");
+    }
+    let fix = request
+        .map_err(|code| fail(code, "location request failed"))?
+        .ok_or_else(|| fail(failure::UNAVAILABLE, "location request returned no fix"))?;
     let point = (fix.latitude(), fix.longitude());
     if let Some((last, city)) = LAST.lock().ok().and_then(|last| last.clone()) {
         if same_city(last, point) {

@@ -95,6 +95,55 @@ impl Precision {
     }
 }
 
+/// This app's location access, as one read of `authorizationStatus`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) enum Access {
+    NotDetermined,
+    Granted,
+    Blocked,
+    Unknown,
+}
+
+/// What a request does with one status read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) enum Step {
+    /// Wait for Core Location's next authorization call.
+    Wait,
+    /// A status probe answers with this read.
+    Report,
+    /// Show the macOS prompt.
+    Ask,
+    Fail(&'static str),
+    Granted {
+        fetch: bool,
+    },
+}
+
+/// A new manager can read "not determined" before Core Location has loaded
+/// this app's status, so that read is never acted on until it is `settled`
+/// (Core Location called the delegate, or the settle wait passed). Acting on
+/// it showed no prompt and then failed with "never asked".
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn next_step(
+    access: Access,
+    settled: bool,
+    probing: bool,
+    prompt: bool,
+    fetch: bool,
+) -> Step {
+    match access {
+        Access::NotDetermined if !settled => Step::Wait,
+        _ if probing => Step::Report,
+        Access::NotDetermined if prompt => Step::Ask,
+        Access::NotDetermined => Step::Fail(failure::NOT_DETERMINED),
+        Access::Granted => Step::Granted { fetch },
+        Access::Blocked => Step::Fail(failure::DENIED),
+        Access::Unknown => Step::Wait,
+    }
+}
+
 /// What a Core Location error means for a pending request. `None` keeps waiting.
 pub(crate) fn failure_for_error_code(code: isize) -> Option<&'static str> {
     // kCLErrorLocationUnknown: Core Location keeps trying; the error is transient.
@@ -159,6 +208,49 @@ pub async fn desktop_nearby_location_permission(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unsettled_not_determined_is_never_acted_on() {
+        use Access::*;
+        // The read before Core Location answers: no prompt, no failure.
+        assert_eq!(
+            next_step(NotDetermined, false, false, true, true),
+            Step::Wait
+        );
+        assert_eq!(
+            next_step(NotDetermined, false, false, false, true),
+            Step::Wait
+        );
+        assert_eq!(
+            next_step(NotDetermined, false, true, false, false),
+            Step::Wait
+        );
+        // Settled: the arrow asks, a background lookup gives up.
+        assert_eq!(next_step(NotDetermined, true, false, true, true), Step::Ask);
+        assert_eq!(
+            next_step(NotDetermined, true, false, false, true),
+            Step::Fail(failure::NOT_DETERMINED)
+        );
+        // A granted or blocked read is final either way.
+        assert_eq!(
+            next_step(Granted, false, false, false, true),
+            Step::Granted { fetch: true }
+        );
+        assert_eq!(
+            next_step(Granted, true, false, true, false),
+            Step::Granted { fetch: false }
+        );
+        assert_eq!(
+            next_step(Blocked, false, false, true, true),
+            Step::Fail(failure::DENIED)
+        );
+        // A probe only reports the settled status.
+        assert_eq!(next_step(Granted, false, true, false, false), Step::Report);
+        assert_eq!(
+            next_step(NotDetermined, true, true, false, false),
+            Step::Report
+        );
+    }
 
     #[test]
     fn city_fixes_are_coarse_and_fall_back_to_older_readings() {

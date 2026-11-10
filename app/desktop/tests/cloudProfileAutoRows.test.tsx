@@ -22,8 +22,10 @@ function fakeLocation(status: string, calls: string[]): ProfileDeviceLocation {
       calls.push(request ? 'ask' : 'check');
       return status;
     },
-    city: async () => {
-      calls.push('city');
+    city: async (prompt) => {
+      calls.push(prompt ? 'ask+city' : 'city');
+      if (status === 'denied') throw new Error('location_denied');
+      if (status !== 'granted') throw new Error('location_timeout');
       return 'Palo Alto, CA';
     },
     openSettings: () => { calls.push('settings'); },
@@ -82,7 +84,7 @@ test('the arrow asks for location once, then fills the city in automatic mode', 
     assert.equal(view.input().value, '');
     assert.equal(view.button('Automatic location on'), null);
     await act(async () => view.button('Set location automatically')!.click());
-    assert.deepEqual(calls.filter((call) => call !== 'check'), ['ask', 'city']);
+    assert.deepEqual(calls.filter((call) => call !== 'check'), ['ask+city'], 'one step asks, waits, then reads');
     assert.equal(view.input().value, 'Palo Alto, CA');
     assert.ok(view.button('Automatic location on'));
     await view.save();
@@ -98,7 +100,7 @@ test('denied access keeps the field and shows one line to System Settings', asyn
   try {
     await act(async () => view.button('Set location automatically')!.click());
     assert.equal(view.input().value, 'Bay Area');
-    assert.ok(!calls.includes('city'));
+    assert.deepEqual(calls.filter((call) => call !== 'check'), ['ask+city']);
     const link = Array.from(document.querySelectorAll('button')).find((button) => button.textContent === 'Allow location in System Settings');
     assert.ok(link);
     await act(async () => link.click());
@@ -123,6 +125,19 @@ test('typing makes the location manual and the time zone menu leads with Automat
     assert.deepEqual(view.sent, [{
       displayName: 'Maya', location: 'Stanford', timeZone: 'Asia/Tokyo', locationMode: 'manual', timeZoneMode: 'manual',
     }]);
+  } finally {
+    await view.unmount();
+  }
+});
+
+test('a failed lookup shows one short line and keeps the field manual', async () => {
+  const view = await mount(base, fakeLocation('unavailable', []));
+  try {
+    await act(async () => view.button('Set location automatically')!.click());
+    assert.equal(view.input().value, '');
+    assert.ok(view.button('Set location automatically'));
+    const alert = view.input().closest('.app-cloud-profile-row')!.querySelector('[role="alert"]');
+    assert.equal(alert?.textContent, 'Could not find your city.');
   } finally {
     await view.unmount();
   }

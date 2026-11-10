@@ -50,7 +50,7 @@ export function useProfileDeviceSync(
         launched = true;
         const [timeZone, location] = await Promise.all([
           deviceTimeZone(),
-          lookUpCity ? deviceCity().catch(() => null) : Promise.resolve(null),
+          lookUpCity ? deviceCity(false).catch(() => null) : Promise.resolve(null),
         ]);
         if (lookUpCity) memory = { ...memory, locationCheckedAt: now };
         const latest = accountRef.current;
