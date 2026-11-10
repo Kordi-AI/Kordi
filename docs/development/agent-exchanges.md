@@ -50,7 +50,12 @@ ends when its goal is reached, the other agent has nothing new, or the root's
 budget of eight exchanges is spent. The final continuation always publishes a
 short closing summary of two or three lines: what was agreed or found and
 anything left open. A continuation that asks again stays a quiet yield, and
-a single question still finishes silently. The continuation prompt carries
+a single relayed question that the visible answer fully completes still
+finishes silently. A task about planning or choosing (a day, time, place,
+event, or option) is the asking agent's to decide: it never finishes
+silently, and closes with a plan card (a vote while options remain or others
+must agree, a plan once settled) when the run has that tool, plus one short
+result line. The continuation prompt carries
 `remainingRequests` and the earlier answered rounds of the task. A follow-up's
 recipient receives the earlier rounds with that same requester. Both are
 public messages of this conversation, sent as untrusted data and clipped to a

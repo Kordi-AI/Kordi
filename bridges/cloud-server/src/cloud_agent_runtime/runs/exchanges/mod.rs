@@ -16,6 +16,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 mod answering;
+mod decision;
 mod lifecycle;
 mod main_row;
 mod outcome;
