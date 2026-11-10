@@ -134,8 +134,12 @@ pub(super) async fn waiting_target(
 ) -> RunResult<Option<(String, String)>> {
     Ok(query_as(
         "SELECT CASE WHEN e.target_kind='person' THEN COALESCE(NULLIF(btrim(p.display_name),''),'Participant')
-                     ELSE COALESCE(NULLIF(btrim(o.display_name),''),'Participant')||'''s agent' END,
-                COALESCE(e.target_person_id,e.target_owner_id,'')
+                     ELSE (SELECT CASE WHEN lower(btrim(n))='kordi'
+                                       THEN COALESCE(NULLIF(btrim(o.display_name),''),'Participant')||'''s Kordi' ELSE btrim(n) END
+                           FROM (SELECT COALESCE((SELECT NULLIF(btrim(d.name),'') FROM cloud_agent_definitions d WHERE d.agent_id=e.target_agent_id AND d.owner_account_id=e.target_owner_id),
+                                                 (SELECT NULLIF(btrim(f.display_name),'') FROM cloud_default_agent_profiles f WHERE f.owner_account_id=e.target_owner_id),'Kordi') AS n) agent) END,
+                -- Only a person waits for their own reply; an agent has no account here.
+                COALESCE(e.target_person_id,'')
          FROM cloud_agent_exchanges e
          LEFT JOIN cloud_accounts p ON p.account_id=e.target_person_id
          LEFT JOIN cloud_accounts o ON o.account_id=e.target_owner_id

@@ -316,7 +316,8 @@ pub(super) async fn send(
     .await?;
     query("UPDATE cloud_agent_exchanges SET target_run_id=$2,request_message_id=$3 WHERE exchange_id=$1")
         .bind(id).bind(&run).bind(message).execute(&mut *tx).await?;
-    progress::update(&mut tx, id, "waiting").await?;
+    // The task's slot waits for that agent by the name people know.
+    progress::waiting_for(&mut tx, id, &name, "", false).await?;
     super::publish::publish_state(
         &mut tx,
         parent,

@@ -127,7 +127,17 @@ async fn complete(
             .await?;
     }
     let response_body = super::subsessions::with_links(pool, run_id, &response_body).await?;
-    let response_message_id = if is_scheduled_run_request_id(&request_message_id) {
+    // A yield shows the waiting slot in place, in the one version that
+    // records it, never an empty finished row first.
+    let yielded = if trimmed == super::exchanges::WAITING {
+        super::processing_slot::show(pool, run_id, true).await?;
+        super::exchanges::yield_in_place(pool, run_id).await?
+    } else {
+        None
+    };
+    let response_message_id = if let Some(slot) = yielded {
+        slot
+    } else if is_scheduled_run_request_id(&request_message_id) {
         if let Some(message_id) = ensure_scheduled_direct_person_response_message(
             pool,
             run_id,
