@@ -86,7 +86,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // One shared error line and the call permission dialog remove 8.4 kB there.
 // Leaving a group through the server route adds 0.8 kB there.
 // Presence text in group Info, Add people and the Chat Info participants adds 0.9 kB there, so it moves to 5.837 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_837_000;
+// Plan RSVPs in the event dialog, sign-in renewal and per-sign-in model availability add
+// 8 kB there, plus the cloud-edition build's margin, so it moves to 5.847 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_847_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
