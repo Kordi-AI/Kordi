@@ -23,6 +23,9 @@ pub(crate) struct Options {
     /// Show the macOS prompt when access was never asked for.
     prompt: bool,
     precision: Precision,
+    /// Logs Core Location errors and skipped fixes (never coordinates) under
+    /// this tag, so a failed request can be diagnosed from the app log.
+    log: Option<&'static str>,
 }
 
 impl Options {
@@ -31,6 +34,7 @@ impl Options {
             fetch: false,
             prompt: true,
             precision: NEARBY,
+            log: None,
         }
     }
 
@@ -39,15 +43,17 @@ impl Options {
             fetch: true,
             prompt: true,
             precision: NEARBY,
+            log: None,
         }
     }
 
     /// A fix without asking for access, for a purpose that already has it.
-    pub(crate) fn silent(precision: Precision) -> Self {
+    pub(crate) fn silent(precision: Precision, log: &'static str) -> Self {
         Self {
             fetch: true,
             prompt: false,
             precision,
+            log: Some(log),
         }
     }
 }
@@ -104,7 +110,13 @@ define_class!(
                     self.finish(manager, Ok(Some(fix)));
                     return;
                 }
-                if fix.accuracy >= 0.0 && precision.usable(0.0, age) {
+                if let Some(tag) = self.ivars().options.log {
+                    eprintln!(
+                        "[{tag}] fix skipped: accuracy {:.0} m, age {age:.0} s",
+                        fix.accuracy
+                    );
+                }
+                if precision.fallback(fix.accuracy, age) {
                     let mut best = self.ivars().best.borrow_mut();
                     if best
                         .as_ref()
@@ -118,6 +130,13 @@ define_class!(
 
         #[unsafe(method(locationManager:didFailWithError:))]
         fn failed(&self, manager: &CLLocationManager, error: &NSError) {
+            if let Some(tag) = self.ivars().options.log {
+                eprintln!(
+                    "[{tag}] core location error {} {}",
+                    error.domain(),
+                    error.code()
+                );
+            }
             if let Some(code) = failure_for_error_code(error.code()) {
                 self.finish(manager, Err(code));
             }
@@ -127,7 +146,11 @@ define_class!(
 
 impl NearbyLocationDelegate {
     fn authorized(&self, manager: &CLLocationManager) {
-        match unsafe { manager.authorizationStatus() } {
+        let status = unsafe { manager.authorizationStatus() };
+        if let Some(tag) = self.ivars().options.log {
+            eprintln!("[{tag}] authorization status {}", status.0);
+        }
+        match status {
             CLAuthorizationStatus::NotDetermined if !self.ivars().options.prompt => {
                 self.finish(manager, Err(failure::NOT_DETERMINED));
             }

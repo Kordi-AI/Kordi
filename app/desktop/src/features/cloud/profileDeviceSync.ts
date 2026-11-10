@@ -116,9 +116,12 @@ export function deviceCity(): Promise<string> {
   return invokeDesktop<string>('desktop_profile_city');
 }
 
-/** Location access for this app: 'granted', 'not_determined', 'denied', 'restricted' or 'unavailable'. */
+/**
+ * Location access for this app: 'granted', 'not_determined', 'denied', 'restricted' or 'unavailable'.
+ * Failures reject with a location failure code and are logged as "[profile-location]".
+ */
 export function deviceLocationPermission(request: boolean): Promise<string> {
-  return invokeDesktop<string>('desktop_nearby_location_permission', { request });
+  return invokeDesktop<string>('desktop_profile_location_permission', { request });
 }
 
 export const LOCATION_SETTINGS_URL = 'x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices';
