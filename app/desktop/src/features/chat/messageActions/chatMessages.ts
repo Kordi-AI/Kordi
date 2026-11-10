@@ -922,9 +922,11 @@ export function useChatMessageActions({
             message: {
               id: retryMessageId,
               senderAccountId: '',
-              text,
+              text, mentions: messageMentions,
               createdAtMs: Date.now(),
               messageAction: retryMessage.messageAction ?? null, ...voiceFields,
+              // A retry is the same agent request as the failed send, not plain text.
+              targetCloudAgentId, targetCloudAgentName, targetCloudAgentOwnerAccountId: mentionedCloudSharedAgentOwnerAccountId, targetCloudAgentOwnerName: targetCloudAgentId ? mentionedTarget?.peer.ownerName ?? null : null,
             },
             attachments: retryAttachments,
             retryFailed: true,
@@ -969,20 +971,18 @@ export function useChatMessageActions({
             retryMessageId,
           ));
           const retryDirectHostedAgentTarget = resolveDirectHostedAgentTarget({
-            mentionedAgentId: null,
-            mentionedTarget: null,
+            mentionedAgentId: targetCloudAgentId,
+            mentionedTarget,
             activeTarget: activeConvCollaborationTarget,
             lockedTarget: lockedSupportAgentTarget,
           });
-          const retryAgentVoice = agentVoiceSend(Boolean(retryDirectHostedAgentTarget), retryAttachments);
-          const retryCloudBody = retryDirectHostedAgentTarget
+          const retryAgentVoice = agentVoiceSend(Boolean(retryDirectHostedAgentTarget) || messageMentions.some((mention) => mention.targetKind === 'agent'), retryAttachments);
+          const retryCloudBody = retryDirectHostedAgentTarget || messageMentions.length
             ? encodeCloudDirectMessageEnvelope({
                 schemaVersion: 1,
                 kind: 'message',
-                text,
-                agentRuntimeRoute: resolveChatRuntimeRoute(
-                  activeConvCanonicalSessionId ?? activeConvId,
-                ),
+                text, mentions: messageMentions,
+                ...(retryDirectHostedAgentTarget ? { agentRuntimeRoute: resolveChatRuntimeRoute(activeConvCanonicalSessionId ?? activeConvId) } : {}),
                 ...retryDirectHostedAgentTarget,
               })
             : text;
