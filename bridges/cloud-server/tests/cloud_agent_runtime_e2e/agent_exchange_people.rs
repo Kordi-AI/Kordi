@@ -121,7 +121,7 @@ async fn a_person_answer_resumes_the_asking_agent() {
     assert!(wire["message"]["text"]
         .as_str()
         .unwrap()
-        .starts_with("@ExchangeBeta Which day works?"));
+        .starts_with("@Exchange Beta Which day works?"));
     assert!(f.pending(1).await.is_empty(), "nothing runs for the person");
     f.end_parent().await;
 
@@ -284,7 +284,7 @@ async fn a_new_request_to_the_same_agent_supersedes_its_question() {
         f.question_wire(&receipt["exchangeId"]).await["message"]["text"]
             .as_str()
             .unwrap()
-            .starts_with("@ExchangeAlpha Which area?")
+            .starts_with("@Exchange Alpha Which area?")
     );
     f.end_parent().await;
     let owner = &f.people[0].account_id;
@@ -327,6 +327,8 @@ mod shared_requests;
 #[path = "agent_exchange_conversation_info.rs"]
 mod conversation_info;
 
+#[path = "agent_exchange_cloud.rs"]
+mod cloud;
 #[path = "agent_exchange_language.rs"]
 mod language;
 #[path = "agent_exchange_slots.rs"]

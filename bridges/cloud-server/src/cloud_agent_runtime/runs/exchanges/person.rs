@@ -8,9 +8,10 @@
 //! the agent's owner may ask only that requester, and a run answering another
 //! agent may ask only its own owner.
 use super::*;
+use publish::publish;
 use serde::Serialize;
 use sqlx_postgres::PgConnection;
-use store::{authorize, publish, Parent};
+use store::{authorize, Parent};
 use unicode_normalization::UnicodeNormalization;
 
 /// People get far longer than agents to answer.
@@ -226,10 +227,11 @@ pub(super) async fn send(
     }
     // In a direct chat the requester is plainly the one asked; elsewhere the
     // mention says who should answer.
-    let question = if person.requester && parent.kind == "direct" {
-        text.to_owned()
+    let (question, mentions) = if person.requester && parent.kind == "direct" {
+        (text.to_owned(), Vec::new())
     } else {
-        format!("@{} {}", person.handle, text)
+        let mention = super::publish::person_mention(&person.account_id, &person.handle);
+        super::publish::addressed(&person.name, text, mention)
     };
     let message = publish(
         &mut tx,
@@ -239,6 +241,7 @@ pub(super) async fn send(
         &format!("{PREFIX}{id}:sent"),
         &question,
         None,
+        mentions,
     )
     .await?;
     query("UPDATE cloud_agent_exchanges SET request_message_id=$2 WHERE exchange_id=$1")

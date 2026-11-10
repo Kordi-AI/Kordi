@@ -184,6 +184,9 @@ async fn lease_run(
     let Some(row) = leased? else {
         return Ok(None);
     };
+    if let Err(error) = super::processing_slot::show(pool, &row.0).await {
+        eprintln!("[cloud-agent] processing reply for {}: {error}", row.0);
+    }
     runner_response_from_row(pool, row).await.map(Some)
 }
 

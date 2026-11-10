@@ -81,3 +81,14 @@ test('a waiting completion retires prior progress without a speech bubble or reo
     assert.equal(result.terminalResponseRequestIds.has('request'), true);
   }
 });
+
+test('a task slot waiting on an exchange stays visible after the processing timeout', () => {
+  const old = new Date(Date.now() - 10 * 60_000).toISOString();
+  const row = (fields: Record<string, unknown>) => ({ messageId: 'slot', fromAccountId: 'owner', createdAt: old, body: `kordi-cloud-agent-response:${Buffer.from(JSON.stringify({
+    kind: 'agent-response', requestId: 'request', deliveryState: 'processing', ...fields,
+  })).toString('base64url')}` }) as CloudMessage;
+  const select = (message: CloudMessage) => selectVisibleCloudAgentResponses([message], new Map([['request', 'owner']]), () => false, () => false);
+  const waiting = select(row({ text: 'Waiting for Maya.', agentExchangeStatus: 'waiting', agentExchangeWaitingFor: 'Maya' }));
+  assert.equal(waiting.visibleMessages.length, 1, 'the server ends this row');
+  assert.equal(select(row({ text: 'Thinking' })).visibleMessages.length, 0, 'a lost heartbeat still hides');
+});

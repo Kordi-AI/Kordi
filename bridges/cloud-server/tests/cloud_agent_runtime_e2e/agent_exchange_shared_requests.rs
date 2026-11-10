@@ -55,7 +55,7 @@ async fn another_persons_request_may_ask_only_that_person_and_resumes_on_their_r
     assert!(wire["message"]["text"]
         .as_str()
         .unwrap()
-        .starts_with("@ExchangeBeta What time"));
+        .starts_with("@Exchange Beta What time"));
     assert_eq!(metadata["agentExchangeWaitingFor"], "Exchange Beta");
     assert_eq!(
         metadata["agentExchangeWaitingForAccountId"],

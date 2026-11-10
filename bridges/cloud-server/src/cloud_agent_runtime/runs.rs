@@ -15,6 +15,7 @@ pub(crate) mod identity;
 mod leases;
 pub(crate) mod omp_state;
 mod plain_group_request;
+mod processing_slot;
 mod project_unavailable;
 pub(crate) mod prompt_history;
 mod request_language;
