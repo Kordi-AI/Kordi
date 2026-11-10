@@ -25,6 +25,7 @@ mod db_fixture;
 mod editing_db;
 mod formats;
 mod public_page_agents;
+mod snapshot_base_db;
 mod sources_db;
 mod stable_ids_db;
 mod title_db;
