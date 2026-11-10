@@ -34,7 +34,7 @@ final class ConversationScrollNavigationTests: XCTestCase {
                 id: "notification-preview-history-\(index)", conversationId: conversation.id,
                 conversationSequence: Int64(index + 4), author: .person, authorName: "Sender",
                 text: "Earlier conversation message \(index).", createdAt: Date().addingTimeInterval(Double(index + 10)),
-                deliveryState: .delivered, errorMessage: nil, requestMessageId: nil
+                deliveryState: .sent, errorMessage: nil, requestMessageId: nil
             ))
         }
         let messages = model.messages(for: conversation)
@@ -104,7 +104,7 @@ final class ConversationScrollNavigationTests: XCTestCase {
 
     func testReceiptFilteringStillFollowsVisibleContentUpdates() {
         let original = ChatMessage(id: "fixture", conversationId: "fixture", author: .me,
-            authorName: "Tester", text: "Hello", createdAt: Date(), deliveryState: .delivered,
+            authorName: "Tester", text: "Hello", createdAt: Date(), deliveryState: .sent,
             errorMessage: nil, requestMessageId: nil)
         var receipt = original
         receipt.deliveryState = .read; receipt.readByCount = 2; receipt.readByAccountIds = ["reader-a", "reader-b"]

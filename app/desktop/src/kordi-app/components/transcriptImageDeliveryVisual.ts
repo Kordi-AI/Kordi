@@ -13,8 +13,8 @@ export function attachmentImageDeliveryVisual(
   if (normalized === 'processing' || normalized === 'awaiting_reply') {
     return { kind: 'delivering', label: 'Delivering image' };
   }
-  if (normalized === 'sent') return { kind: 'sent', label: 'Sent' };
-  if (normalized === 'delivered') return { kind: 'delivered', label: 'Delivered' };
+  // There is no separate delivered state: the server having the image is Sent.
+  if (normalized === 'sent' || normalized === 'delivered') return { kind: 'sent', label: 'Sent' };
   if (normalized === 'read' || normalized === 'responded') return { kind: 'read', label: 'Read' };
   if (normalized === 'partial') return { kind: 'partial', label: 'Partially delivered' };
   if (normalized === 'failed' || normalized === 'processing_failed' || normalized === 'cancelled') {

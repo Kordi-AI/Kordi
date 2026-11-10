@@ -32,7 +32,7 @@ struct MessageNotificationCleanupTests {
         ChatMessage(
             id: "local-message", clientMessageId: "client-message", conversationId: conversation,
             conversationSequence: sequence, author: .person, authorName: "Sender", text: "Message",
-            createdAt: Date(), deliveryState: .delivered, errorMessage: nil,
+            createdAt: Date(), deliveryState: .sent, errorMessage: nil,
             requestMessageId: nil, reactionTargetMessageId: "server-message"
         )
     }

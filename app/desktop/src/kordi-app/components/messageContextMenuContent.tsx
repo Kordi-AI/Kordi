@@ -1,53 +1,23 @@
 import { useState, type ReactNode } from 'react';
-import { CheckCheck, CheckCircle2, Copy, Eye, Flag, Forward, MessagesSquare, Pencil, Pin, TextQuote, Trash2 } from 'lucide-react';
+import { CheckCircle2, Copy, Eye, Flag, Forward, MessagesSquare, Pencil, Pin, TextQuote, Trash2 } from 'lucide-react';
 
 import {
   attachmentMediaGalleryIndex,
   attachmentPreviewUrl,
 } from '@/features/chat/attachmentMediaGallery';
 import { openAttachmentMediaWindow } from '@/features/chat/attachmentMediaWindow';
+import { messageSeenByTarget, SEEN_BY_PREVIEW_LIMIT } from '@/features/chat/messageSeenBy';
+import { useMessageReaders, useMessageSeenBySource } from '@/features/chat/messageSeenByContext';
 import { reportTargetForMessage } from '@/features/safety/reportTarget';
 import { useSafetyActions } from '@/features/safety/safetyActions';
 import { cn } from '@/lib/utils';
 import type { Message, MessageAttachment, MessageReplyDestination } from '../types';
 import { AddAttachmentToMediaLibraryAction } from './addAttachmentToMediaLibraryAction';
-import { IdentityAvatar } from './IdentityAvatar';
 import { MessageReactionSurface } from './messageReactions';
+import { MessageSeenByReaders, MessageSeenByRow } from './messageSeenByRow';
 import { AttachmentActions } from './transcriptAttachmentActions';
 import { messageStickerAttachment } from './messageStickerPresentation';
 import { transcriptMessageIsOwnHuman } from './transcriptMessageHumanRole';
-
-function SeenRow({ summary }: { summary?: Message['readReceiptSummary'] | null }) {
-  const count = Math.max(0, Math.floor(summary?.count ?? 0));
-  if (count <= 0) return null;
-  const participants = (summary?.participants ?? []).slice(0, 4);
-  const names = participants.map((participant) => participant.name).filter(Boolean);
-  const title = names.length > 0 ? `Seen by ${names.join(', ')}` : `${count} seen`;
-  return (
-    <div
-      className="app-message-context-menu-seen app-dense-menu-label flex items-center gap-2"
-      data-message-context-menu-seen-row="true"
-      title={title}
-    >
-      <CheckCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      <span>{count} Seen</span>
-      {participants.length > 0 ? (
-        <span className="ml-auto inline-flex -space-x-1" aria-hidden="true">
-          {participants.map((participant) => (
-            <IdentityAvatar
-              key={participant.id}
-              kind="human"
-              seed={participant.avatarSeed ?? participant.id}
-              name={participant.name}
-              imageUrl={participant.profileImageUrl}
-              className="h-4.5 w-4.5"
-            />
-          ))}
-        </span>
-      ) : null}
-    </div>
-  );
-}
 
 function Action({ icon, label, action, onClick, destructive = false }: { icon: ReactNode; label: string; action: string; onClick?: () => void; destructive?: boolean }) {
   return (
@@ -127,6 +97,12 @@ export function MessageContextMenuContent({
   mediaGallery?: readonly MessageAttachment[];
 } & MessageContextMenuActionHandlers) {
   const [showsAllReactions, setShowsAllReactions] = useState(false);
+  // 'actions' after returning from the readers list, so the Seen row takes focus back.
+  const [view, setView] = useState<'initial' | 'readers' | 'actions'>('initial');
+  const seenBySource = useMessageSeenBySource();
+  const seenByTarget = messageSeenByTarget(msg, seenBySource);
+  const seenByPreview = useMessageReaders(seenBySource, seenByTarget, SEEN_BY_PREVIEW_LIMIT);
+  const showsReaders = view === 'readers' && Boolean(seenBySource && seenByTarget);
   const copyableText = msg.text.trim() || msg.turn?.assistantText?.trim() || msg.detail?.trim() || '';
   const stickerAttachment = messageStickerAttachment(msg);
   const actionEligible = isActionEligible(msg);
@@ -187,7 +163,17 @@ export function MessageContextMenuContent({
           onToggleExpanded={() => setShowsAllReactions((current) => !current)}
         />
       ) : null}
-      {!showsAllReactions ? <div className="app-transient-surface app-dense-menu app-message-context-menu-list overflow-hidden">
+      {!showsAllReactions && showsReaders && seenBySource && seenByTarget ? (
+        <div className="app-transient-surface app-dense-menu app-message-context-menu-list overflow-hidden">
+          <MessageSeenByReaders
+            source={seenBySource}
+            target={seenByTarget}
+            placeholder={seenByPreview?.status === 'ready' ? seenByPreview.page.readers : []}
+            onBack={() => setView('actions')}
+          />
+        </div>
+      ) : null}
+      {!showsAllReactions && !showsReaders ? <div className="app-transient-surface app-dense-menu app-message-context-menu-list overflow-hidden">
         {mediaAttachment ? (
           <>
             <Action action="review-attachment" icon={<Eye className="h-4 w-4" />} label="Review" onClick={reviewMediaAttachment} />
@@ -212,7 +198,14 @@ export function MessageContextMenuContent({
         {actionEligible ? <Action action="select" icon={<CheckCircle2 className="h-4 w-4" />} label="Select" onClick={() => closeAfter(onSelectMessage)} /> : null}
         {reportTarget ? <Action action="report" icon={<Flag className="h-4 w-4" />} label="Report" onClick={() => { onClose?.(); safety.openReport(reportTarget); }} /> : null}
         {canDelete ? <Action action="delete" icon={<Trash2 className="h-4 w-4" />} label="Delete" destructive onClick={() => closeAfter(onDeleteMessage)} /> : null}
-        <SeenRow summary={msg.readReceiptSummary} />
+        {seenBySource && seenByTarget ? (
+          <MessageSeenByRow
+            source={seenBySource}
+            request={seenByPreview}
+            autoFocus={view === 'actions'}
+            onOpen={() => setView('readers')}
+          />
+        ) : null}
       </div> : null}
     </div>
   );

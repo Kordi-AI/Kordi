@@ -23,7 +23,7 @@ final class ContactProfileSharedItemsTests: XCTestCase {
         attachments: [ChatAttachment] = [],
         messageKind: String? = nil,
         author: MessageAuthor = .person,
-        deliveryState: MessageDeliveryState = .delivered
+        deliveryState: MessageDeliveryState = .sent
     ) -> ChatMessage {
         ChatMessage(
             id: id, conversationId: "person:acct_nadia", author: author, authorName: "Nadia",

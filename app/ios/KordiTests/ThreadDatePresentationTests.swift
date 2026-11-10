@@ -46,7 +46,7 @@ final class ThreadDatePresentationTests: XCTestCase {
 
     private func message(_ id: String, date: String, kind: String? = nil) -> ChatMessage {
         ChatMessage(id: id, conversationId: "synthetic-date-test", author: .person, authorName: "Maya Chen",
-                    text: id, createdAt: ISO8601DateFormatter().date(from: date)!, deliveryState: .delivered,
+                    text: id, createdAt: ISO8601DateFormatter().date(from: date)!, deliveryState: .sent,
                     errorMessage: nil, requestMessageId: nil, messageKind: kind)
     }
 }

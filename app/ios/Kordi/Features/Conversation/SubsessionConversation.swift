@@ -67,7 +67,7 @@ extension CloudAgentSubsession {
                 authorName: agent ? agentDisplayName : author == .me ? "You" : message.senderDisplayName ?? "Task",
                 senderOwnerName: agent ? ownerAccountId == accountId ? "You" : ownerDisplayName : nil,
                 text: message.text, createdAt: Date(timeIntervalSince1970: Double(message.timestampMs) / 1000),
-                deliveryState: .delivered, errorMessage: nil, requestMessageId: message.requestId,
+                deliveryState: .sent, errorMessage: nil, requestMessageId: message.requestId,
                 mentions: message.mentions ?? [], agentExecution: execution)
             if !agent && message.requestState == "queued" {
                 queuePosition += 1
@@ -87,7 +87,7 @@ extension CloudAgentSubsession {
                 result.insert(ChatMessage(id: "runtime:\(sessionId)", conversationId: conversation.id,
                     author: .agent, authorName: agentDisplayName,
                     senderOwnerName: ownerAccountId == accountId ? "You" : ownerDisplayName,
-                    text: "", createdAt: .distantPast, deliveryState: .delivered, errorMessage: nil,
+                    text: "", createdAt: .distantPast, deliveryState: .sent, errorMessage: nil,
                     requestMessageId: nil, agentExecution: progress), at: insertionIndex)
             }
         }

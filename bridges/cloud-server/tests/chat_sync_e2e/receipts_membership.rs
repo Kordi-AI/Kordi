@@ -2,7 +2,7 @@
 //! server-managed members.
 
 use super::receipts::{
-    cursor_events, deliver, delivered_event, group_of, read, read_event, send, CursorEvent,
+    author_event, cursor_events, deliver, group_of, read, read_event, send, watermark, CursorEvent,
 };
 use super::*;
 use kordi_cloud_server::system_account::{self, SYSTEM_ACCOUNT_ID};
@@ -14,7 +14,7 @@ type CursorCopy = BTreeMap<String, (i64, i64)>;
 /// Applies cursor events the way the apps do: each one moves that member's
 /// cursors forward in the local copy of the conversation.
 fn apply(copy: &mut CursorCopy, events: &[CursorEvent]) {
-    for (_, member, delivered, read) in events {
+    for (_, member, delivered, read, _) in events {
         if let Some(cursors) = copy.get_mut(member) {
             *cursors = (cursors.0.max(*delivered), cursors.1.max(*read));
         }
@@ -116,14 +116,17 @@ async fn a_late_member_sees_current_cursors_and_receipts_for_their_messages() {
         (vec![ben.clone()], vec![ben.clone()])
     );
 
-    deliver(&pool, cal, group, mine).await;
-    apply(&mut copy, &cursor_events(&pool, &fay, group).await);
-    let mut delivered = vec![ben.clone(), cal.clone()];
-    delivered.sort();
     assert_eq!(
-        receipt_state(&copy, &fay, mine),
-        (delivered, vec![ben.clone()])
+        cursor_events(&pool, &fay, group).await,
+        vec![author_event(ben, mine, mine)]
     );
+
+    // Cal's delivery stays on Cal's devices; Fay's copy does not change.
+    deliver(&pool, cal, group, mine).await;
+    assert_eq!(cursor_events(&pool, &fay, group).await.len(), 1);
+    read(&pool, cal, group, mine).await;
+    assert_eq!(cursor_events(&pool, &fay, group).await.len(), 1);
+    assert_eq!(watermark(&pool, &fay, group).await, mine);
 }
 
 #[tokio::test]
@@ -150,14 +153,20 @@ async fn an_author_who_left_is_not_told() {
 
     assert!(cursor_events(&pool, ben, group).await.is_empty());
     assert_eq!(sync_head(&pool, ben).await.0, ben_head);
-    let expected = vec![read_event(cal, latest, latest)];
-    for person in [ava, cal, dee] {
-        assert_eq!(
-            cursor_events(&pool, person, group).await,
-            expected,
-            "{person}"
-        );
-    }
+    assert_eq!(watermark(&pool, ben, group).await, 0);
+    // Ava wrote the "created the group" line; the "left" notice is Ben's.
+    assert_eq!(
+        cursor_events(&pool, ava, group).await,
+        vec![author_event(cal, latest, 1)]
+    );
+    assert_eq!(
+        cursor_events(&pool, dee, group).await,
+        vec![author_event(cal, latest, latest)]
+    );
+    assert_eq!(
+        cursor_events(&pool, cal, group).await,
+        vec![read_event(cal, latest, latest)]
+    );
     assert!(cursor_events(&pool, eli, group).await.is_empty());
 }
 
@@ -171,14 +180,20 @@ async fn server_managed_authors_are_not_told() {
         .expect("System joins");
     let notice = send(&pool, SYSTEM_ACCOUNT_ID, group, "Synthetic System notice").await;
 
-    deliver(&pool, ben, group, notice).await;
+    read(&pool, ben, group, notice).await;
 
     assert!(cursor_events(&pool, SYSTEM_ACCOUNT_ID, group)
         .await
         .is_empty());
-    // Ava wrote the "created the group" line, which this delivery also passed.
-    let expected = vec![delivered_event(ben, notice, 0)];
-    assert_eq!(cursor_events(&pool, ava, group).await, expected);
-    assert_eq!(cursor_events(&pool, ben, group).await, expected);
+    assert_eq!(watermark(&pool, SYSTEM_ACCOUNT_ID, group).await, 0);
+    // Ava wrote the "created the group" line, which this read also passed.
+    assert_eq!(
+        cursor_events(&pool, ava, group).await,
+        vec![author_event(ben, notice, 1)]
+    );
+    assert_eq!(
+        cursor_events(&pool, ben, group).await,
+        vec![read_event(ben, notice, notice)]
+    );
     assert!(cursor_events(&pool, cal, group).await.is_empty());
 }

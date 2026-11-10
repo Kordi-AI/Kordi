@@ -271,13 +271,13 @@ struct VoiceTranscriptionTests {
         #expect(jobs.state(for: uploaded, isSender: true) == .ready("Meet at noon."))
     }
 
-    @Test func transcriptUpdateKeepsAnOutgoingVoiceMessageDelivered() {
+    @Test func transcriptUpdateKeepsAnOutgoingVoiceMessageSent() {
         let updated = CloudMessageDTO(messageId: "voice-message", clientMessageId: "client-voice",
             fromAccountId: "acct_me", toAccountId: "acct_peer", body: "Meet at noon.",
             createdAt: "2026-01-01T00:00:00Z", editedAt: "2026-01-01T00:00:05Z",
             deliveredAt: nil, readAt: nil, direction: "outgoing", sessionId: "session",
             messageKind: "voice", voiceMessage: voice(.ready, text: "Meet at noon."), version: 2)
-        #expect(CloudMessageStateProjector.deliveryState(for: updated, ownAccountId: "acct_me") == .delivered)
+        #expect(CloudMessageStateProjector.deliveryState(for: updated, ownAccountId: "acct_me") == .sent)
     }
 
     private func recordingFixture() throws -> URL {

@@ -9,7 +9,7 @@ import {
 } from '../src/features/chat/messageActions/collaborationSendLifecycle';
 import { CloudAuthError } from '../src/features/cloud/cloudAuthError';
 
-test('messageDeliveryVisual maps sent and delivered to a single gray check', () => {
+test('messageDeliveryVisual has no delivered state: sent and delivered are one Sent tick', () => {
   assert.deepEqual(messageDeliveryVisual('sent'), {
     glyph: 'single-check',
     tone: 'gray',
@@ -18,7 +18,7 @@ test('messageDeliveryVisual maps sent and delivered to a single gray check', () 
   assert.deepEqual(messageDeliveryVisual('delivered'), {
     glyph: 'single-check',
     tone: 'gray',
-    label: 'Delivered',
+    label: 'Sent',
   });
 });
 

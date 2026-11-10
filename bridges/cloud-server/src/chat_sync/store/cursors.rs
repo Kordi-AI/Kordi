@@ -1,3 +1,4 @@
+use super::member_snapshots::member_from_row;
 use super::support::*;
 use super::*;
 use std::collections::HashMap;
@@ -12,6 +13,7 @@ type BootstrapMemberRow = (
     String,
     String,
     i32,
+    i64,
     i64,
     i64,
     DateTime<Utc>,
@@ -218,10 +220,13 @@ pub async fn bootstrap(pool: &PgPool, account_id: &str) -> Result<BootstrapSnaps
                 account.avatar_url, agent.display_name, agent.avatar_url, \
                 member.role, member.membership_state, member.version, \
                 member.last_delivered_sequence, member.last_read_sequence, \
-                member.joined_at, member.left_at \
+                COALESCE(outbox.sequence, 0), member.joined_at, member.left_at \
          FROM cloud_chat_conversation_members member \
          JOIN cloud_accounts account ON account.account_id = member.account_id \
          JOIN cloud_default_agent_profiles agent ON agent.owner_account_id = member.account_id \
+         LEFT JOIN cloud_chat_read_outbox outbox \
+           ON outbox.conversation_id = member.conversation_id \
+          AND outbox.account_id = member.account_id \
          WHERE member.conversation_id = ANY($1) \
          ORDER BY member.conversation_id ASC, member.account_id ASC",
     )
@@ -235,7 +240,7 @@ pub async fn bootstrap(pool: &PgPool, account_id: &str) -> Result<BootstrapSnaps
             .or_default()
             .push(member_from_row((
                 row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10, row.11,
-                row.12,
+                row.12, row.13,
             )));
     }
     let conversations = conversation_rows

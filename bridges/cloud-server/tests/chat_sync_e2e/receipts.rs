@@ -1,13 +1,18 @@
-//! Delivery and read receipts reach the member who moved and the authors of
-//! the messages the move passed, never the whole conversation.
+//! Delivery moves reach only the mover; read moves reach the mover and the
+//! authors whose read watermark they raise, never the whole conversation.
 
 use super::group_lifecycle::group_request;
 use super::*;
 use kordi_cloud_server::chat_sync::models::ConversationCursorSnapshot;
 
+#[path = "read_watermark.rs"]
+mod read_watermark;
+#[path = "readers.rs"]
+mod readers;
+
 /// One cursor event as a recipient stores it: (event type, whose cursor,
-/// delivered, read).
-pub(super) type CursorEvent = (String, String, i64, i64);
+/// delivered, read, the recipient's new read watermark when it carries one).
+pub(super) type CursorEvent = (String, String, i64, i64, Option<i64>);
 
 pub(super) fn cursor_request(sequence: i64) -> AdvanceConversationCursorRequest {
     AdvanceConversationCursorRequest {
@@ -68,6 +73,10 @@ pub(super) async fn cursor_events(
     .into_iter()
     .map(|(event_type, payload)| {
         let cursor = &payload["cursor"];
+        let read_outbox = payload.get("read_outbox").map(|outbox| {
+            assert_eq!(outbox["conversation_id"], json!(conversation));
+            outbox["sequence"].as_i64().expect("watermark sequence")
+        });
         (
             event_type,
             cursor["account_id"]
@@ -76,6 +85,7 @@ pub(super) async fn cursor_events(
                 .to_string(),
             cursor["last_delivered_sequence"].as_i64().unwrap_or(-1),
             cursor["last_read_sequence"].as_i64().unwrap_or(-1),
+            read_outbox,
         )
     })
     .collect()
@@ -87,16 +97,45 @@ pub(super) fn delivered_event(mover: &str, delivered: i64, read: i64) -> CursorE
         mover.to_string(),
         delivered,
         read,
+        None,
     )
 }
 
+/// A read move as the mover's own devices get it.
 pub(super) fn read_event(mover: &str, delivered: i64, read: i64) -> CursorEvent {
     (
         "read_cursor.updated".to_string(),
         mover.to_string(),
         delivered,
         read,
+        None,
     )
+}
+
+/// A read move as an author gets it: the reader's cursor and the author's new
+/// read watermark.
+pub(super) fn author_event(mover: &str, read: i64, watermark: i64) -> CursorEvent {
+    (
+        "read_cursor.updated".to_string(),
+        mover.to_string(),
+        read,
+        read,
+        Some(watermark),
+    )
+}
+
+/// `account`'s read watermark in `conversation`, as member snapshots carry it.
+pub(super) async fn watermark(pool: &PgPool, account: &str, conversation: Uuid) -> i64 {
+    query_as::<_, (i64,)>(
+        "SELECT sequence FROM cloud_chat_read_outbox \
+         WHERE conversation_id = $1 AND account_id = $2",
+    )
+    .bind(conversation)
+    .bind(account)
+    .fetch_optional(pool)
+    .await
+    .expect("load read watermark")
+    .map_or(0, |row| row.0)
 }
 
 /// A group `labels[0]` created with everyone else in it. Group creation posts
@@ -121,7 +160,7 @@ pub(super) async fn group_of<const N: usize>(
 }
 
 #[tokio::test]
-async fn a_receipt_reaches_only_the_author_and_the_reader() {
+async fn a_read_reaches_only_the_author_and_the_reader() {
     let Some(pool) = try_pool().await else { return };
     let (group, people) = group_of(&pool, ["Ava", "Ben", "Cal", "Dee", "Eli"]).await;
     let [ava, ben, cal, dee, eli] = &people;
@@ -136,24 +175,38 @@ async fn a_receipt_reaches_only_the_author_and_the_reader() {
     deliver(&pool, ben, group, message).await;
     read(&pool, ben, group, message).await;
 
-    let expected = vec![
-        delivered_event(ben, message, 0),
-        read_event(ben, message, message),
-    ];
-    assert_eq!(cursor_events(&pool, ava, group).await, expected);
-    assert_eq!(cursor_events(&pool, ben, group).await, expected);
+    // Ben's devices see both moves; Ava hears only that Ben read her message.
+    assert_eq!(
+        cursor_events(&pool, ben, group).await,
+        vec![
+            delivered_event(ben, message, 0),
+            read_event(ben, message, message),
+        ]
+    );
+    assert_eq!(
+        cursor_events(&pool, ava, group).await,
+        vec![author_event(ben, message, message)]
+    );
     for (person, head) in [cal, dee, eli].into_iter().zip(quiet_heads) {
         assert!(cursor_events(&pool, person, group).await.is_empty());
         assert_eq!(sync_head(&pool, person).await.0, head, "{person} was woken");
     }
 
-    // Ava's own stream carries Ben's new cursors for her message.
+    // Ava's own stream carries Ben's cursor and her new watermark.
     let batch = store::sync_batch(&pool, ava, ava_head, Some(10))
         .await
         .unwrap();
-    assert_eq!(batch.events.len(), 2);
+    assert_eq!(batch.events.len(), 1);
+    eprintln!(
+        "author read_cursor.updated payload: {}",
+        batch.events[0].payload
+    );
+    assert_eq!(
+        batch.events[0].payload["read_outbox"],
+        json!({ "conversation_id": group, "sequence": message })
+    );
     let cursor: ConversationCursorSnapshot =
-        serde_json::from_value(batch.events[1].payload["cursor"].clone()).unwrap();
+        serde_json::from_value(batch.events[0].payload["cursor"].clone()).unwrap();
     assert_eq!(
         cursor,
         ConversationCursorSnapshot {
@@ -166,23 +219,32 @@ async fn a_receipt_reaches_only_the_author_and_the_reader() {
 }
 
 #[tokio::test]
-async fn a_move_past_two_authors_reaches_both_and_the_reader() {
+async fn a_read_past_two_authors_gives_each_their_own_watermark() {
     let Some(pool) = try_pool().await else { return };
     let (group, people) = group_of(&pool, ["Ava", "Ben", "Cal", "Dee", "Eli"]).await;
     let [ava, ben, cal, dee, eli] = &people;
-    send(&pool, ava, group, "Synthetic first draft").await;
-    let last = send(&pool, cal, group, "Synthetic second draft").await;
+    let first = send(&pool, ava, group, "Synthetic first draft").await;
+    let second = send(&pool, cal, group, "Synthetic second draft").await;
+    let last = send(&pool, ava, group, "Synthetic third draft").await;
 
     read(&pool, dee, group, last).await;
 
-    let expected = vec![read_event(dee, last, last)];
-    for person in [ava, cal, dee] {
-        assert_eq!(
-            cursor_events(&pool, person, group).await,
-            expected,
-            "{person}"
-        );
-    }
+    assert!(first < second && second < last);
+    assert_eq!(
+        cursor_events(&pool, ava, group).await,
+        vec![author_event(dee, last, last)]
+    );
+    assert_eq!(
+        cursor_events(&pool, cal, group).await,
+        vec![author_event(dee, last, second)]
+    );
+    assert_eq!(
+        cursor_events(&pool, dee, group).await,
+        vec![read_event(dee, last, last)]
+    );
+    assert_eq!(watermark(&pool, ava, group).await, last);
+    assert_eq!(watermark(&pool, cal, group).await, second);
+    // Ben and Eli wrote nothing in the range.
     for person in [ben, eli] {
         assert!(
             cursor_events(&pool, person, group).await.is_empty(),
@@ -200,7 +262,7 @@ async fn a_move_past_only_the_readers_own_messages_reaches_only_the_reader() {
     read(&pool, ben, group, 1).await;
     assert_eq!(
         cursor_events(&pool, ava, group).await,
-        vec![read_event(ben, 1, 1)]
+        vec![author_event(ben, 1, 1)]
     );
     send(&pool, ben, group, "Synthetic note one").await;
     let last = send(&pool, ben, group, "Synthetic note two").await;
@@ -218,8 +280,9 @@ async fn a_move_past_only_the_readers_own_messages_reaches_only_the_reader() {
     );
     assert_eq!(
         cursor_events(&pool, ava, group).await,
-        vec![read_event(ben, 1, 1)]
+        vec![author_event(ben, 1, 1)]
     );
+    assert_eq!(watermark(&pool, ben, group).await, 0);
     for person in [cal, dee, eli] {
         assert!(
             cursor_events(&pool, person, group).await.is_empty(),
@@ -229,32 +292,41 @@ async fn a_move_past_only_the_readers_own_messages_reaches_only_the_reader() {
 }
 
 #[tokio::test]
-async fn delivery_beyond_unread_messages_tells_only_the_new_authors() {
+async fn a_delivery_reaches_only_the_movers_devices() {
     let Some(pool) = try_pool().await else { return };
-    let (group, people) = group_of(&pool, ["Ava", "Ben", "Cal", "Dee", "Eli"]).await;
-    let [ava, ben, cal, dee, eli] = &people;
-    let first = send(&pool, cal, group, "Synthetic early message").await;
-    deliver(&pool, eli, group, first).await;
-    let second = send(&pool, dee, group, "Synthetic later message").await;
+    let (group, people) = group_of(&pool, ["Ava", "Ben", "Cal", "Dee"]).await;
+    let [ava, ben, cal, dee] = &people;
+    send(&pool, cal, group, "Synthetic early message").await;
+    let last = send(&pool, dee, group, "Synthetic later message").await;
+    let heads = [
+        sync_head(&pool, ava).await.0,
+        sync_head(&pool, cal).await.0,
+        sync_head(&pool, dee).await.0,
+    ];
 
-    // Ava's line and Cal's message stay delivered but unread, so only Dee,
-    // whose message this delivery passes, hears about it.
-    deliver(&pool, eli, group, second).await;
+    deliver(&pool, ben, group, last).await;
 
     assert_eq!(
-        cursor_events(&pool, cal, group).await,
-        vec![delivered_event(eli, first, 0)]
+        cursor_events(&pool, ben, group).await,
+        vec![delivered_event(ben, last, 0)]
     );
-    assert_eq!(
-        cursor_events(&pool, dee, group).await,
-        vec![delivered_event(eli, second, 0)]
-    );
-    assert_eq!(cursor_events(&pool, ava, group).await.len(), 1);
-    assert!(cursor_events(&pool, ben, group).await.is_empty());
+    for (person, head) in [ava, cal, dee].into_iter().zip(heads) {
+        assert!(cursor_events(&pool, person, group).await.is_empty());
+        assert_eq!(sync_head(&pool, person).await.0, head, "{person} was woken");
+        assert_eq!(watermark(&pool, person, group).await, 0, "{person}");
+    }
+    let marks = query_as::<_, (i64,)>(
+        "SELECT COUNT(*) FROM cloud_chat_read_marks WHERE conversation_id = $1",
+    )
+    .bind(group)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(marks.0, 0, "delivery writes no read mark");
 }
 
 #[tokio::test]
-async fn a_direct_peer_still_hears_receipts_for_their_messages() {
+async fn a_direct_peer_still_hears_reads_of_their_messages() {
     let Some(pool) = try_pool().await else { return };
     let owner = account(&pool, "direct-receipt-owner").await;
     let peer = account(&pool, "direct-receipt-peer").await;
@@ -279,23 +351,27 @@ async fn a_direct_peer_still_hears_receipts_for_their_messages() {
 
     deliver(&pool, &peer, direct, first).await;
     read(&pool, &peer, direct, first).await;
-    let peer_moves = vec![
-        delivered_event(&peer, first, 0),
-        read_event(&peer, first, first),
-    ];
-    assert_eq!(cursor_events(&pool, &owner, direct).await, peer_moves);
-    assert_eq!(cursor_events(&pool, &peer, direct).await, peer_moves);
+    assert_eq!(
+        cursor_events(&pool, &owner, direct).await,
+        vec![author_event(&peer, first, first)]
+    );
+    assert_eq!(
+        cursor_events(&pool, &peer, direct).await,
+        vec![
+            delivered_event(&peer, first, 0),
+            read_event(&peer, first, first),
+        ]
+    );
 
     let reply = send(&pool, &peer, direct, "Synthetic reply").await;
     read(&pool, &owner, direct, reply).await;
-    let owner_move = read_event(&owner, reply, reply);
     assert_eq!(
         cursor_events(&pool, &peer, direct).await.last(),
-        Some(&owner_move)
+        Some(&author_event(&owner, reply, reply))
     );
     assert_eq!(
         cursor_events(&pool, &owner, direct).await.last(),
-        Some(&owner_move)
+        Some(&read_event(&owner, reply, reply))
     );
 }
 

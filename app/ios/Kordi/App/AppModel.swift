@@ -2459,7 +2459,7 @@ final class AppModel: ObservableObject {
                     authorName: "You",
                     text: text,
                     createdAt: optimistic.createdAt,
-                    deliveryState: .delivered,
+                    deliveryState: .sent,
                     errorMessage: nil,
                     requestMessageId: nil,
                     readByCount: 0,
@@ -3196,7 +3196,7 @@ final class AppModel: ObservableObject {
                 senderOwnerName: pendingAgentOwnerNames[requestMessageId],
                 text: "",
                 createdAt: placeholderCreatedAt,
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: requestMessageId,
                 agentExecution: AgentExecutionSnapshot(
@@ -4662,7 +4662,7 @@ final class AppModel: ObservableObject {
             messagesByConversation[created.id] = [ChatMessage(
                 id: "channel-created:\(sessionID)", conversationId: created.id,
                 author: .me, authorName: account.preferredName, text: created.lastMessage,
-                createdAt: created.lastActivityAt, deliveryState: .delivered,
+                createdAt: created.lastActivityAt, deliveryState: .sent,
                 errorMessage: nil, requestMessageId: nil,
                 messageKind: ChatMessage.channelCreatedMessageKind
             )]
@@ -5734,7 +5734,7 @@ final class AppModel: ObservableObject {
             authorName: ownedAgent(for: conversation)?.name ?? "Kordi",
             text: noticeText,
             createdAt: revisionDate == .distantPast ? Date() : revisionDate,
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             messageKind: ChatMessage.agentModelChangeMessageKind
@@ -6610,7 +6610,7 @@ final class AppModel: ObservableObject {
                     text: titleUpdate.text,
                     createdAt: parseCloudDate(wire.createdAt),
                     cloudMessageVersion: wire.version,
-                    deliveryState: .delivered,
+                    deliveryState: .sent,
                     errorMessage: nil,
                     requestMessageId: nil,
                     messageKind: titleUpdate.messageKind
@@ -6641,7 +6641,7 @@ final class AppModel: ObservableObject {
                         authorName: inviterName,
                         text: "\(memberName) joined the group, invited by \(inviterName).",
                         createdAt: Date(timeIntervalSince1970: join.createdAtMs / 1_000),
-                        deliveryState: .delivered,
+                        deliveryState: .sent,
                         errorMessage: nil,
                         requestMessageId: nil,
                         messageKind: ChatMessage.groupMemberJoinMessageKind
@@ -8018,7 +8018,7 @@ final class AppModel: ObservableObject {
                     conversationId: conversation.id, conversationSequence: Int64(number),
                     author: .person, authorName: conversation.displayName,
                     text: "Notification test \(number) of \(count)", createdAt: Date().addingTimeInterval(Double(number)),
-                    deliveryState: .delivered, errorMessage: nil, requestMessageId: nil
+                    deliveryState: .sent, errorMessage: nil, requestMessageId: nil
                 )
             }
             messagesByConversation[conversation.id] = messages
@@ -8049,7 +8049,7 @@ final class AppModel: ObservableObject {
             id: "preview-incoming-\(UUID().uuidString)", conversationId: conversation.id,
             author: .person, authorName: "Maya Chen",
             text: "Here is your test message. Tap the down arrow to read it and check that the unread badge disappears.",
-            createdAt: Date(), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil
+            createdAt: Date(), deliveryState: .sent, errorMessage: nil, requestMessageId: nil
         )
         messagesByConversation[conversation.id, default: []].append(message)
         updateConversationPreview(conversation.id, text: message.text, attachment: nil, date: message.createdAt)
