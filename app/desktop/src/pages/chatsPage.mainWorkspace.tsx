@@ -31,6 +31,7 @@ import { MainChatHeader } from '@/pages/chatsPage.mainHeader';
 import {
   canonicalHistorySessionIdForConversation,
   chatTranscriptDensityMode,
+  conversationIsGroupChat,
   conversationPaneKind,
   localAgentConversationNeedsProvider,
   parseAskAgentTriggerCommand,
@@ -68,6 +69,7 @@ import { SupportConversationEmptyState } from '@/features/support/SupportReportD
 import { SupportReportSubmissionProvider } from '@/features/support/SupportReportSubmissionContext';
 import { ConversationCallBanner } from '@/features/cloud/ConversationCallBanner';
 import { ModelRecoveryProvider } from '@/features/chat/ModelRecoveryProvider';
+import { MessageSeenByProvider } from '@/features/chat/MessageSeenByProvider';
 
 type ChatMainWorkspaceProps = {
   layout: ChatsPageLayout;
@@ -255,6 +257,7 @@ export function ChatMainWorkspace({
                 }}
               />
 
+            <MessageSeenByProvider isGroup={conversationIsGroupChat(activeConv)} participants={activeConv.canonicalParticipants}>
             <ModelRecoveryProvider messages={presentation.messages}>
             <SupportReportSubmissionProvider
               accountId={supportAccountId}
@@ -425,6 +428,7 @@ export function ChatMainWorkspace({
               />
             </SupportReportSubmissionProvider>
             </ModelRecoveryProvider>
+            </MessageSeenByProvider>
           </div>
         ) : (
           <div

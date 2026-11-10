@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Read receipts · Kordi proposal</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="tokens.css?v=1">
+<link rel="stylesheet" href="preview.css?v=1">
+<link rel="stylesheet" href="ios.css?v=1">
+</head>
+<body data-page="index">
+<header class="review-controls" aria-label="Preview controls">
+  <strong class="brand">Read receipts</strong>
+  <div class="segmented" data-param="device" aria-label="Device">
+    <button type="button" data-value="mac">Mac</button><button type="button" data-value="ios">iPhone</button>
+  </div>
+  <div class="segmented" data-param="theme" aria-label="Appearance">
+    <button type="button" data-value="light">Light</button><button type="button" data-value="dark">Dark</button>
+  </div>
+  <label>State <select data-param="state"></select></label>
+  <span class="spacer"></span>
+  <a data-link="states.html" href="states.html">All states</a>
+</header>
+<main class="stage-wrap"><div id="stage" class="stage" aria-live="polite"></div></main>
+<script src="shared.js?v=1"></script>
+<script src="mac.js?v=1"></script>
+<script src="ios.js?v=1"></script>
+<script src="preview.js?v=1"></script>
+</body>
+</html>

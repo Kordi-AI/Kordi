@@ -2,6 +2,7 @@ import type { CloudSyncEvent, CloudSyncResponse } from './authClient';
 import { normalizeCloudMessageSnapshot } from './cloudMessageSnapshot';
 import { chatSyncSessionTitle, cloudMessageFromChatSync, directSessionId, conversationPeer } from './chatSyncMapping';
 import { ChatSyncState } from './chatSyncState';
+import { applyChatSyncCursorEvent, chatSyncCursorEventTouches } from './chatSyncReadReceipts';
 import { ACCOUNT_HINT_EVENT_TYPES } from './accountHintEvents';
 import { requireCloudSessionVisibility } from './cloudSessionListClient';
 import type { ChatSyncBootstrapResponse, ChatSyncConversation, ChatSyncEvent, ChatSyncMessage, ChatSyncPreferences, ChatSyncSyncResponse } from './chatSyncTypes';
@@ -434,47 +435,13 @@ export class ChatSyncSyncClient {
       }
     }
     if ((event.type === 'delivery_cursor.updated' || event.type === 'read_cursor.updated') && conversation) {
-      const cursor = event.payload.cursor;
-      if (cursor && typeof cursor === 'object' && !Array.isArray(cursor)) {
-        const value = cursor as {
-          account_id?: string;
-          last_delivered_sequence?: number;
-          last_read_sequence?: number;
-        };
-        const previousMember = conversation.members.find(
-          (member) => member.account_id === value.account_id,
-        );
-        if (!previousMember) return [];
-        const lastDeliveredSequence = Math.max(
-          previousMember.last_delivered_sequence,
-          value.last_delivered_sequence ?? previousMember.last_delivered_sequence,
-        );
-        const lastReadSequence = Math.max(
-          previousMember.last_read_sequence,
-          value.last_read_sequence ?? previousMember.last_read_sequence,
-        );
-        const updated = {
-          ...conversation,
-          members: conversation.members.map((member) => member.account_id === value.account_id
-            ? {
-              ...member,
-              last_delivered_sequence: lastDeliveredSequence,
-              last_read_sequence: lastReadSequence,
-            }
-            : member),
-        };
+      // The reader's cursor and, for the author, the raised read watermark.
+      const applied = applyChatSyncCursorEvent(conversation, event.payload);
+      if (applied) {
+        const updated = applied.conversation;
         this.state.rememberConversation(updated);
         return [...this.state.messageById.values()]
-          .filter((message) => message.conversation_id === updated.id && (
-            (
-              message.conversation_sequence > previousMember.last_delivered_sequence
-              && message.conversation_sequence <= lastDeliveredSequence
-            )
-            || (
-              message.conversation_sequence > previousMember.last_read_sequence
-              && message.conversation_sequence <= lastReadSequence
-            )
-          ))
+          .filter((message) => chatSyncCursorEventTouches(applied, message))
           .map((message) => ({
             ...base,
             eventId: `${event.event_id}:${message.id}`,
