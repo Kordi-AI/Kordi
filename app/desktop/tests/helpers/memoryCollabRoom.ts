@@ -56,10 +56,11 @@ export function createMemoryCollabRoom() {
       setTimeout(() => {
         if (!this.shouldConnect) return;
         connected.add(this);
-        Y.applyUpdate(this.doc, Y.encodeStateAsUpdate(server, Y.encodeStateVector(this.doc)), 'remote');
+        // Updates from the room carry the provider as their origin, as `y-websocket` applies them.
+        Y.applyUpdate(this.doc, Y.encodeStateAsUpdate(server, Y.encodeStateVector(this.doc)), this);
         Y.applyUpdate(server, Y.encodeStateAsUpdate(this.doc, Y.encodeStateVector(server)), this);
-        const toServer = (update: Uint8Array, origin: unknown) => { if (origin !== 'remote') Y.applyUpdate(server, update, this); };
-        const fromServer = (update: Uint8Array, origin: unknown) => { if (origin !== this) Y.applyUpdate(this.doc, update, 'remote'); };
+        const toServer = (update: Uint8Array, origin: unknown) => { if (origin !== this) Y.applyUpdate(server, update, this); };
+        const fromServer = (update: Uint8Array, origin: unknown) => { if (origin !== this) Y.applyUpdate(this.doc, update, this); };
         this.doc.on('update', toServer);
         server.on('update', fromServer);
         this.unbind = () => { this.doc.off('update', toServer); server.off('update', fromServer); };

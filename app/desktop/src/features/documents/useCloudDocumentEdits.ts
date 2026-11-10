@@ -14,9 +14,11 @@ export const UPDATED_ELSEWHERE = 'Updated elsewhere';
  * was based on: debounced, flushed on blur and close. A 409 or a
  * `document.updated` hands the newer document to the editor, which merges it
  * block by block and reports its Markdown again; the next save then uses the
- * newer revision. While the document's collaboration room is connected the
- * room carries the content: no revisioned saves, and `document.updated` only
- * refreshes reactions and comments.
+ * newer revision. While the editor is bound to the document's collaboration
+ * room (connected or reconnecting) the room carries the content: no revisioned
+ * saves, the draft the editor merged into the room at binding is dropped, and
+ * `document.updated` only refreshes reactions and comments (the refetched
+ * document still shows in `storeDocument`, for the room to compare).
  */
 export function useCloudDocumentEdits({
   api,
@@ -29,7 +31,7 @@ export function useCloudDocumentEdits({
   api: DocumentShareApi;
   document: DocumentResponse | null;
   enabled: boolean;
-  /** The collaboration room is connected. */
+  /** The editor is bound to the collaboration room. */
   collaborating?: boolean;
   onDocument: (next: DocumentResponse) => void;
   /** Replaces reactions and comments only, leaving the blocks being edited alone. */
@@ -38,6 +40,7 @@ export function useCloudDocumentEdits({
   const [draft, setDraftState] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [refreshed, setRefreshed] = useState<DocumentResponse | null>(null);
   const enabled = editable && !collaborating;
   const latest = useRef({ document, draft, onDocument, onAnnotations, collaborating, saving: false, blockIds: null as Record<string, string> | null });
   useLayoutEffect(() => { latest.current = { ...latest.current, document, draft, onDocument, onAnnotations, collaborating }; });
@@ -46,6 +49,13 @@ export function useCloudDocumentEdits({
     latest.current = { ...latest.current, draft: next };
     setDraftState(next);
   }, []);
+
+  // Binding drops the draft without saving it: the editor merged it into the room. A save in flight still finishes.
+  const [wasCollaborating, setWasCollaborating] = useState(collaborating);
+  if (collaborating !== wasCollaborating) {
+    setWasCollaborating(collaborating);
+    if (collaborating) setDraftState(null);
+  }
 
   const flush = useCallback(async () => {
     const { document: base, draft: pending, blockIds } = latest.current;
@@ -93,7 +103,8 @@ export function useCloudDocumentEdits({
     window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('blur', onBlur);
-      void flush();
+      // Closing flushes; binding to the room does not (the room already has the edits).
+      if (!latest.current.collaborating) void flush();
     };
   }, [enabled, flush]);
 
@@ -109,6 +120,7 @@ export function useCloudDocumentEdits({
         .then((remote) => {
           const base = latest.current.document;
           if (disposed || !base) return;
+          setRefreshed(remote);
           if ((remote.revision ?? 0) > (base.revision ?? 0) && !latest.current.saving && !latest.current.collaborating) {
             latest.current = { ...latest.current, document: remote };
             latest.current.onDocument(remote);
@@ -135,10 +147,16 @@ export function useCloudDocumentEdits({
     if (markdown !== latest.current.draft) setDraft(markdown);
   }, [setDraft]);
 
+  // A bound room compares revisions with the newest document known here; while bound, refetches do not replace `document`.
+  const storeDocument = refreshed && document && refreshed.attachmentId === document.attachmentId && (refreshed.revision ?? 0) > (document.revision ?? 0)
+    ? refreshed
+    : document;
+
   return {
     draft,
     updateSource,
     flush,
+    storeDocument,
     saving,
     notice,
     showNotice: setNotice,
