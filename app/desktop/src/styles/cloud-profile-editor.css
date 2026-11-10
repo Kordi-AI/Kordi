@@ -92,18 +92,6 @@
   resize: none;
 }
 
-.app-cloud-account-profile .app-cloud-profile-select {
-  padding-right: 20px;
-  cursor: pointer;
-  text-overflow: ellipsis;
-}
-
-.app-cloud-profile-chevron {
-  margin-left: -16px;
-  color: var(--app-transient-subtle-text);
-  pointer-events: none;
-}
-
 .app-cloud-account-profile .app-cloud-profile-date {
   flex: 0 1 auto;
   width: auto;
@@ -140,4 +128,95 @@
   color: var(--app-transient-muted-text);
   font-size: 13px;
   line-height: 20px;
+}
+
+/* Automatic Location and Time zone (#2439): a muted "Automatic" mark after the
+ * value, an arrow that turns automatic back on, and a native select laid over
+ * the time zone value so the menu stays the real macOS menu. */
+.app-cloud-profile-row-value {
+  position: relative;
+}
+
+.app-cloud-profile-auto,
+.app-cloud-profile-use-auto {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  margin-right: -4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-transient-muted-text);
+  cursor: pointer;
+}
+
+.app-cloud-profile-auto {
+  gap: 4px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.app-cloud-profile-use-auto {
+  justify-content: center;
+  width: 24px;
+  color: var(--app-transient-subtle-text);
+}
+
+.app-cloud-profile-auto:hover,
+.app-cloud-profile-use-auto:hover:not(:disabled) {
+  background: var(--app-transient-icon-bg);
+  color: var(--app-transient-text);
+}
+
+.app-cloud-profile-auto-static {
+  margin-right: 4px;
+  pointer-events: none;
+}
+
+.app-cloud-profile-select-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 0;
+  overflow: hidden;
+  color: var(--app-palette-accent);
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-cloud-profile-select-chevron {
+  color: var(--app-transient-subtle-text);
+  pointer-events: none;
+}
+
+.app-cloud-account-profile .app-cloud-profile-select-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  font: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.app-cloud-profile-line-link {
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--app-palette-accent);
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.app-cloud-profile-line-link:hover {
+  text-decoration: underline;
 }

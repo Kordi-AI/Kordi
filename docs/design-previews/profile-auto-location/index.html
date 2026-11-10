@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Automatic location · Kordi proposal</title>
+<link rel="stylesheet" href="theme.css?v=1">
+<link rel="stylesheet" href="preview.css?v=1">
+</head>
+<body>
+<div class="bar" id="bar">
+  <strong>Automatic location and time zone</strong>
+  <label>Device<span class="seg" data-key="device"><button data-v="mac">Mac</button><button data-v="ios">iPhone</button></span></label>
+  <label>Theme<span class="seg" data-key="theme"><button data-v="light">Light</button><button data-v="dark">Dark</button></span></label>
+  <label>State<span class="seg" data-key="state"><button data-v="auto">Automatic</button><button data-v="manual">Manual</button><button data-v="denied">Denied</button><button data-v="empty">Empty</button></span></label>
+  <label>Device is in<span class="seg" data-key="place"><button data-v="paloalto">Palo Alto</button><button data-v="thuwal">Thuwal</button></span></label>
+</div>
+<main class="stage" id="stage" aria-live="polite"></main>
+<p class="note" id="note"></p>
+<script src="sample-data.js?v=1"></script>
+<script src="preview.js?v=1"></script>
+</body>
+</html>

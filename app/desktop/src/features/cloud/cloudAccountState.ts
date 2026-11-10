@@ -52,6 +52,8 @@ export function cloudAccountsEqual(left: CloudAccount | null, right: CloudAccoun
     && left.about === right.about
     && left.location === right.location
     && left.timeZone === right.timeZone
+    && left.locationMode === right.locationMode
+    && left.timeZoneMode === right.timeZoneMode
     && left.website === right.website
     && left.birthday === right.birthday
     && left.avatarUrl === right.avatarUrl

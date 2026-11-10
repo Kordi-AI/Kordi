@@ -26,6 +26,7 @@ mod media_preview_window;
 mod menu_bar;
 mod message_notification;
 mod nearby_location;
+mod profile_device;
 mod project;
 mod remote_image;
 mod skill_library;
@@ -172,6 +173,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             nearby_location::desktop_nearby_location,
             nearby_location::desktop_nearby_location_permission,
+            profile_device::desktop_profile_city,
+            profile_device::desktop_profile_location_permission,
+            profile_device::desktop_time_zone,
             transcript_trace::desktop_transcript_trace,
             auth_window::desktop_set_auth_window_surface,
             desktop_reveal_main_window,

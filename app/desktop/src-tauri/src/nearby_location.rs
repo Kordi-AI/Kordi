@@ -1,4 +1,5 @@
-//! One foreground location fix, requested by the Nearby screen. Never logs coordinates.
+//! One foreground location fix, requested by the Nearby screen or by the
+//! profile's automatic city. Never logs coordinates.
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -8,6 +9,18 @@ pub struct LocationFix {
     longitude: f64,
     accuracy: f64,
     timestamp: f64,
+}
+
+impl LocationFix {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) fn latitude(&self) -> f64 {
+        self.latitude
+    }
+
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) fn longitude(&self) -> f64 {
+        self.longitude
+    }
 }
 
 /// Stable failure codes; the web view maps them to copy.
@@ -26,19 +39,109 @@ pub(crate) mod failure {
     pub const UNAVAILABLE: &str = "location_unavailable";
     /// Another request is still running.
     pub const BUSY: &str = "location_busy";
+    /// Access was never asked for, and this request may not ask.
+    pub const NOT_DETERMINED: &str = "location_not_determined";
 }
 
-/// Fixes coarser than this are not published; matches the web-side check.
-const MAX_ACCURACY_METERS: f64 = 2000.0;
-/// Core Location may first replay a cached fix; older ones are skipped.
-const MAX_FIX_AGE_SECONDS: f64 = 300.0;
+/// How precise and how fresh a fix must be for one purpose.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Precision {
+    /// Passed to Core Location as the desired accuracy, in meters.
+    pub(crate) desired: f64,
+    /// Coarser fixes are not returned right away.
+    pub(crate) max_accuracy: f64,
+    /// Core Location may first replay a cached fix; older ones are skipped.
+    pub(crate) max_age_seconds: f64,
+    /// A fix up to this old is kept and returned when nothing better arrives
+    /// before the request times out.
+    pub(crate) fallback_age_seconds: f64,
+}
 
-/// Whether a reported fix can be returned right away.
-pub(crate) fn usable_fix(accuracy: f64, age_seconds: f64) -> bool {
-    accuracy.is_finite()
-        && (0.0..=MAX_ACCURACY_METERS).contains(&accuracy)
-        && age_seconds.is_finite()
-        && age_seconds <= MAX_FIX_AGE_SECONDS
+/// Nearby: fixes coarser than 2 km are not published; matches the web-side check.
+pub(crate) const NEARBY: Precision = Precision {
+    desired: 100.0,
+    max_accuracy: 2000.0,
+    max_age_seconds: 300.0,
+    fallback_age_seconds: 300.0,
+};
+
+/// The profile's city. `kCLLocationAccuracyThreeKilometers` (3000 m), not
+/// `kCLLocationAccuracyReduced`: reduced accuracy is meant for apps without
+/// full accuracy and Core Location delivers it rarely, so a one-shot request
+/// can time out with no fix. A day-old fix still names the right city more
+/// often than none, so it is the fallback.
+pub(crate) const CITY: Precision = Precision {
+    desired: 3000.0,
+    max_accuracy: 25_000.0,
+    max_age_seconds: 900.0,
+    fallback_age_seconds: 86_400.0,
+};
+
+impl Precision {
+    /// Whether a reported fix can be returned right away.
+    pub(crate) fn usable(&self, accuracy: f64, age_seconds: f64) -> bool {
+        accuracy.is_finite()
+            && (0.0..=self.max_accuracy).contains(&accuracy)
+            && age_seconds.is_finite()
+            && age_seconds <= self.max_age_seconds
+    }
+
+    /// Whether a fix that is not usable right away is kept as the fallback.
+    pub(crate) fn fallback(&self, accuracy: f64, age_seconds: f64) -> bool {
+        accuracy.is_finite()
+            && accuracy >= 0.0
+            && age_seconds.is_finite()
+            && age_seconds <= self.fallback_age_seconds
+    }
+}
+
+/// This app's location access, as one read of `authorizationStatus`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) enum Access {
+    NotDetermined,
+    Granted,
+    Blocked,
+    Unknown,
+}
+
+/// What a request does with one status read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) enum Step {
+    /// Wait for Core Location's next authorization call.
+    Wait,
+    /// A status probe answers with this read.
+    Report,
+    /// Show the macOS prompt.
+    Ask,
+    Fail(&'static str),
+    Granted {
+        fetch: bool,
+    },
+}
+
+/// A new manager can read "not determined" before Core Location has loaded
+/// this app's status, so that read is never acted on until it is `settled`
+/// (Core Location called the delegate, or the settle wait passed). Acting on
+/// it showed no prompt and then failed with "never asked".
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn next_step(
+    access: Access,
+    settled: bool,
+    probing: bool,
+    prompt: bool,
+    fetch: bool,
+) -> Step {
+    match access {
+        Access::NotDetermined if !settled => Step::Wait,
+        _ if probing => Step::Report,
+        Access::NotDetermined if prompt => Step::Ask,
+        Access::NotDetermined => Step::Fail(failure::NOT_DETERMINED),
+        Access::Granted => Step::Granted { fetch },
+        Access::Blocked => Step::Fail(failure::DENIED),
+        Access::Unknown => Step::Wait,
+    }
 }
 
 /// What a Core Location error means for a pending request. `None` keeps waiting.
@@ -55,13 +158,13 @@ pub(crate) fn failure_for_error_code(code: isize) -> Option<&'static str> {
 }
 
 #[cfg(target_os = "macos")]
-mod macos;
+pub(crate) mod macos;
 
 #[tauri::command]
 pub async fn desktop_nearby_location(app: tauri::AppHandle) -> Result<LocationFix, String> {
     #[cfg(target_os = "macos")]
     {
-        match macos::request(app, true).await {
+        match macos::request(app, macos::Options::nearby()).await {
             Ok(Some(fix)) => Ok(fix),
             Ok(None) => Err(failure::UNAVAILABLE.into()),
             Err(code) => Err(code.into()),
@@ -85,7 +188,7 @@ pub async fn desktop_nearby_location_permission(
         let status = macos::permission(app.clone()).await?;
         if request && status == "not_determined" {
             // Only asks for access; no location is read here.
-            let result = macos::request(app.clone(), false).await;
+            let result = macos::request(app.clone(), macos::Options::permission()).await;
             let status = macos::permission(app).await?;
             if status == "not_determined" {
                 result.map_err(String::from)?;
@@ -107,7 +210,69 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unsettled_not_determined_is_never_acted_on() {
+        use Access::*;
+        // The read before Core Location answers: no prompt, no failure.
+        assert_eq!(
+            next_step(NotDetermined, false, false, true, true),
+            Step::Wait
+        );
+        assert_eq!(
+            next_step(NotDetermined, false, false, false, true),
+            Step::Wait
+        );
+        assert_eq!(
+            next_step(NotDetermined, false, true, false, false),
+            Step::Wait
+        );
+        // Settled: the arrow asks, a background lookup gives up.
+        assert_eq!(next_step(NotDetermined, true, false, true, true), Step::Ask);
+        assert_eq!(
+            next_step(NotDetermined, true, false, false, true),
+            Step::Fail(failure::NOT_DETERMINED)
+        );
+        // A granted or blocked read is final either way.
+        assert_eq!(
+            next_step(Granted, false, false, false, true),
+            Step::Granted { fetch: true }
+        );
+        assert_eq!(
+            next_step(Granted, true, false, true, false),
+            Step::Granted { fetch: false }
+        );
+        assert_eq!(
+            next_step(Blocked, false, false, true, true),
+            Step::Fail(failure::DENIED)
+        );
+        // A probe only reports the settled status.
+        assert_eq!(next_step(Granted, false, true, false, false), Step::Report);
+        assert_eq!(
+            next_step(NotDetermined, true, true, false, false),
+            Step::Report
+        );
+    }
+
+    #[test]
+    fn city_fixes_are_coarse_and_fall_back_to_older_readings() {
+        assert!(CITY.usable(8_000.0, 60.0), "approximate fixes name a city");
+        assert!(!CITY.usable(30_000.0, 60.0));
+        assert!(
+            !CITY.usable(100.0, 1_000.0),
+            "a cached fix waits for a fresh one"
+        );
+        assert!(CITY.fallback(100.0, 3_600.0), "but stays the fallback");
+        assert!(CITY.fallback(30_000.0, 60.0));
+        assert!(
+            !CITY.fallback(-1.0, 60.0),
+            "negative accuracy marks an invalid fix"
+        );
+        assert!(!CITY.fallback(100.0, 90_000.0));
+        assert!(NEARBY.fallback(5_000.0, 300.0) && !NEARBY.fallback(50.0, 301.0));
+    }
+
+    #[test]
     fn usable_fix_requires_fresh_and_precise_readings() {
+        let usable_fix = |accuracy, age| NEARBY.usable(accuracy, age);
         assert!(usable_fix(65.0, 1.0));
         assert!(usable_fix(2000.0, 300.0));
         assert!(

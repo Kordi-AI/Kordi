@@ -250,37 +250,6 @@ actor CloudAPIClient {
         return account
     }
 
-    func updateProfile(
-        token: String,
-        displayName: String,
-        avatarMutation: CanonicalAvatarMutation?,
-        kordiId: String? = nil,
-        details: CloudProfileDetailsUpdate = CloudProfileDetailsUpdate()
-    ) async throws -> CloudAccount {
-        let avatarMutation = try await referenceBackedAvatarMutation(
-            token: token,
-            entityType: "human",
-            entityId: try requireActiveAccountId(),
-            mutation: avatarMutation
-        )
-        return try await send(
-            path: "/v1/cloud/auth/me",
-            method: "PATCH",
-            token: token,
-            body: UpdateProfileRequest(
-                displayName: displayName,
-                avatarMutation: avatarMutation,
-                kordiId: kordiId,
-                about: details.about,
-                location: details.location,
-                timeZone: details.timeZone,
-                website: details.website,
-                birthday: details.birthday
-            ),
-            fallback: "Could not update your profile."
-        )
-    }
-
     func logout(token: String) async throws {
         defer {
             activeAccountId = nil
@@ -711,7 +680,7 @@ actor CloudAPIClient {
         return response.agent
     }
 
-    private func referenceBackedAvatarMutation(
+    func referenceBackedAvatarMutation(
         token: String,
         entityType: String,
         entityId: String,
@@ -2388,7 +2357,7 @@ actor CloudAPIClient {
         throw CloudAPIError(code: "title_sync_failed", message: "Could not synchronize the session title.", statusCode: 0)
     }
 
-    private func requireActiveAccountId() throws -> String {
+    func requireActiveAccountId() throws -> String {
         guard let accountId = activeAccountId?.nonEmpty else {
             throw CloudAPIError(code: "account_missing", message: "Your Kordi account session is unavailable.", statusCode: 401)
         }
@@ -3178,16 +3147,6 @@ private struct LoginRequest: Encodable {
     let email: String
     let password: String
     let device: CloudDeviceRegistration
-}
-private struct UpdateProfileRequest: Encodable {
-    let displayName: String
-    let avatarMutation: CanonicalAvatarMutation?
-    let kordiId: String?
-    let about: String?
-    let location: String?
-    let timeZone: String?
-    let website: String?
-    let birthday: String?
 }
 private struct SignupRequest: Encodable {
     let email: String
