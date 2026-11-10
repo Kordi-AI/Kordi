@@ -183,7 +183,7 @@ test('agent final text resolves one exact Kordi handoff and never a second hop',
   }), null);
 });
 
-test('agent-authored handoffs require exact owner metadata and one-hop depth', () => {
+test('an agent-authored mention never targets an agent, even with exact metadata', () => {
   const handoffMessage = {
     id: 'msg_agent_handoff',
     senderAccountId: 'acct_source',
@@ -205,11 +205,12 @@ test('agent-authored handoffs require exact owner metadata and one-hop depth', (
     participants,
     message: handoffMessage,
   }, 'acct_target'), true);
+  // Agents reach other agents only through reach_out.
   assert.equal(cloudGroupMessageTargetsLocalAgent(
     handoffMessage,
     targetAccount,
     participants,
-  ), true);
+  ), false);
 
   const invalidMessages = [
     { ...handoffMessage, targetCloudAgentOwnerAccountId: 'acct_unicode' },
@@ -253,7 +254,7 @@ test('an explicit remote agent target never falls back to the sender local runti
   }, sourceAccount, participants), false);
 });
 
-test('agent-authored handoffs produce only the resolved owner Cloud fallback claim', () => {
+test('an agent reply that mentions another agent produces no Cloud fallback claim and no row', () => {
   const groupId = 'session:group:agent-handoff';
   const handoffMessage = {
     id: 'msg_agent_handoff',
@@ -301,9 +302,7 @@ test('agent-authored handoffs produce only the resolved owner Cloud fallback cla
     contacts: [targetContact],
     messagesByPeer: { acct_target: [outgoing] },
   });
-  assert.equal(claims.length, 1);
-  assert.equal(claims[0]?.ownerAccountId, 'acct_target');
-  assert.equal(claims[0]?.requestMessageId, handoffMessage.id);
+  assert.deepEqual(claims, [], 'no claim, so no waiting or failed row');
 
   const forgedBody = encodeCloudGroupControl({
     kind: 'group-message',

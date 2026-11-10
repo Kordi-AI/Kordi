@@ -4,7 +4,7 @@ import type { SharedCloudAgentSummary } from '@/features/cloud/cloudAgents';
 import type { DesktopChatState, DesktopCollaborationState } from '@/kordi-app/types';
 import type { ComposerMentionOption } from '@/kordi-app/components';
 import type { ResolvedMentionedCollaborationTarget } from './types';
-import { conversationHasGroupMentionScope, localAgentMentionLabels, resolveMentionedCollaborationAgentTargetWithSharedCloudAgentRefresh, resolveMentionedCollaborationTarget, resolveMentionedLocalAgentTarget, type MentionScopeConversation } from './mentions';
+import { buildCollaborationMentionCandidates, conversationHasGroupMentionScope, conversationHasParticipantMentionScope, filterCollaborationMentionCandidatesForConversation, localAgentMentionLabels, resolveMentionedCollaborationAgentTargetWithSharedCloudAgentRefresh, resolveMentionedCollaborationTarget, resolveMentionedLocalAgentTarget, sharedCloudAgentMentionCandidatesForConversation, type MentionScopeConversation } from './mentions';
 import { mentionTextStartsWithLabel } from './localAgentMentions';
 import { normalizeMentionLabel } from './mentionHandles';
 
@@ -119,6 +119,37 @@ export async function resolvePreferredAgentMentionTarget(
   return leadingAgentMentionTarget(cachedRemoteTarget, localTarget) ?? (skip ? null : resolveMentionedCollaborationAgentTargetWithSharedCloudAgentRefresh(
     text, collaborationState, conversation, sharedCloudAgents, refreshSharedCloudAgents,
   ));
+}
+
+/**
+ * Whether a typed (not picked) leading agent handle names more than one agent
+ * here, such as two people's agents that share a name. Such a message must
+ * not be sent to a guessed agent; the person picks one from the list.
+ */
+export function typedAgentMentionIsAmbiguous(
+  text: string,
+  desktopChatState: DesktopChatState | null,
+  collaborationState: DesktopCollaborationState | null,
+  conversation: MentionScopeConversation | null | undefined,
+  sharedCloudAgents: SharedCloudAgentSummary[],
+) {
+  const first = /(^|\s)@/u.exec(text);
+  if (!first || !conversationHasParticipantMentionScope(conversation)) return false;
+  const afterAt = text.slice(first.index + first[1].length + 1);
+  const named = (handle: string) => normalizeMentionLabel(handle) !== 'kordi' && mentionTextStartsWithLabel(afterAt, handle);
+  const activeHost = collaborationState?.hosts.find((host) => host.id === collaborationState.activeHostId) ?? collaborationState?.hosts[0] ?? null;
+  const self = activeHost?.humanId?.trim() || activeHost?.nodeId?.trim() || '';
+  const agents = new Set<string>();
+  if (localAgentMentionLabels(desktopChatState, collaborationState).some(named)) agents.add(`cloud-agent:${self}`);
+  for (const candidate of filterCollaborationMentionCandidatesForConversation(buildCollaborationMentionCandidates(collaborationState), conversation)) {
+    if (candidate.targetKind !== 'agent' || !named(candidate.baseHandle ?? candidate.handle)) continue;
+    const owner = candidate.peer.humanId?.trim() || candidate.peer.nodeId?.trim() || '';
+    agents.add(candidate.peer.agentId?.trim() || `cloud-agent:${owner}`);
+  }
+  for (const candidate of sharedCloudAgentMentionCandidatesForConversation(sharedCloudAgents, conversation, self || null)) {
+    if (named(candidate.baseHandle ?? candidate.handle)) agents.add(candidate.targetAgentId);
+  }
+  return agents.size > 1;
 }
 
 export function cloudAgentMentionIdentity(target: ResolvedMentionedCollaborationTarget | null) {

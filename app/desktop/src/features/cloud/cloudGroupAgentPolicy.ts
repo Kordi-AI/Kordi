@@ -12,7 +12,6 @@ import {
 } from './cloudAgentTriggerPolicy';
 import {
   CLOUD_GROUP_AGENT_MENTION_MAX_DEPTH,
-  cloudGroupAgentHandoffTargetsAccount,
   cloudGroupAgentPersonaInstruction,
   cloudGroupAgentMentionDepth,
   cloudGroupMentionInstruction,
@@ -46,12 +45,9 @@ export function cloudGroupMessageTargetsLocalAgent(
   participants: readonly CloudGroupParticipant[] = [],
 ): boolean {
   if (!cloudMessageActionAllowsAgentTrigger(message.messageAction)) return false;
-  if (message.senderKind === 'agent') {
-    return cloudGroupAgentHandoffTargetsAccount(
-      { message, participants: [...participants] },
-      account.accountId,
-    );
-  }
+  // Only a person's message starts an agent: an agent reaches another agent
+  // through reach_out, never by mentioning it in its reply.
+  if (message.senderKind === 'agent') return false;
   return cloudGroupHumanAgentTarget(message, participants)?.ownerAccountId === account.accountId;
 }
 

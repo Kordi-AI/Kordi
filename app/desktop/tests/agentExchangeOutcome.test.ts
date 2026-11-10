@@ -52,7 +52,11 @@ test('a successful durable receipt replaces redundant parent speech, never a fai
   assert.equal(cloudAgentTurnReplyText({ ...parent, succeeded: false }), '');
   assert.equal(cloudAgentTurnReplyText({ ...parent, tools: [{ ...parent.tools[0], isError: true }] }), parent.assistantText);
   const row = { messageKind: 'agent-turn', status: 'processing', contentText: '', content: {} } as CanonicalSessionMessage;
-  assert.equal(isInternalCloudAgentControlMessage(withLiveTurn(row, parent)), true);
+  // The yielding slot stays visible as waiting (#2416), without the control text.
+  const projected = withLiveTurn(row, parent);
+  assert.equal(isInternalCloudAgentControlMessage(projected), false);
+  assert.equal(projected.contentText, '');
+  assert.equal((projected.content as Record<string, unknown>).agentExchangeStatus, 'waiting');
 });
 
 test('a waiting completion retires prior progress without a speech bubble or reopened pending request', () => {

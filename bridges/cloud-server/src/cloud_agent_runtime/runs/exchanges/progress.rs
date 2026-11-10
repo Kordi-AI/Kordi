@@ -14,24 +14,27 @@ pub(super) async fn update(
     if state != "waiting" {
         retire_unanswered(tx, exchange).await?;
     }
-    // A continuation that never answered shows how it ended.
-    match state {
-        "cancelled" => {
-            super::slots::finish_continued(tx, exchange, super::slots::Ending::Stopped).await?
-        }
-        "failed" => {
-            super::slots::finish_continued(tx, exchange, super::slots::Ending::Failed).await?
-        }
-        _ => {}
+    // The asking task's own slot shows the state, so the question stays a
+    // plain message; a task without a slot yet keeps it on the question.
+    use super::main_row::{set, Change};
+    let shown = match state {
+        "processing" => set(tx, exchange, Change::Processing).await?,
+        "failed" => set(tx, exchange, Change::Failed).await?,
+        "cancelled" => set(tx, exchange, Change::Stopped).await?,
+        // The result itself already updated the slot.
+        "completed" => super::main_row::exists(tx, exchange).await?,
+        _ => false,
+    };
+    if shown {
+        return clear(tx, exchange).await;
     }
     patch(tx, exchange, &[("agentExchangeStatus", json!(state))]).await
 }
 
-/// A question to a person names who the agent is waiting for, so every client
-/// can say so instead of a generic waiting label, and carries their account,
-/// so that person's own client can say it waits for them. Older clients read
-/// `agentExchangeWaitingForRequester` as "the owner's agent asked the owner",
-/// so it is set only for a question to the owner as the requester.
+/// Whom the task waits for, with their account so that person's own client
+/// can say it waits for them: on the task's slot, else on the question.
+/// Older clients read `agentExchangeWaitingForRequester` as "the owner's
+/// agent asked the owner", so it is set only for that question.
 pub(super) async fn waiting_for(
     tx: &mut Transaction<'_, Postgres>,
     exchange: Uuid,
@@ -39,6 +42,13 @@ pub(super) async fn waiting_for(
     account: &str,
     owner_requester: bool,
 ) -> RunResult<()> {
+    let change = super::main_row::Change::Waiting {
+        name: name.to_owned(),
+        account: account.to_owned(),
+    };
+    if super::main_row::set(tx, exchange, change).await? {
+        return clear(tx, exchange).await;
+    }
     let mut fields = vec![
         ("agentExchangeStatus", json!("waiting")),
         ("agentExchangeWaitingFor", json!(name)),
@@ -50,7 +60,22 @@ pub(super) async fn waiting_for(
     patch(tx, exchange, &fields).await
 }
 
-async fn patch(
+/// The question leaves its progress to the task's slot.
+pub(super) async fn clear(tx: &mut Transaction<'_, Postgres>, exchange: Uuid) -> RunResult<()> {
+    patch(
+        tx,
+        exchange,
+        &[
+            ("agentExchangeStatus", Value::Null),
+            ("agentExchangeWaitingFor", Value::Null),
+            ("agentExchangeWaitingForAccountId", Value::Null),
+            ("agentExchangeWaitingForRequester", Value::Null),
+        ],
+    )
+    .await
+}
+
+pub(super) async fn patch(
     tx: &mut Transaction<'_, Postgres>,
     exchange: Uuid,
     fields: &[(&str, Value)],

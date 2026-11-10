@@ -219,16 +219,28 @@ and its answer is published as the reply to the asking agent, which resumes
 as usual. When an agent cannot answer, the asking agent's continuation asks
 that agent's owner directly as a person instead of posting open questions.
 
-## Processing rows for runs without a mention
+## One row per agent task
 
-A run started by an exchange rather than a fresh mention shows its processing
-row as soon as the run exists, for both the Mac and the cloud runner: the
-answering agent's reply row is created with the question, and an asking
-agent's continuation row is created with its resume run, replying to the
-answer it continues from. The run's answer replaces that row in place. A run
-that ends silently or waits retires the row (complete, empty, synchronization
-only); a failure shows the failure and a stop shows "Stopped". The server
-ends every such row, so the desktop keeps it without a heartbeat.
+An agent task keeps one visible row: the reply slot of the run a person
+started (#2416), which becomes its reply in place and keeps its place. When
+the agent asks another agent or a person, that slot shows whom it waits for
+instead of being emptied; when the answer arrives it shows processing; the
+resumed task's result replaces it in place. The question stays a plain
+message without progress (until the task has a slot, a cloud run's question
+carries the state). A resumed task that ends silently hides the slot, a
+failure shows the failure, and a stop shows "Stopped". The owner's own Mac
+keeps a yielding turn's slot visible as waiting too.
+
+Only the agent answering another agent's request, which has no row of its
+own, gets an added processing row: its reply row is created with the
+question, retired while it asks its own owner, reopened when the owner
+replies, and replaced by its answer. Continuation prompts tell the agent to
+write in the request's language even when its owner's memories or the other
+side use another.
+
+Only a person's message starts an agent: neither the server nor a Mac runs
+or claims anything for a mention inside an agent's reply, and an
+`agent_not_available` refusal is final.
 
 ## Identity, not names
 
@@ -237,8 +249,14 @@ are unique within a conversation: a handle two entries would share gets the
 owner's suffix (public handle, else the end of the account number), in the
 reach_out directory, `read_session mode=info`, and the desktop mention list,
 where the viewer's own agent keeps its plain handle and every other agent
-shows its owner. Routing follows the structured agent id of a mention, never
-the text handle; a text-only mention that matches more than one agent starts
-no run. `read_session mode=info` marks `ownerAccountId` and
+shows its owner. The suffix stays internal: the composer inserts, and
+messages, quotes, and notifications show, the friendly handle, and a picked
+mention carries the agent's id. Routing follows that structured id, never the
+text handle. A typed handle that names more than one agent is not sent (the
+composer says "Pick which agent"). A person's group request that names an
+agent by id but cannot be routed (for example conflicting targets) ends at
+once with that agent's failed reply ("Couldn't reach ...") instead of
+waiting; a claim for an agent the request does not name is refused without a
+reply, so no client can post a failure as someone else's agent. `read_session mode=info` marks `ownerAccountId` and
 `requesterAccountId`, and stable guidance tells agents to identify people and
 agents by id or handle, never by display name.

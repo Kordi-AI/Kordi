@@ -8,7 +8,7 @@ import { defaultAgentDisplayName,publicScopedAgentMentionHandle,stripSelfPossess
 
 import { mentionTextStartsWithLabel } from './localAgentMentions';
 import { mentionHandleForLabel,normalizeMentionLabel } from './mentionHandles';
-import { identitySuffixForCandidate, uniqueAgentMentionCandidates, uniqueHandle } from './uniqueAgentMentions';
+import { ambiguousOwnerNames, identitySuffixForCandidate, uniqueAgentMentionCandidates, uniqueHandle } from './uniqueAgentMentions';
 export { reserveAgentMentionHandles, uniqueAgentMentionCandidates } from './uniqueAgentMentions';
 
 export {
@@ -33,6 +33,8 @@ export type CollaborationMentionCandidate = {
   normalizedHandle: string;
   displayLabel: string;
   targetKind: 'person' | 'agent';
+  /** The friendly handle people see; `handle` may carry a hidden suffix. */
+  baseHandle?: string;
 };
 
 function normalizedOwnerKey(value: string | null | undefined) {
@@ -112,6 +114,7 @@ export function conversationHasParticipantMentionScope(conversation: MentionScop
 export function collaborationMentionOwnerMatchesConversationHumans(
   owner: Pick<DesktopCollaborationState['hosts'][number]['visiblePeers'][number], 'humanId' | 'ownerName'> & { nodeId?: string | null },
   conversation: MentionScopeConversation | null | undefined,
+  ambiguousNames?: ReadonlySet<string>,
 ) {
   const ownerHumanKey = normalizedOwnerKey(owner.humanId);
   const ownerNodeKey = normalizedOwnerKey(owner.nodeId);
@@ -131,7 +134,8 @@ export function collaborationMentionOwnerMatchesConversationHumans(
     if (!ownerHumanKey || identityKeys.length === 0) return true;
   }
 
-  if (sawCanonicalNameMatch) return false;
+  // Names repeat: without ids, a name two known people share never decides.
+  if (sawCanonicalNameMatch || (ownerNameKey && ambiguousNames?.has(ownerNameKey))) return false;
   return Boolean(ownerNameKey && conversationParticipantNameKeys(conversation?.participants).includes(ownerNameKey));
 }
 
@@ -140,8 +144,9 @@ export function filterCollaborationMentionCandidatesForConversation(
   conversation: MentionScopeConversation | null | undefined,
 ) {
   if (!conversationHasParticipantMentionScope(conversation)) return candidates;
+  const ambiguous = ambiguousOwnerNames(candidates);
   return dedupeCollaborationMentionCandidateHandles(
-    candidates.filter((candidate) => collaborationMentionOwnerMatchesConversationHumans(candidate.peer, conversation)),
+    candidates.filter((candidate) => collaborationMentionOwnerMatchesConversationHumans(candidate.peer, conversation, ambiguous)),
   );
 }
 
@@ -169,6 +174,7 @@ export type SharedCloudAgentMentionCandidate = {
   targetKind: 'cloud-shared-agent';
   targetAgentId: string;
   targetOwnerAccountId: string;
+  baseHandle?: string;
 };
 
 export function sharedCloudAgentMentionCandidatesForConversation(
@@ -207,7 +213,7 @@ export function sharedCloudAgentMentionCandidatesForConversation(
       normalizedHandle = normalizeMentionLabel(handle);
     }
     used.add(normalizedHandle);
-    return { ...candidate, handle, normalizedHandle };
+    return { ...candidate, handle, normalizedHandle, baseHandle: candidate.handle };
   });
 }
 
@@ -323,7 +329,7 @@ function dedupeCollaborationMentionCandidateHandles(candidates: CollaborationMen
       collisionIndex += 1;
     }
     usedHandles.add(normalizedHandle);
-    return { ...candidate, handle, normalizedHandle };
+    return { ...candidate, handle, normalizedHandle, baseHandle: candidate.handle };
   });
 }
 

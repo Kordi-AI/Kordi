@@ -18,4 +18,14 @@ pub(super) async fn message_sent(state: &ServerState, message: &MessageSnapshot)
     {
         eprintln!("[chat_sync] agent question reply matching: {error}");
     }
+    // A person's mention that no agent can take fails visibly for everyone.
+    if let Err(error) = crate::cloud_agent_runtime::runs::fail_unroutable_mention(
+        state.db_pool(),
+        message.conversation_id,
+        message.id,
+    )
+    .await
+    {
+        eprintln!("[chat_sync] unroutable agent mention: {error}");
+    }
 }

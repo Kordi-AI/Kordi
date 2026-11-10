@@ -56,3 +56,14 @@ export function withAgentExchangeProgress(message: Message, state: unknown, wait
   const turn = agentExchangeProgressTurn(state, message.text, `exchange-progress:${message.id}`, '', message.turn, waitingFor, forViewer);
   return turn === message.turn || !turn ? message : { ...message, turn };
 }
+
+/**
+ * The slot of an agent whose own turn yielded to wait for another agent or a
+ * person: it stays visible as waiting (#2416) instead of disappearing until
+ * the resumed task answers in the same slot.
+ */
+export function yieldingCollaborationMessage<T extends { localTurn?: DesktopChatTurnSnapshot | null }>(
+  message: T, id: string, sessionId: string, waitingFor?: unknown,
+): T {
+  return { ...message, localTurn: agentExchangeProgressTurn('waiting', '', id, sessionId, null, waitingFor) ?? message.localTurn ?? null };
+}

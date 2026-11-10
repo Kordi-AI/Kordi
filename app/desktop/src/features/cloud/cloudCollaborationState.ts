@@ -1,4 +1,4 @@
-import { agentExchangeProgressTurn, agentExchangeWaitsForViewer } from './agentExchangePresentation';
+import { agentExchangeProgressTurn, agentExchangeWaitsForViewer, yieldingCollaborationMessage } from './agentExchangePresentation';
 import { agentExchangeTurnIsWaiting, agentExchangeTurnIsYielding } from './agentExchangeOutcome';
 import {
   cloudCollaborationConversationId,
@@ -548,7 +548,7 @@ export function buildCloudCollaborationConversation({
   const collaborationMessages = visibleCloudMessages.flatMap((message) => {
     const responseId = parseCloudAgentResponse(message.body)?.requestId;
     const responseTurn = responseId ? localAgentTurnsByRequestId[responseId] : undefined;
-    if (responseTurn && agentExchangeTurnIsYielding(responseTurn)) return [];
+    if (responseTurn && agentExchangeTurnIsYielding(responseTurn)) return [yieldingCollaborationMessage(cloudMessageToCollaborationMessage(account, message, contact, { cancelledRequestIds, localAgentTurnsByRequestId: {}, targetAgentNameByRequestId: explicitResponseAgentNames }), message.messageId, message.sessionId ?? '', parseCloudAgentResponse(message.body)?.agentExchangeWaitingFor)];
     const mapped = cloudMessageToCollaborationMessage(account, message, contact, { cancelledRequestIds, localAgentTurnsByRequestId, targetAgentNameByRequestId: explicitResponseAgentNames });
     const targetAccountId = requestTargetAccountIds.get(message.messageId);
     if (!targetAccountId) return [mapped];

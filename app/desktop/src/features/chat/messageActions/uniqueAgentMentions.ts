@@ -19,9 +19,11 @@ export function uniqueHandle(baseHandle: string, suffix: string) {
  * Agent handles must be unique in a conversation: two people can share a
  * name, and so can their agents. An agent whose handle is already taken (by
  * the viewer's own agent or an agent listed before it) gets a deterministic
- * suffix from its owner's identity, never a silent tie.
+ * suffix from its owner's identity, never a silent tie. The suffix stays
+ * internal: people see and type `baseHandle`, and a picked mention carries
+ * the agent's id.
  */
-export function reserveAgentMentionHandles<T extends { handle: string; normalizedHandle: string; targetKind: string }>(
+export function reserveAgentMentionHandles<T extends { handle: string; normalizedHandle: string; targetKind: string; baseHandle?: string }>(
   candidates: readonly T[],
   used: Set<string>,
   ownerKey: (candidate: T) => string,
@@ -38,7 +40,7 @@ export function reserveAgentMentionHandles<T extends { handle: string; normalize
       collisionIndex += 1;
     }
     used.add(normalizedHandle);
-    return handle === candidate.handle ? candidate : { ...candidate, handle, normalizedHandle };
+    return handle === candidate.handle ? candidate : { ...candidate, handle, normalizedHandle, baseHandle: candidate.baseHandle ?? candidate.handle };
   });
 }
 /** Collaboration and shared agent candidates with every agent handle unique. */
@@ -54,3 +56,13 @@ export function uniqueAgentMentionCandidates(
   };
 }
 
+
+/** Owner names that two known people share; such a name alone never decides. */
+export function ambiguousOwnerNames(candidates: readonly Pick<CollaborationMentionCandidate, 'peer'>[]) {
+  const owners = new Map<string, Set<string>>();
+  for (const { peer } of candidates) {
+    const name = peer.ownerName?.trim().toLowerCase() ?? '';
+    if (name) owners.set(name, (owners.get(name) ?? new Set()).add((peer.humanId || peer.nodeId || '').trim().toLowerCase()));
+  }
+  return new Set([...owners].filter(([, ids]) => ids.size > 1).map(([name]) => name));
+}

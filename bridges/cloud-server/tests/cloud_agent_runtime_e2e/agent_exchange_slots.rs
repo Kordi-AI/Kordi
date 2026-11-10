@@ -1,72 +1,77 @@
-//! Runs started by an exchange, not a fresh mention, show a processing row
-//! at once that becomes their answer in place, or ends cleanly.
+//! One visible row per agent task (#2416): the asking agent's own slot shows
+//! whom it waits for, then processing, then the resumed task's result in
+//! place; the question stays a plain message. Only the answering agent, which
+//! has no row of its own, gets an added processing row.
 use super::*;
 
-/// A slot row: its message id, what it replies to, and its wire message.
-struct Slot {
-    id: uuid::Uuid,
-    reply_to: Option<uuid::Uuid>,
-    message: Value,
-}
-
 impl Fixture {
-    async fn slot(&self, exchange: &Value, continued: bool) -> Option<Slot> {
-        let exchange: uuid::Uuid = exchange.as_str().unwrap().parse().unwrap();
-        let client = if continued {
-            uuid::Uuid::new_v5(&exchange, b"continued")
-        } else {
-            exchange
-        };
-        let row: Option<(uuid::Uuid, Option<uuid::Uuid>, String)> = query_as("SELECT message_id,reply_to_message_id,content #>> '{blocks,0,text}' FROM cloud_chat_messages WHERE client_message_id=$1 AND deleted_at IS NULL")
-            .bind(client).fetch_optional(&self.pool).await.unwrap();
-        row.map(|(id, reply_to, body)| {
-            let wire: Value = serde_json::from_slice(
-                &base64::engine::general_purpose::URL_SAFE_NO_PAD
-                    .decode(body.split_once(':').unwrap().1)
-                    .unwrap(),
-            )
+    /// The root run's own slot, as its executor leaves it when it yields.
+    async fn root_slot(&self) -> uuid::Uuid {
+        let conversation = self.conversation().await;
+        let owner = &self.people[0].account_id;
+        let envelope = json!({"kind":"group-message","groupId":self.session,"createdByAccountId":owner,"actor":{"accountId":owner,"displayName":"Alpha"},"participants":[],
+            "message":{"id":uuid::Uuid::new_v4(),"senderAccountId":owner,"senderKind":"agent","senderAgentId":format!("cloud-agent:{owner}"),"text":"","createdAtMs":chrono::Utc::now().timestamp_millis(),"deliveryState":"complete","structuredContent":{"synchronizationOnly":true,"agentExchangeOutcome":"waiting"}}});
+        let body = format!(
+            "kordi-cloud-group:{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(envelope.to_string())
+        );
+        let id: uuid::Uuid = insert_test_message(&self.pool, owner, conversation, &body)
+            .await
+            .parse()
             .unwrap();
-            Slot {
-                id,
-                reply_to,
-                message: wire["message"].clone(),
-            }
-        })
+        query("UPDATE cloud_agent_fallback_runs SET status='completed',completed_at=now()::text,response_message_id=$2 WHERE run_id=$1")
+            .bind(&self.root).bind(id.to_string()).execute(&self.pool).await.unwrap();
+        id
     }
-    async fn fail(&self, person: usize, run: &str, claim: uuid::Uuid) {
-        self.post(
-            person,
-            &format!("/v1/cloud/agent-exchanges/desktop/{run}/fail"),
-            json!({"claimId":claim}),
+    async fn message(&self, id: uuid::Uuid) -> Value {
+        let (body,): (String,) = query_as(
+            "SELECT content #>> '{blocks,0,text}' FROM cloud_chat_messages WHERE message_id=$1",
         )
-        .await;
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap();
+        let wire: Value = serde_json::from_slice(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(body.split_once(':').unwrap().1)
+                .unwrap(),
+        )
+        .unwrap();
+        wire.get("message").cloned().unwrap_or(wire)
+    }
+    async fn agent_rows(&self) -> i64 {
+        let (count,): (i64,) = query_as("SELECT count(*) FROM cloud_chat_messages m JOIN cloud_chat_conversations c USING(conversation_id) WHERE c.legacy_session_id=$1 AND m.sender_account_id=$2")
+            .bind(&self.session).bind(&self.people[0].account_id).fetch_one(&self.pool).await.unwrap();
+        count
     }
 }
 
 #[tokio::test]
-async fn a_resume_after_a_person_answer_shows_processing_then_its_answer_in_place() {
+async fn the_asking_agent_keeps_one_row_from_waiting_to_its_result() {
     let Some(f) = Fixture::new().await else {
         return;
     };
     let receipt = f.ask_ok("ask", 1, "Which day?").await;
-    f.end_parent().await;
-    assert!(
-        f.slot(&receipt["exchangeId"], true).await.is_none(),
-        "nothing runs yet"
-    );
-    let answer = f.say(1, "Tuesday", None).await;
+    let slot = f.root_slot().await;
+    f.say(1, "Tuesday", None).await;
     let resume = f.pending(0).await.remove(0);
-    let processing = f
-        .slot(&receipt["exchangeId"], true)
-        .await
-        .expect("processing row");
-    assert_eq!(processing.message["deliveryState"], "processing");
-    assert_eq!(processing.message["text"], "");
+    let processing = f.message(slot).await;
     assert_eq!(
-        processing.reply_to,
-        Some(answer),
-        "it replies to the person's answer"
+        processing["structuredContent"]["agentExchangeStatus"],
+        "processing"
     );
+    assert!(
+        processing["structuredContent"]
+            .get("synchronizationOnly")
+            .is_none(),
+        "never emptied"
+    );
+    let question = f.question_wire(&receipt["exchangeId"]).await;
+    assert!(
+        question["message"]["structuredContent"]["agentExchangeStatus"].is_null(),
+        "the question stays plain"
+    );
+    let rows = f.agent_rows().await;
     let claim = f.claim(0, &resume).await;
     f.finish(
         0,
@@ -75,74 +80,60 @@ async fn a_resume_after_a_person_answer_shows_processing_then_its_answer_in_plac
         "Booked for Tuesday.",
     )
     .await;
-    let done = f.slot(&receipt["exchangeId"], true).await.unwrap();
+    let done = f.message(slot).await;
     assert_eq!(
-        done.id, processing.id,
-        "the answer replaces the row in place"
+        done["text"], "Booked for Tuesday.",
+        "the result replaces the slot in place"
     );
-    assert_eq!(done.message["deliveryState"], "complete");
-    assert_eq!(done.message["text"], "Booked for Tuesday.");
+    assert_eq!(done["deliveryState"], "complete");
+    assert!(done["structuredContent"]["agentExchangeStatus"].is_null());
+    assert_eq!(f.agent_rows().await, rows, "no new row for the result");
 }
 
 #[tokio::test]
-async fn a_silent_or_failed_resume_never_leaves_a_spinner() {
-    let Some(f) = Fixture::new().await else {
-        return;
-    };
-    let first = f.ask_ok("first", 1, "Free on Friday?").await;
-    let second = f.ask_ok("second", 2, "Free on Friday?").await;
-    f.end_parent().await;
-    f.say(1, "Yes", None).await;
-    f.say(2, "No", None).await;
-    let runs = f.pending(0).await;
-    assert_eq!(runs.len(), 2);
-    for run in &runs {
-        let id = run["runId"].as_str().unwrap();
-        let claim = f.claim(0, run).await;
-        if data(run)["sentQuestion"] == "Free on Friday?" && data(run)["personReply"] == "Yes" {
-            f.finish(0, id, claim, r#"{"agentExchangeOutcome":"silent"}"#)
+async fn a_silent_failed_or_stopped_task_ends_its_slot_cleanly() {
+    for ending in ["silent", "failed", "stopped"] {
+        let Some(f) = Fixture::new().await else {
+            return;
+        };
+        f.ask_ok("ask", 1, "Free on Friday?").await;
+        let slot = f.root_slot().await;
+        f.say(1, "Yes", None).await;
+        let resume = f.pending(0).await.remove(0);
+        let id = resume["runId"].as_str().unwrap();
+        match ending {
+            "silent" => {
+                let claim = f.claim(0, &resume).await;
+                f.finish(0, id, claim, r#"{"agentExchangeOutcome":"silent"}"#)
+                    .await;
+                let row = f.message(slot).await;
+                assert_eq!(
+                    row["structuredContent"]["synchronizationOnly"], true,
+                    "no empty bubble"
+                );
+            }
+            "failed" => {
+                let claim = f.claim(0, &resume).await;
+                f.post(
+                    0,
+                    &format!("/v1/cloud/agent-exchanges/desktop/{id}/fail"),
+                    json!({"claimId":claim}),
+                )
                 .await;
-        } else {
-            f.fail(0, id, claim).await;
+                let row = f.message(slot).await;
+                assert_eq!(row["deliveryState"], "failed");
+                assert!(row["text"].as_str().unwrap().contains("could not complete"));
+            }
+            _ => {
+                query("UPDATE cloud_chat_conversation_members SET membership_state='left' WHERE account_id=$1")
+                    .bind(&f.people[1].account_id).execute(&f.pool).await.unwrap();
+                assert!(f.pending(0).await.is_empty());
+                let row = f.message(slot).await;
+                assert_eq!(row["deliveryState"], "cancelled");
+                assert_eq!(row["text"], "Stopped");
+            }
         }
     }
-    let silent = f.slot(&first["exchangeId"], true).await.unwrap();
-    assert_eq!(silent.message["deliveryState"], "complete");
-    assert_eq!(silent.message["text"], "");
-    assert_eq!(
-        silent.message["structuredContent"]["synchronizationOnly"],
-        true
-    );
-    let failed = f.slot(&second["exchangeId"], true).await.unwrap();
-    assert_eq!(failed.message["deliveryState"], "failed");
-    assert!(failed.message["text"]
-        .as_str()
-        .unwrap()
-        .contains("could not complete"));
-}
-
-#[tokio::test]
-async fn a_cancelled_resume_shows_stopped() {
-    let Some(f) = Fixture::new().await else {
-        return;
-    };
-    let receipt = f.ask_ok("ask", 1, "Which day?").await;
-    f.end_parent().await;
-    f.say(1, "Tuesday", None).await;
-    assert_eq!(f.pending(0).await.len(), 1, "the resume run exists");
-    assert_eq!(
-        f.slot(&receipt["exchangeId"], true).await.unwrap().message["deliveryState"],
-        "processing"
-    );
-    query("UPDATE cloud_chat_conversation_members SET membership_state='left' WHERE account_id=$1")
-        .bind(&f.people[1].account_id)
-        .execute(&f.pool)
-        .await
-        .unwrap();
-    assert!(f.pending(0).await.is_empty());
-    let stopped = f.slot(&receipt["exchangeId"], true).await.unwrap();
-    assert_eq!(stopped.message["deliveryState"], "cancelled");
-    assert_eq!(stopped.message["text"], "Stopped");
 }
 
 #[tokio::test]
@@ -151,11 +142,23 @@ async fn an_answering_run_keeps_one_reply_row_through_asking_its_owner() {
         return;
     };
     let exchange = f.send("ask-agent", 1).await["exchangeId"].clone();
-    let pending = f
-        .slot(&exchange, false)
-        .await
-        .expect("the answering agent's row");
-    assert_eq!(pending.message["deliveryState"], "processing");
+    let reply_row = |exchange: &Value| {
+        let id: uuid::Uuid = exchange.as_str().unwrap().parse().unwrap();
+        let pool = f.pool.clone();
+        async move {
+            let (message, body): (uuid::Uuid, String) = query_as("SELECT message_id,content #>> '{blocks,0,text}' FROM cloud_chat_messages WHERE client_message_id=$1")
+                .bind(id).fetch_one(&pool).await.unwrap();
+            let wire: Value = serde_json::from_slice(
+                &base64::engine::general_purpose::URL_SAFE_NO_PAD
+                    .decode(body.split_once(':').unwrap().1)
+                    .unwrap(),
+            )
+            .unwrap();
+            (message, wire["message"].clone())
+        }
+    };
+    let (pending_id, pending) = reply_row(&exchange).await;
+    assert_eq!(pending["deliveryState"], "processing");
     let target = f.pending(1).await.remove(0);
     let run = target["runId"].as_str().unwrap().to_owned();
     let claim = f.claim(1, &target).await;
@@ -163,17 +166,16 @@ async fn an_answering_run_keeps_one_reply_row_through_asking_its_owner() {
     f.post(1, &path, json!({"claimId":claim,"toolCallId":"owner","arguments":{"target":f.people[1].account_id,"targetKind":"person","message":"OK to share Friday?"}})).await;
     f.finish(1, &run, claim, r#"{"agentExchangeOutcome":"waiting"}"#)
         .await;
-    let waiting = f.slot(&exchange, false).await.unwrap();
     assert_eq!(
-        waiting.message["structuredContent"]["synchronizationOnly"], true,
-        "no spinner while the owner decides"
+        reply_row(&exchange).await.1["structuredContent"]["synchronizationOnly"],
+        true
     );
     f.end_parent().await;
     f.say(1, "Yes, Friday 7pm", None).await;
     let resume = f.pending(1).await.remove(0);
-    let reopened = f.slot(&exchange, false).await.unwrap();
-    assert_eq!(reopened.id, pending.id);
-    assert_eq!(reopened.message["deliveryState"], "processing");
+    let (reopened_id, reopened) = reply_row(&exchange).await;
+    assert_eq!(reopened_id, pending_id);
+    assert_eq!(reopened["deliveryState"], "processing");
     let claim = f.claim(1, &resume).await;
     f.finish(
         1,
@@ -182,11 +184,7 @@ async fn an_answering_run_keeps_one_reply_row_through_asking_its_owner() {
         "Beta is free Friday at 7pm.",
     )
     .await;
-    let answered = f.slot(&exchange, false).await.unwrap();
-    assert_eq!(answered.id, pending.id, "one row from processing to answer");
-    assert_eq!(answered.message["text"], "Beta is free Friday at 7pm.");
-    assert!(
-        f.slot(&exchange, true).await.is_none(),
-        "no extra continuation row on the answering side"
-    );
+    let (answered_id, answered) = reply_row(&exchange).await;
+    assert_eq!(answered_id, pending_id, "one row from processing to answer");
+    assert_eq!(answered["text"], "Beta is free Friday at 7pm.");
 }

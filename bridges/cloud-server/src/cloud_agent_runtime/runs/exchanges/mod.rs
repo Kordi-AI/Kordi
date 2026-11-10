@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 mod answering;
 mod lifecycle;
+mod main_row;
 mod outcome;
 mod person;
 mod person_replies;
@@ -30,6 +31,7 @@ pub(crate) use outcome::{
 pub(crate) use person_replies::match_replies as match_person_replies;
 mod store;
 pub(crate) use lifecycle::{finish, reconcile};
+pub(crate) use main_row::show_waiting;
 use store::{authorize, directory, send};
 
 pub(crate) const PREFIX: &str = "agent-exchange:";
@@ -298,6 +300,7 @@ mod guidance_tests {
         assert!(text.contains("other participant's agent (preferred)"));
         assert!(text.contains("never end with a list of open questions"));
         assert!(text.contains("may only ask that requester"));
+        assert!(text.contains("reach_out to that agent at least once before you finalize"));
         assert!(!text.contains('{'), "no per-run data in the stable prefix");
     }
 }

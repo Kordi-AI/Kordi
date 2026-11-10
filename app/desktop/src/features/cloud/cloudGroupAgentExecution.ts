@@ -48,7 +48,6 @@ import {
   publishCloudGroupAgentTerminalAfterGuards,
 } from './cloudGroupAgentPublication';
 import { clearCloudGroupAgentPendingState,persistCloudGroupAgentCancellation,throwIfCloudAgentTurnAborted,waitForCloudGroupAgentTurn } from "./cloudGroupAgentRunState";
-import { cloudGroupAgentHandoffForResponse } from './cloudGroupMentions';
 import {
   cloudGroupAgentConversationId,
   cloudGroupAgentResponseTargetAccountIds,
@@ -417,15 +416,8 @@ export async function respondToCloudGroupAgentMention(
     input,
     persistedResponseMessage,
   );
-  const agentHandoff = succeeded
-    ? cloudGroupAgentHandoffForResponse({
-      responseText,
-      participants: envelope.participants,
-      respondingAccountId: account.accountId,
-      respondingAgentId: presentation.agentId,
-      requestMessage: message,
-    })
-    : null;
+  // A reply that mentions another agent hands nothing off (reach_out does).
+  const agentHandoff = null;
 
   const activitySpan = beginChatPerformanceSpan(
     'cloud-agent-activity-publish',

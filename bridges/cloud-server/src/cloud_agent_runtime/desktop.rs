@@ -451,6 +451,9 @@ async fn publish_progress(
     }.await;
     match result {
         Ok(Some(value)) => {
+            if phase == "completed" {
+                let _ = super::runs::exchanges::show_waiting(state.db_pool(), &run_id).await;
+            }
             if matches!(phase, "completed" | "failed" | "cancelled") {
                 super::routes::notify_run_response(
                     &state,
