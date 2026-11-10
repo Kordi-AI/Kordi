@@ -19,7 +19,7 @@ use crate::chat_sync::models::SendMessageRequest;
 use super::addressing;
 use super::cards::{mark_card_seen, sync_card_messages};
 use super::config::SystemAgentConfig;
-use super::input::{build_input, Candidate};
+use super::input::Candidate;
 use super::limits;
 use super::mentions::{encode_system_agent_message_with_mentions, resolve_mentions};
 use crate::resource_pools::usage::{settle, Settlement};
@@ -76,6 +76,10 @@ pub(super) const SWEEP_SQL: &str = concat!(
                WHEN jsonb_typeof(s.hooks_fired->('card_seen:' || card.event_id)) = 'number'
                THEN (s.hooks_fired->>('card_seen:' || card.event_id))::bigint ELSE 0 END
              AND card.updated_at <= now() - interval '45 seconds')
+         -- A person's agent owns a task here and it is time to check whether it stalled.
+         OR CASE WHEN jsonb_typeof(s.hooks_fired #> '{deferred,checkAfter}') = 'string'
+              THEN (s.hooks_fired #>> '{deferred,checkAfter}')::timestamptz <= now()
+              ELSE false END
          -- A reminder is due: one window at a time, as the run input offers it.
          OR (card.start_at > now() AND (
                (card.start_at <= now() + interval '2 hours'
@@ -179,7 +183,10 @@ async fn enqueue(
     config: &SystemAgentConfig,
     candidate: &Candidate,
 ) -> Result<bool, sqlx_core::Error> {
-    let input = build_input(pool, config, candidate).await?;
+    // A person's agent owns its task: its messages stay context until it
+    // replies, or come back as new here once it stalls.
+    let (candidate, input) = super::ownership_store::prepare(pool, config, candidate).await?;
+    let candidate = &candidate;
     let hook_names: Vec<&str> = input["hooks"]
         .as_array()
         .into_iter()
@@ -396,7 +403,10 @@ pub async fn complete(
         }
     }
     let response_message_id = match output.message.as_deref().map(str::trim) {
-        Some(text) if !text.is_empty() => post_text(pool, run_id, &run, text).await?,
+        Some(text) if !text.is_empty() => {
+            let text = super::ownership::with_step_in_line(&run.input, text);
+            post_text(pool, run_id, &run, &text).await?
+        }
         _ => None,
     };
 
