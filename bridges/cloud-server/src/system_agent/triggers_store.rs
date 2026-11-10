@@ -82,6 +82,7 @@ async fn live_cards(
                 created_at: instant(&created)?,
                 updated_at: instant(&updated)?,
                 by_system_agent: by == config.account_id,
+                created_by: by,
             })
         })
         .collect())

@@ -40,6 +40,7 @@ fn finding(kind: &str) -> Finding {
     Finding {
         detail: json!({"kind": kind}),
         marks: json!({ format!("{kind}:key"): true }),
+        ask: None,
     }
 }
 
@@ -298,6 +299,7 @@ fn card(id: &str, title: &str, start_hours: Option<i64>, by_system_agent: bool) 
         end_at: None,
         created_at: now(),
         updated_at: now(),
+        created_by: format!("acct_{id}"),
         by_system_agent,
     }
 }
@@ -329,4 +331,82 @@ fn overlapping_cards_and_one_plan_at_two_times_are_conflicts_once() {
         card("plan_f", "Friday dinner", None, false),
     ];
     assert!(find_conflict(&unrelated, &json!({})).is_none());
+}
+
+fn step_in_input() -> Value {
+    json!({
+        "members": [
+            {"participantId": "acct_bob", "handle": "@Bob", "agentHandle": "@KordiBob",
+             "isSystemAgent": false},
+            {"participantId": "acct_ana", "handle": "@Ana", "agentHandle": "@KordiAna",
+             "isSystemAgent": false},
+            {"participantId": "acct_system", "handle": "@System", "agentHandle": null,
+             "isSystemAgent": true},
+        ],
+        "messages": [
+            {"sequence": 3, "isNew": false, "senderId": "acct_ana"},
+            {"sequence": 4, "isNew": true, "senderId": "acct_ana", "fromAgent": true},
+            {"sequence": 5, "isNew": true, "senderId": "acct_bob"},
+        ],
+        "hooks": [],
+    })
+}
+
+#[test]
+fn every_step_in_names_whom_to_address() {
+    let quiet = Duration::minutes(12);
+    let mut silence = step_in_input();
+    let trigger = Trigger::Silence {
+        from_sequence: 3,
+        quiet,
+    };
+    apply(&mut silence, &trigger, Map::new());
+    assert_eq!(
+        silence["trigger"]["ask"]["mention"], "@Bob",
+        "first speaker"
+    );
+
+    let mut stall = step_in_input();
+    stall["stepIn"] = json!({"agentName": "KordiAna", "ownerAccountId": "acct_ana"});
+    apply(&mut stall, &Trigger::Stall, Map::new());
+    assert_eq!(stall["trigger"]["ask"]["mention"], "@Ana");
+
+    let mut looped = step_in_input();
+    let found = Finding {
+        ask: Some("acct_ana".to_string()),
+        ..finding("loop")
+    };
+    apply(&mut looped, &Trigger::Loop(found.clone()), Map::new());
+    assert_eq!(
+        looped["trigger"]["ask"]["mention"], "@KordiAna",
+        "the agent"
+    );
+    assert_eq!(looped["trigger"]["ask"]["handle"], "@Ana");
+
+    let mut conflict = step_in_input();
+    apply(&mut conflict, &Trigger::Conflict(found), Map::new());
+    assert_eq!(conflict["trigger"]["ask"]["mention"], "@Ana", "a person");
+
+    let mut unknown = step_in_input();
+    let nobody = Finding {
+        ask: Some("acct_system".to_string()),
+        ..finding("conflict")
+    };
+    apply(&mut unknown, &Trigger::Conflict(nobody), Map::new());
+    assert!(unknown["trigger"].get("ask").is_none());
+}
+
+#[test]
+fn loops_and_conflicts_ask_the_task_owner_or_the_other_cards_maker() {
+    let rounds: Vec<ExchangeFact> = (0..LOOP_ROUNDS as i64)
+        .map(|round| exchange(&format!("r{round}"), "a", "b", 30 - round))
+        .collect();
+    let found = find_loop(&rounds, None, &[], &json!({}), 8).unwrap();
+    assert_eq!(found.ask.as_deref(), Some("a"));
+    let cards = [
+        card("plan_a", "Friday dinner", Some(30), true),
+        card("plan_b", "Dinner on Friday", Some(30), false),
+    ];
+    let found = find_conflict(&cards, &json!({})).unwrap();
+    assert_eq!(found.ask.as_deref(), Some("acct_plan_b"));
 }

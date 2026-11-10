@@ -31,8 +31,21 @@ impl Chat {
         .unwrap();
     }
 
-    /// Finishes the System agent's active run silently, as a runner would.
-    async fn finish_run(&self) {
+    /// Gives Alice and Bob names, so their handles resolve.
+    async fn name_people(&self) {
+        for (account, name) in [(&self.alice, "Alice"), (&self.bob, "Bob")] {
+            query("UPDATE cloud_accounts SET display_name = $2 WHERE account_id = $1")
+                .bind(account)
+                .bind(name)
+                .execute(&self.pool)
+                .await
+                .unwrap();
+        }
+    }
+
+    /// Finishes the System agent's active run as a runner would, and returns
+    /// the text and mentions of the message it posted (null when silent).
+    async fn finish_run(&self, message: Option<&str>) -> Value {
         let (run_id,): (String,) = query_as(
             "SELECT active_run_id FROM cloud_pip_conversation_state WHERE conversation_id = $1",
         )
@@ -45,14 +58,26 @@ impl Chat {
             .execute(&self.pool)
             .await
             .unwrap();
-        super::store::complete(
-            &self.pool,
-            &run_id,
-            "test-runner",
-            r#"{"message":null,"hooksHandled":[]}"#,
-        )
-        .await
-        .unwrap();
+        let output = json!({"message": message, "hooksHandled": []}).to_string();
+        super::store::complete(&self.pool, &run_id, "test-runner", &output)
+            .await
+            .unwrap();
+        let (response,): (Option<String>,) =
+            query_as("SELECT response_message_id FROM cloud_agent_fallback_runs WHERE run_id = $1")
+                .bind(&run_id)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap();
+        let Some(response) = response else {
+            return Value::Null;
+        };
+        let (content,): (Value,) =
+            query_as("SELECT content FROM cloud_chat_messages WHERE message_id::text = $1")
+                .bind(&response)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap();
+        super::input::cloud_envelope(content["blocks"][0]["text"].as_str().unwrap()).unwrap()
     }
 
     async fn agent_says(&self, owner: &str, text: &str) {
@@ -128,6 +153,7 @@ fn trigger(input: &Value) -> (&str, &str) {
 #[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
 async fn plan_talk_waits_for_silence_and_a_new_message_resets_it() {
     let chat = Chat::new().await;
+    chat.name_people().await;
     say(&chat.pool, &chat.bob, chat.chat, "Dinner Friday at 7?").await;
     assert_eq!(chat.sweep().await, 0, "people are still talking");
     let discussion = chat.hooks().await["planDiscussion"].clone();
@@ -151,7 +177,17 @@ async fn plan_talk_waits_for_silence_and_a_new_message_resets_it() {
         .unwrap();
     assert_eq!(plan["isNew"], true, "the discussion is the run's news");
 
-    chat.finish_run().await;
+    assert_eq!(
+        prompts[0]["trigger"]["ask"]["mention"], "@Bob",
+        "who started it"
+    );
+    // A message that names nobody is addressed to the person who can decide.
+    let posted = chat
+        .finish_run(Some("Is Friday at 7 still the plan?"))
+        .await;
+    assert_eq!(posted["text"], "@Bob Is Friday at 7 still the plan?");
+    assert_eq!(posted["mentions"][0]["targetKind"], "person");
+    assert_eq!(posted["mentions"][0]["humanId"], json!(chat.bob));
     assert!(chat.hooks().await["planDiscussion"].is_null());
     assert_eq!(chat.sweep().await, 0, "once");
     assert_eq!(chat.system_agent_prompts().await.len(), 1);
@@ -161,6 +197,7 @@ async fn plan_talk_waits_for_silence_and_a_new_message_resets_it() {
 #[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
 async fn a_discussion_an_agent_takes_never_reaches_the_system_agent() {
     let chat = Chat::new().await;
+    chat.name_people().await;
     say(&chat.pool, &chat.bob, chat.chat, "Dinner Friday at 7?").await;
     assert_eq!(chat.sweep().await, 0);
     chat.ask_alices_agent().await;
@@ -179,6 +216,7 @@ async fn a_discussion_an_agent_takes_never_reaches_the_system_agent() {
 #[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
 async fn agents_going_back_and_forth_get_one_step_in() {
     let chat = Chat::new().await;
+    chat.name_people().await;
     let (alice, bob) = (chat.alice.clone(), chat.bob.clone());
     for round in 0..3 {
         let (from, to) = if round % 2 == 0 {
@@ -206,8 +244,13 @@ async fn agents_going_back_and_forth_get_one_step_in() {
         .iter()
         .all(|hook| hook["name"] != "new_messages"));
 
+    // The agent that started the task is asked for the decision.
+    assert_eq!(prompts[0]["trigger"]["ask"]["mention"], "@KordiAlice");
+    let posted = chat.finish_run(Some("Please pick 7pm or 8pm.")).await;
+    let mention = &posted["mentions"][0];
+    assert_eq!(mention["targetKind"], "agent");
+    assert_eq!(mention["agentId"], format!("cloud-agent:{alice}"));
     // A restart reads the same row: the loop never fires again.
-    chat.finish_run().await;
     chat.agent_says(&alice, "Any update from Bob's agent?")
         .await;
     assert_eq!(chat.sweep().await, 0, "once");
@@ -217,6 +260,7 @@ async fn agents_going_back_and_forth_get_one_step_in() {
 #[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
 async fn overlapping_cards_get_one_step_in() {
     let chat = Chat::new().await;
+    chat.name_people().await;
     chat.card(&chat.config.account_id.clone(), "Friday dinner", 30)
         .await;
     chat.card(&chat.alice.clone(), "Dinner on Friday", 30).await;
@@ -244,7 +288,18 @@ async fn overlapping_cards_get_one_step_in() {
         1
     );
 
-    chat.finish_run().await;
+    // Whoever made the other card decides which plan to keep.
+    assert_eq!(prompts[0]["trigger"]["ask"]["mention"], "@Alice");
+    let posted = chat
+        .finish_run(Some(
+            "@KordiAlice these two dinner cards overlap; which one stays?",
+        ))
+        .await;
+    assert_eq!(posted["mentions"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        posted["mentions"][0]["targetKind"], "agent",
+        "its own choice"
+    );
     assert!(chat
         .hooks()
         .await
@@ -259,4 +314,40 @@ async fn overlapping_cards_get_one_step_in() {
         .await
         .unwrap();
     assert_eq!(chat.sweep().await, 0, "once");
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn a_stalled_agent_task_gets_one_addressed_step_in() {
+    let chat = Chat::new().await;
+    chat.name_people().await;
+    chat.ask_alices_agent().await;
+    say(&chat.pool, &chat.bob, chat.chat, "7pm, anything is fine").await;
+    assert_eq!(chat.sweep().await, 0, "Alice's agent owns the dinner");
+    chat.let_window_pass().await;
+    assert_eq!(chat.sweep().await, 1, "the agent stalled");
+    let prompts = chat.system_agent_prompts().await;
+    assert_eq!(trigger(&prompts[0]), ("stall", ""));
+    assert_eq!(prompts[0]["trigger"]["ask"]["mention"], "@Alice");
+    let posted = chat.finish_run(Some("Does 7pm work for you?")).await;
+    let text = posted["text"].as_str().unwrap();
+    assert!(text.ends_with("\n@Alice Does 7pm work for you?"), "{text}");
+    assert_eq!(posted["mentions"][0]["humanId"], json!(chat.alice));
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn a_step_in_that_publishes_a_card_needs_no_mention() {
+    let chat = Chat::new().await;
+    chat.name_people().await;
+    say(&chat.pool, &chat.bob, chat.chat, "Dinner Friday at 7?").await;
+    assert_eq!(chat.sweep().await, 0);
+    chat.let_silence_pass().await;
+    assert_eq!(chat.sweep().await, 1);
+    // The run publishes the plan card with its tool.
+    chat.card(&chat.config.account_id.clone(), "Friday dinner", 30)
+        .await;
+    let posted = chat.finish_run(Some("Card is up.")).await;
+    assert_eq!(posted["text"], "Card is up.");
+    assert!(posted["mentions"].as_array().unwrap().is_empty());
 }

@@ -15,7 +15,7 @@ use super::addressing;
 use super::cards::seen_revision;
 use super::config::SystemAgentConfig;
 use super::context;
-use super::mentions::mention_handle;
+use super::mentions::{agent_mention_handle, mention_handle};
 
 const MESSAGE_TEXT_LIMIT: usize = 1200;
 const CLOUD_MESSAGE_PREFIXES: [&str; 2] = ["kordi-cloud-message:", "kordi-cloud-group:"];
@@ -32,8 +32,14 @@ type MessageRow = (
     String,
     Option<String>,
 );
-/// account_id, display name, role, timezone
-type MemberRow = (String, Option<String>, String, Option<String>);
+/// account_id, display name, role, timezone, default agent name
+type MemberRow = (
+    String,
+    Option<String>,
+    String,
+    Option<String>,
+    Option<String>,
+);
 
 #[derive(Clone)]
 pub(super) struct Candidate {
@@ -148,10 +154,12 @@ pub(super) async fn build_input(
     let (kind, shared_title, group_title) = conversation.unwrap_or_default();
 
     let members: Vec<MemberRow> = query_as(
-        "SELECT member.account_id, account.display_name, member.role, digest.timezone
+        "SELECT member.account_id, account.display_name, member.role, digest.timezone,
+                agent.display_name
          FROM cloud_chat_conversation_members member
          JOIN cloud_accounts account ON account.account_id = member.account_id
          LEFT JOIN cloud_account_digests digest ON digest.account_id = member.account_id
+         LEFT JOIN cloud_default_agent_profiles agent ON agent.owner_account_id = member.account_id
          WHERE member.conversation_id = $1 AND member.membership_state = 'active'
          ORDER BY member.joined_at ASC",
     )
@@ -328,14 +336,19 @@ pub(super) async fn build_input(
             "title": group_title.or(shared_title),
         },
         "memberCount": members.len(),
-        "members": listed_members.into_iter().map(|(account_id, display_name, role, timezone)| {
+        "members": listed_members.into_iter().map(|(account_id, display_name, role, timezone, agent)| {
             let display_name = display_name.clone().unwrap_or_else(|| "Member".to_string());
+            let is_system_agent = *account_id == config.account_id;
+            // A member's own agent, addressed with this handle.
+            let agent_handle = (!is_system_agent)
+                .then(|| format!("@{}", agent_mention_handle(agent.as_deref(), &display_name)));
             json!({
                 "participantId": account_id,
                 "displayName": display_name,
                 "handle": format!("@{}", mention_handle(&display_name)),
+                "agentHandle": agent_handle,
                 "role": role,
-                "isSystemAgent": *account_id == config.account_id,
+                "isSystemAgent": is_system_agent,
                 "timezone": timezone,
             })
         }).collect::<Vec<_>>(),

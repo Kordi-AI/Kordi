@@ -372,6 +372,9 @@ pub(super) fn step_in(input: &mut Value, owner: &Owner) {
         }
     }
     input["stepIn"] = json!({ "agentName": owner.label() });
+    if let Some(account_id) = &owner.account_id {
+        input["stepIn"]["ownerAccountId"] = json!(account_id);
+    }
 }
 
 /// The System agent's message, led by one line saying it is picking up a

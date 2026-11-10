@@ -14,13 +14,11 @@ use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 use uuid::Uuid;
 
-use crate::chat_sync::models::SendMessageRequest;
-
 use super::cards::{mark_card_seen, sync_card_messages};
 use super::config::SystemAgentConfig;
 use super::input::Candidate;
 use super::limits;
-use super::mentions::{encode_system_agent_message_with_mentions, resolve_mentions};
+use super::post::post_text;
 use crate::resource_pools::usage::{settle, Settlement};
 use crate::resource_pools::Feature;
 
@@ -315,51 +313,6 @@ async fn active_run(
     ))
 }
 
-/// Posts the System agent's words as their own message, with `@Handle` mentions
-/// resolved.
-async fn post_text(
-    pool: &PgPool,
-    run_id: &str,
-    run: &ActiveRun,
-    text: &str,
-) -> Result<Option<String>, sqlx_core::Error> {
-    let members: Vec<(String, String)> = query_as(
-        "SELECT member.account_id, COALESCE(account.display_name, 'Member')
-         FROM cloud_chat_conversation_members member
-         JOIN cloud_accounts account ON account.account_id = member.account_id
-         WHERE member.conversation_id = $1 AND member.membership_state = 'active'",
-    )
-    .bind(run.conversation_id)
-    .fetch_all(pool)
-    .await?;
-    let mentions = resolve_mentions(text, &members);
-    let request = SendMessageRequest {
-        client_message_id: Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("{run_id}:text").as_bytes()),
-        kind: "text".to_string(),
-        content: json!({
-            "schema": 1,
-            "blocks": [{"type": "text", "text": encode_system_agent_message_with_mentions(text, mentions)}],
-            "legacy_attachments": [],
-        }),
-        reply_to_message_id: None,
-        attachment_ids: Vec::new(),
-    };
-    match crate::chat_sync::store::send_message(
-        pool,
-        &run.owner_account_id,
-        run.conversation_id,
-        request,
-    )
-    .await
-    {
-        Ok(outcome) => Ok(Some(outcome.value.id.to_string())),
-        Err(error) => {
-            eprintln!("[system-agent] Could not post the System agent's text message: {error}");
-            Ok(None)
-        }
-    }
-}
-
 /// Every reminder a run was offered counts as fired once the run finishes,
 /// whether the System agent posted a nudge or chose to stay silent. The sweep
 /// keeps picking a chat while a due reminder is unmarked, so waiting for the
@@ -403,6 +356,7 @@ pub async fn complete(
     .bind(&run.created_at)
     .fetch_optional(pool)
     .await?;
+    let card_touched = touched.is_some();
     if let Some((event_id,)) = touched {
         if let Some(row) = crate::plan_cards::store::load(pool, &event_id).await? {
             if let Err(error) = sync_card_messages(pool, &run.owner_account_id, &row).await {
@@ -412,8 +366,17 @@ pub async fn complete(
     }
     let response_message_id = match output.message.as_deref().map(str::trim) {
         Some(text) if !text.is_empty() => {
-            let text = super::ownership::with_step_in_line(&run.input, text);
-            post_text(pool, run_id, &run, &text).await?
+            let (sender, conversation) = (&run.owner_account_id, run.conversation_id);
+            post_text(
+                pool,
+                run_id,
+                sender,
+                conversation,
+                &run.input,
+                text,
+                card_touched,
+            )
+            .await?
         }
         _ => None,
     };

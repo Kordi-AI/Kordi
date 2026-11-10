@@ -18,6 +18,7 @@ pub mod membership;
 mod mentions;
 mod ownership;
 mod ownership_store;
+mod post;
 mod prompt;
 mod retry;
 pub mod store;
