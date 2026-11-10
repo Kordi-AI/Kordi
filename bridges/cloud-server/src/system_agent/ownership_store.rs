@@ -2,9 +2,9 @@
 //! and exchanges in the conversation's session), applies its outcome to the
 //! run input, and keeps the deferred task in the sweep row.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx_core::query::query;
 use sqlx_core::query_as::query_as;
@@ -19,6 +19,47 @@ use super::ownership::{
     assess, mark, state_patch, step_in, AgentMessage, Clock, Deferral, Delivery, MessageFact,
     Outcome, Owner, RunFact, SteppedIn, Work, DEFERRED_KEY,
 };
+use super::triggers::PlanDiscussion;
+
+/// What the trigger check needs from the ownership pass.
+#[derive(Clone, Debug, Default)]
+pub(super) struct Gate {
+    /// The run picks up a stalled agent's task.
+    pub stepping_in: bool,
+    /// An agent owns a task here: waiting, or it replied or stalled this pass.
+    pub agent_task: bool,
+    /// The owning agent may still reply, or a person's agent is working now.
+    pub agent_busy: bool,
+    /// The newest and the first new message a person wrote themselves.
+    pub last_human_at: Option<DateTime<Utc>>,
+    pub first_new_human_at: Option<DateTime<Utc>>,
+    /// The newest message a person's agent wrote.
+    pub newest_agent_sequence: Option<i64>,
+    /// Messages written by a person's agent, with that agent's name.
+    pub agents: BTreeMap<i64, Option<String>>,
+}
+
+fn gate(
+    outcome: &Outcome,
+    seen: i64,
+    messages: &[MessageFact],
+    working: bool,
+    agents: &BTreeMap<i64, Option<String>>,
+) -> Gate {
+    let humans = messages.iter().filter(|message| message.human);
+    Gate {
+        stepping_in: matches!(outcome, Outcome::Stalled(_)),
+        agent_task: !matches!(outcome, Outcome::Free),
+        agent_busy: working || matches!(outcome, Outcome::Waiting(_)),
+        last_human_at: humans.clone().map(|message| message.created_at).max(),
+        first_new_human_at: humans
+            .filter(|message| message.sequence > seen)
+            .map(|message| message.created_at)
+            .min(),
+        newest_agent_sequence: agents.keys().next_back().copied(),
+        agents: agents.clone(),
+    }
+}
 
 /// Messages before the first new one, to find the agent message it answers.
 const LOOKBACK_MESSAGES: i64 = 50;
@@ -291,13 +332,22 @@ pub(super) async fn prepare(
     pool: &PgPool,
     config: &SystemAgentConfig,
     candidate: &Candidate,
-) -> Result<(Candidate, Value), sqlx_core::Error> {
+) -> Result<(Candidate, Value, Gate), sqlx_core::Error> {
     let mut input = build_input(pool, config, candidate).await?;
     let stored = Deferral::read(&candidate.hooks_fired);
     let stepped_in = SteppedIn::read(&candidate.hooks_fired);
-    let start = stored.as_ref().map_or(candidate.seen_sequence, |task| {
-        task.from_sequence.min(candidate.seen_sequence)
-    }) - LOOKBACK_MESSAGES;
+    // A pending plan discussion's messages are read too, for its silence.
+    let discussion = PlanDiscussion::read(&candidate.hooks_fired);
+    let start = [
+        Some(candidate.seen_sequence),
+        stored.as_ref().map(|task| task.from_sequence),
+        discussion.map(|discussion| discussion.from_sequence),
+    ]
+    .into_iter()
+    .flatten()
+    .min()
+    .unwrap_or_default()
+        - LOOKBACK_MESSAGES;
     let flagged = flagged_ids(&input);
     let messages = message_facts(
         pool,
@@ -312,6 +362,7 @@ pub(super) async fn prepare(
         now: Utc::now(),
         stall: config.stall_window(),
     };
+    let working = work.open_owner(clock.now, clock.stall).is_some();
     let stepped_in_through = stepped_in.as_ref().map_or(0, |stepped| stepped.through);
     let assessment = assess(
         stored.clone(),
@@ -330,13 +381,20 @@ pub(super) async fn prepare(
     ) {
         save(pool, candidate.conversation_id, &patch).await?;
     }
+    let mut gate = gate(
+        &assessment.outcome,
+        candidate.seen_sequence,
+        &messages,
+        working,
+        &assessment.agents,
+    );
     let mut candidate = candidate.clone();
     if let Outcome::Stalled(task) = &assessment.outcome {
         candidate.seen_sequence = task.from_sequence.min(candidate.seen_sequence);
         input = build_input(pool, config, &candidate).await?;
         mark(&mut input, &Default::default(), &assessment.agents);
         step_in(&mut input, &task.owner);
-        return Ok((candidate, input));
+        return Ok((candidate, input, gate));
     }
     mark(&mut input, &assessment.owned, &assessment.agents);
     // A retried step-in run still says it is picking the task up.
@@ -344,8 +402,9 @@ pub(super) async fn prepare(
         candidate.seen_sequence < stepped.through && retried_step_in(&input, stepped.through)
     }) {
         step_in(&mut input, &stepped.owner);
+        gate.stepping_in = true;
     }
-    Ok((candidate, input))
+    Ok((candidate, input, gate))
 }
 
 fn retried_step_in(input: &Value, through: i64) -> bool {

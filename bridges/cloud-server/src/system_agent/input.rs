@@ -189,6 +189,7 @@ pub(super) async fn build_input(
             .map(|member| member.1.as_deref().unwrap_or("Member")),
     );
     let mut addressed = HashSet::new();
+    let mut asks_system_agent = HashSet::new();
     let mut ids_of = HashMap::new();
     for (id, _, _, _, _, content, _, client_id) in &rows {
         let envelope = content_envelope(content);
@@ -196,6 +197,10 @@ pub(super) async fn build_input(
             addressing::addresses_other_agent(envelope, &config.account_id, &handles)
         }) {
             addressed.insert(id.clone());
+        } else if envelope.as_ref().is_some_and(|envelope| {
+            addressing::addresses_system_agent(envelope, &config.account_id)
+        }) {
+            asks_system_agent.insert(id.clone());
         }
         let ids = addressing::request_ids(id, client_id.as_deref(), envelope.as_ref());
         ids_of.insert(id.clone(), ids);
@@ -229,6 +234,9 @@ pub(super) async fn build_input(
             .to_string();
         if addressed.contains(&id) {
             message["addressesAgent"] = json!(true);
+        }
+        if asks_system_agent.contains(&id) {
+            message["addressesSystemAgent"] = json!(true);
         }
         if ids_of
             .get(&id)

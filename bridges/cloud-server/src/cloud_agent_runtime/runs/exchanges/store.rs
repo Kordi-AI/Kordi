@@ -197,7 +197,7 @@ pub(super) async fn send(
         .bind(&parent.root)
         .fetch_one(&mut *tx)
         .await?;
-    if count.0 >= 8 {
+    if count.0 >= super::REQUEST_LIMIT {
         return Err(RunError::ContextUnavailable(
             "The collaboration request limit has been reached for this task.",
         ));

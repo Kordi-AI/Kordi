@@ -121,6 +121,19 @@ async fn sweep_wakes_for_members_and_unseen_cards_only() {
         .await
         .unwrap();
     assert!(
+        selected(&pool, &system_agent, chat).await,
+        "a card change not checked for conflicts yet"
+    );
+    query(
+        "UPDATE cloud_pip_conversation_state SET hooks_fired = hooks_fired || jsonb_build_object(
+             'cardsCheckedAt', (SELECT max(updated_at) FROM cloud_plan_cards WHERE conversation_id = $1))
+         WHERE conversation_id = $1",
+    )
+    .bind(chat)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(
         !selected(&pool, &system_agent, chat).await,
         "a card the System agent has seen"
     );
@@ -224,8 +237,19 @@ async fn messages_for_an_agent_or_already_answered_do_not_queue_a_run() {
         .unwrap();
     assert_eq!(sweep().await, 0, "a message an agent answered");
 
-    // (c) Plain coordination between people still wakes the System agent.
+    // (c) Plain coordination between people waits until the chat is quiet.
     say(&pool, &jordan, chat, "Dinner Friday at 7?").await;
-    assert_eq!(sweep().await, 1, "a plain plan message");
+    assert_eq!(sweep().await, 0, "people may still be talking");
+    query("UPDATE cloud_chat_messages SET created_at = now() - interval '15 minutes' WHERE conversation_id = $1")
+        .bind(chat)
+        .execute(&pool)
+        .await
+        .unwrap();
+    query("UPDATE cloud_pip_conversation_state SET hooks_fired = jsonb_set(hooks_fired, '{planDiscussion,checkAfter}', to_jsonb(now())) WHERE conversation_id = $1")
+        .bind(chat)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(sweep().await, 1, "a plain plan message, once quiet");
     assert_eq!(system_agent_runs(&pool, &system_agent).await, 1);
 }

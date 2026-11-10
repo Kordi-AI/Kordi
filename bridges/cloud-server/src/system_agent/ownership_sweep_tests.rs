@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::chat_sync::models::SendMessageRequest;
 use crate::plan_cards::tests::{seed_account, seed_conversation};
 
-async fn say(pool: &PgPool, sender: &str, chat: Uuid, text: &str) -> String {
+pub(super) async fn say(pool: &PgPool, sender: &str, chat: Uuid, text: &str) -> String {
     let request = SendMessageRequest {
         client_message_id: Uuid::new_v4(),
         kind: "text".to_string(),
@@ -30,7 +30,7 @@ async fn say(pool: &PgPool, sender: &str, chat: Uuid, text: &str) -> String {
     sent.value.id.to_string()
 }
 
-fn group(chat: Uuid, message: Value) -> String {
+pub(super) fn group(chat: Uuid, message: Value) -> String {
     let envelope =
         json!({"kind": "group-message", "groupId": format!("group:{chat}"), "message": message});
     format!(
@@ -39,17 +39,17 @@ fn group(chat: Uuid, message: Value) -> String {
     )
 }
 
-struct Chat {
-    pool: PgPool,
-    config: super::SystemAgentConfig,
-    chat: Uuid,
-    session: String,
-    alice: String,
-    bob: String,
+pub(super) struct Chat {
+    pub(super) pool: PgPool,
+    pub(super) config: super::SystemAgentConfig,
+    pub(super) chat: Uuid,
+    pub(super) session: String,
+    pub(super) alice: String,
+    pub(super) bob: String,
 }
 
 impl Chat {
-    async fn new() -> Self {
+    pub(super) async fn new() -> Self {
         let url = std::env::var("KORDI_DIGEST_TEST_DATABASE_URL")
             .expect("isolated test database required");
         let pool = sqlx_postgres::PgPoolOptions::new()
@@ -92,7 +92,7 @@ impl Chat {
         }
     }
 
-    async fn sweep(&self) -> usize {
+    pub(super) async fn sweep(&self) -> usize {
         query("UPDATE cloud_pip_conversation_state SET checked_at = now() - interval '1 hour'")
             .execute(&self.pool)
             .await
@@ -102,7 +102,7 @@ impl Chat {
             .expect("sweep")
     }
 
-    async fn hooks(&self) -> Value {
+    pub(super) async fn hooks(&self) -> Value {
         let (hooks,): (Value,) = query_as(
             "SELECT hooks_fired FROM cloud_pip_conversation_state WHERE conversation_id = $1",
         )
@@ -115,7 +115,7 @@ impl Chat {
 
     /// Pretends the stall window has passed since the deferred task's last
     /// human message.
-    async fn let_window_pass(&self) {
+    pub(super) async fn let_window_pass(&self) {
         query(
             "UPDATE cloud_pip_conversation_state SET hooks_fired = jsonb_set(jsonb_set(hooks_fired,
                  '{deferred,lastHumanAt}', to_jsonb(now() - interval '20 minutes')),
@@ -128,7 +128,7 @@ impl Chat {
         .unwrap();
     }
 
-    async fn run(&self, prefix: &str, request: &str, status: &str, lease_minutes: i64) {
+    pub(super) async fn run(&self, prefix: &str, request: &str, status: &str, lease_minutes: i64) {
         let now = chrono::Utc::now();
         let lease = (now + chrono::Duration::minutes(lease_minutes)).to_rfc3339();
         // Runs start with the message they answer, which `say` backdates.
@@ -147,7 +147,7 @@ impl Chat {
             .unwrap();
     }
 
-    async fn ask_alices_agent(&self) {
+    pub(super) async fn ask_alices_agent(&self) {
         let alice = &self.alice;
         let request = group(
             self.chat,
@@ -169,7 +169,7 @@ impl Chat {
         say(&self.pool, alice, self.chat, &question).await;
     }
 
-    async fn system_agent_prompts(&self) -> Vec<Value> {
+    pub(super) async fn system_agent_prompts(&self) -> Vec<Value> {
         let rows: Vec<(String,)> = query_as(
             "SELECT prompt FROM cloud_agent_fallback_runs
              WHERE owner_account_id = $1 AND run_id LIKE 'pip\\_%' ORDER BY created_at",
@@ -243,7 +243,18 @@ async fn a_running_agent_is_never_overtaken_and_system_agent_runs_own_nothing() 
     // The System agent's own runs and background work never own a task.
     chat.run("pip_", "pip-request", "running", 5).await;
     chat.run("digest_", "digest-request", "queued", 5).await;
-    assert_eq!(chat.sweep().await, 1, "plain planning between people");
+    assert_eq!(chat.sweep().await, 0, "plain planning waits for silence");
+    query("UPDATE cloud_chat_messages SET created_at = now() - interval '15 minutes' WHERE conversation_id = $1")
+        .bind(chat.chat)
+        .execute(&chat.pool)
+        .await
+        .unwrap();
+    query("UPDATE cloud_pip_conversation_state SET hooks_fired = jsonb_set(hooks_fired, '{planDiscussion,checkAfter}', to_jsonb(now())) WHERE conversation_id = $1")
+        .bind(chat.chat)
+        .execute(&chat.pool)
+        .await
+        .unwrap();
+    assert_eq!(chat.sweep().await, 1, "then the System agent sums it up");
 
     let chat = Chat::new().await;
     let request = say(&chat.pool, &chat.bob, chat.chat, "Dinner Friday at 7?").await;
