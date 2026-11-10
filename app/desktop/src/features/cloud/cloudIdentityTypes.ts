@@ -21,8 +21,11 @@ export type CloudAccount = {
   primaryEmailVerified?: boolean;
   about?: string | null;
   location?: string | null;
-  /** IANA time zone id; null means automatic. */
+  /** IANA time zone id; null when no device has reported one yet. */
   timeZone?: string | null;
+  /** Owner only: whether Location and Time zone follow this person's devices. Absent on older servers. */
+  locationMode?: CloudProfileFieldMode;
+  timeZoneMode?: CloudProfileFieldMode;
   website?: string | null;
   /** "YYYY-MM-DD"; private to the account owner. */
   birthday?: string | null;
@@ -36,6 +39,9 @@ export type CloudAccount = {
   aiConsent?: CloudAiConsent | null;
 };
 
+/** "automatic" fields follow the owner's devices; "manual" ones keep the owner's value. */
+export type CloudProfileFieldMode = 'automatic' | 'manual';
+
 export type CloudAiConsentStatus = 'unset' | 'allowed' | 'declined';
 export type CloudAiConsent = { status: CloudAiConsentStatus; decidedAt: string | null };
 
@@ -45,8 +51,11 @@ export type CloudProfileFieldsInput = {
   kordiId?: string;
   about?: string;
   location?: string;
-  /** IANA time zone id; "" means automatic. */
+  /** IANA time zone id. */
   timeZone?: string;
+  /** A `CloudProfileFieldMode`. */
+  locationMode?: string;
+  timeZoneMode?: string;
   website?: string;
   /** "YYYY-MM-DD". */
   birthday?: string;

@@ -115,6 +115,7 @@ extension CommonGroundNearbyLocator {
     func received(_ locations: [CLLocation]) {
         guard let location = locations.last else { return }
         resolveFixWaiters(location)
+        ProfileDeviceSync.shared.deviceMoved(location)
         if foreground, !updating, let manager {
             manager.startUpdatingLocation()
             updating = true

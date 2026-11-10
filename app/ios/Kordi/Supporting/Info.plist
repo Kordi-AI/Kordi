@@ -74,7 +74,7 @@
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>With background alerts on, Kordi checks your location so it can tell you when someone you're looking for is nearby.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Kordi shows people near you who also turned on Nearby.</string>
+	<string>Kordi keeps the city on your profile current when you turn that on, and shows people near you who also turned on Nearby.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Kordi uses the microphone when you record a voice or video message or join a call.</string>
 	<key>NSNearbyInteractionUsageDescription</key>

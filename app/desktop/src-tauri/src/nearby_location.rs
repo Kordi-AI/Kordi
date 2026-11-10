@@ -1,4 +1,5 @@
-//! One foreground location fix, requested by the Nearby screen. Never logs coordinates.
+//! One foreground location fix, requested by the Nearby screen or by the
+//! profile's automatic city. Never logs coordinates.
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -8,6 +9,18 @@ pub struct LocationFix {
     longitude: f64,
     accuracy: f64,
     timestamp: f64,
+}
+
+impl LocationFix {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) fn latitude(&self) -> f64 {
+        self.latitude
+    }
+
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) fn longitude(&self) -> f64 {
+        self.longitude
+    }
 }
 
 /// Stable failure codes; the web view maps them to copy.
@@ -26,19 +39,36 @@ pub(crate) mod failure {
     pub const UNAVAILABLE: &str = "location_unavailable";
     /// Another request is still running.
     pub const BUSY: &str = "location_busy";
+    /// Access was never asked for, and this request may not ask.
+    pub const NOT_DETERMINED: &str = "location_not_determined";
 }
 
-/// Fixes coarser than this are not published; matches the web-side check.
-const MAX_ACCURACY_METERS: f64 = 2000.0;
-/// Core Location may first replay a cached fix; older ones are skipped.
-const MAX_FIX_AGE_SECONDS: f64 = 300.0;
+/// How precise and how fresh a fix must be for one purpose.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Precision {
+    /// Passed to Core Location as the desired accuracy, in meters.
+    pub(crate) desired: f64,
+    /// Coarser fixes are not returned right away.
+    pub(crate) max_accuracy: f64,
+    /// Core Location may first replay a cached fix; older ones are skipped.
+    pub(crate) max_age_seconds: f64,
+}
 
-/// Whether a reported fix can be returned right away.
-pub(crate) fn usable_fix(accuracy: f64, age_seconds: f64) -> bool {
-    accuracy.is_finite()
-        && (0.0..=MAX_ACCURACY_METERS).contains(&accuracy)
-        && age_seconds.is_finite()
-        && age_seconds <= MAX_FIX_AGE_SECONDS
+/// Nearby: fixes coarser than 2 km are not published; matches the web-side check.
+pub(crate) const NEARBY: Precision = Precision {
+    desired: 100.0,
+    max_accuracy: 2000.0,
+    max_age_seconds: 300.0,
+};
+
+impl Precision {
+    /// Whether a reported fix can be returned right away.
+    pub(crate) fn usable(&self, accuracy: f64, age_seconds: f64) -> bool {
+        accuracy.is_finite()
+            && (0.0..=self.max_accuracy).contains(&accuracy)
+            && age_seconds.is_finite()
+            && age_seconds <= self.max_age_seconds
+    }
 }
 
 /// What a Core Location error means for a pending request. `None` keeps waiting.
@@ -55,13 +85,13 @@ pub(crate) fn failure_for_error_code(code: isize) -> Option<&'static str> {
 }
 
 #[cfg(target_os = "macos")]
-mod macos;
+pub(crate) mod macos;
 
 #[tauri::command]
 pub async fn desktop_nearby_location(app: tauri::AppHandle) -> Result<LocationFix, String> {
     #[cfg(target_os = "macos")]
     {
-        match macos::request(app, true).await {
+        match macos::request(app, macos::Options::nearby()).await {
             Ok(Some(fix)) => Ok(fix),
             Ok(None) => Err(failure::UNAVAILABLE.into()),
             Err(code) => Err(code.into()),
@@ -85,7 +115,7 @@ pub async fn desktop_nearby_location_permission(
         let status = macos::permission(app.clone()).await?;
         if request && status == "not_determined" {
             // Only asks for access; no location is read here.
-            let result = macos::request(app.clone(), false).await;
+            let result = macos::request(app.clone(), macos::Options::permission()).await;
             let status = macos::permission(app).await?;
             if status == "not_determined" {
                 result.map_err(String::from)?;
@@ -108,6 +138,7 @@ mod tests {
 
     #[test]
     fn usable_fix_requires_fresh_and_precise_readings() {
+        let usable_fix = |accuracy, age| NEARBY.usable(accuracy, age);
         assert!(usable_fix(65.0, 1.0));
         assert!(usable_fix(2000.0, 300.0));
         assert!(

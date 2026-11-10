@@ -8,20 +8,33 @@ struct CloudProfileDetailsUpdate: Equatable {
     var timeZone: String?
     var website: String?
     var birthday: String?
+    /// "automatic" or "manual"; nil keeps the mode.
+    var locationMode: String?
+    var timeZoneMode: String?
 
     init(
         about: String? = nil,
         location: String? = nil,
         timeZone: String? = nil,
         website: String? = nil,
-        birthday: String? = nil
+        birthday: String? = nil,
+        locationMode: String? = nil,
+        timeZoneMode: String? = nil
     ) {
         self.about = about
         self.location = location
         self.timeZone = timeZone
         self.website = website
         self.birthday = birthday
+        self.locationMode = locationMode
+        self.timeZoneMode = timeZoneMode
     }
+}
+
+/// Whether Location or Time zone follows the owner's devices (#2439).
+enum ProfileFieldMode {
+    static let automatic = "automatic"
+    static let manual = "manual"
 }
 
 /// An editable profile row that can carry a server validation error.
@@ -61,6 +74,9 @@ struct ProfileDraft: Equatable {
     var timeZone = ""
     var website = ""
     var birthday = ""
+    /// Location stays off until the owner turns it on.
+    var locationMode = ProfileFieldMode.manual
+    var timeZoneMode = ProfileFieldMode.automatic
 
     init() {}
 
@@ -72,6 +88,19 @@ struct ProfileDraft: Equatable {
         timeZone = account?.timeZone ?? ""
         website = account?.website ?? ""
         birthday = account?.birthday ?? ""
+        locationMode = account?.locationMode ?? ProfileFieldMode.manual
+        // Older servers have no mode: a stored zone was picked, none means automatic.
+        timeZoneMode = account?.timeZoneMode
+            ?? (account?.timeZone?.nonEmpty == nil ? ProfileFieldMode.automatic : ProfileFieldMode.manual)
+    }
+
+    /// A field that stays automatic belongs to the devices; the editor never sends it.
+    func deviceOwnsLocation(saved: ProfileDraft) -> Bool {
+        locationMode == ProfileFieldMode.automatic && saved.locationMode == ProfileFieldMode.automatic
+    }
+
+    func deviceOwnsTimeZone(saved: ProfileDraft) -> Bool {
+        timeZoneMode == ProfileFieldMode.automatic && saved.timeZoneMode == ProfileFieldMode.automatic
     }
 
     /// The account's custom handle, or nil when its Kordi ID is the nine-digit number.
@@ -118,10 +147,12 @@ struct ProfileDraft: Equatable {
             changed(kordiId, saved.kordiId),
             CloudProfileDetailsUpdate(
                 about: changed(about, saved.about),
-                location: changed(location, saved.location),
-                timeZone: changed(timeZone, saved.timeZone),
+                location: deviceOwnsLocation(saved: saved) ? nil : changed(location, saved.location),
+                timeZone: deviceOwnsTimeZone(saved: saved) ? nil : changed(timeZone, saved.timeZone),
                 website: changed(website, saved.website),
-                birthday: changed(birthday, saved.birthday)
+                birthday: changed(birthday, saved.birthday),
+                locationMode: changed(locationMode, saved.locationMode),
+                timeZoneMode: changed(timeZoneMode, saved.timeZoneMode)
             )
         )
     }

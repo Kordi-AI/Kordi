@@ -35,6 +35,7 @@ import {
 } from './useCloudAccountEmailVerification';
 import { useCloudCapabilities } from './useCloudCapabilities';
 import { useCloudPresencePublisher } from './useCloudPresencePublisher';
+import { useProfileDeviceSync } from './useProfileDeviceSync';
 import {
   CLOUD_SESSION_SIGNED_OUT_EVENT,
   clearSession,
@@ -466,6 +467,7 @@ export function useCloudSession({
   }, [authClient, setSignedOut]);
 
   useCloudPresencePublisher(account, authClient);
+  useProfileDeviceSync(account, authClient, setAuthenticated);
 
   const clearError = useCallback(() => setError(null), []);
 

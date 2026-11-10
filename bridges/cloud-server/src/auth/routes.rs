@@ -218,6 +218,10 @@ pub fn routes_with_shared_rate_limiter(
     let protected = Router::new()
         .route("/v1/cloud/auth/me", get(me).patch(update_me))
         .route(
+            "/v1/cloud/auth/me/device-profile",
+            post(update_device_profile),
+        )
+        .route(
             "/v1/cloud/auth/email/verification/code",
             post(account_email_handlers::send_account_email_verification_code),
         )

@@ -10,10 +10,47 @@ use objc2_core_location::{
 use objc2_foundation::{NSArray, NSBundle, NSError, NSObject, NSObjectProtocol};
 use tokio::sync::oneshot;
 
-use super::{failure, failure_for_error_code, usable_fix, LocationFix};
+use super::{failure, failure_for_error_code, LocationFix, Precision, NEARBY};
 
 /// `None` when the request only asked for permission.
 type Reply = Result<Option<LocationFix>, &'static str>;
+
+/// What one request does.
+#[derive(Clone, Copy)]
+pub(crate) struct Options {
+    /// Read a fix once access is granted; otherwise only ask for access.
+    fetch: bool,
+    /// Show the macOS prompt when access was never asked for.
+    prompt: bool,
+    precision: Precision,
+}
+
+impl Options {
+    pub(crate) fn permission() -> Self {
+        Self {
+            fetch: false,
+            prompt: true,
+            precision: NEARBY,
+        }
+    }
+
+    pub(crate) fn nearby() -> Self {
+        Self {
+            fetch: true,
+            prompt: true,
+            precision: NEARBY,
+        }
+    }
+
+    /// A fix without asking for access, for a purpose that already has it.
+    pub(crate) fn silent(precision: Precision) -> Self {
+        Self {
+            fetch: true,
+            prompt: false,
+            precision,
+        }
+    }
+}
 static REQUEST: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Time for the person to answer the macOS permission prompt.
 const PERMISSION_WAIT: Duration = Duration::from_secs(120);
@@ -24,7 +61,7 @@ struct LocationIvars {
     reply: RefCell<Option<oneshot::Sender<Reply>>>,
     /// Signalled once access is granted; dropped when the request ends early.
     granted: RefCell<Option<oneshot::Sender<()>>>,
-    fetch: bool,
+    options: Options,
     asked: Cell<bool>,
     started: Cell<bool>,
     /// Best fresh but coarse fix, returned if nothing better arrives in time.
@@ -62,11 +99,12 @@ define_class!(
                         -timestamp.timeIntervalSinceNow(),
                     )
                 };
-                if usable_fix(fix.accuracy, age) {
+                let precision = self.ivars().options.precision;
+                if precision.usable(fix.accuracy, age) {
                     self.finish(manager, Ok(Some(fix)));
                     return;
                 }
-                if fix.accuracy >= 0.0 && usable_fix(0.0, age) {
+                if fix.accuracy >= 0.0 && precision.usable(0.0, age) {
                     let mut best = self.ivars().best.borrow_mut();
                     if best
                         .as_ref()
@@ -90,6 +128,9 @@ define_class!(
 impl NearbyLocationDelegate {
     fn authorized(&self, manager: &CLLocationManager) {
         match unsafe { manager.authorizationStatus() } {
+            CLAuthorizationStatus::NotDetermined if !self.ivars().options.prompt => {
+                self.finish(manager, Err(failure::NOT_DETERMINED));
+            }
             CLAuthorizationStatus::NotDetermined => {
                 if !self.ivars().asked.replace(true) {
                     // Shows the macOS prompt; the answer arrives through this delegate.
@@ -101,7 +142,7 @@ impl NearbyLocationDelegate {
                 if let Some(granted) = self.ivars().granted.borrow_mut().take() {
                     let _ = granted.send(());
                 }
-                if !self.ivars().fetch {
+                if !self.ivars().options.fetch {
                     self.finish(manager, Ok(None));
                 } else if !self.ivars().started.replace(true) {
                     unsafe { manager.startUpdatingLocation() };
@@ -139,7 +180,7 @@ fn bundled() -> bool {
 }
 
 /// Asks for access when needed, then, with `fetch`, reads one foreground fix.
-pub(super) async fn request(app: tauri::AppHandle, fetch: bool) -> Reply {
+pub(crate) async fn request(app: tauri::AppHandle, options: Options) -> Reply {
     let _guard = REQUEST.try_lock().map_err(|_| failure::BUSY)?;
     let (sender, receiver) = oneshot::channel();
     let (granted, granted_receiver) = oneshot::channel();
@@ -157,14 +198,14 @@ pub(super) async fn request(app: tauri::AppHandle, fetch: bool) -> Reply {
             let delegate = NearbyLocationDelegate::alloc(mtm).set_ivars(LocationIvars {
                 reply: RefCell::new(Some(sender)),
                 granted: RefCell::new(Some(granted)),
-                fetch,
+                options,
                 asked: Cell::new(false),
                 started: Cell::new(false),
                 best: RefCell::new(None),
             });
             let delegate: Retained<NearbyLocationDelegate> = msg_send![super(delegate), init];
             let manager = CLLocationManager::new();
-            manager.setDesiredAccuracy(100.0);
+            manager.setDesiredAccuracy(options.precision.desired);
             manager.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
             if !CLLocationManager::locationServicesEnabled_class() {
                 delegate.finish(&manager, Err(failure::SERVICES_OFF));
@@ -206,7 +247,7 @@ pub(super) async fn request(app: tauri::AppHandle, fetch: bool) -> Reply {
     }
 }
 
-pub(super) async fn permission(app: tauri::AppHandle) -> Result<String, String> {
+pub(crate) async fn permission(app: tauri::AppHandle) -> Result<String, String> {
     let (sender, receiver) = oneshot::channel();
     app.run_on_main_thread(move || {
         let status = unsafe {

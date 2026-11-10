@@ -154,7 +154,7 @@ fn macos_model_name() -> String {
 }
 
 #[cfg(target_os = "macos")]
-fn macos_time_zone() -> Option<String> {
+pub(crate) fn macos_time_zone() -> Option<String> {
     fs::read_link("/etc/localtime").ok().and_then(|path| {
         let value = path.to_string_lossy();
         value
