@@ -29,6 +29,7 @@ pub(crate) enum RunOutcome {
 fn cloud_run(lease: &PoolLease, pool_id: &str, model: &str) -> CloudAgentRun {
     CloudAgentRun {
         agent_communication: false,
+        plan_cards: false,
         turn_identity: None,
         history_messages: vec![],
         subsession_id: None,

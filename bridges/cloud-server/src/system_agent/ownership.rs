@@ -38,6 +38,30 @@ impl Owner {
     }
 }
 
+/// Why the System agent picked up a person's agent's task, for the line that
+/// says so.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(super) enum StallCause {
+    /// Its run failed or was cancelled, or its reply failed.
+    Failed,
+    /// Its run never started or lost its lease.
+    Unreachable,
+    /// It ran but did not answer in time.
+    #[default]
+    Silent,
+}
+
+impl StallCause {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Failed => "failed",
+            Self::Unreachable => "unreachable",
+            Self::Silent => "silent",
+        }
+    }
+}
+
 /// A task the System agent left to a person's agent.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,6 +76,9 @@ pub(super) struct Deferral {
     #[serde(default)]
     pub owner: Owner,
     pub check_after: DateTime<Utc>,
+    /// Set only when the task stalls; never stored with a waiting task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<StallCause>,
 }
 
 impl Deferral {
@@ -74,6 +101,8 @@ pub(super) struct SteppedIn {
     pub through: i64,
     #[serde(default)]
     pub owner: Owner,
+    #[serde(default)]
+    pub cause: StallCause,
 }
 
 impl SteppedIn {
@@ -96,6 +125,9 @@ pub(super) struct AgentMessage {
     /// A question, a processing row, or an exchange waiting on someone.
     pub waiting: bool,
     pub delivery: Delivery,
+    /// When an agent updated its message in place (a processing row that
+    /// became its answer), which counts as activity at that time.
+    pub changed_at: Option<DateTime<Utc>>,
 }
 
 /// What the ownership check needs to know about one chat message.
@@ -118,6 +150,8 @@ pub(super) struct RunFact {
     pub owner: Owner,
     pub lease_expires_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+    /// When the run was started: a run started during plan talk took it up.
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 impl RunFact {
@@ -153,7 +187,7 @@ impl Work {
     /// The owner of work still open now, which every new message defers to:
     /// a recently queued run, a run holding a live lease, or a pending
     /// exchange. A run whose lease lapsed (its Mac went to sleep) owns nothing.
-    fn open_owner(&self, now: DateTime<Utc>, stall: Duration) -> Option<Owner> {
+    pub(super) fn open_owner(&self, now: DateTime<Utc>, stall: Duration) -> Option<Owner> {
         let horizon = now - Duration::minutes(OPEN_RUN_HORIZON_MINUTES);
         self.runs
             .iter()
@@ -235,6 +269,13 @@ pub(super) fn assess(
                 task.last_human_at = message.created_at;
                 if task.owner.account_id.is_none() && task.owner.agent_name.is_none() {
                     task.owner = owner;
+                } else if task.owner.account_id.is_none()
+                    && owner.account_id.is_some()
+                    && (task.owner.agent_name.is_none()
+                        || task.owner.agent_name == owner.agent_name)
+                {
+                    // The same agent, now with its owner's account.
+                    task.owner.account_id = owner.account_id;
                 }
             }
             (Some(_), None) => {}
@@ -246,6 +287,7 @@ pub(super) fn assess(
                     last_human_at: message.created_at,
                     owner,
                     check_after: clock.now,
+                    cause: None,
                 });
             }
             (None, None) => continue,
@@ -274,10 +316,16 @@ fn owner_messages_after<'a>(
     task: &'a Deferral,
     messages: &'a [MessageFact],
 ) -> impl Iterator<Item = &'a AgentMessage> + 'a {
+    // A message after the task's last human message, or an earlier one the
+    // agent updated in place since.
     messages
         .iter()
-        .filter(move |message| message.sequence > task.last_human_sequence)
-        .filter_map(|message| message.agent.as_ref())
+        .filter_map(|message| Some((message, message.agent.as_ref()?)))
+        .filter(move |(message, agent)| {
+            message.sequence > task.last_human_sequence
+                || agent.changed_at.is_some_and(|at| at > task.last_human_at)
+        })
+        .map(|(_, agent)| agent)
         .filter(move |agent| task.owned_by(&agent.owner))
 }
 
@@ -312,9 +360,20 @@ fn decide(mut task: Deferral, messages: &[MessageFact], work: &Work, clock: &Clo
     }
     let failed_reply =
         owner_messages_after(&task, messages).any(|agent| agent.delivery == Delivery::Failed);
+    let run_failed =
+        newest.is_some_and(|run| matches!(run.status.as_str(), "failed" | "cancelled"));
+    // Its lease lapsed, or it never left the queue.
+    let unreachable = newest.is_some_and(|run| run.is_executing() || run.status == "queued");
     let run_ended_badly = newest.is_some_and(|run| run.ended_badly(clock.now, clock.stall));
     let window_passed = clock.now - task.last_human_at >= clock.stall;
     if failed_reply || run_ended_badly || window_passed {
+        task.cause = Some(if failed_reply || run_failed {
+            StallCause::Failed
+        } else if unreachable {
+            StallCause::Unreachable
+        } else {
+            StallCause::Silent
+        });
         return Outcome::Stalled(task);
     }
     task.check_after = clock.now + Duration::seconds(RECHECK_SECONDS);
@@ -331,7 +390,11 @@ pub(super) fn state_patch(
     match outcome {
         Outcome::Waiting(task) => Some(json!({ DEFERRED_KEY: task })),
         Outcome::Stalled(task) => Some(json!({
-            STEPPED_IN_KEY: SteppedIn { through: latest_sequence, owner: task.owner.clone() },
+            STEPPED_IN_KEY: SteppedIn {
+                through: latest_sequence,
+                owner: task.owner.clone(),
+                cause: task.cause.unwrap_or_default(),
+            },
         })),
         Outcome::Free | Outcome::Replied if has_deferred_key => Some(json!({})),
         Outcome::Free | Outcome::Replied => None,
@@ -363,7 +426,7 @@ pub(super) fn mark(
 
 /// Hands the stalled agent's task to the System agent: every message in the
 /// snapshot is the System agent's to act on, and the run says it is stepping in.
-pub(super) fn step_in(input: &mut Value, owner: &Owner) {
+pub(super) fn step_in(input: &mut Value, owner: &Owner, cause: StallCause) {
     for message in input["messages"].as_array_mut().into_iter().flatten() {
         if let Some(message) = message.as_object_mut() {
             for key in ["addressesAgent", "answeredByAgent", "agentOwned"] {
@@ -371,16 +434,25 @@ pub(super) fn step_in(input: &mut Value, owner: &Owner) {
             }
         }
     }
-    input["stepIn"] = json!({ "agentName": owner.label() });
+    input["stepIn"] = json!({ "agentName": owner.label(), "reason": cause.as_str() });
+    if let Some(account_id) = &owner.account_id {
+        input["stepIn"]["ownerAccountId"] = json!(account_id);
+    }
 }
 
 /// The System agent's message, led by one line saying it is picking up a
-/// stalled agent's task when the run is a step-in.
+/// stalled agent's task when the run is a step-in, in words that match why:
+/// the agent failed, could not be reached, or did not answer.
 pub(super) fn with_step_in_line(input: &Value, text: &str) -> String {
-    match input["stepIn"]["agentName"].as_str() {
-        Some(name) => format!("{name} hasn't replied, so I'm picking this up.\n{text}"),
-        None => text.to_string(),
-    }
+    let Some(name) = input["stepIn"]["agentName"].as_str() else {
+        return text.to_string();
+    };
+    let line = match input["stepIn"]["reason"].as_str() {
+        Some("failed") => format!("{name} couldn't answer"),
+        Some("unreachable") => format!("I couldn't reach {name}"),
+        _ => format!("{name} hasn't replied"),
+    };
+    format!("{line}, so I'm picking this up.\n{text}")
 }
 
 #[cfg(test)]

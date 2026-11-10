@@ -228,7 +228,8 @@ pub(super) async fn update_me(
             time_zone_mode = CASE WHEN $25::TEXT IS NOT NULL THEN $25 \
                 WHEN $18::BOOLEAN AND time_zone IS DISTINCT FROM $19 \
                     THEN CASE WHEN $19::TEXT IS NULL THEN 'automatic' ELSE 'manual' END \
-                ELSE time_zone_mode END \
+                ELSE time_zone_mode END, \
+            share_calendar_availability = COALESCE($26, share_calendar_availability) \
          WHERE account_id = $10 \
          RETURNING {OWNER_ACCOUNT_RECORD_COLUMNS}",
     ))
@@ -257,6 +258,7 @@ pub(super) async fn update_me(
     .bind(birthday.flatten())
     .bind(location_mode.map(FieldMode::as_str))
     .bind(time_zone_mode.map(FieldMode::as_str))
+    .bind(req.share_calendar_availability)
     .fetch_optional(&mut *tx)
     .await
     {

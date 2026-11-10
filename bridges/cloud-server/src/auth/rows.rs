@@ -17,7 +17,7 @@ pub(super) const OWNER_ACCOUNT_RECORD_COLUMNS: &str = "account_id, \
     avatar_renderer_version, avatar_version, avatar_updated_at, about, location, time_zone, \
     website, primary_email_verified_at IS NOT NULL AS primary_email_verified, \
     public_account_number::TEXT AS account_number, birthday, public_handle_changed_at, \
-    location_mode, time_zone_mode";
+    location_mode, time_zone_mode, share_calendar_availability";
 
 /// An account as anyone who may see it sees it.
 pub(super) struct AccountRecordRow {
@@ -74,6 +74,8 @@ pub(super) struct OwnerAccountRecordRow {
     /// `automatic` when the owner's devices keep the field current, else `manual`.
     pub(super) location_mode: String,
     pub(super) time_zone_mode: String,
+    /// Whether people in the owner's chats may ask the owner's agent for busy/free.
+    pub(super) share_calendar_availability: bool,
 }
 
 impl<'row> FromRow<'row, PgRow> for OwnerAccountRecordRow {
@@ -86,6 +88,7 @@ impl<'row> FromRow<'row, PgRow> for OwnerAccountRecordRow {
             public_handle_changed_at: row.try_get("public_handle_changed_at")?,
             location_mode: row.try_get("location_mode")?,
             time_zone_mode: row.try_get("time_zone_mode")?,
+            share_calendar_availability: row.try_get("share_calendar_availability")?,
         })
     }
 }

@@ -52,10 +52,10 @@ test('observers, stale requests, forwarded messages and deleted rows do not star
   assert.deepEqual(cloudFallbackRunClaimsForMessages({ account, contacts: [], messagesByPeer: { acct_transport: [{ ...request, deletedAt: now }] } }), []);
 });
 
-test('an agent handoff on a canonical group row claims only its target owner', () => {
+test('an agent reply that mentions another agent claims no run', () => {
   const request = wire({ ...envelope, message: { ...envelope.message!, senderKind: 'agent', senderAgentId: 'cloud-agent:acct_sender', agentMentionDepth: 1 } });
   const claims = cloudFallbackRunClaimsForMessages({ account, contacts: [], messagesByPeer: { acct_transport: [request] } });
-  assert.deepEqual(claims.map((c) => c.ownerAccountId), ['acct_target']);
+  assert.deepEqual(claims, [], 'agents reach other agents only through reach_out');
 });
 
 test('a legacy owner-based mention on a canonical group row still claims the explicit default agent', () => {

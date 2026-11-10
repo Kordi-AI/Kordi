@@ -4,8 +4,9 @@ import UIKit
 /// Server notices, such as a group's introduction and "joined" lines or the
 /// plan card in a direct chat. They carry this message kind and come from the
 /// hidden System account, the plan agent, or a member (a plan card stays the
-/// organizer's); the app always shows them from "System" with a gray Kordi
-/// bird. The plan agent's own messages show the same way.
+/// organizer's); the app shows them from "System" with a gray Kordi bird,
+/// except a card a person's agent opened (`planCardAgent`). The plan agent's
+/// own messages show the same way.
 enum KordiSystemIdentity {
     static let messageKind = "system-notice"
     static let displayName = "System"
@@ -68,6 +69,31 @@ enum KordiSystemIdentity {
         if isSystemNotice(kind: messageKind) || isServiceAccount(fromAccountId) { return displayName }
         return participantNames[fromAccountId] ?? fallback
     }
+
+    /// A card a person's agent opened travels as a notice from the agent's
+    /// owner, but shows as that agent's message, like its other replies.
+    /// Nil for every other message, System agent and Meet cards included.
+    static func planCardAgent(_ message: CloudMessageDTO, ownAccountId: String) -> PlanCardAgentSender? {
+        guard isSystemNotice(kind: message.messageKind), let planner = message.planCard?.plannedBy,
+              planner.ownerAccountId == message.fromAccountId else { return nil }
+        let ownerName = planner.ownerName?.nonEmpty
+        let isDefaultAgent = CanonicalAvatarSystem.agentID(planner.agentId, ownerAccountID: planner.ownerAccountId)
+            == "cloud-agent:\(planner.ownerAccountId)"
+        return PlanCardAgentSender(
+            authorName: isDefaultAgent
+                ? CloudDefaultAgentProfile.displayName(planner.agentName, ownerName: ownerName) : planner.agentName,
+            ownerName: planner.ownerAccountId == ownAccountId ? "You" : ownerName
+        )
+    }
+}
+
+/// The agent shown as the sender of a plan card it opened.
+struct PlanCardAgentSender: Equatable {
+    /// An agent's card is an ordinary message, never a System notice.
+    static let messageKind = "text"
+    let authorName: String
+    /// "You" when the viewer owns the agent.
+    let ownerName: String?
 }
 
 /// The Kordi bird in gray, matching the development app icon.

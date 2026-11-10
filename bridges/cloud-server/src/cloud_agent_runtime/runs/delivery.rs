@@ -128,14 +128,18 @@ pub(super) async fn ensure_group_response_messages(
         .unwrap_or_else(Utc::now);
     let now_string = now.to_rfc3339();
     let now_ms = now.timestamp_millis();
-    let shared_failure_text = response.failure_code.map(|_| {
-        cloud_agent_shared_failure_text(
-            request_envelope
-                .message
-                .as_ref()
-                .and_then(|message| message.target_cloud_agent_name.as_deref()),
-        )
-    });
+    // An unreachable agent's line already names it ("Couldn't reach ...").
+    let shared_failure_text = response
+        .failure_code
+        .filter(|code| *code != "agent_unreachable")
+        .map(|_| {
+            cloud_agent_shared_failure_text(
+                request_envelope
+                    .message
+                    .as_ref()
+                    .and_then(|message| message.target_cloud_agent_name.as_deref()),
+            )
+        });
     let response_body = cloud_group_response_body(
         &request_envelope,
         response.owner_account_id,

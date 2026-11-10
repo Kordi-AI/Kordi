@@ -41,6 +41,7 @@ impl CloudAgentRunClient for NoCloudCalls {
 fn run() -> CloudAgentRun {
     CloudAgentRun {
         agent_communication: false,
+        plan_cards: false,
         turn_identity: None,
         history_messages: vec![],
         subsession_id: None,
@@ -269,7 +270,7 @@ fn vertex_service_token_uses_google_endpoint_with_chat_completions() {
 }
 
 #[test]
-fn agent_communication_requires_server_capability_and_owner_authority() {
+fn agent_communication_follows_the_server_capability() {
     let mut run = run();
     let memory = crate::memory::RunMemory::disabled();
     let advertised = |run: &CloudAgentRun| {
@@ -280,11 +281,38 @@ fn agent_communication_requires_server_capability_and_owner_authority() {
     assert!(!advertised(&run));
     run.agent_communication = true;
     assert!(advertised(&run));
+    // Another person's request or an answer to another agent: the server
+    // limits whom it reaches, so the tool stays available.
     run.requester_account_id = "other-person".into();
-    assert!(!advertised(&run));
-    run.requester_account_id = run.owner_account_id.clone();
+    assert!(advertised(&run));
     run.subsession_id = Some("child".into());
     assert!(!advertised(&run));
+}
+
+#[test]
+fn plan_cards_require_the_server_capability_and_no_subsession() {
+    let mut run = run();
+    let memory = crate::memory::RunMemory::disabled();
+    let advertised = |run: &CloudAgentRun| {
+        crate::model_loop::run_tool_catalog(run, &memory)
+            .iter()
+            .any(|tool| tool["function"]["name"] == "plan_card")
+    };
+    assert!(!advertised(&run));
+    run.plan_cards = true;
+    assert!(advertised(&run), "a shared requester may ask too");
+    run.subsession_id = Some("child".into());
+    assert!(!advertised(&run));
+    // The schema is the same on every run, for a stable prompt prefix.
+    let schema = |run: &CloudAgentRun| {
+        crate::model_loop::run_tool_catalog(run, &memory)
+            .into_iter()
+            .find(|tool| tool["function"]["name"] == "plan_card")
+    };
+    run.subsession_id = None;
+    let mut other = run.clone();
+    other.run_id = "car_other".into();
+    assert_eq!(schema(&run), schema(&other));
 }
 
 #[test]

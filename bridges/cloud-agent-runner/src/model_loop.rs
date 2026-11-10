@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
+mod calendar;
 pub(crate) mod omp;
+mod plan_card;
 mod prompt;
 mod provider;
 mod reply;
@@ -63,10 +65,14 @@ pub fn run_tool_catalog(run: &CloudAgentRun, memory: &RunMemory) -> Vec<Value> {
     tools.extend(crate::connectors::tool_definitions(run));
     tools.retain(|tool| {
         let name = tool["function"]["name"].as_str().unwrap_or_default();
+        // The server grants reach_out per run and limits whom it reaches: a
+        // run for someone other than the owner (another person's request, or
+        // an answer to another agent) may still ask that one person.
         if name == "reach_out" {
-            return run.agent_communication
-                && run.subsession_id.is_none()
-                && run.owner_account_id == run.requester_account_id;
+            return run.agent_communication && run.subsession_id.is_none();
+        }
+        if name == kordi_tools::plan_card::NAME {
+            return run.plan_cards && run.subsession_id.is_none();
         }
         if name == "reflection" {
             return memory.enabled;
@@ -226,10 +232,7 @@ pub(crate) async fn execute_model_tool<C: CloudAgentRunClient + Sync>(
         return output;
     }
     if call.name == "reach_out" {
-        if !run.agent_communication
-            || run.subsession_id.is_some()
-            || run.owner_account_id != run.requester_account_id
-        {
+        if !run.agent_communication || run.subsession_id.is_some() {
             return Err("Agent communication is not authorized for this run.".into());
         }
         return client
@@ -240,6 +243,9 @@ pub(crate) async fn execute_model_tool<C: CloudAgentRunClient + Sync>(
                     "The agent request was not confirmed. Do not claim it was sent.".into(),
                 )
             });
+    }
+    if call.name == kordi_tools::plan_card::NAME {
+        return plan_card::call(client, run, call).await;
     }
     if call.name == "task_operator" {
         if run.subsession_id.is_some() {
@@ -269,21 +275,9 @@ pub(crate) async fn execute_model_tool<C: CloudAgentRunClient + Sync>(
         }
     }
     if call.name == "read_calendar" {
-        if run.owner_account_id != run.requester_account_id || run.subsession_id.is_some() {
-            return Err(format!(
-                "Calendar reads require a direct request to the owner's own Agent. {}",
-                kordi_tools::calendar::CALENDAR_UNAVAILABLE
-            )
-            .into());
-        }
-        if (run.session_id.starts_with("session:group:")
-            || run.session_id.starts_with("session:direct-person:"))
-            && call.arguments["shareInConversation"] != true
-        {
-            return Err(format!("Calendar disclosure requires the owner's explicit request in this conversation. {}", kordi_tools::calendar::CALENDAR_UNAVAILABLE).into());
-        }
+        let arguments = calendar::calendar_arguments(run, &call.arguments)?;
         return match client
-            .read_context(&run.run_id, &call.name, call.arguments.clone())
+            .read_context(&run.run_id, &call.name, arguments)
             .await
         {
             Ok(value) => Ok(value.to_string().into()),

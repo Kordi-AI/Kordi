@@ -298,3 +298,24 @@ fn stall_minutes_default_to_ten_and_reject_nonsense() {
         );
     }
 }
+
+#[test]
+fn silence_minutes_default_to_ten_and_reject_nonsense() {
+    let key = ("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-test");
+    let default = configured(&[key]).unwrap();
+    assert_eq!(default.silence_minutes, super::DEFAULT_SILENCE_MINUTES);
+    assert_eq!(default.silence_minutes, 10);
+    let custom = configured(&[key, ("KORDI_SYSTEM_AGENT_SILENCE_MINUTES", "4")]).unwrap();
+    assert_eq!(
+        custom.unprovisioned().silence_window(),
+        chrono::Duration::minutes(4)
+    );
+    for bad in ["0", "later", "1441"] {
+        let values = HashMap::from([key, ("KORDI_SYSTEM_AGENT_SILENCE_MINUTES", bad)]);
+        assert!(
+            PendingSystemAgentConfig::from_lookup(|key| values.get(key).map(|v| v.to_string()))
+                .is_err(),
+            "{bad}"
+        );
+    }
+}

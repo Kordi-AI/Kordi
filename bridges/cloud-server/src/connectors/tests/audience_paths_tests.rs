@@ -238,7 +238,7 @@ async fn system_agent_sweep_creates_a_shared_run() {
         .await
         .expect("send message");
     query(
-        "UPDATE cloud_chat_messages SET created_at = now() - interval '5 minutes' \
+        "UPDATE cloud_chat_messages SET created_at = now() - interval '15 minutes' \
          WHERE conversation_id = $1",
     )
     .bind(conversation_id)

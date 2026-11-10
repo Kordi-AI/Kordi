@@ -365,6 +365,8 @@ pub struct ToolContext {
     pub on_output: Option<OnOutputFn>,
     pub web_search: Option<WebSearchRuntime>,
     pub reach_out: Option<ReachOutRuntime>,
+    /// The run's plan and vote cards; `None` where the run may not open them.
+    pub plan_card: Option<crate::plan_card::PlanCardRuntime>,
     pub reflection: Option<ReflectionRuntime>,
     pub session_observation: Option<SessionObservationRuntime>,
     pub task_operator: Option<TaskOperatorRuntime>,
