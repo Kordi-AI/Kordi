@@ -403,3 +403,16 @@ test('local group context maps the requester and disables second-hop agents', ()
   assert.match(secondHopContext.at(-1)?.text ?? '', /do not ask another agent/);
   assert.doesNotMatch(secondHopContext.at(-1)?.text ?? '', /Agents:/);
 });
+
+test('the System agent may name an agent by structured mention; a person agent may not', () => {
+  const message = {
+    id: 'msg_system_push', senderAccountId: 'acct_kordi_pip', text: "@KordiDArcyLin let's finish the plan", createdAtMs: 3,
+    senderKind: 'agent' as const,
+    mentions: [{ label: 'KordiDArcyLin', targetKind: 'agent' as const, targetIdentityId: 'agent:cloud-agent:acct_target', agentId: 'cloud-agent:acct_target',
+      humanId: 'acct_target', nodeId: 'acct_target', sourceHostId: 'cloud', startUtf16: 0, lengthUtf16: '@KordiDArcyLin'.length, displayText: '@KordiDArcyLin' }],
+  };
+  const targetAccount = { ...sourceAccount, accountId: 'acct_target', displayName: "D'Arcy Lin" };
+  const withSystem = [...participants, { accountId: 'acct_kordi_pip', displayName: 'Kordi', avatarUrl: null }];
+  assert.equal(cloudGroupMessageTargetsLocalAgent(message, targetAccount, withSystem), true);
+  assert.equal(cloudGroupMessageTargetsLocalAgent({ ...message, senderAccountId: 'acct_source' }, targetAccount, participants), false);
+});

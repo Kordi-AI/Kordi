@@ -23,6 +23,7 @@ import type {
 } from './cloudGroupMessages';
 import type { IndexedCloudGroupRow } from './cloudMessageIndex';
 import { cloudGroupHumanAgentTarget } from './cloudGroupAgentTarget';
+import { isSystemAgentAccountId } from '@/features/systemAgent/systemAgentIdentity';
 import type { MessageActionMetadata } from '@/kordi-app/types/message';
 
 export function cloudGroupAgentReplyThreadAction(
@@ -46,8 +47,12 @@ export function cloudGroupMessageTargetsLocalAgent(
 ): boolean {
   if (!cloudMessageActionAllowsAgentTrigger(message.messageAction)) return false;
   // Only a person's message starts an agent: an agent reaches another agent
-  // through reach_out, never by mentioning it in its reply.
-  if (message.senderKind === 'agent') return false;
+  // through reach_out, never by mentioning it in its reply. The System agent
+  // may name an agent by structured mention to push a stalled chat forward.
+  if (message.senderKind === 'agent') {
+    return isSystemAgentAccountId(message.senderAccountId)
+      && cloudGroupHumanAgentTarget({ ...message, senderKind: 'human' }, participants)?.ownerAccountId === account.accountId;
+  }
   return cloudGroupHumanAgentTarget(message, participants)?.ownerAccountId === account.accountId;
 }
 
