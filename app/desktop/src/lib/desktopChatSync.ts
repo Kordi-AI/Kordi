@@ -85,11 +85,20 @@ export type ChatSyncPendingOperation = {
 export const CHAT_SYNC_LOCAL_STATE_CHANGED_EVENT =
   'kordi.chat-sync.local-state-changed';
 
+/** The `detail` of a commit's change event. An event without it says only that something changed. */
+export type ChatSyncLocalStateChange = { batch: ApplyChatSyncRequest };
+export type ChatSyncLocalStateChangedEvent = Event & { detail?: ChatSyncLocalStateChange | null };
+
 export function publishChatSyncLocalStateChanged(
   target: Pick<EventTarget, 'dispatchEvent'> | null =
     typeof window === 'undefined' ? null : window,
+  change?: ChatSyncLocalStateChange,
 ) {
-  target?.dispatchEvent(new Event(CHAT_SYNC_LOCAL_STATE_CHANGED_EVENT));
+  // A plain Event with the detail attached: `Event` is the global every
+  // listener's realm already provides, which `CustomEvent` may not be.
+  const event: ChatSyncLocalStateChangedEvent = new Event(CHAT_SYNC_LOCAL_STATE_CHANGED_EVENT);
+  if (change) event.detail = change;
+  target?.dispatchEvent(event);
 }
 
 export async function loadChatSyncLocalState(accountId: string) {
@@ -199,7 +208,7 @@ export async function applyChatSyncLocalBatch(request: ApplyChatSyncRequest) {
   const result = await invokeDesktop<ChatSyncApplyResult>('desktop_chat_sync_apply', { request });
   if (request.bootstrap || request.conversations?.length || request.messages?.length
     || request.events?.length || result.changedConversationHeads.length) {
-    publishChatSyncLocalStateChanged();
+    publishChatSyncLocalStateChanged(undefined, { batch: request });
   }
   return result;
 }
