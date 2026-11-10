@@ -207,6 +207,15 @@ mod tests {
         };
         let (name, mention) = agent_address(&target);
         assert_eq!(name, "Maya Lee's Kordi");
+        // The range covers the whole name, apostrophe and space included.
+        let (text, mentions) = addressed(&name, "Which day?", mention.clone());
+        let length = mentions[0]["lengthUtf16"].as_u64().unwrap() as usize;
+        let utf16: Vec<u16> = text.encode_utf16().collect();
+        assert_eq!(
+            String::from_utf16(&utf16[..length]).unwrap(),
+            "@Maya Lee's Kordi"
+        );
+        assert_eq!(mentions[0]["displayText"], "@Maya Lee's Kordi");
         assert_eq!(mention["agentId"], "cloud-agent:acct_maya");
         assert_eq!(mention["targetKind"], "agent");
     }
