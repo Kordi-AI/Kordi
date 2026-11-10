@@ -108,13 +108,17 @@ async fn another_persons_request_may_ask_only_that_person_and_resumes_on_their_r
 }
 
 #[tokio::test]
-async fn a_shared_request_in_a_direct_chat_asks_without_a_mention_and_answers_go_to_its_agent() {
+async fn a_shared_request_in_a_direct_chat_mentions_the_person_and_answers_go_to_its_agent() {
     let Some(f) = Fixture::requested_by(false, 1).await else {
         return;
     };
     let receipt = f.ask_ok("ask-requester", 1, "Which city?").await;
     let wire = f.question_wire(&receipt["exchangeId"]).await;
-    assert_eq!(wire["text"], "Which city?");
+    assert_eq!(wire["text"], "@Exchange Beta Which city?");
+    assert_eq!(
+        wire["mentions"][0]["humanId"],
+        f.people[1].account_id.as_str()
+    );
     assert_eq!(
         wire["agentExchangeWaitingForAccountId"],
         f.people[1].account_id.as_str()

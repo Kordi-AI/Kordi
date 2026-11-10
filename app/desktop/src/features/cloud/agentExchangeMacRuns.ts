@@ -97,7 +97,7 @@ export async function runAgentExchangeOnMac(
     const outcome = agentExchangeOutcome(text);
     // Any exchange run may yield to wait (an answering agent asking its own
     // owner); only a continuation may finish silently. The server checks both.
-    if (outcome === 'silent' && !run.requestMessageId.endsWith(':resume')) throw new Error('Invalid agent exchange outcome.');
+    if (outcome === 'silent' && !/:(resume|decide)$/.test(run.requestMessageId)) throw new Error('Invalid agent exchange outcome.');
     // Retry the same result if the HTTP acknowledgement was lost.
     let confirmed = false;
     for (let attempt = 0; attempt < 3 && !lease.lost; attempt++) {

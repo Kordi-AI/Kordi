@@ -303,3 +303,146 @@ async fn an_answering_slot_waits_for_its_owner_without_a_blank_version() {
     assert_eq!(last["deliveryState"], "processing");
     assert_eq!(last["text"], "Waiting for Exchange Beta.", "{versions:?}");
 }
+
+#[tokio::test]
+async fn a_newer_question_to_a_person_supersedes_older_ones_and_takes_their_plain_reply() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    // An earlier task asked Beta and is still waiting.
+    let old = f.ask_ok("old", 1, "Coffee next week?").await;
+    f.end_parent().await;
+    // A new task asks Beta in the same conversation.
+    f.macs_offline().await;
+    let request = f.group_request(1, "Find a day for a bike ride").await;
+    let body = json!({"requestMessageId":request,"sessionId":f.session,"ownerAccountId":f.people[0].account_id,"requesterAccountId":f.people[1].account_id,"prompt":"Find a day","idempotencyKey":format!("newer:{request}")});
+    let run = f.post(1, "/v1/cloud/agent-runs/claim", body).await["runId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    f.runner_lease(&run).await;
+    let asked = f
+        .runner_ask(&run, "new", json!({"target":f.people[1].account_id,"targetKind":"person","message":"Saturday or Sunday?"}))
+        .await;
+    assert_eq!(asked.status(), StatusCode::OK);
+    let new = read_json(asked).await;
+    // Beta's plain reply answers the newest question, never the old one.
+    f.say(1, "Sunday afternoon works for me", None).await;
+    let (status, answer, _) = f.exchange(&new["exchangeId"]).await;
+    assert_eq!(
+        (status.as_str(), answer.as_deref()),
+        ("reply_received", Some("Sunday afternoon works for me"))
+    );
+    // The old task resumes at once as unanswered, superseded.
+    f.pending(0).await;
+    let (prompt,): (String,) = query_as("SELECT r.prompt FROM cloud_agent_exchanges e JOIN cloud_agent_fallback_runs r ON r.run_id=e.resume_run_id WHERE e.exchange_id=$1::uuid")
+        .bind(old["exchangeId"].as_str().unwrap()).fetch_one(&f.pool).await.unwrap();
+    let resumed: Value = serde_json::from_str(prompt.split_once('\n').unwrap().1).unwrap();
+    assert_eq!(resumed["personReplied"], false);
+    assert_eq!(resumed["personSuperseded"], true);
+    assert!(resumed["personReply"]
+        .as_str()
+        .unwrap()
+        .contains("A newer question"));
+    assert_ne!(
+        f.exchange(&old["exchangeId"]).await.1.as_deref(),
+        Some("Sunday afternoon works for me")
+    );
+}
+
+impl Fixture {
+    /// A planning task on the cloud runner that asked Beta and got an answer;
+    /// returns the exchange, the root run, and the first resume run.
+    async fn planning_resume(&self, key: &str) -> (String, String, String) {
+        self.macs_offline().await;
+        let request = self
+            .group_request(1, "Find a day for a bike ride, Saturday or Sunday")
+            .await;
+        let body = json!({"requestMessageId":request,"sessionId":self.session,"ownerAccountId":self.people[0].account_id,"requesterAccountId":self.people[1].account_id,"prompt":"Find a day","idempotencyKey":format!("{key}:{request}")});
+        let run = self.post(1, "/v1/cloud/agent-runs/claim", body).await["runId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        self.runner_lease(&run).await;
+        let asked = self
+            .runner_ask(&run, "day", json!({"target":self.people[1].account_id,"targetKind":"person","message":"Saturday or Sunday?"}))
+            .await;
+        let exchange = read_json(asked).await["exchangeId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        self.runner_complete(&run, r#"{"agentExchangeOutcome":"waiting"}"#)
+            .await;
+        self.say(1, "Either works, Sunday is a bit better", None)
+            .await;
+        self.pending(0).await;
+        let first = self.resume_of(&exchange).await.0;
+        (exchange, run, first)
+    }
+    async fn resume_of(&self, exchange: &str) -> (String, String) {
+        query_as("SELECT r.run_id,r.prompt FROM cloud_agent_exchanges e JOIN cloud_agent_fallback_runs r ON r.run_id=e.resume_run_id WHERE e.exchange_id=$1::uuid")
+            .bind(exchange).fetch_one(&self.pool).await.unwrap()
+    }
+    async fn slot_of(&self, run: &str) -> Value {
+        let (slot,): (String,) =
+            query_as("SELECT response_message_id FROM cloud_agent_fallback_runs WHERE run_id=$1")
+                .bind(run)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap();
+        self.wire_of(&slot).await.0
+    }
+}
+
+#[tokio::test]
+async fn a_planning_answer_without_a_card_is_asked_once_more_for_the_card() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    let (exchange, run, first) = f.planning_resume("plan").await;
+    // The decision step is the last thing the agent reads.
+    let prompt = f.resume_of(&exchange).await.1;
+    assert!(
+        prompt.trim_end().ends_with("do not finish silently.\"}"),
+        "{prompt}"
+    );
+    f.runner_lease(&first).await;
+    f.runner_complete(&first, "Beta slightly prefers Sunday; both days work.")
+        .await;
+    // No card was made: one retry asks for it, and the text is not published.
+    let (retry, retry_prompt) = f.resume_of(&exchange).await;
+    assert_ne!(retry, first);
+    assert!(retry_prompt.contains("ended without the decision card"));
+    assert!(retry_prompt.contains("Beta slightly prefers Sunday"));
+    assert_eq!(f.slot_of(&run).await["deliveryState"], "processing");
+    // The retry answers; a second miss is published, never retried again.
+    f.runner_lease(&retry).await;
+    f.runner_complete(&retry, "Sunday it is.").await;
+    assert_eq!(f.slot_of(&run).await["text"], "Sunday it is.");
+    assert_eq!(f.resume_of(&exchange).await.0, retry, "only one retry");
+}
+
+#[tokio::test]
+async fn a_planning_answer_with_its_card_is_published_at_once() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    let (exchange, run, first) = f.planning_resume("card").await;
+    f.runner_lease(&first).await;
+    // The run made its vote card while it worked.
+    let conversation: (uuid::Uuid,) =
+        query_as("SELECT conversation_id FROM cloud_chat_conversations WHERE legacy_session_id=$1")
+            .bind(&f.session)
+            .fetch_one(&f.pool)
+            .await
+            .unwrap();
+    query("INSERT INTO cloud_plan_cards(event_id,conversation_id,state,title,created_by_account_id) VALUES($1,$2,'polling','Bike ride',$3)")
+        .bind(format!("plan_{exchange}")).bind(conversation.0).bind(&f.people[0].account_id).execute(&f.pool).await.unwrap();
+    f.runner_complete(&first, "Vote on Saturday or Sunday above.")
+        .await;
+    assert_eq!(f.resume_of(&exchange).await.0, first, "no retry");
+    assert_eq!(
+        f.slot_of(&run).await["text"],
+        "Vote on Saturday or Sunday above."
+    );
+}
