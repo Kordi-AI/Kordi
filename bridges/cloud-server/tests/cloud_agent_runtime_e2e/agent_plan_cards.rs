@@ -3,11 +3,11 @@ use super::agent_exchanges::Fixture;
 use super::*;
 use sqlx_core::{query::query, query_as::query_as};
 
-fn later(hours: i64) -> String {
+pub(super) fn later(hours: i64) -> String {
     (chrono::Utc::now() + chrono::Duration::days(3) + chrono::Duration::hours(hours)).to_rfc3339()
 }
 
-async fn card_call(
+pub(super) async fn card_call(
     f: &Fixture,
     person: usize,
     run: &str,
@@ -29,7 +29,7 @@ async fn card_call(
     (status, read_json(response).await)
 }
 
-async fn root_call(f: &Fixture, action: &str, arguments: Value) -> (StatusCode, Value) {
+pub(super) async fn root_call(f: &Fixture, action: &str, arguments: Value) -> (StatusCode, Value) {
     card_call(f, 0, &f.root, f.claim, action, arguments).await
 }
 
