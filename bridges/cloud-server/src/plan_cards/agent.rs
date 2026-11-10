@@ -28,7 +28,7 @@ use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 use uuid::Uuid;
 
-use super::agent_proposal::{agent_author, merged, proposal, Card, OptionArgument};
+use super::agent_proposal::{agent_author, card_action, merged, proposal, Card, CardArguments};
 use super::models::{PlanCardRow, PlanCardStoreError};
 use super::wire::{blank_to_none, error, store_error, Rejection};
 use crate::auth::routes::CloudSession;
@@ -105,29 +105,6 @@ pub(crate) struct AgentRun {
     pub owner: String,
     pub agent: String,
     pub conversation: Uuid,
-}
-
-/// The tool's arguments. Absent fields keep the card's current value on
-/// update; an empty string or list clears it.
-#[derive(Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct CardArguments {
-    #[serde(default)]
-    pub(super) kind: Option<String>,
-    #[serde(default)]
-    pub(super) event_id: Option<String>,
-    #[serde(default)]
-    pub(super) title: Option<String>,
-    #[serde(default)]
-    pub(super) start_at: Option<String>,
-    #[serde(default)]
-    pub(super) end_at: Option<String>,
-    #[serde(default)]
-    pub(super) location: Option<String>,
-    #[serde(default)]
-    pub(super) open_items: Option<Vec<String>>,
-    #[serde(default)]
-    pub(super) options: Option<Vec<OptionArgument>>,
 }
 
 fn bad_request(code: &str, message: &str) -> Rejection {
@@ -270,10 +247,10 @@ pub(crate) async fn execute(
             &format!("Plan card request is invalid: {err}"),
         )
     })?;
-    let row = match action {
-        "create" => create(pool, run, arguments).await?,
-        "update" => update(pool, run, arguments).await?,
-        _ => {
+    let row = match card_action(action, &arguments) {
+        Some("create") => create(pool, run, arguments).await?,
+        Some(_) => update(pool, run, arguments).await?,
+        None => {
             return Err(bad_request(
                 "invalid_plan_card_request",
                 "action must be create or update.",
@@ -370,7 +347,7 @@ async fn create(
         open_items: arguments.open_items.clone().unwrap_or_default(),
         options: arguments.options.clone().unwrap_or_default(),
     };
-    let args = proposal(pool, run, None, arguments.kind.as_deref(), card).await?;
+    let args = proposal(pool, run, None, arguments.kind(), card).await?;
     super::store::propose_for_agent(pool, args, &author, &run.root)
         .await
         .map_err(store_error)
@@ -408,7 +385,7 @@ async fn update(
             pool,
             run,
             Some((&event_id, current.revision)),
-            arguments.kind.as_deref(),
+            arguments.kind(),
             card,
         )
         .await?;

@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 
-use super::agent::{AgentRun, CardArguments};
+use super::agent::AgentRun;
 use super::models::{PlanCardAgent, PlanCardProposeArgs, PlanCardRow};
 use super::wire::{blank_to_none, error, store_error, ProposeRequest, Rejection};
 
@@ -30,6 +30,69 @@ pub(crate) struct OptionArgument {
     end_at: Option<String>,
     #[serde(default)]
     location: Option<String>,
+}
+
+/// The tool's arguments. Absent fields keep the card's current value on
+/// update; an empty string or list clears it. The System agent's names are
+/// accepted too (`existingEventId`, `unresolvedFields`, and `state`: polling
+/// with options is a vote, awaitingConfirmation a plan), since chat guidance
+/// written for it may reach a person's agent.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CardArguments {
+    #[serde(default)]
+    pub(super) kind: Option<String>,
+    #[serde(default)]
+    state: Option<String>,
+    #[serde(default, alias = "existingEventId")]
+    pub(super) event_id: Option<String>,
+    #[serde(default)]
+    pub(super) title: Option<String>,
+    #[serde(default)]
+    pub(super) start_at: Option<String>,
+    #[serde(default)]
+    pub(super) end_at: Option<String>,
+    #[serde(default)]
+    pub(super) location: Option<String>,
+    #[serde(default, alias = "unresolvedFields")]
+    pub(super) open_items: Option<Vec<String>>,
+    #[serde(default)]
+    pub(super) options: Option<Vec<OptionArgument>>,
+}
+
+impl CardArguments {
+    /// `kind`, or the kind a System agent style `state` names.
+    pub(super) fn kind(&self) -> Option<&str> {
+        if let Some(kind) = self
+            .kind
+            .as_deref()
+            .map(str::trim)
+            .filter(|kind| !kind.is_empty())
+        {
+            return Some(kind);
+        }
+        let has_options = self
+            .options
+            .as_ref()
+            .is_some_and(|options| !options.is_empty());
+        match self.state.as_deref().map(str::trim) {
+            Some("polling") if has_options => Some("vote"),
+            Some("awaitingConfirmation" | "awaiting_confirmation") => Some("plan"),
+            _ => None,
+        }
+    }
+}
+
+/// The action a call asks for: `create` or `update`, or the System agent's
+/// `propose`, which updates the card it names and otherwise creates one.
+pub(crate) fn card_action(action: &str, arguments: &CardArguments) -> Option<&'static str> {
+    match action.trim() {
+        "create" => Some("create"),
+        "update" => Some("update"),
+        "propose" if blank_to_none(arguments.event_id.clone()).is_some() => Some("update"),
+        "propose" => Some("create"),
+        _ => None,
+    }
 }
 
 /// The card's content before validation.

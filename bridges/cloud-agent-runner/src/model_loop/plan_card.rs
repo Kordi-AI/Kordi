@@ -13,10 +13,11 @@ pub(super) async fn call<C: CloudAgentRunClient + Sync>(
     run: &CloudAgentRun,
     call: &ModelToolCall,
 ) -> Result<Value, Value> {
-    let action = call.arguments["action"].as_str().unwrap_or_default();
-    if !run.plan_cards || run.subsession_id.is_some() || !matches!(action, "create" | "update") {
+    if !run.plan_cards || run.subsession_id.is_some() {
         return Err("Plan cards are not available for this run.".into());
     }
+    // The server checks the action and names the fix for a wrong one.
+    let action = call.arguments["action"].as_str().unwrap_or_default().trim();
     match client
         .plan_card(&run.run_id, &call.id, action, call.arguments.clone())
         .await
@@ -59,3 +60,7 @@ mod tests {
         assert!(plan_card_failure("connection refused").contains("Do not claim"));
     }
 }
+
+#[cfg(test)]
+#[path = "plan_card_tests.rs"]
+mod forwarding_tests;

@@ -115,7 +115,8 @@ impl Tool for PlanCardTool {
             .get("action")
             .and_then(Value::as_str)
             .map(str::trim)
-            .filter(|action| matches!(*action, "create" | "update"))
+            // `propose` is the System agent's name; the server maps it.
+            .filter(|action| matches!(*action, "create" | "update" | "propose"))
             .ok_or_else(|| KordiError::Tool("plan_card action must be create or update".into()))?
             .to_string();
         let Some(runtime) = ctx.plan_card.clone() else {
@@ -211,6 +212,23 @@ mod tests {
             .unwrap();
         let request = seen.lock().unwrap().clone().unwrap();
         assert_eq!(request.action, "create");
+        // The System agent's `propose` reaches the server, which maps it.
+        let ctx = context(Some(PlanCardRuntime {
+            call: Arc::new(|request: PlanCardRequest| {
+                Box::pin(async move {
+                    assert_eq!(request.action, "propose");
+                    Ok(json!({"eventId": "plan_2", "kind": "plan", "card": {}}))
+                })
+            }),
+        }));
+        PlanCardTool
+            .execute(
+                json!({"action": "propose", "state": "awaitingConfirmation", "title": "Coffee"}),
+                &ctx,
+                CancellationToken::new(),
+            )
+            .await
+            .expect("propose is forwarded");
         assert_eq!(request.tool_call_id.as_deref(), Some("call_1"));
         assert_eq!(request.arguments["title"], "Coffee");
         let text = format!("{:?}", result.content);
