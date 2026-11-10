@@ -7,6 +7,7 @@ import {
   mentionHandleForLabel,
   sharedCloudAgentMentionCandidatesForConversation,
   shouldIncludeLocalAgentMentionForConversation,
+  uniqueAgentMentionCandidates,
   type MentionScopeConversation,
 } from '@/features/chat/messageActions/mentions';
 import { cloudAgentDefinitionToSharedCloudAgentSummary, type CloudAgentDefinition, type SharedCloudAgentSummary } from '@/features/cloud/cloudAgents';
@@ -199,7 +200,15 @@ export function buildCollaborationMentionTargetsByScope({
     }
 
     const collaborationCandidates = filterCollaborationMentionCandidatesForHost(buildCollaborationMentionCandidates(desktopCollaborationState ?? null), activeHost);
-    for (const candidate of filterCollaborationMentionCandidatesForConversation(collaborationCandidates, conversation)) {
+    const activeHostAccountId = activeHost?.humanId?.trim() || activeHost?.nodeId?.trim() || null;
+    // Every agent handle is unique here: another agent named like the
+    // viewer's own gets a suffix, and its owner shows next to it.
+    const uniqueAgents = uniqueAgentMentionCandidates(
+      filterCollaborationMentionCandidatesForConversation(collaborationCandidates, conversation),
+      sharedCloudAgentMentionCandidatesForConversation(sharedCloudAgents, conversation, activeHostAccountId),
+      options.filter((option) => option.targetKind === 'agent').map((option) => option.value),
+    );
+    for (const candidate of uniqueAgents.collaboration) {
       const display = collaborationMentionCandidateOptionText(candidate);
       pushOption({
         value: candidate.handle,
@@ -223,8 +232,7 @@ export function buildCollaborationMentionTargetsByScope({
       });
     }
 
-    const activeHostAccountId = activeHost?.humanId?.trim() || activeHost?.nodeId?.trim() || null;
-    for (const candidate of sharedCloudAgentMentionCandidatesForConversation(sharedCloudAgents, conversation, activeHostAccountId)) {
+    for (const candidate of uniqueAgents.shared) {
       pushOption({
         value: candidate.handle,
         label: candidate.displayLabel,

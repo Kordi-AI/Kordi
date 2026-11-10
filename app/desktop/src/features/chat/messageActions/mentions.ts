@@ -8,6 +8,8 @@ import { defaultAgentDisplayName,publicScopedAgentMentionHandle,stripSelfPossess
 
 import { mentionTextStartsWithLabel } from './localAgentMentions';
 import { mentionHandleForLabel,normalizeMentionLabel } from './mentionHandles';
+import { identitySuffixForCandidate, uniqueAgentMentionCandidates, uniqueHandle } from './uniqueAgentMentions';
+export { reserveAgentMentionHandles, uniqueAgentMentionCandidates } from './uniqueAgentMentions';
 
 export {
 leadingAddressRest,
@@ -289,20 +291,6 @@ export function filterCollaborationMentionCandidatesForHost(
   });
 }
 
-function identitySuffixForCandidate(candidate: Pick<CollaborationMentionCandidate, 'peer' | 'handle'>) {
-  const source = candidate.peer.humanId?.trim()
-    || candidate.peer.agentId?.trim()
-    || candidate.peer.nodeId?.trim()
-    || candidate.handle;
-  return mentionHandleForLabel(source, 'target').slice(0, 8);
-}
-
-function uniqueHandle(baseHandle: string, suffix: string) {
-  const cleanSuffix = mentionHandleForLabel(suffix, 'target');
-  const availableBaseLength = Math.max(1, 64 - cleanSuffix.length);
-  return `${baseHandle.slice(0, availableBaseLength)}${cleanSuffix}`;
-}
-
 function candidateWithBaseMentionHandle(candidate: CollaborationMentionCandidate) {
   const handle = candidate.targetKind === 'agent'
     && (candidate.peer.isDefaultAgent || candidate.peer.displayName?.trim() !== candidate.displayLabel)
@@ -440,21 +428,27 @@ export type ResolveMentionedCollaborationTargetOptions = {
   targetKind?: CollaborationMentionCandidate['targetKind'];
   sharedCloudAgents?: SharedCloudAgentSummary[];
   localAccountId?: string | null;
+  /** Handles already taken here, such as the viewer's own agent. */
+  reservedHandles?: readonly string[];
 };
-
 export function resolveMentionedCollaborationTarget(
   text: string,
   collaborationState: DesktopCollaborationState | null,
   conversation?: MentionScopeConversation | null,
   options: ResolveMentionedCollaborationTargetOptions = {},
 ) {
-  const scopedCandidates = filterCollaborationMentionCandidatesForConversation(buildCollaborationMentionCandidates(collaborationState), conversation);
+  const unique = uniqueAgentMentionCandidates(
+    filterCollaborationMentionCandidatesForConversation(buildCollaborationMentionCandidates(collaborationState), conversation),
+    options.targetKind && options.targetKind !== 'agent'
+      ? []
+      : sharedCloudAgentMentionCandidatesForConversation(options.sharedCloudAgents ?? [], conversation, options.localAccountId),
+    options.reservedHandles,
+  );
+  const scopedCandidates = unique.collaboration;
   const candidates = options.targetKind
     ? scopedCandidates.filter((candidate) => candidate.targetKind === options.targetKind)
     : scopedCandidates;
-  const sharedCandidates = options.targetKind && options.targetKind !== 'agent'
-    ? []
-    : sharedCloudAgentMentionCandidatesForConversation(options.sharedCloudAgents ?? [], conversation, options.localAccountId);
+  const sharedCandidates = unique.shared;
   if (candidates.length === 0 && sharedCandidates.length === 0) return null;
   const mentionMatches = Array.from(text.matchAll(/(^|\s)@/g));
   if (mentionMatches.length === 0) return null;

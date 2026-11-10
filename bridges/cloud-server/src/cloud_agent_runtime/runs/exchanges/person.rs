@@ -50,7 +50,7 @@ fn mention_handle(name: &str) -> String {
     }
 }
 
-const PEOPLE_SQL: &str = "SELECT a.account_id,COALESCE(NULLIF(btrim(a.display_name),''),'Participant'),a.public_handle FROM cloud_chat_conversation_members m JOIN cloud_accounts a USING(account_id)
+const PEOPLE_SQL: &str = "SELECT a.account_id,COALESCE(NULLIF(btrim(a.display_name),''),'Participant'),a.public_handle,COALESCE(NULLIF(btrim(a.public_handle),''),right(a.public_account_number::text,4),left(a.account_id,6)) FROM cloud_chat_conversation_members m JOIN cloud_accounts a USING(account_id)
      WHERE m.conversation_id=$1 AND m.membership_state='active'
        AND CASE WHEN $6::text IS NOT NULL THEN a.account_id=$6 ELSE (a.account_id<>$2 AND a.account_id<>$3) OR ($5 AND a.account_id=$2) END
        AND NOT cloud_accounts_blocked_either_way($2,a.account_id) AND NOT cloud_accounts_blocked_either_way($3,a.account_id)
@@ -69,7 +69,7 @@ async fn people(
         .may_reach_out()
         .then(|| parent.only_person())
         .flatten();
-    let rows: Vec<(String, String, Option<String>)> = query_as(PEOPLE_SQL)
+    let rows: Vec<(String, String, Option<String>, String)> = query_as(PEOPLE_SQL)
         .bind(parent.conversation)
         .bind(&parent.requester)
         .bind(&parent.owner)
@@ -83,11 +83,19 @@ async fn people(
         })
         .fetch_all(conn)
         .await?;
-    Ok(rows
+    let rows: Vec<_> = rows
         .into_iter()
         .filter(|(id, ..)| !crate::system_account::is_service_account(id))
-        .map(|(account_id, name, public_handle)| Person {
-            handle: mention_handle(&name),
+        .collect();
+    // Names can repeat; each person's mention handle is unique here.
+    let mut handles: Vec<String> = rows.iter().map(|r| mention_handle(&r.1)).collect();
+    let suffixes: Vec<String> = rows.iter().map(|r| r.3.clone()).collect();
+    crate::cloud_agent_runtime::runs::conversation_context::unique_handles(&mut handles, &suffixes);
+    Ok(rows
+        .into_iter()
+        .zip(handles)
+        .map(|((account_id, name, public_handle, _), handle)| Person {
+            handle,
             requester: account_id == parent.requester,
             account_id,
             name,

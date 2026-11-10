@@ -124,22 +124,13 @@ pub async fn validate_group_agent_claim(pool: &PgPool, input: &ClaimRunRequest) 
     {
         return Ok(false);
     }
-    if message.sender_kind.as_deref() != Some("agent") {
-        return Ok(human_group_target(message, &envelope.participants)
-            .is_some_and(|target| target.owner_account_id == input.owner_account_id.trim()));
+    // Only a person's message starts an agent's run. An agent reaches another
+    // agent through reach_out, never by mentioning it in its reply text.
+    if message.sender_kind.as_deref() == Some("agent") {
+        return Ok(false);
     }
-    // A reach_out call already owns delivery and continuation for this reply.
-    // A textual @mention in its acknowledgement must not start a second task.
-    if let Some(parent_request) = message.request_id.as_deref() {
-        let (sent,):(bool,)=query_as("SELECT EXISTS(SELECT 1 FROM cloud_agent_exchanges e JOIN cloud_agent_fallback_runs r ON r.run_id=e.parent_run_id WHERE r.session_id=$1 AND r.request_message_id=$2 AND r.owner_account_id=$3)")
-            .bind(&input.session_id).bind(parent_request).bind(&message.sender_account_id).fetch_one(pool).await?;
-        if sent {
-            return Ok(false);
-        }
-    }
-    Ok(agent_handoff_target(&envelope).is_some_and(|target| {
-        target.participant.account_id.trim() == input.owner_account_id.trim()
-    }))
+    Ok(human_group_target(message, &envelope.participants)
+        .is_some_and(|target| target.owner_account_id == input.owner_account_id.trim()))
 }
 
 #[derive(Debug, Clone)]

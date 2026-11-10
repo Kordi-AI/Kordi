@@ -8,17 +8,24 @@ async fn another_persons_request_may_ask_only_that_person_and_resumes_on_their_r
         return;
     };
     let capabilities = f.capabilities().await;
+    let beta_agent = format!("cloud-agent:{}", f.people[1].account_id);
+    let agents: Vec<&str> = capabilities["targets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["agentId"].as_str().unwrap())
+        .collect();
     assert_eq!(
-        capabilities["targets"],
-        json!([]),
-        "no agents for a shared request"
+        agents,
+        [beta_agent.as_str()],
+        "only the requester's own agents"
     );
     let people = capabilities["people"].as_array().unwrap();
     assert_eq!(people.len(), 1, "{capabilities}");
     assert_eq!(people[0]["accountId"], f.people[1].account_id.as_str());
     assert_eq!(people[0]["requester"], true);
 
-    // Nobody but the requester: not another member, not an agent.
+    // Nobody else: not another member, not another member's agent.
     assert_ne!(
         f.ask("gamma", 2, "Are you coming?").await.status(),
         StatusCode::OK
@@ -29,16 +36,6 @@ async fn another_persons_request_may_ask_only_that_person_and_resumes_on_their_r
         json!({"claimId":f.claim,"toolCallId":"agent","arguments":{"target":format!("cloud-agent:{}",f.people[2].account_id),"targetKind":"agent","message":"Check the calendar"}}),
     )).await.unwrap();
     assert_ne!(agent.status(), StatusCode::OK);
-    let untyped = f.router.clone().oneshot(post_json_with_token(
-        &format!("/v1/cloud/agent-runs/desktop/{}/agent-exchange", f.root),
-        &f.people[0].token,
-        json!({"claimId":f.claim,"toolCallId":"untyped","arguments":{"target":format!("cloud-agent:{}",f.people[1].account_id),"message":"Check the calendar"}}),
-    )).await.unwrap();
-    assert_ne!(
-        untyped.status(),
-        StatusCode::OK,
-        "not even the requester's agent"
-    );
     // The owner's calendar stays out of a shared request.
     let calendar = f
         .router
@@ -103,7 +100,7 @@ async fn another_persons_request_may_ask_only_that_person_and_resumes_on_their_r
             json!({"claimId":claim,"action":"capabilities"}),
         )
         .await;
-    assert_eq!(capabilities["targets"], json!([]));
+    assert_eq!(capabilities["targets"].as_array().unwrap().len(), 1);
     assert_eq!(capabilities["people"].as_array().unwrap().len(), 1);
     f.finish(0, run, claim, "Booked a table for 7pm on Friday.")
         .await;
@@ -199,4 +196,64 @@ async fn an_answering_agent_asks_its_owner_and_its_answer_returns_to_the_asking_
         continued["agentOwner"]["accountId"],
         f.people[1].account_id.as_str()
     );
+}
+
+#[tokio::test]
+async fn another_persons_request_on_the_cloud_runner_reaches_their_own_agent_with_its_owner_authority(
+) {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    std::env::set_var("KORDI_CLOUD_RUNNER_TOKEN", "runner-test-token");
+    // Alpha's Mac is offline: Beta's request to Alpha's agent runs in the cloud.
+    query("UPDATE cloud_agent_desktop_capabilities SET updated_at=now()-interval '1 hour' WHERE agent_id=$1")
+        .bind(format!("cloud-agent:{}", f.people[0].account_id)).execute(&f.pool).await.unwrap();
+    query("UPDATE cloud_device_presence SET last_heartbeat_at=(now()-interval '1 hour')::text WHERE account_id=$1")
+        .bind(&f.people[0].account_id).execute(&f.pool).await.unwrap();
+    let request = f
+        .group_request(1, "Ask my agent which day works for a bike ride")
+        .await;
+    let body = json!({"requestMessageId":request,"sessionId":f.session,"ownerAccountId":f.people[0].account_id,"requesterAccountId":f.people[1].account_id,"prompt":"Ask my agent","idempotencyKey":format!("bike:{request}")});
+    let run = f.post(1, "/v1/cloud/agent-runs/claim", body).await["runId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let lease = f
+        .router
+        .clone()
+        .oneshot(post_json_with_runner_token(
+            "/v1/cloud/agent-runs/lease",
+            "runner-test-token",
+            json!({"runnerId":"bike-runner","canaryRunId":run}),
+        ))
+        .await
+        .unwrap();
+    let lease = read_json(lease).await;
+    assert_eq!(lease["run"]["runId"], run.as_str(), "{lease}");
+    assert_eq!(
+        lease["run"]["agentCommunication"], true,
+        "reach_out is offered in the cloud"
+    );
+    let send = |key: &str, target: &str| {
+        let body = json!({"runnerId":"bike-runner","toolCallId":key,"arguments":{"target":target,"targetKind":"agent","message":"Saturday or Sunday?"}});
+        f.router.clone().oneshot(post_json_with_runner_token(
+            &format!("/v1/cloud/agent-runs/{run}/agent-exchange"),
+            "runner-test-token",
+            body,
+        ))
+    };
+    let gamma = send("gamma", &format!("cloud-agent:{}", f.people[2].account_id))
+        .await
+        .unwrap();
+    assert_ne!(gamma.status(), StatusCode::OK, "not another member's agent");
+    let sent = send("beta", &format!("cloud-agent:{}", f.people[1].account_id))
+        .await
+        .unwrap();
+    assert_eq!(sent.status(), StatusCode::OK);
+    let sent = read_json(sent).await;
+    // Beta's agent answers for its owner: owner and requester are both Beta.
+    let (owner, requester): (String, String) = query_as("SELECT r.owner_account_id,r.requester_account_id FROM cloud_agent_exchanges e JOIN cloud_agent_fallback_runs r ON r.run_id=e.target_run_id WHERE e.exchange_id=$1::uuid")
+        .bind(sent["exchangeId"].as_str().unwrap()).fetch_one(&f.pool).await.unwrap();
+    assert_eq!(owner, f.people[1].account_id);
+    assert_eq!(requester, f.people[1].account_id);
 }

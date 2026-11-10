@@ -28,7 +28,7 @@ impl Fixture {
         value["info"].clone()
     }
     /// A group request from `sender` to Alpha's agent, as a client sends it.
-    async fn group_request(&self, sender: usize, text: &str) -> String {
+    pub(super) async fn group_request(&self, sender: usize, text: &str) -> String {
         let logical = uuid::Uuid::new_v4().to_string();
         let owner = &self.people[0].account_id;
         let participants: Vec<Value> = self
@@ -243,4 +243,124 @@ async fn runs_in_one_conversation_share_a_byte_identical_system_prompt() {
         note_of(&second["turnIdentity"])["members"].is_object(),
         "a member left"
     );
+}
+
+#[tokio::test]
+async fn people_and_agents_with_the_same_name_are_told_apart_by_id() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    let (beta, gamma) = (&f.people[1].account_id, &f.people[2].account_id);
+    query("UPDATE cloud_accounts SET display_name=CASE WHEN account_id=$1 THEN 'Shu Yang' ELSE 'shu yang' END WHERE account_id IN ($1,$2)")
+        .bind(beta).bind(gamma).execute(&f.pool).await.unwrap();
+    let unique = |values: Vec<&str>| {
+        let lower: std::collections::BTreeSet<String> =
+            values.iter().map(|v| v.to_lowercase()).collect();
+        lower.len() == values.len()
+    };
+    let capabilities = f.capabilities().await;
+    let agents = capabilities["targets"].as_array().unwrap();
+    assert_eq!(agents.len(), 2, "{capabilities}");
+    assert!(
+        unique(
+            agents
+                .iter()
+                .map(|a| a["handle"].as_str().unwrap())
+                .collect()
+        ),
+        "{capabilities}"
+    );
+    assert!(agents
+        .iter()
+        .all(|a| a["agentId"].as_str().is_some() && a["ownerAccountId"].as_str().is_some()));
+    let people = capabilities["people"].as_array().unwrap();
+    assert!(
+        unique(
+            people
+                .iter()
+                .map(|p| p["handle"].as_str().unwrap())
+                .collect()
+        ),
+        "{capabilities}"
+    );
+
+    let info = f.info(&f.root, f.claim).await;
+    assert_eq!(info["ownerAccountId"], f.people[0].account_id.as_str());
+    assert_eq!(info["requesterAccountId"], f.people[0].account_id.as_str());
+    assert!(info["identity"]
+        .as_str()
+        .unwrap()
+        .contains("never by display name"));
+    assert!(
+        unique(
+            info["people"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| p["handle"].as_str().unwrap())
+                .collect()
+        ),
+        "{info}"
+    );
+    assert!(
+        unique(
+            info["agents"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|a| a["handle"].as_str().unwrap())
+                .collect()
+        ),
+        "{info}"
+    );
+
+    // Routing follows the structured agent id, never the shared name.
+    let mention = json!([{"targetKind":"agent","agentId":format!("cloud-agent:{gamma}"),"humanId":gamma,"label":"Kordishuyang","displayText":"@Kordishuyang","startUtf16":0,"lengthUtf16":13}]);
+    for (structured, owner, allowed) in [
+        (true, gamma, true),
+        (true, beta, false),
+        (false, gamma, false),
+        (false, beta, false),
+    ] {
+        let logical = uuid::Uuid::new_v4().to_string();
+        let mut message = json!({"id":logical,"senderAccountId":f.people[0].account_id,"senderKind":"human","text":"@Kordishuyang hi","createdAtMs":chrono::Utc::now().timestamp_millis()});
+        if structured {
+            message["mentions"] = mention.clone();
+            message["targetCloudAgentId"] = json!(format!("cloud-agent:{gamma}"));
+            message["targetCloudAgentOwnerAccountId"] = json!(gamma);
+        }
+        let participants: Vec<Value> = f
+            .people
+            .iter()
+            .map(|p| json!({"accountId":p.account_id,"displayName":"Shu Yang"}))
+            .collect();
+        let envelope = json!({"kind":"group-message","groupId":f.session,"createdByAccountId":f.people[0].account_id,"actor":{"accountId":f.people[0].account_id,"displayName":"Alpha"},"participants":participants,"message":message});
+        let body = format!(
+            "kordi-cloud-group:{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(envelope.to_string())
+        );
+        insert_test_message(
+            &f.pool,
+            &f.people[0].account_id,
+            f.conversation().await,
+            &body,
+        )
+        .await;
+        let claim = json!({"requestMessageId":logical,"sessionId":f.session,"ownerAccountId":owner,"requesterAccountId":f.people[0].account_id,"prompt":"hi","idempotencyKey":format!("dup:{logical}:{owner}")});
+        let response = f
+            .router
+            .clone()
+            .oneshot(post_json_with_token(
+                "/v1/cloud/agent-runs/claim",
+                &f.people[0].token,
+                claim,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status() == StatusCode::OK,
+            allowed,
+            "structured={structured} owner={owner}"
+        );
+    }
 }
