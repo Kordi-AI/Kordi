@@ -56,7 +56,15 @@ event, or option) is the asking agent's to decide: it never finishes
 silently, and closes with `plan_card` when the run has it (`create` with
 `kind: vote` and 2 to 4 options while options remain or others must agree,
 `kind: plan` once settled, then `update` of the same card by `eventId` as
-details settle), plus one short result line. The continuation prompt carries
+details settle), plus one short result line. The server marks such a
+continuation (`decisionDue`, by the original request's words about days,
+times, places, and events) and ends its data with `whatToDoNow`, the exact
+call to make. A planning answer that ends with text only and no card made in
+the conversation while it ran gets one retry: a new resume run of the same
+exchange (`:decide`) receives the answer back as `previousAnswer` and is told
+to make the card now; its answer is then published either way. The agent
+continuation also states whether the other agent asked its owner and what
+they said (`agentOwner.askedByTheirAgent`), so the result never guesses. The continuation prompt carries
 `remainingRequests` and the earlier answered rounds of the task. A follow-up's
 recipient receives the earlier rounds with that same requester. Both are
 public messages of this conversation, sent as untrusted data and clipped to a

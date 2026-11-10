@@ -115,6 +115,9 @@ test('silent continuation and an answering agent waiting on its owner acknowledg
     // An answering agent that asked its own owner yields; it never fails.
     ['request', '{"agentExchangeOutcome":"waiting"}', 'completed'],
     ['resume', '', 'failed'],
+    // The one retry of a planning answer is a continuation too.
+    ['decide', 'Sunday it is.', 'completed'],
+    ['decide', '{"agentExchangeOutcome":"silent"}', 'completed'],
   ]) {
     const { value, requests } = runtime({ startTurn: async () => ({ id: 'turn', completed: true, succeeded: true, assistantText: text }) as DesktopChatTurnSnapshot });
     assert.equal(await runAgentExchangeOnMac({ ...run, requestMessageId: `agent-exchange:synthetic:${suffix}` }, value), expected);
