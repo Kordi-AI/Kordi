@@ -80,7 +80,12 @@ fn rows() -> Vec<Row> {
             ],
         ),
         (
-            &["claude-opus-5-5", "claude-fable-5", "claude-fable-5-1"],
+            &[
+                "claude-opus-5-5",
+                "claude-fable-5",
+                "claude-fable-5-1",
+                "claude-fable-5-2",
+            ],
             [
                 (
                     Value::Null,

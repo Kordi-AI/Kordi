@@ -258,7 +258,9 @@ struct ModelReleaseTests {
         #expect(AgentModelPicker.modelNamesByProvider["openai"]?.first == "gpt-6.1-sol")
         #expect(AgentModelPicker.modelNamesByProvider["openai"]?.contains(where: { $0.contains("daybreak") }) == false)
         #expect(ProviderAuthenticationDefinition.all.first(where: { $0.id == "openai" })?.defaultModel == "gpt-6.1-sol")
-        #expect(AgentModelPicker.modelNamesByProvider["anthropic"]?.first == "claude-sonnet-5-5")
+        #expect(AgentModelPicker.modelNamesByProvider["anthropic"]?.prefix(4) == [
+            "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-2", "claude-haiku-5-5",
+        ])
         for route in ["gpt-6-astra", "openai/gpt-6-astra", "openai-codex/gpt-6-astra", "openai/gpt-6-sol", "openai-codex/gpt-6-luna",
                       "openai-codex/gpt-6.1-sol"] {
             #expect(AgentModelPicker.thinkingLevels(for: route) == ["default", "low", "medium", "high", "xhigh", "max"])
@@ -279,6 +281,7 @@ struct ModelReleaseTests {
     @Test func effortStepsFollowTheOMPCatalog() {
         #expect(AgentModelPicker.thinkingLevels(for: "openai-codex/gpt-5.5") == ["default", "low", "medium", "high", "xhigh"])
         #expect(AgentModelPicker.thinkingLevels(for: "anthropic/claude-fable-5-1") == ["default", "low", "medium", "high", "xhigh", "max"])
+        #expect(AgentModelPicker.thinkingLevels(for: "anthropic/claude-fable-5-2") == ["default", "low", "medium", "high", "xhigh", "max"])
         #expect(AgentModelPicker.thinkingLevels(for: "anthropic/claude-haiku-4-5")
             == ["default", "minimal", "low", "medium", "high", "xhigh"])
         let thinking = ["gpt-6-sol": OMPModelThinking(efforts: ["low", "high"], defaultLevel: nil)]
@@ -297,6 +300,7 @@ struct ModelPresentationTests {
         #expect(AgentModelPresentation.name("openai-codex/gpt-6.1-sol") == "GPT-6.1 Sol")
         #expect(AgentModelPresentation.name("anthropic/claude-opus-4-8") == "Claude Opus 4.8")
         #expect(AgentModelPresentation.name("openrouter/anthropic/claude-fable-5-1") == "Claude Fable 5.1")
+        #expect(AgentModelPresentation.name("anthropic/claude-fable-5-2") == "Claude Fable 5.2")
         #expect(AgentModelPresentation.name("custom/research-model") == "research-model")
         #expect(AgentModelPresentation.effort("xhigh") == "Extra high")
         #expect(AgentModelPresentation.effort("default") == "Default")

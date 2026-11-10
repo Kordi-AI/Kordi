@@ -1,5 +1,6 @@
 import { canonicalCloudProviderId } from '@/features/cloud/providerAuthSnapshot';
 import { isChatGptCatalogProvider, isHiddenChatGptModel, orderChatGptModels } from '@/features/cloud/chatgptModelCatalog';
+import { orderClaudeModels } from '@/features/cloud/claudeModelCatalog';
 import { catalogModelThinkingLevels } from '@/features/cloud/modelThinkingLevels';
 import { routeRunsOnKordiCloud } from '@/features/cloud/cloudAgentRuntimeRoute';
 import type { HostedAccount } from '@/features/cloud/hostedAccounts';
@@ -62,7 +63,9 @@ export function hostedRouteAccounts(
       model,
       providerId,
       providerLabel: custom ? 'Custom API' : providerShortName(ompProviderName(providerId, entry)),
-      models: chatGpt ? orderChatGptModels(offeredModels) : offeredModels,
+      models: chatGpt ? orderChatGptModels(offeredModels)
+        : providerId === 'anthropic' ? orderClaudeModels(offeredModels)
+        : offeredModels,
     };
   });
 }

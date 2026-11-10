@@ -41,7 +41,11 @@ struct AgentModelPicker: View {
         ],
         "anthropic": [
             "claude-sonnet-5-5",
+            "claude-opus-5-5",
+            "claude-fable-5-2",
+            "claude-haiku-5-5",
             "claude-fable-5-1",
+            "claude-opus-5",
             "claude-sonnet-5",
             "claude-opus-4-8",
             "claude-opus-4-7",
@@ -63,7 +67,7 @@ struct AgentModelPicker: View {
         switch model.split(separator: "/").last.map(String.init) {
         case "gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna":
             return ["default", "low", "medium", "high", "xhigh", "max"]
-        case "claude-fable-5-1":
+        case "claude-fable-5-2", "claude-fable-5-1":
             return ["default", "minimal", "low", "medium", "high", "xhigh", "max"]
         default:
             return ["off", "default", "minimal", "low", "medium", "high", "xhigh", "max"]

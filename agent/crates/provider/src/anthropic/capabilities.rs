@@ -12,7 +12,7 @@ use kordi_core::agent_session::ThinkingLevel;
 //    keeps adaptive thinking on for Sonnet 5 and Opus 5. The API accepts
 //    disabled on all six (Opus 5 at effort high or below, and Off sends no
 //    effort), and digest triage relies on a real off.
-// 2. Off on Fable 5 and 5.1 follows OMP: no thinking field and effort low,
+// 2. Off on Fable 5, 5.1 and 5.2 follows OMP: no thinking field and effort low,
 //    because the API rejects disabled thinking on Fable.
 // 3. Default sends no thinking or effort field. OMP's session default turns
 //    it into high effort; the cloud runner gives Sonnet 5.5 Medium instead.
@@ -89,7 +89,7 @@ pub enum ThinkingOffBehavior {
     /// Send `{type: "between_tools"}` with no other thinking field and no effort:
     /// Claude Sonnet 5.5 rejects disabled thinking.
     BetweenTools,
-    /// Leave thinking out and send effort low: Claude Fable 5, Claude Fable 5.1 and
+    /// Leave thinking out and send effort low: Claude Fable 5, 5.1 and 5.2 and
     /// Claude Opus 5.5 cannot turn thinking off.
     LowEffort,
 }
@@ -340,11 +340,13 @@ macro_rules! define_claude_model_profiles {
 define_claude_model_profiles! {
     default: SONNET_5_5;
     SONNET_5_5: "claude-sonnet-5-5" => BETWEEN_TOOLS,
+    OPUS_5_5: "claude-opus-5-5" => ALWAYS_ON,
+    FABLE_5_2: "claude-fable-5-2" => ALWAYS_ON,
+    HAIKU_5_5: "claude-haiku-5-5" => ADAPTIVE,
     FABLE_5_1: "claude-fable-5-1" => ALWAYS_ON,
     FABLE_5: "claude-fable-5" => ALWAYS_ON,
     HAIKU_4_5: "claude-haiku-4-5" => BUDGET,
     HAIKU_4_5_20251001: "claude-haiku-4-5-20251001" => BUDGET,
-    HAIKU_5_5: "claude-haiku-5-5" => ADAPTIVE,
     OPUS_4_1: "claude-opus-4-1" => BUDGET_32K,
     OPUS_4_1_20250805: "claude-opus-4-1-20250805" => BUDGET_32K,
     OPUS_4_5: "claude-opus-4-5" => BUDGET_WITH_EFFORT,
@@ -353,7 +355,6 @@ define_claude_model_profiles! {
     OPUS_4_7: "claude-opus-4-7" => ADAPTIVE,
     OPUS_4_8: "claude-opus-4-8" => ADAPTIVE,
     OPUS_5: "claude-opus-5" => ADAPTIVE,
-    OPUS_5_5: "claude-opus-5-5" => ALWAYS_ON,
     SONNET_4_5: "claude-sonnet-4-5" => BUDGET,
     SONNET_4_5_20250929: "claude-sonnet-4-5-20250929" => BUDGET,
     SONNET_4_6: "claude-sonnet-4-6" => ADAPTIVE_4_6,
