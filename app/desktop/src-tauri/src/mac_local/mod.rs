@@ -173,9 +173,8 @@ pub async fn desktop_mac_local_connectors_set_enabled(
                 {
                     blocking(|| {
                         use objc2_event_kit::EKEntityType;
-                        let store = eventkit::store();
-                        let _ = eventkit::request_full_access(&store, EKEntityType::Event);
-                        let _ = eventkit::request_full_access(&store, EKEntityType::Reminder);
+                        let _ = eventkit::request_full_access(EKEntityType::Event);
+                        let _ = eventkit::request_full_access(EKEntityType::Reminder);
                     })
                     .await?;
                     calendar_permission()

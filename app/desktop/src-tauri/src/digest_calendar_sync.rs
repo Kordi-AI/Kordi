@@ -90,7 +90,7 @@ pub async fn desktop_digest_calendar_observe(app: tauri::AppHandle) -> Result<()
 #[cfg(target_os = "macos")]
 mod native {
     use super::*;
-    use crate::digest_calendar::native::{access, external_uid, store};
+    use crate::digest_calendar::native::{access, external_uid, with_store};
     use chrono::TimeZone;
     use objc2::rc::Retained;
     use objc2_event_kit::{
@@ -119,8 +119,7 @@ mod native {
     }
     pub fn access_status(request: bool) -> String {
         if request && status() == EKAuthorizationStatus::NotDetermined {
-            let store = store();
-            let _ = access(&store);
+            let _ = access();
         }
         status_name(status()).into()
     }
@@ -221,16 +220,29 @@ mod native {
                 .unwrap_or(start.timestamp() + 30 * 60);
             (start.timestamp(), end_ts)
         };
-        let store = store();
-        let existing = match device_id.as_deref() {
+        with_store(|store| {
+            save(
+                store,
+                &event,
+                device_id.as_deref(),
+                calendar_id,
+                device_start_at.as_deref(),
+                (start_ts, end_ts),
+            )
+        })
+    }
+    fn save(
+        store: &EKEventStore,
+        event: &CalendarEvent,
+        device_id: Option<&str>,
+        calendar_id: Option<String>,
+        device_start_at: Option<&str>,
+        (start_ts, end_ts): (i64, i64),
+    ) -> Result<WrittenEvent, String> {
+        let existing = match device_id {
             Some(id) => Some(
-                resolve(
-                    &store,
-                    id,
-                    event.external_uid.as_deref(),
-                    device_start_at.as_deref(),
-                )
-                .ok_or("The device calendar event is no longer available.")?,
+                resolve(store, id, event.external_uid.as_deref(), device_start_at)
+                    .ok_or("The device calendar event is no longer available.")?,
             ),
             None => None,
         };
@@ -246,8 +258,8 @@ mod native {
                 existing
             }
             None => {
-                let created = unsafe { EKEvent::eventWithEventStore(&store) };
-                let calendar = writable_calendar(&store, calendar_id)?;
+                let created = unsafe { EKEvent::eventWithEventStore(store) };
+                let calendar = writable_calendar(store, calendar_id)?;
                 unsafe { created.setCalendar(Some(&calendar)) };
                 created
             }
@@ -281,17 +293,18 @@ mod native {
         if status() != EKAuthorizationStatus::FullAccess {
             return Err("Calendar permission was revoked.".into());
         }
-        let store = store();
-        let Some(event) = resolve(
-            &store,
-            &device_id,
-            external_uid.as_deref(),
-            start_at.as_deref(),
-        ) else {
-            return Ok(());
-        };
-        unsafe { store.removeEvent_span_commit_error(&event, EKSpan::ThisEvent, true) }
-            .map_err(|error| error.localizedDescription().to_string())
+        with_store(|store| {
+            let Some(event) = resolve(
+                store,
+                &device_id,
+                external_uid.as_deref(),
+                start_at.as_deref(),
+            ) else {
+                return Ok(());
+            };
+            unsafe { store.removeEvent_span_commit_error(&event, EKSpan::ThisEvent, true) }
+                .map_err(|error| error.localizedDescription().to_string())
+        })
     }
     static OBSERVING: AtomicBool = AtomicBool::new(false);
     pub fn observe(app: tauri::AppHandle) {
@@ -299,8 +312,9 @@ mod native {
             return;
         }
         std::thread::spawn(move || {
-            // A live store is what makes the process receive change notifications at all.
-            let store = store();
+            // A live store is what makes the process receive change notifications at all;
+            // the shared store lives for the whole process.
+            with_store(|_| ());
             let block = block2::RcBlock::new(move |_: NonNull<NSNotification>| {
                 let _ = app.emit(CALENDAR_CHANGED_EVENT, ());
             });
@@ -315,7 +329,6 @@ mod native {
             // Intentionally kept for the process lifetime.
             std::mem::forget(token);
             std::mem::forget(block);
-            std::mem::forget(store);
         });
     }
 }
