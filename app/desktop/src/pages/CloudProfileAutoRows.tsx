@@ -109,6 +109,7 @@ export function CloudProfileAutoRows({ account, editor, id, deviceLocation }: {
       editor.setField('location', city);
       editor.setField('locationMode', 'automatic');
     } catch {
+      // The app log has "[profile-location] <code>: <detail>"; the row stays short.
       setLocationError('Could not find your city.');
     } finally {
       setLocating(false);

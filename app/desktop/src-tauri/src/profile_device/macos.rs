@@ -8,51 +8,65 @@ use std::time::Duration;
 
 use objc2::rc::Retained;
 use objc2::{msg_send, AnyThread};
-use objc2_core_location::{kCLLocationAccuracyReduced, CLGeocoder, CLLocation, CLPlacemark};
+use objc2_core_location::{CLGeocoder, CLLocation, CLPlacemark};
 use objc2_foundation::{NSArray, NSError, NSLocale, NSString};
 use tokio::sync::oneshot;
 
 use super::{city_label, same_city, Placemark};
-use crate::nearby_location::{failure, macos as location, Precision};
+use crate::nearby_location::{failure, macos as location, CITY};
 
 /// Reverse geocoding normally answers within a second or two.
 const GEOCODE_WAIT: Duration = Duration::from_secs(15);
+/// The geocoder failed or answered with no place.
+const GEOCODE_FAILED: &str = "location_geocode_failed";
+/// The place had no town, region or country to name.
+const NO_PLACE: &str = "location_no_place";
 
 /// The last fix and its city, kept in memory only so a Mac that has not moved
 /// does not ask the geocoder again.
 static LAST: Mutex<Option<((f64, f64), String)>> = Mutex::new(None);
 
-/// Approximate location is enough for a city.
-fn precision() -> Precision {
-    Precision {
-        desired: unsafe { kCLLocationAccuracyReduced },
-        max_accuracy: 25_000.0,
-        max_age_seconds: 1800.0,
-    }
+/// Logs one failure with its detail (never coordinates) and returns its code,
+/// which the profile shows as a short line.
+fn fail(code: &'static str, detail: impl std::fmt::Display) -> &'static str {
+    eprintln!("[profile-location] {code}: {detail}");
+    code
 }
 
 pub(super) async fn city(app: tauri::AppHandle) -> Result<String, &'static str> {
-    match location::permission(app.clone())
+    let status = location::permission(app.clone())
         .await
-        .map_err(|_| failure::UNAVAILABLE)?
-        .as_str()
-    {
+        .map_err(|error| fail(failure::UNAVAILABLE, error))?;
+    match status.as_str() {
         "granted" => {}
-        "not_determined" => return Err(failure::NOT_DETERMINED),
-        "denied" | "restricted" => return Err(failure::DENIED),
-        _ => return Err(failure::UNAVAILABLE),
+        "not_determined" => {
+            return Err(fail(failure::NOT_DETERMINED, "access was never asked for"))
+        }
+        "denied" | "restricted" => return Err(fail(failure::DENIED, &status)),
+        _ => return Err(fail(failure::UNAVAILABLE, format!("permission {status}"))),
     }
-    let fix = location::request(app.clone(), location::Options::silent(precision()))
-        .await?
-        .ok_or(failure::UNAVAILABLE)?;
+    let fix = location::request(
+        app.clone(),
+        location::Options::silent(CITY, "profile-location"),
+    )
+    .await
+    .map_err(|code| fail(code, "location request failed"))?
+    .ok_or_else(|| fail(failure::UNAVAILABLE, "location request returned no fix"))?;
     let point = (fix.latitude(), fix.longitude());
     if let Some((last, city)) = LAST.lock().ok().and_then(|last| last.clone()) {
         if same_city(last, point) {
             return Ok(city);
         }
     }
-    let place = reverse_geocode(&app, point).await?;
-    let city = city_label(&place).ok_or(failure::UNAVAILABLE)?;
+    let place = reverse_geocode(&app, point)
+        .await
+        .map_err(|(code, detail)| fail(code, detail))?;
+    let city = city_label(&place).ok_or_else(|| {
+        fail(
+            NO_PLACE,
+            format!("no label for country {:?}", place.iso_country_code),
+        )
+    })?;
     if let Ok(mut last) = LAST.lock() {
         *last = Some((point, city.clone()));
     }
@@ -81,8 +95,8 @@ fn placemark(place: &CLPlacemark) -> Placemark {
 async fn reverse_geocode(
     app: &tauri::AppHandle,
     (latitude, longitude): (f64, f64),
-) -> Result<Placemark, &'static str> {
-    let (sender, receiver) = oneshot::channel::<Result<Placemark, &'static str>>();
+) -> Result<Placemark, (&'static str, String)> {
+    let (sender, receiver) = oneshot::channel::<Result<Placemark, (&'static str, String)>>();
     app.run_on_main_thread(move || {
         let sender = Mutex::new(Some(sender));
         let geocoder = unsafe { CLGeocoder::new() };
@@ -92,9 +106,13 @@ async fn reverse_geocode(
             move |places: *mut NSArray<CLPlacemark>, error: *mut NSError| {
                 let _ = &keep;
                 let first = unsafe { places.as_ref() }.and_then(|places| places.firstObject());
-                let result = match first {
-                    Some(place) if error.is_null() => Ok(placemark(&place)),
-                    _ => Err(failure::UNAVAILABLE),
+                let result = match (first, unsafe { error.as_ref() }) {
+                    (_, Some(error)) => Err((
+                        GEOCODE_FAILED,
+                        format!("geocoder error {} {}", error.domain(), error.code()),
+                    )),
+                    (Some(place), None) => Ok(placemark(&place)),
+                    (None, None) => Err((GEOCODE_FAILED, "geocoder returned no place".into())),
                 };
                 if let Some(sender) = sender.lock().ok().and_then(|mut sender| sender.take()) {
                     let _ = sender.send(result);
@@ -115,9 +133,10 @@ async fn reverse_geocode(
             ];
         }
     })
-    .map_err(|_| failure::UNAVAILABLE)?;
+    .map_err(|_| (failure::UNAVAILABLE, "main thread unavailable".to_string()))?;
     match tokio::time::timeout(GEOCODE_WAIT, receiver).await {
         Ok(Ok(result)) => result,
-        _ => Err(failure::TIMEOUT),
+        Ok(Err(_)) => Err((GEOCODE_FAILED, "geocoder dropped its answer".into())),
+        Err(_) => Err((failure::TIMEOUT, "geocoder did not answer".into())),
     }
 }

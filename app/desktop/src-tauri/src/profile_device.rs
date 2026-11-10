@@ -86,6 +86,24 @@ pub fn desktop_time_zone() -> Option<String> {
     }
 }
 
+/// Location access for the profile's city, asking for it with `request`.
+/// Shares the Nearby permission flow and logs why it failed.
+#[tauri::command]
+pub async fn desktop_profile_location_permission(
+    app: tauri::AppHandle,
+    request: bool,
+) -> Result<String, String> {
+    let result = crate::nearby_location::desktop_nearby_location_permission(app, request).await;
+    match &result {
+        Ok(status) if status != "granted" => {
+            eprintln!("[profile-location] permission: {status}");
+        }
+        Err(code) => eprintln!("[profile-location] {code}: permission request failed"),
+        Ok(_) => {}
+    }
+    result
+}
+
 /// The city this Mac is in, without asking for access. Fails with the
 /// location failure codes when access is missing or no fix arrives.
 #[tauri::command]

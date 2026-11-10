@@ -52,6 +52,9 @@ pub(crate) struct Precision {
     pub(crate) max_accuracy: f64,
     /// Core Location may first replay a cached fix; older ones are skipped.
     pub(crate) max_age_seconds: f64,
+    /// A fix up to this old is kept and returned when nothing better arrives
+    /// before the request times out.
+    pub(crate) fallback_age_seconds: f64,
 }
 
 /// Nearby: fixes coarser than 2 km are not published; matches the web-side check.
@@ -59,6 +62,19 @@ pub(crate) const NEARBY: Precision = Precision {
     desired: 100.0,
     max_accuracy: 2000.0,
     max_age_seconds: 300.0,
+    fallback_age_seconds: 300.0,
+};
+
+/// The profile's city. `kCLLocationAccuracyThreeKilometers` (3000 m), not
+/// `kCLLocationAccuracyReduced`: reduced accuracy is meant for apps without
+/// full accuracy and Core Location delivers it rarely, so a one-shot request
+/// can time out with no fix. A day-old fix still names the right city more
+/// often than none, so it is the fallback.
+pub(crate) const CITY: Precision = Precision {
+    desired: 3000.0,
+    max_accuracy: 25_000.0,
+    max_age_seconds: 900.0,
+    fallback_age_seconds: 86_400.0,
 };
 
 impl Precision {
@@ -68,6 +84,14 @@ impl Precision {
             && (0.0..=self.max_accuracy).contains(&accuracy)
             && age_seconds.is_finite()
             && age_seconds <= self.max_age_seconds
+    }
+
+    /// Whether a fix that is not usable right away is kept as the fallback.
+    pub(crate) fn fallback(&self, accuracy: f64, age_seconds: f64) -> bool {
+        accuracy.is_finite()
+            && accuracy >= 0.0
+            && age_seconds.is_finite()
+            && age_seconds <= self.fallback_age_seconds
     }
 }
 
@@ -135,6 +159,24 @@ pub async fn desktop_nearby_location_permission(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn city_fixes_are_coarse_and_fall_back_to_older_readings() {
+        assert!(CITY.usable(8_000.0, 60.0), "approximate fixes name a city");
+        assert!(!CITY.usable(30_000.0, 60.0));
+        assert!(
+            !CITY.usable(100.0, 1_000.0),
+            "a cached fix waits for a fresh one"
+        );
+        assert!(CITY.fallback(100.0, 3_600.0), "but stays the fallback");
+        assert!(CITY.fallback(30_000.0, 60.0));
+        assert!(
+            !CITY.fallback(-1.0, 60.0),
+            "negative accuracy marks an invalid fix"
+        );
+        assert!(!CITY.fallback(100.0, 90_000.0));
+        assert!(NEARBY.fallback(5_000.0, 300.0) && !NEARBY.fallback(50.0, 301.0));
+    }
 
     #[test]
     fn usable_fix_requires_fresh_and_precise_readings() {
