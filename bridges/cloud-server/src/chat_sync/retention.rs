@@ -1,9 +1,10 @@
-//! Retention for the recoverable per-user chat stream.
+//! Retention for the recoverable per-user chat stream and for read marks.
 //!
 //! Canonical conversations and messages are retained by product policy. Only
 //! replay rows are trimmed here, and each user's `min_seq` is advanced in the
 //! same transaction before the rows disappear so an old cursor fails with an
-//! explicit bootstrap requirement.
+//! explicit bootstrap requirement. Read marks, which give the read times in a
+//! message's readers list, are kept for seven days.
 
 use chrono::{DateTime, Utc};
 use sqlx_core::query::query;
@@ -12,6 +13,7 @@ use sqlx_postgres::PgPool;
 const DEFAULT_RETENTION_DAYS: i64 = 60;
 const MIN_RETENTION_DAYS: i64 = 30;
 const MAX_RETENTION_DAYS: i64 = 90;
+pub const READ_MARK_RETENTION_DAYS: i64 = 7;
 
 pub fn retention_days() -> i64 {
     std::env::var("KORDI_CHAT_SYNC_RETENTION_DAYS")
@@ -56,6 +58,19 @@ pub async fn sweep_expired_events(
     Ok(deleted)
 }
 
+/// Deletes read marks written before `cutoff`. A reader whose mark is gone
+/// still counts as a reader, with no read time.
+pub async fn sweep_expired_read_marks(
+    pool: &PgPool,
+    cutoff: DateTime<Utc>,
+) -> Result<u64, sqlx_core::Error> {
+    let deleted = query("DELETE FROM cloud_chat_read_marks WHERE read_at < $1")
+        .bind(cutoff)
+        .execute(pool)
+        .await?;
+    Ok(deleted.rows_affected())
+}
+
 pub fn spawn_retention_worker(pool: PgPool) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(retention_sweep_interval());
@@ -65,6 +80,10 @@ pub fn spawn_retention_worker(pool: PgPool) {
             let cutoff = Utc::now() - chrono::Duration::days(retention_days());
             if let Err(error) = sweep_expired_events(&pool, cutoff).await {
                 eprintln!("[chat-sync] retention sweep: {error}");
+            }
+            let marks_cutoff = Utc::now() - chrono::Duration::days(READ_MARK_RETENTION_DAYS);
+            if let Err(error) = sweep_expired_read_marks(&pool, marks_cutoff).await {
+                eprintln!("[chat-sync] read mark retention sweep: {error}");
             }
         }
     });

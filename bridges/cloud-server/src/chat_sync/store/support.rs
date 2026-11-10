@@ -1,3 +1,4 @@
+use super::member_snapshots::member_rows;
 use super::*;
 
 pub(super) fn fingerprint<T: Serialize>(value: &T) -> Result<String, StoreError> {
@@ -14,24 +15,6 @@ pub(super) fn parse_kind(value: &str) -> Result<ConversationKind, StoreError> {
         _ => Err(StoreError::InvariantViolation(
             "stored conversation kind is invalid",
         )),
-    }
-}
-
-pub(super) fn member_from_row(row: MemberRow) -> MemberSnapshot {
-    MemberSnapshot {
-        default_agent_id: format!("cloud-agent:{}", row.0),
-        account_id: row.0,
-        display_name: row.1,
-        avatar_url: row.2,
-        default_agent_display_name: row.3,
-        default_agent_avatar_url: row.4,
-        role: row.5,
-        membership_state: row.6,
-        version: row.7,
-        last_delivered_sequence: row.8,
-        last_read_sequence: row.9,
-        joined_at: row.10,
-        left_at: row.11,
     }
 }
 
@@ -98,28 +81,6 @@ pub(super) async fn advisory_session_lock(
         .execute(&mut **transaction)
         .await?;
     Ok(())
-}
-
-pub(super) async fn member_rows(
-    transaction: &mut Transaction<'_, Postgres>,
-    conversation_id: Uuid,
-) -> Result<Vec<MemberSnapshot>, StoreError> {
-    let rows: Vec<MemberRow> = query_as(
-        "SELECT member.account_id, account.display_name, account.avatar_url, \
-                agent.display_name, agent.avatar_url, \
-                member.role, member.membership_state, member.version, \
-                member.last_delivered_sequence, member.last_read_sequence, \
-                member.joined_at, member.left_at \
-         FROM cloud_chat_conversation_members member \
-         JOIN cloud_accounts account ON account.account_id = member.account_id \
-         JOIN cloud_default_agent_profiles agent ON agent.owner_account_id = member.account_id \
-         WHERE member.conversation_id = $1 \
-         ORDER BY member.joined_at ASC, member.account_id ASC",
-    )
-    .bind(conversation_id)
-    .fetch_all(&mut **transaction)
-    .await?;
-    Ok(rows.into_iter().map(member_from_row).collect())
 }
 
 pub(super) async fn load_conversation(
