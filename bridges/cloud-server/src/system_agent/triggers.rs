@@ -53,6 +53,9 @@ pub(super) struct Finding {
     pub detail: Value,
     /// Merged into `hooks_fired` when the run finishes.
     pub marks: Value,
+    /// The member to address when no card fits: the owner of the agent that
+    /// started the task, or whoever made the other card.
+    pub ask: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -242,6 +245,21 @@ pub(super) fn apply(input: &mut Value, trigger: &Trigger, marks: Map<String, Val
     };
     if !detail.is_null() {
         input["trigger"] = detail;
+        let ask = match trigger {
+            Trigger::Stall => input["stepIn"]["ownerAccountId"]
+                .as_str()
+                .map(str::to_string),
+            Trigger::Silence { .. } => first_speaker(input),
+            Trigger::Loop(finding) | Trigger::Conflict(finding) => finding.ask.clone(),
+            Trigger::Request { .. } | Trigger::Cards => None,
+        };
+        if let Some(mut ask) = ask.and_then(|account_id| addressee(input, &account_id)) {
+            // A loop goes back to the agent that owns the task; everything
+            // else to a person who can decide.
+            let agent = matches!(trigger, Trigger::Loop(_)) && ask["agentHandle"].is_string();
+            ask["mention"] = ask[if agent { "agentHandle" } else { "handle" }].clone();
+            input["trigger"]["ask"] = ask;
+        }
     }
     if matches!(
         trigger,
@@ -257,6 +275,32 @@ pub(super) fn apply(input: &mut Value, trigger: &Trigger, marks: Map<String, Val
     if !marks.is_empty() {
         input[MARKS_KEY] = Value::Object(marks);
     }
+}
+
+/// The first person who spoke in the discussion the run reads as new.
+fn first_speaker(input: &Value) -> Option<String> {
+    input["messages"]
+        .as_array()?
+        .iter()
+        .find(|message| {
+            message["isNew"] == true
+                && message["fromAgent"] != true
+                && message["fromSystemAgent"] != true
+        })
+        .and_then(|message| message["senderId"].as_str().map(str::to_string))
+}
+
+/// A listed member's handles, for the trigger's `ask`.
+fn addressee(input: &Value, account_id: &str) -> Option<Value> {
+    let member = input["members"]
+        .as_array()?
+        .iter()
+        .find(|member| member["participantId"] == account_id && member["isSystemAgent"] != true)?;
+    Some(json!({
+        "participantId": account_id,
+        "handle": member["handle"],
+        "agentHandle": member["agentHandle"],
+    }))
 }
 
 /// What a finished (or refused) run records in `hooks_fired`: the reminders

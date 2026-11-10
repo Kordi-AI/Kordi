@@ -22,6 +22,7 @@ pub(super) struct CardFact {
     pub end_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub created_by: String,
     pub by_system_agent: bool,
 }
 
@@ -90,6 +91,12 @@ pub(super) fn find_conflict(cards: &[CardFact], hooks_fired: &Value) -> Option<F
                     "cards": [a.shown(), b.shown()],
                 }),
                 marks: json!({ key: true }),
+                // Whoever made the newer card someone else did not make.
+                ask: [a, b]
+                    .into_iter()
+                    .filter(|card| !card.by_system_agent)
+                    .max_by_key(|card| card.created_at)
+                    .map(|card| card.created_by.clone()),
             });
         }
     }

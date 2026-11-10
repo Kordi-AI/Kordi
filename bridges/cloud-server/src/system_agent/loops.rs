@@ -96,6 +96,7 @@ fn request_limit_loop(
             "rounds": rounds.len(),
         }),
         marks,
+        ask: rounds.first().map(|exchange| exchange.from_account.clone()),
     })
 }
 
@@ -128,6 +129,7 @@ fn rounds_loop(
                 "rounds": rounds.len(),
             }),
             marks: json!({ key: newest }),
+            ask: rounds.first().map(|exchange| exchange.from_account.clone()),
         })
     })
 }
@@ -137,7 +139,7 @@ fn repeated_messages(messages: &[Value], hooks_fired: &Value) -> Option<Finding>
         .get(REPEAT_KEY)
         .and_then(Value::as_i64)
         .unwrap_or(0);
-    let agent_messages: Vec<(i64, String, BTreeSet<String>)> = messages
+    let agent_messages: Vec<(i64, String, BTreeSet<String>, Option<String>)> = messages
         .iter()
         .filter(|message| message["fromAgent"] == true)
         .filter_map(|message| {
@@ -147,20 +149,21 @@ fn repeated_messages(messages: &[Value], hooks_fired: &Value) -> Option<Finding>
                 .or(message["senderName"].as_str())
                 .unwrap_or("An agent");
             let words = word_set(message["text"].as_str().unwrap_or_default());
-            (!words.is_empty()).then(|| (sequence, name.to_string(), words))
+            let owner = message["senderId"].as_str().map(str::to_string);
+            (!words.is_empty()).then(|| (sequence, name.to_string(), words, owner))
         })
         .collect();
     let through = agent_messages
         .iter()
         .map(|(sequence, ..)| *sequence)
         .max()?;
-    agent_messages.iter().find_map(|(_, _, words)| {
-        let same: Vec<&(i64, String, BTreeSet<String>)> = agent_messages
+    agent_messages.iter().find_map(|(_, _, words, _)| {
+        let same: Vec<_> = agent_messages
             .iter()
-            .filter(|(_, _, other)| similarity(words, other) >= SAME_MESSAGE)
+            .filter(|(_, _, other, _)| similarity(words, other) >= SAME_MESSAGE)
             .collect();
         (same.len() >= REPEATS).then(|| {
-            let agents: BTreeSet<&str> = same.iter().map(|(_, name, _)| name.as_str()).collect();
+            let agents: BTreeSet<&str> = same.iter().map(|(_, name, ..)| name.as_str()).collect();
             Finding {
                 detail: json!({
                     "kind": "loop",
@@ -169,6 +172,7 @@ fn repeated_messages(messages: &[Value], hooks_fired: &Value) -> Option<Finding>
                     "rounds": same.len(),
                 }),
                 marks: json!({ REPEAT_KEY: through }),
+                ask: same.first().and_then(|(.., owner)| owner.clone()),
             }
         })
     })
