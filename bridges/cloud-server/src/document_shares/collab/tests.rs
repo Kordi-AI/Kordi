@@ -1,8 +1,10 @@
-//! Pure tests for collaboration tickets, the init grant, and frame decoding.
-//! Socket and storage tests live in `document_shares/tests/collab_db.rs`.
+//! Pure tests for collaboration tickets, the init grant, frame decoding, and
+//! relay payloads. Socket and storage tests live in
+//! `document_shares/tests/collab_*.rs`.
 
 use chrono::{Duration, Utc};
 
+use super::relay::{awareness_payload, query_payload, update_payload, Signal, MAX_PAYLOAD_BYTES};
 use super::rooms::decode_messages;
 use super::tickets::{
     bind_origin, grants_init, random_ticket, ticket_hash, InitState, TicketError, TICKET_PREFIX,
@@ -115,4 +117,73 @@ fn frames_must_hold_known_messages() {
     assert!(decode_messages(&[]).is_err(), "empty frame");
     assert!(decode_messages(&[0, 9]).is_err(), "unknown sync step");
     assert!(decode_messages(&[0, 0, 5, 1]).is_err(), "truncated");
+}
+
+#[test]
+fn relay_payloads_round_trip() {
+    let payload = update_payload("att_doc_1", 42);
+    assert_eq!(payload, "u:att_doc_1:42");
+    assert_eq!(
+        Signal::parse(&payload),
+        Some(Signal::Update {
+            attachment_id: "att_doc_1".into(),
+            seq: 42
+        })
+    );
+
+    let update = vec![1, 2, 3, 250, 0, 58];
+    let payload = awareness_payload("origin1", "att:with:colons", &update).unwrap();
+    assert!(payload.starts_with("a:origin1:att:with:colons:"));
+    assert_eq!(
+        Signal::parse(&payload),
+        Some(Signal::Awareness {
+            origin: "origin1".into(),
+            attachment_id: "att:with:colons".into(),
+            update
+        })
+    );
+
+    let payload = query_payload("origin1", "att_doc_1");
+    assert_eq!(payload, "q:origin1:att_doc_1");
+    assert_eq!(
+        Signal::parse(&payload),
+        Some(Signal::Query {
+            origin: "origin1".into(),
+            attachment_id: "att_doc_1".into()
+        })
+    );
+}
+
+#[test]
+fn oversized_awareness_is_not_sent() {
+    let fits = vec![7_u8; 5_000];
+    assert!(awareness_payload("origin1", "att_doc_1", &fits).is_some());
+    let too_large = vec![7_u8; MAX_PAYLOAD_BYTES];
+    assert!(awareness_payload("origin1", "att_doc_1", &too_large).is_none());
+}
+
+#[test]
+fn malformed_relay_payloads_are_ignored() {
+    for payload in [
+        "",
+        "u",
+        "u:",
+        "u:att_doc_1",
+        "u::5",
+        "u:att_doc_1:0",
+        "u:att_doc_1:-3",
+        "u:att_doc_1:many",
+        "a:origin1:att_doc_1",
+        "a:origin1:att_doc_1:not base64!",
+        "a::att_doc_1:AQID",
+        "a:origin1::AQID",
+        "a:origin1:att_doc_1:",
+        "q:origin1",
+        "q::att_doc_1",
+        "q:origin1:",
+        "x:origin1:att_doc_1",
+        "att_doc_1",
+    ] {
+        assert_eq!(Signal::parse(payload), None, "{payload:?}");
+    }
 }
