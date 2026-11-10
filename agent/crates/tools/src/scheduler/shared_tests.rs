@@ -36,7 +36,13 @@ async fn shared_requests_fail_closed_without_changing_tool_definitions() {
         let definition = tool.parameters_schema();
         let allowed = matches!(
             tool.name(),
-            "web_search" | "web_fetch" | "search_sessions" | "read_session" | "task_operator"
+            "web_search"
+                | "web_fetch"
+                | "search_sessions"
+                | "read_session"
+                | "task_operator"
+                // The server limits whom a non-owner request may ask.
+                | "reach_out"
         );
         assert_eq!(
             ensure_tool_allowed(tool.as_ref(), &ctx).is_ok(),

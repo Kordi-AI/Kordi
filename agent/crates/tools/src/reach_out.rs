@@ -53,6 +53,13 @@ impl Tool for ReachOutTool {
         "reach_out"
     }
 
+    /// A request from someone other than the owner may still ask: the
+    /// runtime exists only under a server lease, and the server limits such a
+    /// run to its requester, or to its own owner while answering another agent.
+    fn allows_shared_requests(&self) -> bool {
+        true
+    }
+
     fn description(&self) -> &str {
         "Send an explicit request to another agent, or ask a person, in the current conversation. Use an exact agent ID, person account ID, or unique @handle from the participant directory, and set targetKind to person when asking a person. A person's next message in the conversation, or their reply to the question, is the answer. In a shared conversation, ask the person who made the request this way, instead of ending the turn with a question, when you need their input to finish; for a request from someone other than your owner, they are the only one you can ask. For a task that involves other participants, reach their agent (preferred) or them for their availability or preferences, and the requester for what only they know; never end with a list of open questions. A successful request is durable and returns a receipt. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Never resend or poll while waiting."
     }
@@ -270,6 +277,30 @@ fn build_project_context(ctx: &ToolContext) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_non_owner_shared_request_may_use_reach_out() {
+        let ctx = ToolContext {
+            cwd: std::env::temp_dir(),
+            artifacts_dir: std::env::temp_dir(),
+            model: None,
+            execution_policy: crate::ExecutionPolicy::Shared,
+            invocation_id: None,
+            on_output: None,
+            web_search: None,
+            reach_out: None,
+            reflection: None,
+            session_observation: None,
+            task_operator: None,
+            schedule_task: None,
+            mac_local: None,
+            execution_mode: crate::ToolExecutionMode::Interactive,
+            connector_tools: None,
+            request_approval: None,
+        };
+        assert!(ReachOutTool.allows_shared_requests());
+        assert!(crate::ensure_tool_allowed(&ReachOutTool, &ctx).is_ok());
+    }
 
     fn input(kind: Option<&str>) -> ReachOutInput {
         serde_json::from_value(
