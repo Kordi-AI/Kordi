@@ -28,6 +28,13 @@ pub use super::retry::{fail, release_stale_runs};
 pub const RUN_PREFIX: &str = "pip_";
 const SWEEP_BATCH: i64 = 10;
 
+/// A SQL pattern for an RFC 3339 time as the sweep row stores it.
+macro_rules! iso_time {
+    () => {
+        "'^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}'"
+    };
+}
+
 /// Conversations worth a run. Every condition reads the same card as the run
 /// input (the newest one still in play), so a selected conversation always
 /// yields a hook or moves its cursor, and is never reselected every tick.
@@ -74,21 +81,31 @@ pub(super) const SWEEP_SQL: &str = concat!(
                THEN (s.hooks_fired->>('card_seen:' || card.event_id))::bigint ELSE 0 END
              AND card.updated_at <= now() - interval '45 seconds')
          -- A person's agent owns a task here and it is time to check whether it stalled.
-         OR CASE WHEN jsonb_typeof(s.hooks_fired #> '{deferred,checkAfter}') = 'string'
+         -- Stored times are cast only when they look like one, so one bad row
+         -- never fails the sweep for every conversation.
+         OR CASE WHEN s.hooks_fired #>> '{deferred,checkAfter}' ~ ",
+    iso_time!(),
+    "
               THEN (s.hooks_fired #>> '{deferred,checkAfter}')::timestamptz <= now()
               ELSE false END
          -- A held plan discussion may have gone quiet, or a loop or conflict waited.
-         OR CASE WHEN jsonb_typeof(s.hooks_fired #> '{planDiscussion,checkAfter}') = 'string'
+         OR CASE WHEN s.hooks_fired #>> '{planDiscussion,checkAfter}' ~ ",
+    iso_time!(),
+    "
               THEN (s.hooks_fired #>> '{planDiscussion,checkAfter}')::timestamptz <= now()
               ELSE false END
-         OR CASE WHEN jsonb_typeof(s.hooks_fired -> 'triggerCheckAfter') = 'string'
+         OR CASE WHEN s.hooks_fired ->> 'triggerCheckAfter' ~ ",
+    iso_time!(),
+    "
               THEN (s.hooks_fired ->> 'triggerCheckAfter')::timestamptz <= now()
               ELSE false END
          -- A live card changed since the last conflict check, 45 seconds ago or more.
          OR EXISTS (SELECT 1 FROM cloud_plan_cards card
               WHERE card.conversation_id = c.conversation_id
                 AND card.updated_at <= now() - interval '45 seconds'
-                AND card.updated_at > CASE WHEN jsonb_typeof(s.hooks_fired -> 'cardsCheckedAt') = 'string'
+                AND card.updated_at > CASE WHEN s.hooks_fired ->> 'cardsCheckedAt' ~ ",
+    iso_time!(),
+    "
                   THEN (s.hooks_fired ->> 'cardsCheckedAt')::timestamptz ELSE '-infinity' END
                 AND ",
     crate::plan_cards::live_plan_card_sql!(),
@@ -184,11 +201,38 @@ pub async fn sweep(pool: &PgPool, config: &SystemAgentConfig) -> Result<usize, s
             context_start_sequence,
             hooks_fired,
         };
-        if enqueue(pool, config, &candidate).await? {
-            queued += 1;
+        // One conversation's bad data or failed read must never stop the
+        // System agent everywhere else: log it, hold that conversation back
+        // briefly, and go on with the rest.
+        match enqueue(pool, config, &candidate).await {
+            Ok(true) => queued += 1,
+            Ok(false) => {}
+            Err(error) => {
+                eprintln!("[system-agent] Skipped conversation {conversation_id}: {error}");
+                if let Err(error) = hold_back(pool, conversation_id).await {
+                    eprintln!("[system-agent] Could not hold back {conversation_id}: {error}");
+                }
+            }
         }
     }
     Ok(queued)
+}
+
+/// How long a conversation that could not be evaluated waits for its next try.
+const HOLD_BACK_SECONDS: f64 = 60.0;
+
+async fn hold_back(pool: &PgPool, conversation_id: Uuid) -> Result<(), sqlx_core::Error> {
+    query(
+        "UPDATE cloud_pip_conversation_state
+         SET retry_after = now() + ($2 * interval '1 second'), last_error = 'sweep_failed',
+             updated_at = now()
+         WHERE conversation_id = $1 AND active_run_id IS NULL",
+    )
+    .bind(conversation_id)
+    .bind(HOLD_BACK_SECONDS)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 async fn enqueue(
@@ -196,6 +240,8 @@ async fn enqueue(
     config: &SystemAgentConfig,
     candidate: &Candidate,
 ) -> Result<bool, sqlx_core::Error> {
+    #[cfg(test)]
+    tests::fail_if_broken(candidate.conversation_id)?;
     // A person's agent owns its task: its messages stay context until it
     // replies, or come back as new here once it stalls.
     let (prepared, input, gate) = super::ownership_store::prepare(pool, config, candidate).await?;
@@ -420,33 +466,5 @@ pub async fn complete(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn run_output_accepts_json_and_bare_text() {
-        let json =
-            parse_run_output(r#"{"message":"Lunch card is up.","hooksHandled":["t_minus_24h"]}"#);
-        assert_eq!(json.message.as_deref(), Some("Lunch card is up."));
-        assert_eq!(json.hooks_handled, vec!["t_minus_24h".to_string()]);
-        let silent = parse_run_output(r#"{"message":null,"hooksHandled":[]}"#);
-        assert!(silent.message.is_none());
-        let bare = parse_run_output("Still on for tomorrow?");
-        assert_eq!(bare.message.as_deref(), Some("Still on for tomorrow?"));
-        assert!(parse_run_output("   ").message.is_none());
-    }
-
-    #[test]
-    fn offered_reminders_fire_even_when_the_run_stays_silent() {
-        let input = json!({"hooks": [
-            {"name": "new_messages", "sinceSequence": 4},
-            {"name": "t_minus_24h", "key": "t_minus_24h:plan_a", "eventId": "plan_a"},
-            {"name": "card_changed", "eventId": "plan_a", "revision": 3},
-        ]});
-        assert_eq!(
-            offered_reminders(&input),
-            json!({"t_minus_24h:plan_a": true})
-        );
-        assert_eq!(offered_reminders(&json!({"hooks": []})), json!({}));
-    }
-}
+#[path = "store_tests.rs"]
+pub(super) mod tests;

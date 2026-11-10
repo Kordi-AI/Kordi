@@ -393,3 +393,72 @@ async fn a_failed_agent_run_is_named_as_a_failure_and_keeps_its_owner() {
         "KordiAlice couldn't answer, so I'm picking this up.\n@Alice Which time works for you?"
     );
 }
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn a_conversation_that_cannot_be_read_never_stops_the_others() {
+    let broken = Chat::new().await;
+    // A second conversation of the same people and System agent.
+    let (chat, session) = (Uuid::new_v4(), format!("session:group:{}", Uuid::new_v4()));
+    let members = [&broken.bob, &broken.alice, &broken.config.account_id];
+    crate::plan_cards::tests::seed_conversation(
+        &broken.pool,
+        chat,
+        &broken.bob,
+        &members.map(String::as_str),
+    )
+    .await;
+    query("UPDATE cloud_chat_conversations SET legacy_session_id = $2 WHERE conversation_id = $1")
+        .bind(chat)
+        .bind(&session)
+        .execute(&broken.pool)
+        .await
+        .unwrap();
+    query("INSERT INTO cloud_pip_conversation_state (conversation_id) VALUES ($1)")
+        .bind(chat)
+        .execute(&broken.pool)
+        .await
+        .unwrap();
+    let healthy = Chat {
+        pool: broken.pool.clone(),
+        config: broken.config.clone(),
+        chat,
+        session,
+        alice: broken.alice.clone(),
+        bob: broken.bob.clone(),
+    };
+    for chat in [&broken, &healthy] {
+        chat.name_people().await;
+        say(&chat.pool, &chat.bob, chat.chat, "Dinner Friday at 7?").await;
+        chat.let_silence_pass().await;
+    }
+    super::store::tests::break_conversation(broken.chat);
+    // A malformed stored time is skipped by the sweep query itself.
+    query("UPDATE cloud_pip_conversation_state SET hooks_fired = '{\"triggerCheckAfter\": \"soon\", \"cardsCheckedAt\": \"later\"}' WHERE conversation_id = $1")
+        .bind(broken.chat)
+        .execute(&broken.pool)
+        .await
+        .unwrap();
+    // The broken conversation is looked at first, and fails.
+    query("UPDATE cloud_pip_conversation_state SET checked_at = now() - interval '2 hours' WHERE conversation_id = $1")
+        .bind(broken.chat)
+        .execute(&broken.pool)
+        .await
+        .unwrap();
+    let queued = super::store::sweep(&healthy.pool, &healthy.config)
+        .await
+        .expect("one broken conversation does not fail the sweep");
+    assert_eq!(queued, 1);
+    let prompts = healthy.system_agent_prompts().await;
+    assert_eq!(trigger(&prompts[0]), ("silence", ""));
+    let (retry_later, error): (bool, Option<String>) = query_as(
+        "SELECT retry_after > now(), last_error FROM cloud_pip_conversation_state
+         WHERE conversation_id = $1",
+    )
+    .bind(broken.chat)
+    .fetch_one(&broken.pool)
+    .await
+    .unwrap();
+    assert!(retry_later, "held back instead of retried every tick");
+    assert_eq!(error.as_deref(), Some("sweep_failed"));
+}
