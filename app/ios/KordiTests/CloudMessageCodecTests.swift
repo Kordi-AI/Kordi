@@ -229,7 +229,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "You",
             text: "Original update",
             createdAt: Date(timeIntervalSince1970: 1_786_000_000),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             messageAction: .forward(source)
@@ -283,7 +283,7 @@ final class CloudMessageCodecTests: XCTestCase {
                 authorName: "Maya",
                 text: "",
                 createdAt: Date(timeIntervalSince1970: 1_786_000_000),
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: nil,
                 attachments: [attachment],
@@ -618,7 +618,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "My Kordi",
             text: "processing...",
             createdAt: Date(timeIntervalSince1970: 1),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: "request-1"
         )
@@ -629,7 +629,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "My Kordi",
             text: "Done",
             createdAt: Date(timeIntervalSince1970: 2),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: "request-1"
         )
@@ -644,7 +644,7 @@ final class CloudMessageCodecTests: XCTestCase {
             ChatMessage(id: id, conversationId: "group:fixture", author: .agent,
                 authorName: "Kordi", senderOwnerName: "Same display name",
                 text: text, createdAt: Date(timeIntervalSince1970: 1),
-                deliveryState: .delivered, errorMessage: nil, requestMessageId: "shared-request")
+                deliveryState: .sent, errorMessage: nil, requestMessageId: "shared-request")
         }
         let first = response("first-agent-response", text: "Working")
         let second = response("second-agent-response", text: "Done")
@@ -680,7 +680,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "You",
             text: "Hello",
             createdAt: Date(timeIntervalSince1970: 2),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil
         )
@@ -719,7 +719,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "You",
             text: "",
             createdAt: Date(timeIntervalSince1970: 1),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             attachments: []
@@ -740,7 +740,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "My Kordi",
             text: "Switched model to openai/gpt-5.6-sol",
             createdAt: Date(timeIntervalSince1970: 2),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             messageKind: ChatMessage.agentModelChangeMessageKind
@@ -752,7 +752,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "My Kordi",
             text: "Stale",
             createdAt: Date(timeIntervalSince1970: 3),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil
         )
@@ -763,7 +763,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "My Kordi",
             text: "Current",
             createdAt: Date(timeIntervalSince1970: 4),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil
         )
@@ -786,7 +786,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "My Kordi",
             text: "Switched model to openai/gpt-5.6-sol",
             createdAt: Date(timeIntervalSince1970: 2),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             messageKind: ChatMessage.agentModelChangeMessageKind
@@ -798,7 +798,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "You",
             text: local.text,
             createdAt: local.createdAt.addingTimeInterval(1),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             messageKind: ChatMessage.agentModelChangeMessageKind
@@ -834,7 +834,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "Maya",
             text: "Later",
             createdAt: Date(timeIntervalSince1970: 3),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil
         )
@@ -870,7 +870,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "You",
             text: failed.text,
             createdAt: failed.createdAt,
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil
         )
@@ -902,7 +902,7 @@ final class CloudMessageCodecTests: XCTestCase {
             authorName: "My Kordi",
             text: "Cached response",
             createdAt: Date(timeIntervalSince1970: 1),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil
         )

@@ -143,11 +143,11 @@ struct ConversationBoundaryTests {
 @Test func threadReferencesResolveToTheSameKnownCloudMessage() throws {
     let wireId = "10000000-0000-4000-8000-000000000001"
     var root = ChatMessage(id:"group-payload",clientMessageId:"client-root",conversationId:"parent",conversationSequence:30,
-        author:.agent,authorName:"Researcher",text:"Result",createdAt:.now,deliveryState:.delivered,errorMessage:nil,requestMessageId:nil)
+        author:.agent,authorName:"Researcher",text:"Result",createdAt:.now,deliveryState:.sent,errorMessage:nil,requestMessageId:nil)
     root.reactionTargetMessageId = wireId
     func reply(_ id: String, reference: String) -> ChatMessage {
         var row = ChatMessage(id:id,conversationId:"parent",conversationSequence:31,author:.person,authorName:"Peer",text:"Follow",
-            createdAt:.now,deliveryState:.delivered,errorMessage:nil,requestMessageId:nil)
+            createdAt:.now,deliveryState:.sent,errorMessage:nil,requestMessageId:nil)
         row.messageAction = .thread(MessageActionSource(sourceSessionId:"parent",sourceMessageId:reference,senderLabel:"Researcher",textPreview:"Result",attachmentCount:0))
         return row
     }
@@ -165,7 +165,7 @@ struct ConversationBoundaryTests {
 @Test @MainActor func hydrationAndBackfillKeepCloudOrderInsteadOfRequestAnchoredTime() {
     func row(_ id: String, sequence: Int64?, time: Double, author: MessageAuthor) -> ChatMessage {
         ChatMessage(id:id,conversationId:"parent",conversationSequence:sequence,author:author,authorName:"Participant",text:id,
-            createdAt:Date(timeIntervalSince1970:time),deliveryState:sequence == nil ? .sending : .delivered,errorMessage:nil,requestMessageId:nil)
+            createdAt:Date(timeIntervalSince1970:time),deliveryState:sequence == nil ? .sending : .sent,errorMessage:nil,requestMessageId:nil)
     }
     let rows = [row("A-request",sequence:28,time:1,author:.me),row("B-request",sequence:29,time:2,author:.me),
         row("B-answer",sequence:30,time:2.001,author:.agent),row("A-answer",sequence:31,time:1.001,author:.agent)]
@@ -179,17 +179,17 @@ struct ConversationBoundaryTests {
     let key = "10000000-0000-4000-8000-000000000001"
     let data = try JSONSerialization.data(withJSONObject: ["root_message_id":key,"root_client_message_id":"client-root","last_read_sequence":2])
     let read = try JSONDecoder().decode(CloudThreadRead.self, from:data)
-    let root = ChatMessage(id:key,conversationId:"parent",author:.agent,authorName:"Researcher",text:"Root",createdAt:.now,deliveryState:.delivered,errorMessage:nil,requestMessageId:nil)
-    let reply = ChatMessage(id:"reply",conversationId:"parent",conversationSequence:2,author:.person,authorName:"Peer",text:"Reply",createdAt:.now,deliveryState:.delivered,errorMessage:nil,requestMessageId:nil)
+    let root = ChatMessage(id:key,conversationId:"parent",author:.agent,authorName:"Researcher",text:"Root",createdAt:.now,deliveryState:.sent,errorMessage:nil,requestMessageId:nil)
+    let reply = ChatMessage(id:"reply",conversationId:"parent",conversationSequence:2,author:.person,authorName:"Peer",text:"Reply",createdAt:.now,deliveryState:.sent,errorMessage:nil,requestMessageId:nil)
     let thread = MessageThread(root:root,replies:[reply])
     #expect(thread.hasUnread(cursors:[:]))
     var cursors = CloudThreadRead.merging([read],into:[:])
     #expect(!thread.hasUnread(cursors:cursors))
     cursors = CloudThreadRead.merging([CloudThreadRead(rootMessageId:key,rootClientMessageId:"client-root",lastReadSequence:1)],into:cursors)
     #expect(cursors[key] == 2)
-    let own = ChatMessage(id:"own",conversationId:"parent",conversationSequence:3,author:.me,authorName:"You",text:"Own reply",createdAt:.now,deliveryState:.delivered,errorMessage:nil,requestMessageId:nil)
+    let own = ChatMessage(id:"own",conversationId:"parent",conversationSequence:3,author:.me,authorName:"You",text:"Own reply",createdAt:.now,deliveryState:.sent,errorMessage:nil,requestMessageId:nil)
     #expect(!MessageThread(root:root,replies:[reply,own]).hasUnread(cursors:cursors))
-    let answer = ChatMessage(id:"agent",conversationId:"parent",conversationSequence:4,author:.agent,authorName:"Researcher",text:"New result",createdAt:.now,deliveryState:.delivered,errorMessage:nil,requestMessageId:nil)
+    let answer = ChatMessage(id:"agent",conversationId:"parent",conversationSequence:4,author:.agent,authorName:"Researcher",text:"New result",createdAt:.now,deliveryState:.sent,errorMessage:nil,requestMessageId:nil)
     #expect(MessageThread(root:root,replies:[reply,own,answer]).hasUnread(cursors:cursors))
 }
 
@@ -202,13 +202,13 @@ struct ConversationBoundaryTests {
         var root = ChatMessage(id: "root-\(index)", clientMessageId: clientID,
             conversationId: "synthetic-group", conversationSequence: sequence,
             author: .person, authorName: "Peer", text: "Root \(index)",
-            createdAt: Date(timeIntervalSince1970: Double(sequence)), deliveryState: .delivered,
+            createdAt: Date(timeIntervalSince1970: Double(sequence)), deliveryState: .sent,
             errorMessage: nil, requestMessageId: nil)
         root.reactionTargetMessageId = wireID
         let references = [root.id, wireID, clientID, "collaboration-message:viewer:\(wireID)"]
         var reply = ChatMessage(id: "reply-\(index)", conversationId: "synthetic-group",
             conversationSequence: sequence + 1, author: .person, authorName: "Peer", text: "Follow-up",
-            createdAt: Date(timeIntervalSince1970: Double(sequence + 1)), deliveryState: .delivered,
+            createdAt: Date(timeIntervalSince1970: Double(sequence + 1)), deliveryState: .sent,
             errorMessage: nil, requestMessageId: nil)
         reply.messageAction = .thread(MessageActionSource(sourceSessionId: "synthetic-group",
             sourceMessageId: references[index % references.count], senderLabel: "Peer",
@@ -216,7 +216,7 @@ struct ConversationBoundaryTests {
         var answer = ChatMessage(id: "answer-\(index)", conversationId: "synthetic-group",
             conversationSequence: sequence + 2, author: index % 5 == 4 ? .me : .agent,
             authorName: "Participant", text: "Answer", createdAt: Date(timeIntervalSince1970: Double(sequence + 2)),
-            deliveryState: .delivered, errorMessage: nil, requestMessageId: reply.id)
+            deliveryState: .sent, errorMessage: nil, requestMessageId: reply.id)
         answer.replyToMessageId = reply.id
         if index % 5 == 0 {
             answer.agentExecution = AgentExecutionSnapshot(phase: .queued, summary: "Queued", steps: [],
@@ -300,7 +300,7 @@ struct ConversationBoundaryTests {
 @Test func ordinaryMessageRowsNeedNoThreadLookupOrAgentState() {
     let message = ChatMessage(id: "10000000-0000-4000-8000-000000000001",
         conversationId: "synthetic", author: .person, authorName: "Peer", text: "Hello",
-        createdAt: .distantPast, deliveryState: .delivered, errorMessage: nil, requestMessageId: nil)
+        createdAt: .distantPast, deliveryState: .sent, errorMessage: nil, requestMessageId: nil)
     let projection = MessageThreadProjection(messages: [message])
     let rowThread = projection.threadsByRootID[message.id]
     #expect(rowThread == nil)

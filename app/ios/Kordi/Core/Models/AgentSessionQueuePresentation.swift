@@ -24,7 +24,7 @@ enum AgentSessionQueuePresentation {
         confirmedRunStatus: String? = nil
     ) -> AgentExecutionSnapshot.Phase? {
         guard let request = messages.first(where: { $0.id == requestID }),
-              [.sent, .delivered, .read].contains(request.deliveryState) else { return nil }
+              [.sent, .read].contains(request.deliveryState) else { return nil }
         if let confirmedRunStatus {
             if confirmedRunStatus == "running" { return .preparing }
             if ["failed", "cancelled"].contains(confirmedRunStatus) { return nil }

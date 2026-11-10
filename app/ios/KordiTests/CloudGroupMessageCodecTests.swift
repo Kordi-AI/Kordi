@@ -791,7 +791,7 @@ final class CloudGroupMessageCodecTests: XCTestCase {
             authorName: "Shu Yang",
             text: "@teammate again",
             createdAt: Date(timeIntervalSince1970: 1),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             reactionTargetMessageId: "cloud-request"
@@ -861,7 +861,7 @@ final class CloudGroupMessageCodecTests: XCTestCase {
             authorName: "Maya Chen",
             text: text,
             createdAt: date,
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             replyToMessageId: replyToMessageID,

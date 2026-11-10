@@ -90,7 +90,7 @@ struct AgentResponseDeduplicationTests {
         let request = wire("request", body: "Hello", second: 0)
         let sent = project([request])
         #expect(sent.count == 1)
-        #expect([MessageDeliveryState.sent, .delivered, .read].contains(try #require(sent.first).deliveryState))
+        #expect([MessageDeliveryState.sent, .read].contains(try #require(sent.first).deliveryState))
         #expect(sent.allSatisfy { $0.agentExecution == nil })
         let progress = try response("progress", text: "", state: "processing")
         let processing = AppModel.mergePartialProjection(project([request, progress]), preserving: sent)
@@ -102,7 +102,7 @@ struct AgentResponseDeduplicationTests {
         #expect(complete.allSatisfy { $0.agentExecution?.completed != false })
     }
 
-    @Test(arguments: [MessageDeliveryState.sending, .sent, .delivered, .read, .failed, .cancelled])
+    @Test(arguments: [MessageDeliveryState.sending, .sent, .read, .failed, .cancelled])
     func processingCannotOvertakeItsRequestsSendState(state: MessageDeliveryState) throws {
         let request = wire("request", body: "Hello", second: 0)
         let progress = try response("progress", text: "", state: "processing")
@@ -111,7 +111,7 @@ struct AgentResponseDeduplicationTests {
         rows[index].deliveryState = state
         for kind: ConversationKind in [.agent, .group, .person] {
             let visible = AgentSessionQueuePresentation.apply(to: rows, kind: kind)
-            #expect(visible.count == ([.sent, .delivered, .read].contains(state) ? 2 : 1))
+            #expect(visible.count == ([.sent, .read].contains(state) ? 2 : 1))
         }
     }
 

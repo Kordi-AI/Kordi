@@ -126,7 +126,7 @@ struct PersonalAgentPersistenceTests {
         let message = ChatMessage(
             id: "outreach-1", conversationId: "agent-session:personal", conversationSequence: 4,
             author: .agent, authorName: "Alex's Kordi", text: "Lab sync moved to 10 am Thursday.",
-            createdAt: Date(timeIntervalSince1970: 1_800_000_000), deliveryState: .delivered,
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000), deliveryState: .sent,
             errorMessage: nil, requestMessageId: "personal_agent_eval_1", sources: sources
         )
         let cache = try LocalMessageStore(inMemory: true)

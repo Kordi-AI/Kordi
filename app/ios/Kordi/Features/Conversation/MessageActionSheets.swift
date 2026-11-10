@@ -1,10 +1,11 @@
 import SwiftUI
 import UIKit
 
+/// Who reads a group message lives in the menu's Seen by row, and there is no
+/// delivered time or state (#2455).
 struct MessageDetailsSheet: View {
     @Environment(\.dismiss) private var dismiss
     let message: ChatMessage
-    let readers: [CloudGroupParticipant]
 
     var body: some View {
         NavigationStack {
@@ -13,35 +14,8 @@ struct MessageDetailsSheet: View {
                     LabeledContent("From", value: message.authorName)
                     LabeledContent("Sent", value: message.createdAt.formatted(date: .abbreviated, time: .shortened))
                     LabeledContent("Status", value: message.deliveryState.label)
-                    if readers.isEmpty, let count = message.readByCount, count > 0 {
-                        LabeledContent("Seen by", value: "\(count) people")
-                    }
                     if message.messageAction?.kind == "forward" {
                         LabeledContent("Forwarded from", value: message.messageAction?.source.senderLabel ?? "Message")
-                    }
-                }
-
-                if !readers.isEmpty {
-                    Section("Seen by") {
-                        ForEach(readers) { reader in
-                            HStack(spacing: 12) {
-                                IdentityAvatar(
-                                    name: reader.displayName,
-                                    imageSource: reader.avatarUrl,
-                                    kind: .person,
-                                    size: 34,
-                                    seed: reader.accountId
-                                )
-                                Text(reader.displayName)
-                                    .lineLimit(1)
-                                Spacer(minLength: 8)
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityHidden(true)
-                            }
-                            .accessibilityElement(children: .combine)
-                            .accessibilityLabel("Seen by \(reader.displayName)")
-                        }
                     }
                 }
 
@@ -68,46 +42,6 @@ struct MessageDetailsSheet: View {
                 }
             }
         }
-    }
-}
-
-enum MessageReadReceiptPresentation {
-    static func readers(
-        for message: ChatMessage,
-        in conversation: ConversationSummary
-    ) -> [CloudGroupParticipant] {
-        guard message.author == .me else { return [] }
-        if conversation.kind == .group {
-            let participantsByID = Dictionary(
-                conversation.groupParticipants.map { ($0.accountId, $0) },
-                uniquingKeysWith: { first, _ in first }
-            )
-            return message.readByAccountIds.map { accountID in
-                participantsByID[accountID] ?? CloudGroupParticipant(
-                    accountId: accountID,
-                    displayName: "Kordi user",
-                    avatarUrl: nil,
-                    role: nil
-                )
-            }
-        }
-        guard conversation.kind == .person,
-              message.readByAccountIds.contains(conversation.peerAccountId) else { return [] }
-        return [CloudGroupParticipant(
-            accountId: conversation.peerAccountId,
-            displayName: conversation.ownerDisplayName?.nonEmpty ?? conversation.displayName,
-            avatarUrl: conversation.avatarSource,
-            role: nil
-        )]
-    }
-
-    static func label(
-        for message: ChatMessage,
-        readers: [CloudGroupParticipant]
-    ) -> String? {
-        guard message.author == .me, message.deliveryState == .read else { return nil }
-        let count = max(message.readByCount ?? 0, readers.count)
-        return count > 0 ? "\(count) Seen" : nil
     }
 }
 
@@ -353,6 +287,7 @@ struct MessageActionOverlay: View {
     @State private var isConfirmingDelete = false
     @State private var didSchedulePreviewExpansion = false
     @State private var threadSheetContentHeight: CGFloat = 398
+    @State private var seenBy = MessageSeenByModel()
     let message: ChatMessage
     var layout: MessageLayout = .chat
     let sourceFrame: CGRect
@@ -370,8 +305,10 @@ struct MessageActionOverlay: View {
     let deleteForEveryoneLabel: String
     let isPinned: Bool
     let mediaAttachment: ChatAttachment?
-    let readReceiptLabel: String?
-    let readReceiptReaders: [CloudGroupParticipant]
+    /// The viewer's own group message whose readers the Seen by row loads; nil hides the row.
+    var seenByTarget: MessageSeenByTarget? = nil
+    var loadSeenBy: MessageReadersLoader = { _, _ in CloudMessageReadersResponse(total: 0, readers: []) }
+    var onShowSeenBy: (MessageSeenByTarget) -> Void = { _ in }
     var onSheetAction: (@escaping () -> Void) -> Void = { $0() }
     let onDismiss: () -> Void
     let onReviewAttachment: () -> Void
@@ -408,7 +345,7 @@ struct MessageActionOverlay: View {
             + (allowsDelete ? 1 : 0)
             + mediaActionCount
             + (stickerAttachment == nil ? 0 : 1)
-            + (readReceiptLabel == nil ? 0 : 1)
+            + (seenByState.isVisible ? 1 : 0)
             + (onReport == nil ? 0 : 1)
     }
 
@@ -437,12 +374,20 @@ struct MessageActionOverlay: View {
         !EmojiRecentStore.items(from: storedRecentEmojiIDs).isEmpty
     }
 
-    @ViewBuilder
     var body: some View {
-        if layout == .threads {
-            threadsActionSheet
-        } else {
-            floatingActionOverlay
+        Group {
+            if layout == .threads { threadsActionSheet } else { floatingActionOverlay }
+        }
+        // Closing the menu or choosing another message cancels the fetch.
+        .task(id: seenByTarget) { await seenBy.load(seenByTarget, using: loadSeenBy) }
+    }
+
+    private var seenByState: MessageSeenByState { seenBy.state(for: seenByTarget) }
+
+    private var seenByRow: some View {
+        MessageSeenByRow(state: seenByState) {
+            guard let seenByTarget else { return }
+            performAction { onShowSeenBy(seenByTarget) }
         }
     }
 
@@ -508,7 +453,7 @@ struct MessageActionOverlay: View {
                                 isConfirmingDelete = true
                             }
                         }
-                        MessageActionReadReceiptRow(label: readReceiptLabel, readers: readReceiptReaders)
+                        seenByRow
                     }
                 }
             }
@@ -1024,10 +969,7 @@ struct MessageActionOverlay: View {
                             }
                         )
                     }
-                    MessageActionReadReceiptRow(
-                        label: readReceiptLabel,
-                        readers: readReceiptReaders
-                    )
+                    seenByRow
                 }
             }
             .padding(.vertical, 4)
@@ -1088,55 +1030,6 @@ struct MessageActionOverlay: View {
         }
         .buttonStyle(.plain)
         .disabled(disabled)
-    }
-}
-
-private struct MessageActionReadReceiptRow: View {
-    @ScaledMetric(relativeTo: .footnote) private var avatarSize = 18.0
-    let label: String?
-    let readers: [CloudGroupParticipant]
-
-    @ViewBuilder
-    var body: some View {
-        if let label {
-            Divider().padding(.horizontal, 14)
-            HStack(spacing: 10) {
-                MessageDeliveryGlyph(state: .read, readByCount: readers.count)
-                    .foregroundStyle(.secondary)
-                Text(label)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                if !readers.isEmpty {
-                    HStack(spacing: -4) {
-                        ForEach(Array(readers.prefix(4).enumerated()), id: \.element.id) { index, reader in
-                            IdentityAvatar(
-                                name: reader.displayName,
-                                imageSource: reader.avatarUrl,
-                                kind: .person,
-                                size: avatarSize,
-                                seed: reader.accountId
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: avatarSize * 0.17, style: .continuous).stroke(Color(uiColor: .systemBackground), lineWidth: 1)
-                            }
-                            .zIndex(Double(index))
-                        }
-                    }
-                    .accessibilityHidden(true)
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(.horizontal, 16)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilityLabel ?? label)
-        }
-    }
-
-    private var accessibilityLabel: String? {
-        let names = readers.map(\.displayName).compactMap(\.nonEmpty)
-        return names.isEmpty ? nil : "Seen by \(names.joined(separator: ", "))"
     }
 }
 
