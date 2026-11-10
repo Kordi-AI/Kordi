@@ -399,7 +399,9 @@ pub(crate) async fn permission(app: tauri::AppHandle) -> Result<String, String> 
         })
     });
     let status = tokio::select! {
-        early = receiver => early.unwrap_or(Err("unavailable")),
+        // The early sender is dropped unused on the normal path; a closed
+        // channel is not an answer, so this branch only ends on a real error.
+        Ok(early) = receiver => early,
         status = tokio::time::timeout(SETTLE_WAIT * 2, status_receiver) => match status {
             Ok(Ok(status)) => Ok(status),
             _ => Err("unknown"),
