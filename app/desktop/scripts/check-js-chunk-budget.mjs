@@ -65,7 +65,9 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // One shared error line and the call permission dialog remove 8.2 kB.
 // Leaving a group through the server route on the Mac adds 0.8 kB.
 // Presence text in group Info, Add people and the Chat Info participants adds 0.9 kB, so it moves to 5.82 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_820_000;
+// Plan RSVPs in the event dialog, renewing an expired sign-in and per-sign-in model
+// availability add 9 kB, so it moves to 5.831 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_831_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
