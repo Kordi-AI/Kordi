@@ -15,6 +15,7 @@ use sqlx_postgres::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
+mod answering;
 mod lifecycle;
 mod outcome;
 mod person;
@@ -250,8 +251,10 @@ async fn desktop_finish(
     }.await)
 }
 
-/// A lease advertises the tool only when its authorization and directory exist.
-pub(crate) async fn guidance(pool: &PgPool, run: &str) -> RunResult<Option<String>> {
+/// Whom this run can reach for its request, for the tail runtime note:
+/// agents and people with their exact ids and handles. `None` when the run
+/// cannot reach out or nobody is reachable.
+pub(crate) async fn reachable(pool: &PgPool, run: &str) -> RunResult<Option<Value>> {
     let parent = match authorize(pool, run, None).await {
         Ok(p) => p,
         Err(RunError::NotFound) => return Ok(None),
@@ -265,27 +268,17 @@ pub(crate) async fn guidance(pool: &PgPool, run: &str) -> RunResult<Option<Strin
     if targets.is_empty() && people.is_empty() {
         return Ok(None);
     }
-    if parent.requester_only() {
-        return Ok(Some(requester_only_guidance(&people)));
-    }
-    Ok(Some(format!(
-        "Use reach_out to contact another agent or ask a person in this conversation. For an agent, use its exact agentId or unique @handle. For a person, set targetKind to person and use their accountId or unique @handle; their next message here, or their reply to your question, is the answer. {}Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task, which you own until it has a result. Do not resend or poll. Participant agent directory: {} People you can ask: {}",
-        if people.iter().any(|p| p.requester) { ASK_REQUESTER } else { "" },
-        json!(targets),
-        json!(people)
-    )))
+    Ok(Some(json!({"agents":targets,"people":people})))
 }
 
-/// In a shared conversation a plain follow-up does not reach the agent, so a
-/// question to the requester must go through reach_out to be answered.
-const ASK_REQUESTER: &str = "If you need information or a decision from the person who asked (marked requester) before you can finish, ask them with reach_out instead of ending your turn with a question; their reply continues the task. ";
-
-/// A request from someone other than the owner may only ask that person back.
-fn requester_only_guidance(people: &[person::Person]) -> String {
-    format!(
-        "If you need information or a decision from the person who asked before you can finish, ask them with reach_out (targetKind person, their accountId) instead of ending your turn with a question; their next message here, or their reply to your question, continues the task. They are the only one you can ask for this request: do not contact other agents or people. Ask only for what is actually missing, in one message. Send only the explicit question. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn. Do not resend or poll. Person you can ask: {}",
-        json!(people)
-    )
+/// A lease advertises the tool only when its authorization and directory
+/// exist. The text is the same for every run of an agent, so the system
+/// prompt prefix stays stable; whom this run can reach is in the runtime
+/// note at the tail of its context.
+pub(crate) async fn guidance(pool: &PgPool, run: &str) -> RunResult<Option<String>> {
+    Ok(reachable(pool, run)
+        .await?
+        .map(|_| kordi_tools::reach_out::GUIDANCE.to_owned()))
 }
 
 async fn is_authorized(pool: &PgPool, run: &str) -> RunResult<bool> {
@@ -293,5 +286,17 @@ async fn is_authorized(pool: &PgPool, run: &str) -> RunResult<bool> {
         Ok(_) => Ok(true),
         Err(RunError::NotFound) => Ok(false),
         Err(e) => Err(e),
+    }
+}
+
+#[cfg(test)]
+mod guidance_tests {
+    #[test]
+    fn the_guidance_is_stable_and_works_with_other_participants() {
+        let text = kordi_tools::reach_out::GUIDANCE;
+        assert!(text.contains("other participant's agent (preferred)"));
+        assert!(text.contains("never end with a list of open questions"));
+        assert!(text.contains("may only ask that requester"));
+        assert!(!text.contains('{'), "no per-run data in the stable prefix");
     }
 }

@@ -323,3 +323,6 @@ async fn a_new_request_to_the_same_agent_supersedes_its_question() {
 
 #[path = "agent_exchange_shared_requests.rs"]
 mod shared_requests;
+
+#[path = "agent_exchange_conversation_info.rs"]
+mod conversation_info;

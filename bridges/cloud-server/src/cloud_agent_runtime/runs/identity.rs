@@ -36,9 +36,16 @@ pub(crate) async fn identity_for_run(pool: &PgPool, run_id: &str) -> RunResult<V
     if let Some(policy) = policy {
         identity["requestPolicy"] = Value::String(policy);
     }
-    // Who is in a shared conversation, where they are, and the current time.
-    if let Some(context) = super::conversation_context::for_run(pool, run_id).await? {
-        identity["conversationContext"] = Value::String(context);
+    // A short note for the tail of this turn's context: the current time, the
+    // members when they changed, and whom reach_out can reach. It never goes
+    // into the system prompt, which stays the same from run to run.
+    if let Some((note, digest)) = super::conversation_context::note(pool, run_id).await? {
+        let note = match super::exchanges::reachable(pool, run_id).await? {
+            Some(reachable) => format!("{note}\nYou can reach_out to: {reachable}"),
+            None => note,
+        };
+        identity["conversationContext"] = Value::String(note);
+        identity["conversationMembersDigest"] = Value::String(digest);
     }
     // Atomic first-writer wins, including competing lease attempts. Avoid holding
     // a pool connection while reading the request envelope on another connection.

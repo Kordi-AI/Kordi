@@ -40,6 +40,11 @@ pub struct ReachOutInput {
     pub timeout_seconds: Option<u64>,
 }
 
+/// Stable reach_out guidance for the system prompt of a run in a shared
+/// conversation. Whom a run can reach is in the runtime note at the tail of
+/// its context, so this text is the same for every run of an agent.
+pub const GUIDANCE: &str = "Use reach_out to contact another agent or ask a person in this conversation; the runtime note at the end of your context lists whom you can reach for this request, with their exact agentId or accountId and @handle. For a person, set targetKind to person; their next message here, or their reply to your question, is the answer. A request from someone other than your owner may only ask that requester, and while answering another agent you may only ask your own owner. When the task involves other participants (plans, times, availability, preferences), first reach_out to each other participant's agent (preferred) or to the person for what only they know, and ask the requester with reach_out for what only the requester knows; never end with a list of open questions. If you need information or a decision from the person who asked before you can finish, ask them with reach_out instead of ending your turn with a question; their reply continues the task. Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task, which you own until it has a result. Do not resend or poll.";
+
 pub struct ReachOutTool;
 
 #[async_trait]
@@ -49,7 +54,7 @@ impl Tool for ReachOutTool {
     }
 
     fn description(&self) -> &str {
-        "Send an explicit request to another agent, or ask a person, in the current conversation. Use an exact agent ID, person account ID, or unique @handle from the participant directory, and set targetKind to person when asking a person. A person's next message in the conversation, or their reply to the question, is the answer. In a shared conversation, ask the person who made the request this way, instead of ending the turn with a question, when you need their input to finish; for a request from someone other than your owner, they are the only one you can ask. A successful request is durable and returns a receipt. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Never resend or poll while waiting."
+        "Send an explicit request to another agent, or ask a person, in the current conversation. Use an exact agent ID, person account ID, or unique @handle from the participant directory, and set targetKind to person when asking a person. A person's next message in the conversation, or their reply to the question, is the answer. In a shared conversation, ask the person who made the request this way, instead of ending the turn with a question, when you need their input to finish; for a request from someone other than your owner, they are the only one you can ask. For a task that involves other participants, reach their agent (preferred) or them for their availability or preferences, and the requester for what only they know; never end with a list of open questions. A successful request is durable and returns a receipt. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Never resend or poll while waiting."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -291,6 +296,11 @@ mod tests {
             ReachOutTool
                 .description()
                 .contains("they are the only one you can ask")
+        );
+        assert!(
+            ReachOutTool
+                .description()
+                .contains("never end with a list of open questions")
         );
     }
 

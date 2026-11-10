@@ -30,8 +30,11 @@ impl Transport {
 /// The server decides who this run may reach: everyone for the owner's own
 /// request, only the requester for anyone else's, and nobody on an older
 /// server, whose capability check refuses requests from other people.
+/// `listed_in_identity`: the turn identity's runtime note already lists whom
+/// this run can reach (newer servers), so the guidance is the stable text.
 pub(super) async fn build(
     lease: Option<&DesktopCloudExecutionLease>,
+    listed_in_identity: bool,
 ) -> Option<(ReachOutRuntime, String)> {
     let lease = lease?.clone();
     let base = crate::cloud_api_base_url_from_env().ok()?;
@@ -50,7 +53,11 @@ pub(super) async fn build(
     });
     // A missing capability on an older backend leaves the tool hidden.
     let capabilities = transport.call("capabilities", "", json!({})).await.ok()?;
-    let guidance = guidance(&capabilities)?;
+    let guidance = if listed_in_identity {
+        (capabilities["available"] == true).then(|| kordi_tools::reach_out::GUIDANCE.to_owned())?
+    } else {
+        guidance(&capabilities)?
+    };
     Some((
         ReachOutRuntime {
             reach_out: Arc::new(move |request: ReachOutRequest| {
@@ -86,8 +93,9 @@ fn listed(value: &Value) -> bool {
     value.as_array().is_some_and(|items| !items.is_empty())
 }
 
-/// The directory the agent sees: other agents, and people it may ask. Older
-/// backends list no people, so only agents are offered there.
+/// The directory the agent sees from a server whose turn identity carries no
+/// runtime note: other agents, and people it may ask. Older backends list no
+/// people, so only agents are offered there.
 fn guidance(capabilities: &Value) -> Option<String> {
     let agents = listed(&capabilities["targets"]);
     let people = listed(&capabilities["people"]);
@@ -100,7 +108,7 @@ fn guidance(capabilities: &Value) -> Option<String> {
             .is_some_and(|people| people.iter().all(|p| p["requester"] == true));
     if only_requester {
         return Some(format!(
-            "If you need information or a decision from the person who asked before you can finish, ask them with reach_out (targetKind person, their accountId) instead of ending your turn with a question; their next message in this conversation, or their reply to your question, continues the task. They are the only one you can ask for this request: do not contact other agents or people. Ask only for what is actually missing, in one message, and never share private context or files. Follow the receipt to end this turn. Do not poll or resend. Person you can ask: {}.",
+            "If you need information or a decision from the person who asked before you can finish, ask them with reach_out (targetKind person, their accountId) instead of ending your turn with a question; their next message in this conversation, or their reply to your question, continues the task. They are the only one you can ask for this request: do not contact other agents or people. Ask only for what is actually missing, in one message, and never share private context or files; never end with a list of open questions. Follow the receipt to end this turn. Do not poll or resend. Person you can ask: {}.",
             capabilities["people"]
         ));
     }
@@ -123,6 +131,7 @@ fn guidance(capabilities: &Value) -> Option<String> {
     if requester {
         text.push_str(" If you need information or a decision from the person who asked (marked requester) before you can finish, ask them with reach_out instead of ending your turn with a question; their reply continues the task.");
     }
+    text.push_str(" When the task involves other participants (plans, times, availability, preferences), first reach_out to each other participant's agent (preferred) or to the person for what only they know, and ask the requester with reach_out for what only the requester knows; never end with a list of open questions.");
     text.push_str(" A successful call queues the request. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Do not poll or resend.");
     Some(text)
 }
@@ -157,6 +166,8 @@ mod tests {
         let requester_only = guidance(&shared).unwrap();
         assert!(requester_only.contains("They are the only one you can ask"));
         assert!(!requester_only.contains("contact another agent"));
+        assert!(requester_only.contains("never end with a list of open questions"));
+        assert!(text.contains("each other participant's agent (preferred)"));
         let older = json!({"available":true,"targets":[{"agentId":"cloud-agent:a"}]});
         assert!(!guidance(&older).unwrap().contains("People:"));
         assert!(guidance(&json!({"available":true,"targets":[],"people":[]})).is_none());
