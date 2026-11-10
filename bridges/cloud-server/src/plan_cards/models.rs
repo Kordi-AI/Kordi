@@ -141,12 +141,38 @@ pub struct PlanCardRow {
 }
 
 /// The person's agent that opened a card: its id, its owner (the card's
-/// creator), and the name it had then.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// creator), the agent's own name when it opened the card, and the owner's
+/// current name and the agent's picture, read with the card.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PlanCardAgent {
     pub agent_id: String,
     pub owner_account_id: String,
     pub name: String,
+    pub owner_name: String,
+    pub avatar_url: Option<String>,
+}
+
+impl PlanCardAgent {
+    /// The agent's own name ("Kordi"), without an owner prefix an older
+    /// card may have stored.
+    pub fn agent_name(&self) -> &str {
+        let name = self.name.trim();
+        let owner = self.owner_name.trim();
+        let prefix = format!("{owner}'s ");
+        match name.strip_prefix(prefix.as_str()) {
+            Some(bare) if !owner.is_empty() && !bare.trim().is_empty() => bare.trim(),
+            _ if name.is_empty() => "Kordi",
+            _ => name,
+        }
+    }
+
+    /// "<owner>'s <agent>", as calendar entries name the planner.
+    pub fn label(&self) -> String {
+        match self.owner_name.trim() {
+            "" => self.agent_name().to_string(),
+            owner => format!("{owner}'s {}", self.agent_name()),
+        }
+    }
 }
 
 pub struct PlanCardProposeArgs {

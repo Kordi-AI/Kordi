@@ -31,6 +31,100 @@ final class SystemAccountIdentityTests: XCTestCase {
         XCTAssertFalse(KordiSystemAgentIdentity.matches(name: identity.name, seed: identity.seed))
     }
 
+    func testAgentPlanCardShowsAsTheAgentInDirectChat() throws {
+        var wire = makeWire(id: "plan", from: "acct_me", to: "acct_maya", kind: KordiSystemIdentity.messageKind)
+        wire.planCard = try plannedCard(agentId: "cloud-agent:acct_me", agentName: "Kordi", owner: "acct_me", ownerName: "Shu Yang")
+
+        let owned = try XCTUnwrap(CloudDirectMessageProjector.project(
+            [wire], conversation: makeDirect(), ownAccountId: "acct_me").first)
+        XCTAssertEqual(owned.author, .agent, "Never the owner's own bubble")
+        XCTAssertEqual(owned.authorName, "Shu Yang's Kordi")
+        XCTAssertEqual(owned.senderOwnerName, "You")
+        XCTAssertEqual(owned.messageKind, PlanCardAgentSender.messageKind)
+        XCTAssertFalse(KordiSystemIdentity.isSystemNotice(owned))
+        XCTAssertFalse(owned.isSystemNotice)
+        XCTAssertNotNil(owned.planCard)
+        XCTAssertEqual(owned.planCardPart().author, .agent)
+        XCTAssertEqual(owned.planCardPart().senderOwnerName, "You")
+        let identity = MessageAuthorIdentity.resolve(
+            owned, in: makeDirect(), account: nil, mentionTargets: [])
+        XCTAssertEqual(identity.name, "Shu Yang's Kordi")
+        XCTAssertEqual(identity.seed, "cloud-agent:acct_me")
+        XCTAssertFalse(KordiSystemIdentity.matches(seed: identity.seed))
+
+        let seenByPeer = try XCTUnwrap(CloudDirectMessageProjector.project(
+            [wire], conversation: makeDirect(), ownAccountId: "acct_maya").first)
+        XCTAssertEqual(seenByPeer.author, .agent)
+        XCTAssertEqual(seenByPeer.senderOwnerName, "Shu Yang")
+    }
+
+    func testAgentPlanCardShowsAsTheAgentInGroup() throws {
+        let conversation = makeGroup()
+        var card = makeWire(
+            id: "plan", from: "acct_maya", to: "acct_me", kind: KordiSystemIdentity.messageKind,
+            sessionId: "session:group:mobile")
+        card.planCard = try plannedCard(agentId: "agent_scout", agentName: "Scout", owner: "acct_maya", ownerName: "Maya")
+        let own = makeWire(id: "own", from: "acct_maya", to: "acct_me", kind: nil, sessionId: "session:group:mobile")
+
+        let projected = AppModel.mapGroupMessages(
+            AppModel.groupWireMessages(for: conversation, in: [card, own]),
+            conversation: conversation,
+            ownAccountId: "acct_me"
+        )
+        let message = try XCTUnwrap(projected.first { $0.id == "plan" })
+
+        XCTAssertEqual(message.author, .agent)
+        XCTAssertEqual(message.authorName, "Scout")
+        XCTAssertEqual(message.senderOwnerName, "Maya")
+        XCTAssertEqual(message.messageKind, PlanCardAgentSender.messageKind)
+        XCTAssertEqual(projected.first { $0.id == "own" }?.authorName, "Maya")
+    }
+
+    func testCardWithoutPlannerOrFromAnotherAccountStaysSystem() throws {
+        let conversation = makeGroup()
+        var meet = makeWire(
+            id: "meet", from: "acct_me", to: "acct_maya", kind: KordiSystemIdentity.messageKind,
+            sessionId: "session:group:mobile")
+        meet.planCard = try JSONDecoder().decode(PlanCard.self, from: Data(planJSON.utf8))
+        var forged = makeWire(
+            id: "forged", from: "acct_maya", to: "acct_me", kind: KordiSystemIdentity.messageKind,
+            sessionId: "session:group:mobile")
+        forged.planCard = try plannedCard(agentId: nil, agentName: "Kordi", owner: "acct_me", ownerName: "Shu Yang")
+
+        let projected = AppModel.mapGroupMessages(
+            AppModel.groupWireMessages(for: conversation, in: [meet, forged]),
+            conversation: conversation,
+            ownAccountId: "acct_me"
+        )
+
+        for id in ["meet", "forged"] {
+            let message = try XCTUnwrap(projected.first { $0.id == id })
+            XCTAssertEqual(message.author, .person, id)
+            XCTAssertEqual(message.authorName, KordiSystemIdentity.displayName, id)
+            XCTAssertNil(message.senderOwnerName, id)
+            XCTAssertEqual(message.messageKind, KordiSystemIdentity.messageKind, id)
+            XCTAssertEqual(
+                MessageAuthorIdentity.resolve(message, in: conversation, account: nil, mentionTargets: []),
+                KordiSystemIdentity.avatar, id)
+        }
+    }
+
+    func testPlanCardDecodesPlannerAndToleratesItsAbsence() throws {
+        let card = try plannedCard(agentId: "agent_scout", agentName: "Scout", owner: "acct_maya", ownerName: "Maya")
+        XCTAssertEqual(card.plannedBy, PlanCardPlanner(
+            agentId: "agent_scout", agentName: "Scout", ownerAccountId: "acct_maya", ownerName: "Maya"))
+        let roundTrip = try JSONDecoder().decode(PlanCard.self, from: JSONEncoder().encode(card))
+        XCTAssertEqual(roundTrip, card)
+
+        XCTAssertNil(try JSONDecoder().decode(PlanCard.self, from: Data(planJSON.utf8)).plannedBy)
+        for garbage in [#""Scout""#, #"{"agentName":"Scout"}"#, #"{"agentName":" ","ownerAccountId":"acct_maya"}"#, "null"] {
+            let json = #"{"eventId":"plan","revision":1,"state":"polling","title":"Dinner","plannedBy":"# + garbage + "}"
+            let decoded = try JSONDecoder().decode(PlanCard.self, from: Data(json.utf8))
+            XCTAssertNil(decoded.plannedBy, garbage)
+            XCTAssertEqual(decoded.title, "Dinner", garbage)
+        }
+    }
+
     func testDirectNoticeFromPeerShowsAsSystem() throws {
         let wire = makeWire(id: "plan", from: "acct_maya", to: "acct_me", kind: KordiSystemIdentity.messageKind)
 
@@ -79,6 +173,15 @@ final class SystemAccountIdentityTests: XCTestCase {
         XCTAssertTrue(KordiSystemIdentity.isServiceAccount(KordiSystemAgentIdentity.accountId))
         XCTAssertFalse(KordiSystemIdentity.isServiceAccount("acct_maya"))
         XCTAssertFalse(KordiSystemIdentity.isSystem(accountId: KordiSystemAgentIdentity.accountId))
+    }
+
+    private func plannedCard(agentId: String?, agentName: String, owner: String, ownerName: String) throws -> PlanCard {
+        let planner: [String: Any?] = [
+            "agentId": agentId, "agentName": agentName, "ownerAccountId": owner, "ownerName": ownerName, "avatarUrl": nil
+        ]
+        var card = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(planJSON.utf8)) as? [String: Any])
+        card["plannedBy"] = planner.mapValues { $0 ?? NSNull() }
+        return try JSONDecoder().decode(PlanCard.self, from: JSONSerialization.data(withJSONObject: card))
     }
 
     private func makeDirect() -> ConversationSummary {

@@ -112,8 +112,9 @@ enum CloudDirectMessageProjector {
     ) -> ChatMessage {
         let isAgentResponse = CloudMessageCodec.isAgentResponse(message.body)
         let responseRequestId = isAgentResponse ? CloudMessageCodec.agentResponseRequestId(message.body) : nil
-        let messageKind = CloudMessageCodec.canonicalMessageKind(message)
-        let author: MessageAuthor = isAgentResponse ? .agent : KordiSystemIdentity.author(
+        let cardAgent = KordiSystemIdentity.planCardAgent(message, ownAccountId: ownAccountId)
+        let messageKind = cardAgent == nil ? CloudMessageCodec.canonicalMessageKind(message) : PlanCardAgentSender.messageKind
+        let author: MessageAuthor = isAgentResponse || cardAgent != nil ? .agent : KordiSystemIdentity.author(
             messageKind: messageKind, fromAccountId: message.fromAccountId, ownAccountId: ownAccountId)
         let state = CloudMessageStateProjector.deliveryState(for: message, ownAccountId: ownAccountId)
         let readerIds = message.readByAccountIds.flatMap { $0.isEmpty ? nil : $0 }
@@ -128,6 +129,8 @@ enum CloudDirectMessageProjector {
         switch author {
         case .me:
             authorName = "You"
+        case .agent where cardAgent != nil:
+            authorName = cardAgent?.authorName ?? "Kordi"
         case .agent:
             let name = verifiedTarget?.targetCloudAgentName?.nonEmpty ?? conversation.agentDisplayName?.nonEmpty ?? "Kordi"
             authorName = CanonicalAvatarSystem.agentID(
@@ -154,7 +157,8 @@ enum CloudDirectMessageProjector {
             timelineSequence: timelineSequence,
             author: author,
             authorName: authorName,
-            senderOwnerName: author == .agent ? (message.fromAccountId == ownAccountId ? "You" : agentOwnerName) : nil,
+            senderOwnerName: author == .agent
+                ? cardAgent.map(\.ownerName) ?? (message.fromAccountId == ownAccountId ? "You" : agentOwnerName) : nil,
             text: CloudMessageCodec.viewerText(
                 message.body,
                 viewerOwnsAgent: message.fromAccountId == ownAccountId,

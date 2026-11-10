@@ -171,11 +171,18 @@ pub(super) async fn fetch_row(
         manager_ids: managers.into_iter().map(|(id,)| id).collect(),
         options: options_from_json(options),
         note,
-        agent: agent_id.map(|agent_id| PlanCardAgent {
-            agent_id,
-            owner_account_id: created_by,
-            name: agent_name.unwrap_or_else(|| "Kordi".to_string()),
-        }),
+        agent: match agent_id {
+            Some(agent_id) => Some(
+                super::agent_proposal::planner(
+                    conn,
+                    agent_id,
+                    created_by,
+                    agent_name.unwrap_or_default(),
+                )
+                .await?,
+            ),
+            None => None,
+        },
     }))
 }
 

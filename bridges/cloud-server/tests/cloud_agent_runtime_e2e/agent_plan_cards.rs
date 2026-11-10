@@ -98,8 +98,25 @@ async fn a_person_agent_opens_one_plan_card_per_task_and_keeps_it_current() {
     .await
     .unwrap();
     assert_eq!(agent, format!("cloud-agent:{}", f.people[0].account_id));
-    assert!(name.starts_with("Exchange Alpha's "), "{name}");
+    assert!(
+        !name.is_empty() && !name.contains("Exchange Alpha"),
+        "{name}"
+    );
     assert_eq!(task, f.root);
+    // The card shows as the agent's message: its block names the agent.
+    let (planner,): (Value,) = query_as(
+        "SELECT content->'blocks'->0->'plannedBy' FROM cloud_chat_messages
+         WHERE sender_account_id = $1 AND content->'blocks' @> $2::jsonb",
+    )
+    .bind(&f.people[0].account_id)
+    .bind(json!([{"type": "plan_card", "eventId": event_id}]))
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(planner["agentId"], agent);
+    assert_eq!(planner["agentName"], name);
+    assert_eq!(planner["ownerAccountId"], f.people[0].account_id);
+    assert_eq!(planner["ownerName"], "Exchange Alpha");
     assert_eq!(
         carriers(&f, &event_id).await,
         vec![("system-notice".to_string(), "event".to_string(), 1)]

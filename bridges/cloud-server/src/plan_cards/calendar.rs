@@ -10,7 +10,7 @@ use sqlx_core::query_as::query_as;
 use sqlx_postgres::Postgres;
 use uuid::Uuid;
 
-use super::models::{PlanCardRow, PlanCardRsvp, PlanCardState};
+use super::models::{PlanCardAgent, PlanCardRow, PlanCardRsvp, PlanCardState};
 
 fn calendar_event_id(event_id: &str) -> String {
     format!("plan:{event_id}")
@@ -22,9 +22,8 @@ fn planned_with(row: &PlanCardRow, group: Option<&str>) -> String {
     let planner = row
         .agent
         .as_ref()
-        .map(|agent| agent.name.trim())
-        .filter(|name| !name.is_empty())
-        .unwrap_or("the System agent");
+        .map(PlanCardAgent::label)
+        .unwrap_or_else(|| "the System agent".to_string());
     match group {
         Some(group) => format!("Planned with {planner} in {group}."),
         None => format!("Planned with {planner}."),
@@ -138,7 +137,6 @@ pub(super) async fn sync_plan(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan_cards::models::PlanCardAgent;
 
     fn row(agent: Option<PlanCardAgent>) -> PlanCardRow {
         PlanCardRow {
@@ -169,15 +167,24 @@ mod tests {
         let agent = PlanCardAgent {
             agent_id: "cloud-agent:acct_a".to_string(),
             owner_account_id: "acct_a".to_string(),
-            name: "Ada's Kordi".to_string(),
+            name: "Kordi".to_string(),
+            owner_name: "Ada".to_string(),
+            avatar_url: None,
         };
         assert_eq!(
             planned_with(&row(Some(agent.clone())), Some("Team")),
             "Planned with Ada's Kordi in Team."
         );
         assert_eq!(
-            planned_with(&row(Some(agent)), None),
+            planned_with(&row(Some(agent.clone())), None),
             "Planned with Ada's Kordi."
         );
+        // A card that stored the owner's name with the agent's reads the same.
+        let stored = PlanCardAgent {
+            name: "Ada's Kordi".to_string(),
+            ..agent
+        };
+        assert_eq!(stored.agent_name(), "Kordi");
+        assert_eq!(stored.label(), "Ada's Kordi");
     }
 }

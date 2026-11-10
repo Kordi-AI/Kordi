@@ -281,8 +281,7 @@ async fn system_agent_defers_to_person_agent(
     let owner = match args.existing_event_id.as_deref() {
         Some(event_id) => super::agent::opened_by_agent(pool, event_id)
             .await
-            .map_err(|err| store_error(err.into()))?
-            .map(|name| (event_id.to_string(), name)),
+            .map_err(|err| store_error(err.into()))?,
         None => super::agent::agent_card_for_same_plan(
             pool,
             args.conversation_id,

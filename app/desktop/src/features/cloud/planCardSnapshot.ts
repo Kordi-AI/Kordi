@@ -1,4 +1,4 @@
-import type { MessagePlanCard, MessagePlanCardOption, MessagePlanCardParticipant } from '@/kordi-app/types/message';
+import type { MessagePlanCard, MessagePlanCardOption, MessagePlanCardParticipant, MessagePlanCardPlanner } from '@/kordi-app/types/message';
 import { isBuiltInAccountId } from '@/features/systemAgent/systemAgentIdentity';
 
 const PLAN_CARD_STATES = new Set(['polling', 'awaiting_confirmation', 'confirmed', 'canceled']);
@@ -70,7 +70,22 @@ export function normalizePlanCardSnapshot(value: unknown): MessagePlanCard | nul
     participants,
     managerIds: Array.isArray(block.managerIds) ? block.managerIds.filter((id): id is string => typeof id === 'string') : [],
     options,
+    plannedBy: planCardPlanner(block.plannedBy),
   };
+}
+
+/** The person's agent that opened a card, or null when the System agent did. */
+function planCardPlanner(value: unknown): MessagePlanCardPlanner | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const planner = value as Record<string, unknown>;
+  const text = (key: string) => {
+    const field = planner[key];
+    return typeof field === 'string' ? field.trim() : '';
+  };
+  const agentId = text('agentId');
+  const ownerAccountId = text('ownerAccountId');
+  if (!agentId || !ownerAccountId) return null;
+  return { agentId, agentName: text('agentName') || 'Kordi', ownerAccountId, ownerName: text('ownerName'), avatarUrl: text('avatarUrl') || null };
 }
 
 /**
