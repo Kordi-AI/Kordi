@@ -14,7 +14,7 @@ import {
 import { cloudContactToContact } from '../src/features/cloud/useCloudContacts';
 import { MessageContextMenuContent } from '../src/kordi-app/components/messageContextMenuContent';
 
-test('direct read receipts survive Cloud mapping, canonical hydration, and menu rendering', () => {
+test('direct read receipts survive Cloud mapping and canonical hydration without a Seen row', () => {
   const account: CloudAccount = {
     accountId: 'acct_me', displayName: 'Me', primaryEmail: 'me@example.com',
     avatar: {
@@ -56,7 +56,7 @@ test('direct read receipts survive Cloud mapping, canonical hydration, and menu 
 
   assert.equal(collaborationMessage.deliveryState, 'read');
   assert.equal(hydrated[0]?.readReceiptSummary?.participants[0]?.name, 'Peer Person');
-  assert.match(markup, /data-message-context-menu-seen-row="true"/);
-  assert.match(markup, /1 Seen/);
-  assert.match(markup, /title="Seen by Peer Person"/);
+  // Direct conversations show two ticks but no Seen row.
+  assert.doesNotMatch(markup, /data-message-context-menu-seen-row/);
+  assert.doesNotMatch(markup, /Seen/);
 });

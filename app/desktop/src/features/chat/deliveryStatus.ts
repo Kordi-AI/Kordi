@@ -12,10 +12,8 @@ export function messageDeliveryVisual(status?: string | null): MessageDeliveryVi
   if (normalized === 'read' || normalized === 'responded') {
     return { glyph: 'double-check', tone: 'gray', label: 'Read' };
   }
-  if (normalized === 'delivered') {
-    return { glyph: 'single-check', tone: 'gray', label: 'Delivered' };
-  }
-  if (normalized === 'sent') {
+  // There is no separate delivered state: the server having the message is Sent.
+  if (normalized === 'sent' || normalized === 'delivered') {
     return { glyph: 'single-check', tone: 'gray', label: 'Sent' };
   }
   if (normalized === 'sending' || normalized === 'pending_send') {

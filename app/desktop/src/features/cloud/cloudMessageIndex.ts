@@ -271,6 +271,8 @@ export function buildCloudMessageIndex(
     const readerAccountIds = (wire.readByAccountIds ?? (readAt ? [wire.toAccountId] : []))
       .map(cleanText)
       .filter((accountId) => accountId && accountId !== localAccountId);
+    // The read watermark can mark a message read before any reader's cursor is known.
+    if (readAt) summary.state = 'read';
     if (readerAccountIds.length > 0) {
       summary.state = 'read';
       const readerReadAt = wire.readByAccountIds === undefined ? readAt : null;

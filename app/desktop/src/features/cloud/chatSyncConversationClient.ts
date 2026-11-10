@@ -12,8 +12,11 @@ import type { ChatSyncConversationInput, ChatSyncConversation, ChatSyncMessage, 
 import { createInSessionOrganization } from '@/features/organizations/organizationForbidden';
 import { ChatSyncMessageDelivery } from './chatSyncMessageDelivery';
 import { captureChatDeliveryScope } from './chatDeliveryScope';
+import { ChatDeliveryAcknowledgements } from './chatSyncReadReceipts';
 
 export class ChatSyncConversationClient {
+  private readonly deliveryAcknowledgements = new ChatDeliveryAcknowledgements();
+
   constructor(private readonly state: ChatSyncState) {}
 
   async ensureChatConversation(token: string, input: ChatSyncConversationInput): Promise<ChatSyncConversation> {
@@ -338,7 +341,16 @@ export class ChatSyncConversationClient {
   ): Promise<void> {
     const conversation = this.state.conversationById.get(conversationId);
     if (!conversation || sequence <= 0) return;
-    await this.advanceChatCursor(token, conversation, 'delivered', sequence);
+    // History completion reads the own delivered cursor, so it still moves, but
+    // only forward: batches that change nothing else send no request.
+    const release = this.deliveryAcknowledgements.claim(conversation, sequence);
+    if (!release) return;
+    try {
+      await this.advanceChatCursor(token, conversation, 'delivered', sequence);
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 
   async updateCloudSessionTitle(token: string, sessionId: string, input: UpdateCloudSessionTitleInput): Promise<CloudSessionTitle> {

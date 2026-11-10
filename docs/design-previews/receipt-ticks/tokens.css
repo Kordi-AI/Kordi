@@ -1,0 +1,127 @@
+/* Token values copied from the app (Classic chat theme, the default).
+ * Mac: app/desktop/src/styles/theme-palette.css (Classic blocks) and dense-menu.css.
+ * iPhone: KordiChatTheme.classic in app/ios/Kordi/Core/Design/KordiTheme.swift and
+ * the UIKit system colours SwiftUI resolves for the same roles. */
+:root {
+  color-scheme: light;
+  /* Review chrome (outside the product surfaces). */
+  --page: #f3f3f5;
+  --page-ink: #1d1d1f;
+  --page-muted: #6b6b70;
+  --page-line: rgb(0 0 0 / 0.1);
+  --page-surface: #ffffff;
+  --page-segment: rgb(0 0 0 / 0.06);
+
+  /* Mac, Classic light. */
+  --m-canvas: #ffffff;
+  --m-ink: oklch(26% 0 0);
+  --m-muted: oklch(46% 0 0);
+  --m-meta: oklch(49% 0 0);
+  --m-border: oklch(36% 0 0 / 0.15);
+  --m-divider: oklch(36% 0 0 / 0.10);
+  --m-hover: rgb(0 0 0 / 0.045);
+  --m-raised: rgb(0 0 0 / 0.035);
+  --m-popup: oklch(97% 0 0 / 0.94);
+  --m-composer: oklch(98% 0 0 / 0.65);
+  --m-own-bg: #e9e9eb;
+  --m-own-ink: #111111;
+  --m-peer-bg: #f2f2f4;
+  --m-peer-ink: #111111;
+  --m-accent: #0a66d6;
+  --m-accent-ink: #ffffff;
+  --m-tick-sent: #805500;   /* --app-chat-reply-own */
+  --m-tick-read: #176b4d;   /* --app-chat-mention-own-person */
+  --m-danger: rgb(159 18 57);
+  --m-avatar-empty: rgb(226 232 240);
+  --m-shadow: 0 12px 40px rgb(0 0 0 / 24%);
+  --m-skeleton: rgb(0 0 0 / 0.08);
+
+  /* iPhone, Classic light. */
+  --i-canvas: #ffffff;
+  --i-label: #000000;
+  --i-secondary: rgb(60 60 67 / 0.6);
+  --i-tertiary: rgb(60 60 67 / 0.3);
+  --i-separator: rgb(60 60 67 / 0.29);
+  --i-fill3: rgb(118 118 128 / 0.12);
+  --i-own: #e9e9eb;
+  --i-own-ink: #111111;
+  /* peerBubble #F2F2F4 under peerText at 12% (lightAppearanceBubbleTintColor). */
+  --i-peer: #d7d7d9;
+  --i-peer-ink: #111111;
+  --i-accent: #0a66d6;
+  --i-accent-ink: #ffffff;
+  --i-tick-sent: #805500;   /* ownReplyAccent */
+  --i-tick-read: #176b4d;   /* ownPersonMention */
+  --i-red: #ff3b30;
+  --i-menu: rgb(250 250 250 / 0.92);
+  --i-pill: rgb(250 250 250 / 0.88);
+  --i-glass: rgb(255 255 255 / 0.72);
+  --i-glass-line: rgb(0 0 0 / 0.07);
+  --i-backdrop: rgb(235 235 238 / 0.32);
+  --i-sheet: #ffffff;
+  --i-dim: rgb(0 0 0 / 0.2);
+  --i-skeleton: rgb(118 118 128 / 0.18);
+  --i-bezel: #1b1c1f;
+
+  --font: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
+}
+
+[data-theme=dark] {
+  color-scheme: dark;
+  --page: #0e0e0e;
+  --page-ink: #eeeeee;
+  --page-muted: #a1a1a6;
+  --page-line: rgb(255 255 255 / 0.12);
+  --page-surface: #1c1c1e;
+  --page-segment: rgb(255 255 255 / 0.08);
+
+  --m-canvas: #171717;
+  --m-ink: oklch(92% 0 0);
+  --m-muted: oklch(73% 0 0);
+  --m-meta: oklch(71% 0 0);
+  --m-border: oklch(85% 0 0 / 0.16);
+  --m-divider: oklch(85% 0 0 / 0.10);
+  --m-hover: rgb(255 255 255 / 0.065);
+  --m-raised: rgb(255 255 255 / 0.05);
+  --m-popup: oklch(27% 0 0 / 0.95);
+  --m-composer: oklch(29% 0 0 / 0.70);
+  --m-own-bg: #343434;
+  --m-own-ink: #f5f5f5;
+  --m-peer-bg: #262626;
+  --m-peer-ink: #f2f2f2;
+  --m-accent: #5ea2ff;
+  --m-accent-ink: #0b1a2e;
+  --m-tick-sent: #fff0a3;
+  --m-tick-read: #adffd7;
+  --m-danger: rgb(253 164 175);
+  --m-avatar-empty: rgb(51 65 85);
+  --m-shadow: 0 12px 40px rgb(0 0 0 / 40%);
+  --m-skeleton: rgb(255 255 255 / 0.12);
+
+  --i-canvas: #171717;
+  --i-label: #ffffff;
+  --i-secondary: rgb(235 235 245 / 0.6);
+  --i-tertiary: rgb(235 235 245 / 0.3);
+  --i-separator: rgb(84 84 88 / 0.65);
+  --i-fill3: rgb(118 118 128 / 0.24);
+  --i-own: #343434;
+  --i-own-ink: #f5f5f5;
+  --i-peer: #262626;
+  --i-peer-ink: #f2f2f2;
+  --i-accent: #5ea2ff;
+  --i-accent-ink: #0b1a2e;
+  --i-tick-sent: #fff0a3;
+  --i-tick-read: #adffd7;
+  --i-red: #ff453a;
+  --i-menu: rgb(22 22 24 / 0.94);
+  --i-pill: rgb(32 32 34 / 0.92);
+  --i-glass: rgb(44 44 46 / 0.72);
+  --i-glass-line: rgb(255 255 255 / 0.08);
+  --i-backdrop: rgb(0 0 0 / 0.34);
+  --i-sheet: #1c1c1e;
+  --i-dim: rgb(0 0 0 / 0.45);
+  --i-skeleton: rgb(118 118 128 / 0.32);
+  --i-bezel: #3a3b3f;
+}
+
+body { background: var(--page); color: var(--page-ink); }
