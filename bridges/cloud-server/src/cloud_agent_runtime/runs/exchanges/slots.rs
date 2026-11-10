@@ -1,39 +1,24 @@
-//! The visible slot of a run started by an exchange rather than a fresh
-//! mention: the answering agent's reply (`:reply`, created with the question)
-//! and the asking agent's continuation (`:continued`, created with the resume
-//! run). Each shows a processing row as soon as the run exists and becomes
-//! the run's answer in place; a run that ends silently or waits retires it,
-//! a failure or a stop leaves the matching terminal state, never a spinner.
+//! The visible slot of the one run that has no row of its own: an agent
+//! answering another agent's request (`:reply`, created with the question).
+//! It shows processing at once and becomes the answer in place; while that
+//! agent waits for its own owner the row is retired, and it reopens when the
+//! owner replies. The asking agent's task uses its own slot (`main_row`).
 use super::*;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use sqlx_core::transaction::Transaction;
 use sqlx_postgres::Postgres;
 
-/// The stable message id of an in-place slot: the exchange id for `:reply`,
-/// a name-based id derived from it for `:continued`.
+/// The stable message id of the answering agent's reply slot: the exchange id.
 pub(super) fn slot_id(request: &str) -> Option<Uuid> {
-    let (exchange, kind) = request.strip_prefix(PREFIX)?.rsplit_once(':')?;
-    let exchange = Uuid::parse_str(exchange).ok()?;
-    match kind {
-        "reply" => Some(exchange),
-        "continued" => Some(continued_id(exchange)),
-        _ => None,
-    }
-}
-
-pub(super) fn continued_id(exchange: Uuid) -> Uuid {
-    Uuid::new_v5(&exchange, b"continued")
+    let exchange = request.strip_prefix(PREFIX)?.strip_suffix(":reply")?;
+    Uuid::parse_str(exchange).ok()
 }
 
 /// How a slot row ends when its run produced no answer of its own.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum Ending {
-    /// Silent or waiting: the row disappears (complete, empty, synchronization only).
+    /// Waiting: the row disappears (complete, empty, synchronization only).
     Retired,
-    /// Stopped or cancelled: the row shows the stopped state.
-    Stopped,
-    /// Failed without a published reply: the row shows the failure.
-    Failed,
 }
 
 /// Ends `sender`'s slot row `client` if it is still processing; a row that
@@ -91,14 +76,6 @@ pub(super) async fn finish(
             }
             flags["synchronizationOnly"] = json!(true);
         }
-        Ending::Stopped => {
-            message["deliveryState"] = json!("cancelled");
-            message["text"] = json!("Stopped");
-        }
-        Ending::Failed => {
-            message["deliveryState"] = json!("failed");
-            message["text"] = json!(FAILED_TEXT);
-        }
     }
     block["text"] = json!(format!(
         "{prefix}:{}",
@@ -116,36 +93,18 @@ pub(super) async fn finish(
 pub(super) const FAILED_TEXT: &str =
     "The agent could not complete this request, so no answer is available. Please try again.";
 
-/// Ends the continuation slot of `exchange`, whose resume run belongs to the
-/// asking run's owner.
-pub(super) async fn finish_continued(
-    tx: &mut Transaction<'_, Postgres>,
-    exchange: Uuid,
-    ending: Ending,
-) -> RunResult<()> {
-    let owner: Option<(String,)> = query_as("SELECT p.owner_account_id FROM cloud_agent_exchanges e JOIN cloud_agent_fallback_runs p ON p.run_id=e.parent_run_id WHERE e.exchange_id=$1")
-        .bind(exchange).fetch_optional(&mut **tx).await?;
-    match owner {
-        Some((owner,)) => finish(tx, &owner, continued_id(exchange), ending).await,
-        None => Ok(()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn slots_have_stable_distinct_ids() {
+    fn the_reply_slot_is_the_exchange_id() {
         let exchange = Uuid::new_v4();
         assert_eq!(
             slot_id(&format!("{PREFIX}{exchange}:reply")),
             Some(exchange)
         );
-        let continued = slot_id(&format!("{PREFIX}{exchange}:continued")).unwrap();
-        assert_eq!(continued, continued_id(exchange));
-        assert_ne!(continued, exchange);
-        assert_eq!(slot_id(&format!("{PREFIX}{exchange}:sent")), None);
+        assert_eq!(slot_id(&format!("{PREFIX}{exchange}:continued")), None);
         assert_eq!(slot_id("other"), None);
     }
 }

@@ -49,9 +49,10 @@ function cloudFallbackClaimErrorCode(error: unknown): CloudAuthErrorCode {
 
 export function cloudFallbackClaimErrorIsRetryable(error: unknown): boolean {
   const code = cloudFallbackClaimErrorCode(error);
+  // `agent_not_available` is a final refusal: the request names no agent
+  // this account may run, and asking again only repeats it.
   return code === 'network_error'
     || code === 'owner_online'
-    || code === 'agent_not_available'
     || code === 'rate_limited'
     || code === 'server_error';
 }

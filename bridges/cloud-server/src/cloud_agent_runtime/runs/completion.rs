@@ -248,6 +248,8 @@ async fn complete(
             if approved(run_id) {
                 crate::proactive::sync_runs(pool, Some(run_id)).await?;
             }
+            // A run that yields to wait keeps its slot, naming whom it waits for.
+            super::exchanges::show_waiting(pool, run_id).await?;
             runner_response_from_row(pool, row).await
         }
         None => Err(RunError::NotFound),

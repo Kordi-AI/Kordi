@@ -315,19 +315,43 @@ async fn people_and_agents_with_the_same_name_are_told_apart_by_id() {
     );
 
     // Routing follows the structured agent id, never the shared name.
-    let mention = json!([{"targetKind":"agent","agentId":format!("cloud-agent:{gamma}"),"humanId":gamma,"label":"Kordishuyang","displayText":"@Kordishuyang","startUtf16":0,"lengthUtf16":13}]);
-    for (structured, owner, allowed) in [
-        (true, gamma, true),
-        (true, beta, false),
-        (false, gamma, false),
-        (false, beta, false),
+    // Outcomes: "run" (a run for that owner), "refused" (no run, no reply:
+    // routed elsewhere or naming nobody), "failed" (names that owner's agent
+    // but cannot be routed: a visible failed reply instead of a silent wait).
+    let gamma_mention = json!([{"targetKind":"agent","agentId":format!("cloud-agent:{gamma}"),"humanId":gamma,"label":"Kordishuyang","displayText":"@Kordishuyang","startUtf16":0,"lengthUtf16":13}]);
+    let beta_mention = json!([{"targetKind":"agent","agentId":format!("cloud-agent:{beta}"),"humanId":beta,"label":"KordiShuYang","displayText":"@Kordishuyang","startUtf16":0,"lengthUtf16":13}]);
+    for (case, mentions, explicit, owner, outcome) in [
+        (
+            "structured",
+            Some(&gamma_mention),
+            Some(gamma),
+            gamma,
+            "run",
+        ),
+        (
+            "routed elsewhere",
+            Some(&gamma_mention),
+            Some(gamma),
+            beta,
+            "refused",
+        ),
+        ("text only", None, None, gamma, "refused"),
+        (
+            "conflicting targets",
+            Some(&beta_mention),
+            Some(gamma),
+            beta,
+            "failed",
+        ),
     ] {
         let logical = uuid::Uuid::new_v4().to_string();
         let mut message = json!({"id":logical,"senderAccountId":f.people[0].account_id,"senderKind":"human","text":"@Kordishuyang hi","createdAtMs":chrono::Utc::now().timestamp_millis()});
-        if structured {
-            message["mentions"] = mention.clone();
-            message["targetCloudAgentId"] = json!(format!("cloud-agent:{gamma}"));
-            message["targetCloudAgentOwnerAccountId"] = json!(gamma);
+        if let Some(mentions) = mentions {
+            message["mentions"] = mentions.clone();
+        }
+        if let Some(target) = explicit {
+            message["targetCloudAgentId"] = json!(format!("cloud-agent:{target}"));
+            message["targetCloudAgentOwnerAccountId"] = json!(target);
         }
         let participants: Vec<Value> = f
             .people
@@ -357,10 +381,87 @@ async fn people_and_agents_with_the_same_name_are_told_apart_by_id() {
             ))
             .await
             .unwrap();
-        assert_eq!(
-            response.status() == StatusCode::OK,
-            allowed,
-            "structured={structured} owner={owner}"
-        );
+        let status = response.status();
+        let run = read_json(response).await;
+        match outcome {
+            "refused" => assert_eq!(status, StatusCode::FORBIDDEN, "{case}: {run}"),
+            "run" => {
+                assert_eq!(status, StatusCode::OK, "{case}: {run}");
+                assert_ne!(run["status"], "failed", "{case}");
+            }
+            _ => {
+                assert_eq!(status, StatusCode::OK, "{case}: {run}");
+                assert_eq!(run["status"], "failed", "{case}");
+                let (body,): (String,) = query_as("SELECT m.content #>> '{blocks,0,text}' FROM cloud_agent_fallback_runs r JOIN cloud_chat_messages m ON m.message_id::text=r.response_message_id WHERE r.run_id=$1")
+                    .bind(run["runId"].as_str().unwrap()).fetch_one(&f.pool).await.unwrap();
+                let wire: Value = serde_json::from_slice(
+                    &base64::engine::general_purpose::URL_SAFE_NO_PAD
+                        .decode(body.split_once(':').unwrap().1)
+                        .unwrap(),
+                )
+                .unwrap();
+                let reply = if wire.get("message").is_some() {
+                    &wire["message"]
+                } else {
+                    &wire
+                };
+                assert_eq!(reply["deliveryState"], "failed", "{case}");
+                assert!(
+                    reply["text"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with("Couldn't reach "),
+                    "{reply}"
+                );
+            }
+        }
     }
+}
+
+#[tokio::test]
+async fn a_mention_no_agent_can_take_fails_for_everyone_as_that_agent() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    let (beta, gamma) = (&f.people[1].account_id, &f.people[2].account_id);
+    // Conflicting targets: the mention names Beta's agent, the target Gamma's.
+    let logical = uuid::Uuid::new_v4().to_string();
+    let message = json!({"id":logical,"senderAccountId":f.people[0].account_id,"senderKind":"human","text":"@KordiBeta hi","createdAtMs":chrono::Utc::now().timestamp_millis(),
+        "mentions":[{"targetKind":"agent","agentId":format!("cloud-agent:{beta}"),"humanId":beta,"label":"KordiBeta","displayText":"@KordiBeta","startUtf16":0,"lengthUtf16":10}],
+        "targetCloudAgentId":format!("cloud-agent:{gamma}"),"targetCloudAgentOwnerAccountId":gamma});
+    let participants: Vec<Value> = f
+        .people
+        .iter()
+        .map(|p| json!({"accountId":p.account_id,"displayName":"Member"}))
+        .collect();
+    let envelope = json!({"kind":"group-message","groupId":f.session,"createdByAccountId":f.people[0].account_id,"actor":{"accountId":f.people[0].account_id,"displayName":"Alpha"},"participants":participants,"message":message});
+    let body = format!(
+        "kordi-cloud-group:{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(envelope.to_string())
+    );
+    // Sent through the chat API, as a client does; nobody claims anything.
+    f.say(0, &body, None).await;
+    let rows: Vec<(String, String)> = query_as("SELECT r.owner_account_id,m.content #>> '{blocks,0,text}' FROM cloud_agent_fallback_runs r JOIN cloud_chat_messages m ON m.message_id::text=r.response_message_id WHERE r.session_id=$1 AND r.request_message_id=$2")
+        .bind(&f.session).bind(&logical).fetch_all(&f.pool).await.unwrap();
+    assert_eq!(rows.len(), 1, "one shared outcome");
+    let (owner, body) = &rows[0];
+    assert_eq!(
+        owner, gamma,
+        "attributed to the agent the message targets by id"
+    );
+    let wire: Value = serde_json::from_slice(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(body.split_once(':').unwrap().1)
+            .unwrap(),
+    )
+    .unwrap();
+    let reply = wire.get("message").unwrap_or(&wire);
+    assert_eq!(reply["deliveryState"], "failed");
+    assert!(
+        reply["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("Couldn't reach "),
+        "{reply}"
+    );
 }

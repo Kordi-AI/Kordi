@@ -33,15 +33,19 @@ test('replay applies each question progress revision instead of retaining the fi
   assert.deepEqual(applied, ['waiting', 'processing', 'completed']);
 });
 
-test('every streamed outcome prefix stays hidden in group live projection and history replay', () => {
+test('every streamed outcome prefix stays out of the waiting slot in group live projection and history replay', () => {
   for (const full of [AGENT_EXCHANGE_WAITING, AGENT_EXCHANGE_SILENT, '{ "agentExchangeOutcome" : "waiting" }']) {
     for (let length = 1; length <= full.length; length++) {
       const text = full.slice(0, length);
       assert.equal(isAgentExchangeControlText(text, true), true);
-      const row = { messageKind: 'agent-turn', senderRole: 'owned-agent', status: 'processing', contentText: '', content: {} } as CanonicalSessionMessage;
+      const row = { id: 'slot', messageKind: 'agent-turn', senderRole: 'owned-agent', status: 'processing', contentText: '', content: {}, createdAtMs: Date.now() } as CanonicalSessionMessage;
       const projected = withLiveTurn(row, snapshot(text));
-      assert.equal(mapCanonicalMessage(projected, new Map()), null);
-      assert.equal(mapCanonicalMessage(JSON.parse(JSON.stringify(projected)), new Map()), null);
+      // The slot stays as waiting (#2416); the control text never shows.
+      for (const mapped of [mapCanonicalMessage(projected, new Map()), mapCanonicalMessage(JSON.parse(JSON.stringify(projected)), new Map())]) {
+        assert.equal(mapped?.turn?.agentExchangeStatus, 'waiting');
+        assert.equal(mapped?.text.includes('agentExchangeOutcome'), false);
+        assert.equal(mapped?.turn?.assistantText.includes('agentExchangeOutcome'), false);
+      }
     }
   }
   for (const text of ['', '{"answer":19}', 'Here is the result', 'Example: {"agentExchangeOutcome":"waiting"}']) {

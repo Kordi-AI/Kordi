@@ -143,6 +143,18 @@ pub(super) async fn claim_cloud_agent_run(
         }
     };
     if !valid_group_target {
+        // A person's request that names no runnable agent fails visibly.
+        match super::runs::fail_unreachable_agent_request(state.db_pool(), &input).await {
+            Ok(Some(run)) => return Json(run).into_response(),
+            Ok(None) => {}
+            Err(error) => {
+                return run_error_response(
+                    "end unreachable request",
+                    "Could not end this request.",
+                    error,
+                )
+            }
+        }
         return error_response(
             "agent_not_available",
             "Group request does not target this Kordi.",

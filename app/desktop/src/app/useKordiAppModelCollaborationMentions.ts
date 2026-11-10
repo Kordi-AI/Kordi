@@ -201,8 +201,7 @@ export function buildCollaborationMentionTargetsByScope({
 
     const collaborationCandidates = filterCollaborationMentionCandidatesForHost(buildCollaborationMentionCandidates(desktopCollaborationState ?? null), activeHost);
     const activeHostAccountId = activeHost?.humanId?.trim() || activeHost?.nodeId?.trim() || null;
-    // Every agent handle is unique here: another agent named like the
-    // viewer's own gets a suffix, and its owner shows next to it.
+    // Same-named agents are told apart by their owner row, not by text.
     const uniqueAgents = uniqueAgentMentionCandidates(
       filterCollaborationMentionCandidatesForConversation(collaborationCandidates, conversation),
       sharedCloudAgentMentionCandidatesForConversation(sharedCloudAgents, conversation, activeHostAccountId),
@@ -211,7 +210,8 @@ export function buildCollaborationMentionTargetsByScope({
     for (const candidate of uniqueAgents.collaboration) {
       const display = collaborationMentionCandidateOptionText(candidate);
       pushOption({
-        value: candidate.handle,
+        // People see the friendly handle; the picked option carries the id.
+        value: candidate.baseHandle ?? candidate.handle,
         label: display.label,
         detail: display.detail,
         targetKind: candidate.targetKind,
@@ -234,7 +234,7 @@ export function buildCollaborationMentionTargetsByScope({
 
     for (const candidate of uniqueAgents.shared) {
       pushOption({
-        value: candidate.handle,
+        value: candidate.baseHandle ?? candidate.handle,
         label: candidate.displayLabel,
         detail: candidate.detailLabel,
         targetKind: 'agent',
