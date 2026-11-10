@@ -10,6 +10,7 @@
 //! people to participate and have fresh locations.
 
 mod actions;
+mod auto;
 mod build;
 mod card;
 mod contact_match;
@@ -47,6 +48,7 @@ use sqlx_postgres::Postgres;
 use crate::auth::rate_limit::{AccountActionLimit, CloudRateLimiter};
 use crate::{auth::routes::cloud_session_middleware, server::ServerState};
 
+pub(crate) use auto::{note_connector_event, note_memory_change};
 pub(crate) use contact_match::contact_match;
 pub(crate) use nearby::{
     forget_device as forget_nearby_device, forget_devices as forget_nearby_devices,
@@ -152,6 +154,14 @@ pub fn capabilities(state: &ServerState) -> Capabilities {
 pub fn spawn_nearby(state: Arc<ServerState>, rate_limiter: Arc<CloudRateLimiter>) {
     if available(&state) {
         nearby::spawn(state, rate_limiter);
+    }
+}
+
+/// Starts the sweep of cards with "Rebuild automatically" on when
+/// Grounding is available.
+pub fn spawn_auto_rebuild(state: Arc<ServerState>) {
+    if available(&state) {
+        auto::spawn(state);
     }
 }
 

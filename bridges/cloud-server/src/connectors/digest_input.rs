@@ -45,7 +45,7 @@ pub async fn recent_events_from(
     since: DateTime<Utc>,
     providers: Option<&[String]>,
 ) -> Result<Vec<ConnectorEventSummary>, sqlx_core::Error> {
-    let rows: Vec<(String, String, String, DateTime<Utc>, Value)> = query_as(
+    let rows: Vec<EventRow> = query_as(
         "SELECT e.event_id, e.provider, e.kind, e.occurred_at, e.payload \
          FROM cloud_connector_events e \
          JOIN cloud_connectors c ON c.connector_id = e.connector_id \
@@ -63,8 +63,47 @@ pub async fn recent_events_from(
     .bind(providers)
     .fetch_all(pool)
     .await?;
-    Ok(rows
-        .into_iter()
+    Ok(summaries(rows))
+}
+
+/// Events from these providers that arrived after `received_after` and
+/// happened after `occurred_after`, newest arrival first, at most `limit`,
+/// with the same grants and filters as [`recent_events_from`]. A Grounding
+/// card's automatic update reads only what arrived since it last caught up.
+pub async fn events_received_since(
+    pool: &PgPool,
+    account_id: &str,
+    received_after: DateTime<Utc>,
+    occurred_after: DateTime<Utc>,
+    providers: &[String],
+    limit: i64,
+) -> Result<Vec<ConnectorEventSummary>, sqlx_core::Error> {
+    let rows: Vec<EventRow> = query_as(
+        "SELECT e.event_id, e.provider, e.kind, e.occurred_at, e.payload \
+         FROM cloud_connector_events e \
+         JOIN cloud_connectors c ON c.connector_id = e.connector_id \
+         JOIN cloud_connector_agent_grants g \
+           ON g.connector_id = c.connector_id AND g.agent_id = $4 \
+         WHERE c.account_id = $1 AND c.status <> 'revoked' \
+           AND e.received_at > $2 AND e.occurred_at >= $3 AND e.expires_at > now() \
+           AND e.provider = ANY($5) \
+         ORDER BY e.received_at DESC, e.event_id DESC LIMIT $6",
+    )
+    .bind(account_id)
+    .bind(received_after)
+    .bind(occurred_after)
+    .bind(default_agent_id(account_id))
+    .bind(providers)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(summaries(rows))
+}
+
+type EventRow = (String, String, String, DateTime<Utc>, Value);
+
+fn summaries(rows: Vec<EventRow>) -> Vec<ConnectorEventSummary> {
+    rows.into_iter()
         .map(|(event_id, provider, kind, occurred_at, payload)| {
             let summary = if payload.to_string().len() > MAX_PAYLOAD_BYTES {
                 json!({ "truncated": true })
@@ -79,5 +118,5 @@ pub async fn recent_events_from(
                 summary,
             }
         })
-        .collect())
+        .collect()
 }

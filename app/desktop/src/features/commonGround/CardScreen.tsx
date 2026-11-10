@@ -1,9 +1,10 @@
 import { useId, useState } from 'react';
-import { Brain, Pencil, Trash2 } from 'lucide-react';
+import { Pencil, RefreshCw, Trash2 } from 'lucide-react';
 
 import { AppDialog, AppDialogActions, AppDialogDescription, AppDialogTitle } from '@/components/ui/dialog';
 import { ErrorLine } from '@/components/ui/ErrorLine';
 import { SettingsSwitch } from '@/kordi-app/components/settingsLayout';
+import { cardMeta } from './cardAuto';
 import { profileDesign } from './cardDesign';
 import { AddTopic, CardLine } from './CardLines';
 import { CardMemories } from './CardMemories';
@@ -16,7 +17,8 @@ import { CardGlyph } from './ProfileCard';
 import { DeleteProfileDialog } from './ProfileDialogs';
 import { PROFILE_FOCUS_MAX, PROFILE_NAME_MAX, renameError, renamePatch } from './profiles';
 import { currentProfile, type CgState, type CommonGroundStore } from './store';
-import { newMemoriesLine, useProfileMemories } from './storeMemories';
+import { useNewTopics } from './storeAutoRebuild';
+import { useProfileMemories } from './storeMemories';
 import { CG_TOPIC_SECTIONS, type CgOwnCard, type CgProfileKind, type CgTopicKey, type CgTopicLists } from './types';
 import { ownerIsCurrent, shortDay } from './wallet';
 
@@ -73,7 +75,8 @@ export function RenameFields({ name, focus, kind, withFocus = true, onSave, onCa
 
 /**
  * The card page: a slim header, Now, the topics with their references, the memories on the card
- * (`memoryVersion` 2; adding and removing cards needs 3), the timeline, the sources, and Share my card.
+ * (`memoryVersion` 2; adding and removing cards needs 3), the timeline, the sources, then Rebuild
+ * automatically (when the server has it) and Share my card.
  */
 export function CardScreen({ state, store, memoryRouting = false, memoryCards = false }: {
   state: CgState;
@@ -85,6 +88,7 @@ export function CardScreen({ state, store, memoryRouting = false, memoryCards = 
   const [renaming, setRenaming] = useState(false);
   const look = useLookPopover();
   const routed = useProfileMemories(store, state.profileId, memoryRouting);
+  const added = useNewTopics(store, state.profileId);
   const card = state.owner?.card;
   // Switching cards leaves the pane empty until the new card arrives, so old topics never show under the new name.
   if (!ownerIsCurrent(state)) return <CgNotice text={state.notice} />;
@@ -93,9 +97,8 @@ export function CardScreen({ state, store, memoryRouting = false, memoryCards = 
   const design = profile ? profileDesign(profile) : 'work';
   const name = profile?.name ?? 'Your card';
   const update = (key: CgTopicKey, next: string[]) => void store.saveTopics({ ...lists(card), [key]: next });
-  const lineCount = CG_TOPIC_SECTIONS.reduce((sum, [key]) => sum + card[key].length, 0);
-  const meta = [`${lineCount} ${lineCount === 1 ? 'line' : 'lines'}`, card.builtAt ? `built ${shortDay(card.builtAt)}` : ''].filter(Boolean).join(' · ');
-  const fresh = memoryRouting ? newMemoriesLine(state.owner.memoriesSinceBuild) : null;
+  const meta = cardMeta(card, state.owner, memoryRouting);
+  const autoRebuild = state.owner.autoRebuild;
   const sources = cardSources(card);
   const onCard = new Set(cardTopics(card));
   const timeline = cardTimeline(card);
@@ -133,7 +136,11 @@ export function CardScreen({ state, store, memoryRouting = false, memoryCards = 
             <>
               <h2>{name}</h2>
               {profile?.focus ? <div className="cg-cardpage-focus">{profile.focus}</div> : null}
-              <div className="cg-cardpage-meta">{meta}{fresh ? <span data-cg-new-memories=""> · {fresh}</span> : null}</div>
+              <div className="cg-cardpage-meta">
+                {meta.base}
+                {meta.newMemories ? <span data-cg-new-memories=""> · {meta.newMemories}</span> : null}
+                {meta.status ? <span data-cg-auto-rebuild=""> · {meta.status}</span> : null}
+              </div>
             </>
           )}
         </div>
@@ -146,7 +153,7 @@ export function CardScreen({ state, store, memoryRouting = false, memoryCards = 
           <Trash2 className="h-[13px] w-[13px]" aria-hidden="true" />Delete
         </button>
         <button type="button" className="cg-mbtn is-primary" onClick={() => store.open({ name: 'build', memory: true })}>
-          <Brain className="h-[13px] w-[13px]" aria-hidden="true" />Rebuild from memory
+          <RefreshCw className="h-[13px] w-[13px]" aria-hidden="true" />Rebuild
         </button>
       </div>
       <CardNow topics={timeline.now} onCard={onCard} />
@@ -159,6 +166,7 @@ export function CardScreen({ state, store, memoryRouting = false, memoryCards = 
                 key={topic}
                 card={card}
                 topic={topic}
+                isNew={added.has(topic)}
                 onHide={() => void store.toggleHidden(topic)}
                 onRemove={() => update(key, card[key].filter((item) => item !== topic))}
               />
@@ -207,6 +215,12 @@ export function CardScreen({ state, store, memoryRouting = false, memoryCards = 
       ) : null}
       <CgUnreadLinks links={state.owner.build.unreadLinks ?? []} />
       <div data-help-target="grounding-sharing" className="cg-panel cg-cardpage-share">
+        {autoRebuild !== undefined ? (
+          <div className="cg-mrow">
+            <span className="cg-mrow-text"><span className="cg-mrow-title">Rebuild automatically</span></span>
+            <SettingsSwitch label="Rebuild automatically" enabled={autoRebuild} disabled={state.busy === 'autoRebuild'} onChange={(on) => void store.setAutoRebuild(on)} />
+          </div>
+        ) : null}
         <div className="cg-mrow">
           <span className="cg-mrow-text"><span className="cg-mrow-title">Share my card</span></span>
           <SettingsSwitch label="Share my card" enabled={state.owner.sharing} disabled={state.busy === 'sharing'} onChange={(on) => void store.setSharing(on)} />

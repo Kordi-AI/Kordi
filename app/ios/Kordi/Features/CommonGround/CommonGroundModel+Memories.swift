@@ -11,6 +11,7 @@ extension CommonGroundModel {
 
     /// "N new memories since this card was built" near Rebuild card.
     var memoriesSinceBuildCaption: String? {
+        if owner?.autoUpdating == true { return "Updating" }
         guard showsProfileMemories else { return nil }
         return MemoryPresentation.memoriesSinceBuildCaption(owner?.memoriesSinceBuild)
     }

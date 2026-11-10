@@ -135,6 +135,10 @@ export type CgOwnerView = {
   profile?: (CgProfileTag & { focus: string | null }) | null;
   /** Memories filed to this profile since the card was built (`memoryVersion` 2). */
   memoriesSinceBuild?: number;
+  /** "Rebuild automatically" for this card; older servers leave it out and the switch stays hidden. */
+  autoRebuild?: boolean;
+  /** True while an automatic update runs; `build.status` stays `idle` meanwhile. */
+  autoUpdating?: boolean;
 };
 
 /** A memory filed to a profile; `everyProfile` marks a schedule memory every fixed-kind profile lists. */

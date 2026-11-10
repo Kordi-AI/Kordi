@@ -7,8 +7,9 @@ use super::ServerState;
 /// Starts every periodic worker: realtime wakes, support tickets, abuse
 /// report notices and retention, scheduled
 /// tasks, digests, the System agent, proactive and personal agents,
-/// Grounding nearby alerts, plan-card projection, retention, terminal
-/// backfill, deleted-object cleanup, and the notification workers when notifications are configured.
+/// Grounding nearby alerts and automatic card updates, plan-card
+/// projection, retention, terminal backfill, deleted-object cleanup, and
+/// the notification workers when notifications are configured.
 pub(super) fn spawn_background_workers(
     state: &Arc<ServerState>,
     database_url: &str,
@@ -30,6 +31,7 @@ pub(super) fn spawn_background_workers(
     crate::proactive::spawn(state.clone());
     crate::personal_agent::spawn(state.clone());
     crate::common_ground::spawn_nearby(state.clone(), rate_limiter.clone());
+    crate::common_ground::spawn_auto_rebuild(state.clone());
     crate::plan_cards::projection::spawn(state.db_pool().clone());
     crate::chat_sync::retention::spawn_retention_worker(state.db_pool().clone());
     crate::cloud_agent_runtime::runs::terminal_backfill::spawn(state.db_pool().clone());

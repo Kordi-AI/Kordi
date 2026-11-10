@@ -9,7 +9,7 @@ mod gather;
 mod links;
 mod related;
 
-pub(super) use gather::item;
+pub(super) use gather::{event_item, item, memory_item, provider_label};
 #[cfg(test)]
 pub(super) use gather::{link_entries_for_tests, link_url_for_tests, request_for_tests};
 #[cfg(test)]
@@ -133,10 +133,13 @@ pub(super) async fn start(
         .bind(account)
         .execute(&mut *tx)
         .await?;
+        // A manual build wins over an automatic update in flight: the update
+        // is let go, so its late reply is discarded.
         let sql = format!(
             "UPDATE cloud_common_ground_cards card SET active_run_id = $2, build_started_at = now(),
                  build_evidence_json = $3, build_candidates_json = $4, build_error_code = NULL,
-                 link_errors_json = $5, updated_at = now()
+                 link_errors_json = $5, auto_run_id = NULL, auto_evidence_json = NULL,
+                 updated_at = now()
              WHERE card.profile_id = $1 AND NOT ({})",
             card::BUILD_IN_FLIGHT_SQL
         );
@@ -236,11 +239,13 @@ pub(super) async fn complete(
     if !runs::mark_completed(&mut tx, run_id, runner_id).await? {
         return Err(sqlx_core::Error::RowNotFound);
     }
-    // A rebuild starts with nothing hidden: the topics are new.
+    // A rebuild starts with nothing hidden: the topics are new. It reads
+    // everything, so what automatic updates had read no longer matters.
     query(
         "UPDATE cloud_common_ground_cards SET topics_json = $2, evidence_json = $3,
              hidden_json = '[]'::jsonb, active_run_id = NULL, build_evidence_json = NULL,
-             build_candidates_json = NULL, build_error_code = NULL, built_at = now(), revision = revision + 1, updated_at = now()
+             build_candidates_json = NULL, build_error_code = NULL, built_at = now(),
+             auto_seen_at = NULL, revision = revision + 1, updated_at = now()
          WHERE profile_id = $1 AND active_run_id = $4",
     )
     .bind(&profile_id)

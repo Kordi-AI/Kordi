@@ -6,7 +6,6 @@ import { useProjectRoutingGroups } from '@/features/projects/useProjectRoutingGr
 import {useThreadAttention} from '@/features/cloud/threadAttention';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createCollaborationConversationMapper } from '@/features/collaboration/conversationProjectionCache';
-import { isCollaborationAgentRuntime } from '@/features/collaboration/runtime';
 import { EMPTY_CLOUD_SESSION_ACTIVITY } from '@/features/cloud/cloudSessionActivity';
 import { cloudAgentDefinitionToAgent, collaborationAgentAvatarFields } from '@/features/cloud/cloudAgents';
 import {
@@ -65,8 +64,8 @@ import {
   hideRawConversationIds,
   preferLatestMessages,
   visibleCollaborationPeople,
-  collaborationPeerIsReachableAgent,
 } from './viewModels/helpers';
+import { addCollaborationPeerContacts } from './viewModels/collaborationPeerContacts';
 const EMPTY_DESKTOP_SESSION_IDS: ReadonlySet<string> = new Set();
 const EMPTY_CLOUD_LEGACY_GROUP_SESSION_TITLES: ReadonlyMap<string, string> = new Map(); const EMPTY_CLOUD_GROUP_NUMBERS: ReadonlyMap<string, number> = new Map();
 
@@ -417,71 +416,7 @@ export function useWorkspaceViewModels({
         avatarSeed: getLocalAgentAvatarSeed(),
       });
 
-      for (const peer of host.visiblePeers) {
-        if (!collaborationPeerIsApprovedContact(peer)) continue;
-        const isAgent = isCollaborationAgentRuntime(peer.runtime);
-        const contactStatus = peer.isContact ? 'contact' : (peer.contactRequestStatus?.trim() || 'none');
-        const contactRequestDirection = peer.contactRequestDirection?.trim() || null;
-        if (!isAgent || collaborationPeerIsReachableAgent(peer)) {
-          const id = isAgent
-            ? `collaboration-peer-agent:${peer.nodeId}:${peer.agentId ?? peer.runtime}`
-            : `collaboration-peer-person:${peer.nodeId}:${peer.humanId ?? 'person'}`;
-          const existing = byId.get(id);
-          const nextDiscoveryLabels = Array.from(new Set([...(existing?.collaborationSources ?? []), label])).sort();
-          const peerName = sanitizeRemotePeerName(peer.displayName, peer.ownerName, peer.humanId, peer.nodeId);
-          byId.set(id, {
-            id,
-            name: peerName,
-            initials: getInitials(peerName),
-            classType: isAgent ? 'other-users-agents' : 'other-users',
-            entityType: isAgent ? 'External agent' : 'Person',
-            subtitle: peer.sharedProjects.length > 0 ? `${peer.runtime} • ${peer.sharedProjects.length} shared project${peer.sharedProjects.length === 1 ? '' : 's'}` : peer.runtime,
-            collaborationSources: nextDiscoveryLabels,
-            status: host.connected ? 'Reachable' : 'Offline',
-            discoverableOn: nextDiscoveryLabels,
-            detail: [peer.nodeId, peer.endpoint, peer.sharedProjects.length > 0 ? `Shared projects: ${peer.sharedProjects.join(' • ')}` : null].filter(Boolean).join(' • '),
-            owner: peer.ownerName || 'Unknown',
-            sourceHostId: host.id,
-            sourceParticipantId: peer.nodeId,
-            sourceRuntime: peer.runtime,
-            sourceHumanId: peer.humanId,
-            sourceAgentId: peer.agentId,
-            contactStatus,
-            contactRequestDirection,
-            avatarSeed: isAgent ? (peer.agentId || peer.nodeId) : (peer.avatarSeed || peer.humanId || peer.ownerName || peer.nodeId),
-            profileImageUrl: collaborationProfileImageUrl(peer.profileImageUrl),
-          });
-        }
-
-        if (isAgent && peer.ownerName && (collaborationPeerIsReachableAgent(peer) || peer.isDefaultAgent)) {
-          const personId = `collaboration-peer-person:${peer.nodeId}:${peer.humanId ?? peer.ownerName}`;
-          const existingPerson = byId.get(personId);
-          const personDiscoveryLabels = Array.from(new Set([...(existingPerson?.collaborationSources ?? []), label])).sort();
-          const personName = sanitizeRemotePeerName(peer.ownerName, peer.humanId, peer.nodeId);
-          byId.set(personId, {
-            id: personId,
-            name: personName,
-            initials: getInitials(personName),
-            classType: 'other-users',
-            entityType: 'Person',
-            subtitle: `Owner of ${peer.displayName || 'external agent'}`,
-            collaborationSources: personDiscoveryLabels,
-            status: host.connected ? 'Reachable' : 'Offline',
-            discoverableOn: personDiscoveryLabels,
-            detail: [peer.humanId ? `Human ID: ${peer.humanId}` : null, peer.nodeId, peer.displayName ? `Agent: ${peer.displayName}` : null].filter(Boolean).join(' • '),
-            owner: peer.ownerName,
-            sourceHostId: host.id,
-            sourceParticipantId: peer.nodeId,
-            sourceRuntime: 'person',
-            sourceHumanId: peer.humanId,
-            sourceAgentId: peer.agentId,
-            contactStatus,
-            contactRequestDirection,
-            avatarSeed: peer.avatarSeed || peer.humanId || peer.ownerName || peer.nodeId,
-            profileImageUrl: collaborationProfileImageUrl(peer.profileImageUrl),
-          });
-        }
-      }
+      addCollaborationPeerContacts(byId, host, label);
     }
 
     if (localAgent && !Array.from(byId.values()).some((contact) => contact.classType === 'my-agents')) {

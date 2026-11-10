@@ -19,6 +19,8 @@ test('base styles disable shell selection and opt in only declared copy surfaces
   assert.match(css, /\[data-kordi-copy-surface\][\s\S]*?::selection[\s\S]*?--app-copy-selection-bg/);
   assert.match(css, /--app-copy-selection-text/);
   assert.doesNotMatch(css, /data-kordi-copy-selection="unified"/);
+  assert.match(css, /\[data-kordi-copy-surface="message"\][\s\S]*?column-span: all;/);
+  assert.match(css, /li\[data-markdown-list-item\]::selection \{\s*background-color: transparent;/);
 });
 
 test('selection colors use a quiet blue tint with explicit light and dark contrast', () => {
@@ -30,6 +32,14 @@ test('selection colors use a quiet blue tint with explicit light and dark contra
   assert.match(tokens, /--app-copy-selection-bg: rgb\(147 197 253 \/ 0\.46\)/);
   assert.match(tokens, /--app-copy-selection-surface-bg: rgb\(147 197 253 \/ 0\.30\)/);
   assert.match(tokens, /--app-copy-selection-text: rgb\(15 23 42\)/);
+});
+
+test('the selection tint follows the theme accent, softer on light surfaces', () => {
+  const palette = readFileSync(new URL('../src/styles/theme-palette.css', import.meta.url), 'utf8');
+
+  assert.match(palette, /--app-copy-selection-bg: color-mix\(in oklab, var\(--app-palette-accent\) var\(--app-copy-selection-strength, 30%\), transparent\);/);
+  assert.match(palette, /--app-copy-selection-strength: 30%;/);
+  assert.match(palette, /--app-copy-selection-strength: 18%;/);
 });
 
 test('selected text in chat bubbles keeps its own ink instead of the theme selection ink', () => {
@@ -78,4 +88,14 @@ test('shared markdown is non-selectable by default and documents are scoped for 
   assert.doesNotMatch(defaultMarkup, /data-kordi-copy-surface/);
   assert.match(documentMarkup, /data-kordi-copy-surface="document"/);
   assert.match(documentMarkup, /tabindex="0"/);
+});
+
+test('markdown list rows are marked so their selection stays behind the text', () => {
+  const markup = renderToStaticMarkup(createElement(MarkdownContent, {
+    text: '- First item\n- Second item',
+    copySurface: 'message',
+  }));
+
+  assert.match(markup, /<li[^>]*data-markdown-list-item="true"/);
+  assert.match(markup, /data-markdown-list-text="true"/);
 });

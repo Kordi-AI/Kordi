@@ -265,21 +265,38 @@ test('a workspace without Grounding gets a tour of available controls and preser
   await expect(page.locator('.help-tour-spotlight')).toHaveAttribute('data-target', 'settings-auth');
 });
 
-test('installed release highlights work offline with one sentence-case heading', async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.assign(window, { __TAURI_INTERNALS__: {
-      transformCallback: () => 1,
-      invoke: async (command: string) => command === 'plugin:app|version' ? '0.0.2-beta.5.2' : null,
-    } });
+for (const [version, theme, heading] of [
+  ['0.0.2-beta.5.2', 'dark', 'Read, edit, and share documents together'],
+  ['0.0.2-beta.8', 'light', 'Agents reply reliably'],
+] as const) {
+  test(`installed release highlights work offline with one sentence-case heading (${theme})`, async ({ page }) => {
+    await page.addInitScript((appVersion) => {
+      Object.assign(window, { __TAURI_INTERNALS__: {
+        transformCallback: () => 1,
+        invoke: async (command: string) => command === 'plugin:app|version' ? appVersion : null,
+      } });
+    }, version);
+    await page.route('**/releases/**', (route) => route.abort());
+    await page.goto(`/tests/visual/helpHub.html?isolated=1${theme === 'light' ? '&theme=light' : ''}`);
+    await page.getByRole('button', { name: 'Help & setup', exact: true }).click();
+    await page.getByRole('button', { name: 'What’s new', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'What’s new', exact: true })).toHaveCount(1);
+    await expect(page.getByText(heading, { exact: true })).toBeVisible();
+    await expect(page.getByText('RELEASE HIGHLIGHTS', { exact: true })).toHaveCount(0);
+    await expect(page.locator('.help-menu-header').getByText(version, { exact: true })).toBeVisible();
+    await expect(page.getByText(`Version ${version}`)).toHaveCount(0);
+    expect((await page.locator('.help-menu').boundingBox())!.width).toBeLessThanOrEqual(320);
+    expect(await page.locator('.help-release-item').count()).toBeGreaterThan(0);
+    await expect(page.locator('.help-menu-content .help-section')).toHaveCount(0);
+    const item = page.locator('.help-release-item').first();
+    await expect(item).toHaveCSS('border-bottom-width', '0px');
+    await expect(item.locator('h3')).toHaveCSS('font-size', '12px');
+    await expect(item.locator('h3')).toHaveCSS('font-weight', '500');
+    await expect(page.locator('.help-release-item p').first()).toHaveCSS('font-size', '11px');
+    await expect(page.locator('.help-release-item p').first()).toHaveCSS('margin-top', '1px');
+    await page.screenshot({ path: test.info().outputPath(`help-whats-new-${theme}.png`) });
   });
-  await page.route('**/releases/**', (route) => route.abort());
-  await page.goto('/tests/visual/helpHub.html?isolated=1');
-  await page.getByRole('button', { name: 'Help & setup', exact: true }).click();
-  await page.getByRole('button', { name: 'What’s new', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'What’s new', exact: true })).toHaveCount(1);
-  await expect(page.getByText('Read, edit, and share documents together', { exact: true })).toBeVisible();
-  await expect(page.getByText('RELEASE HIGHLIGHTS', { exact: true })).toHaveCount(0);
-});
+}
 
 test('first-open loading never paints a clipped placeholder in the navigation rail', async ({ page }) => {
   let releaseMenu!: () => void;
