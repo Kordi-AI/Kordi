@@ -102,6 +102,10 @@ kordi login    # Shows ✓/✗ for each provider
 
 ## Selecting a Model
 
+### November 2026 models
+
+Claude pickers on the Mac and iPhone list Claude Sonnet 5.5 (the default), Claude Opus 5.5, Claude Fable 5.2, and Claude Haiku 5.5 first; older Claude models follow. [Claude Fable 5.2](https://platform.claude.com/docs/en/models/fable-5-2/overview) (`anthropic/claude-fable-5-2`) uses always-on adaptive thinking like Claude Fable 5.1, so the same effort and `off` handling applies.
+
 ### September 2026 models
 
 Select `openai/gpt-6-astra`, `openai/gpt-6-sol`, `openai/gpt-6-luna`, or `anthropic/claude-fable-5-1` in the desktop or iPhone model picker. Existing defaults are unchanged; provider account access still applies. These IDs are included in the built-in fallback catalogs when live discovery is unavailable.
