@@ -210,9 +210,7 @@ struct PlanCardView: View {
     /// Scales to any group size: a few avatars with short counts on the card,
     /// and the full, searchable list in a sheet.
     private var attendees: some View {
-        let going = view.participants.filter { $0.rsvp == .yes }
-        let declined = view.participants.filter { $0.rsvp == .no }
-        let waiting = view.participants.filter { $0.rsvp == .pending }
+        let (going, declined, waiting) = view.attendance
         let shown = Array((going + waiting + declined).prefix(4))
         let hidden = view.participants.count - shown.count
         return Button {
@@ -233,7 +231,7 @@ struct PlanCardView: View {
                             .overlay(Capsule().strokeBorder(Color(uiColor: .secondarySystemGroupedBackground), lineWidth: 2))
                     }
                 }
-                Text(countsLine(going: going.count, declined: declined.count, waiting: waiting.count))
+                Text(PlanCard.countsLine(going: going.count, declined: declined.count, waiting: waiting.count))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -245,20 +243,11 @@ struct PlanCardView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(countsLine(going: going.count, declined: declined.count, waiting: waiting.count))
+        .accessibilityLabel(PlanCard.countsLine(going: going.count, declined: declined.count, waiting: waiting.count))
         .accessibilityHint("Shows everyone and their answer")
     }
 
-    private func countsLine(going: Int, declined: Int, waiting: Int) -> String {
-        var parts = ["\(Self.compactCount(going)) going"]
-        if declined > 0 { parts.append("\(Self.compactCount(declined)) can't") }
-        if waiting > 0 { parts.append("\(Self.compactCount(waiting)) no reply") }
-        return parts.joined(separator: " · ")
-    }
-
-    static func compactCount(_ value: Int) -> String {
-        value >= 1_000 ? String(format: "%.1fk", Double(value) / 1_000).replacingOccurrences(of: ".0k", with: "k") : "\(value)"
-    }
+    static func compactCount(_ value: Int) -> String { PlanCard.compactCount(value) }
 
     private func attendeeAvatar(_ participant: PlanCardParticipant) -> some View {
         IdentityAvatar(

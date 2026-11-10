@@ -194,6 +194,24 @@ struct PlanCard: Codable, Hashable {
 
     var goingCount: Int { participants.filter { $0.rsvp == .yes }.count }
 
+    /// Everyone on the plan, split by their answer.
+    var attendance: (going: [PlanCardParticipant], declined: [PlanCardParticipant], waiting: [PlanCardParticipant]) {
+        (participants.filter { $0.rsvp == .yes }, participants.filter { $0.rsvp == .no }, participants.filter { $0.rsvp == .pending })
+    }
+
+    /// The card's counts line: "2 going · 1 can't · 1 no reply".
+    static func countsLine(going: Int, declined: Int, waiting: Int) -> String {
+        var parts = ["\(compactCount(going)) going"]
+        if declined > 0 { parts.append("\(compactCount(declined)) can't") }
+        if waiting > 0 { parts.append("\(compactCount(waiting)) no reply") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Short counts for large groups: 1200 reads "1.2k".
+    static func compactCount(_ value: Int) -> String {
+        value >= 1_000 ? String(format: "%.1fk", Double(value) / 1_000).replacingOccurrences(of: ".0k", with: "k") : "\(value)"
+    }
+
     func participant(_ accountId: String?) -> PlanCardParticipant? {
         guard let accountId else { return nil }
         return participants.first { $0.participantId == accountId }
