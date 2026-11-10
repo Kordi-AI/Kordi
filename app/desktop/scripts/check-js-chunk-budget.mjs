@@ -71,7 +71,8 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // so it moves to 5.838 MB.
 // Adding calendar events with + or by clicking a day or time adds 2 kB, so it moves to 5.84 MB.
 // The Seen by row loaded on demand, its readers list and the read watermark add 8.7 kB, so it moves to 5.849 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_849_000;
+// The pinned OMP catalog at 18.18.6 (82 providers, Claude Fable 5.2) adds 5.6 kB, so it moves to 5.855 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_855_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -95,7 +96,8 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // Automatic profile location and time zone add 5.4 kB there, so it moves to 5.854 MB.
 // Adding calendar events with + or by clicking a day or time adds 2 kB there, so it moves to 5.856 MB.
 // The Seen by row loaded on demand, its readers list and the read watermark add 8.7 kB there, so it moves to 5.865 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_865_000;
+// The pinned OMP catalog at 18.18.6 adds 5.6 kB there, so it moves to 5.871 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_871_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
