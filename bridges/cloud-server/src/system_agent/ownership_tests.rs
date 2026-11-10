@@ -48,6 +48,7 @@ fn agent(sequence: i64, minute: i64, waiting: bool, delivery: Delivery) -> Messa
             owner: agent_owner(),
             waiting,
             delivery,
+            changed_at: None,
         }),
         human: false,
         addressed_owner: None,
@@ -60,6 +61,7 @@ fn run(status: &str, lease_minute: Option<i64>, updated_minute: i64) -> RunFact 
         owner: agent_owner(),
         lease_expires_at: lease_minute.map(at),
         updated_at: Some(at(updated_minute)),
+        created_at: Some(at(updated_minute)),
     }
 }
 
@@ -375,4 +377,29 @@ fn an_unreadable_deferred_value_is_cleared() {
         None
     );
     assert_eq!(state_patch(true, &Outcome::Free, 4), Some(json!({})));
+}
+
+#[test]
+fn an_agent_row_updated_in_place_after_the_answer_is_its_reply() {
+    let (task, mut messages) = deferred_answer();
+    // The agent's processing row from before the answer, completed in place.
+    let mut slot = agent(1, 0, false, Delivery::Complete);
+    slot.agent.as_mut().unwrap().changed_at = Some(at(6));
+    messages.insert(0, slot.clone());
+    let result = assess(
+        Some(task.clone()),
+        0,
+        2,
+        &messages,
+        &Work::default(),
+        &clock(20),
+    );
+    assert_eq!(result.outcome, Outcome::Replied);
+    // An update from before the answer is not a reply to it.
+    let mut stale = slot;
+    stale.agent.as_mut().unwrap().changed_at = Some(at(0));
+    let (_, mut messages) = deferred_answer();
+    messages.insert(0, stale);
+    let result = assess(Some(task), 0, 2, &messages, &Work::default(), &clock(20));
+    assert!(matches!(result.outcome, Outcome::Stalled(_)));
 }
