@@ -1,13 +1,11 @@
 import type { SharedCloudAgentSummary } from '@/features/cloud/cloudAgents';
 import { isCollaborationAgentRuntime } from '@/features/collaboration/runtime';
-import type {
-Conversation,
-DesktopCollaborationState
-} from '@/kordi-app/types';
+import type { Conversation, DesktopCollaborationState } from '@/kordi-app/types';
 import { defaultAgentDisplayName,publicScopedAgentMentionHandle,stripSelfPossessivePrefix } from '@/lib/identityLabels';
 
 import { mentionTextStartsWithLabel } from './localAgentMentions';
 import { mentionHandleForLabel,normalizeMentionLabel } from './mentionHandles';
+import { directChatHasMember, directChatMemberKeys } from './directChatMembers';
 import { ambiguousOwnerNames, identitySuffixForCandidate, uniqueAgentMentionCandidates, uniqueHandle } from './uniqueAgentMentions';
 export { reserveAgentMentionHandles, uniqueAgentMentionCandidates } from './uniqueAgentMentions';
 
@@ -24,7 +22,6 @@ scopedAgentLabel,
 stripLeadingAddressMentions
 } from './localAgentMentions';
 export { mentionHandleForLabel,normalizeMentionLabel } from './mentionHandles';
-
 
 export type CollaborationMentionCandidate = {
   host: DesktopCollaborationState['hosts'][number];
@@ -101,7 +98,7 @@ export function conversationHasGroupMentionScope(conversation: MentionScopeConve
 
 export function conversationHasParticipantMentionScope(conversation: MentionScopeConversation | null | undefined) {
   if (!conversation) return false;
-  if (conversationHasGroupMentionScope(conversation)) return true;
+  if (conversationHasGroupMentionScope(conversation) || directChatMemberKeys(conversation).size > 0) return true;
   const humanKeys = conversationHumanOwnerKeys(conversation);
   const collaborationTargetIsPerson = conversation.collaborationTarget?.runtime === 'person' || conversation.collaborationTarget?.agentId === null;
   if (humanKeys.size === 0 && !collaborationTargetIsPerson) return false;
@@ -119,6 +116,8 @@ export function collaborationMentionOwnerMatchesConversationHumans(
   const ownerHumanKey = normalizedOwnerKey(owner.humanId);
   const ownerNodeKey = normalizedOwnerKey(owner.nodeId);
   const ownerNameKey = normalizedOwnerKey(owner.ownerName);
+  const member = directChatHasMember(conversation, ownerHumanKey, ownerNodeKey);
+  if (member !== null) return member;
   let sawCanonicalNameMatch = false;
 
   for (const participant of conversation?.canonicalParticipants ?? []) {
@@ -153,6 +152,7 @@ export function filterCollaborationMentionCandidatesForConversation(
 function conversationContainsAccountId(conversation: MentionScopeConversation | null | undefined, accountId: string) {
   const key = normalizedOwnerKey(accountId);
   if (!key) return false;
+  if (directChatHasMember(conversation, key)) return true;
   for (const participant of conversation?.canonicalParticipants ?? []) {
     if (participant.kind !== 'human') continue;
     if (participantHumanIdentityKeys(participant).includes(key)) return true;

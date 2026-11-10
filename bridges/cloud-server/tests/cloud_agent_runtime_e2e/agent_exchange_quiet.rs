@@ -153,6 +153,7 @@ impl Fixture {
                 (response["deliveryState"] == "complete"
                     && !text.is_empty()
                     && text != WAITING
+                    && response["structuredContent"]["agentExchangeStatus"] != "waiting"
                     && response["synchronizationOnly"] != true
                     && response["structuredContent"]["synchronizationOnly"] != true)
                     .then(|| text.to_owned())
@@ -183,7 +184,8 @@ async fn shared_question_silently_finishes_after_a_reply_on_mac_and_cloud() {
             )
             .unwrap();
             let response = value.get("message").unwrap_or(&value);
-            assert_eq!(response["text"], "");
+            // A waiting slot says whom it waits for, never a blank row.
+            assert_eq!(response["text"], "Waiting for Exchange Beta's agent.");
             let control = response.get("structuredContent").unwrap_or(response);
             if !cloud {
                 // The yield keeps the slot visible as waiting (#2416), never emptied.
@@ -425,7 +427,7 @@ async fn a_follow_up_that_delegates_again_yields_without_another_acknowledgement
     assert_eq!(
         texts.len(),
         3,
-        "first question, answer, and new question only"
+        "first question, answer, and new question only: {texts:?}"
     );
     assert!(texts.iter().all(|text| !text.contains("am waiting")));
     assert_eq!(f.pending(2).await.len(), 1);

@@ -168,8 +168,11 @@ pub(super) fn apply(wire: &mut Value, group: bool, change: &Change) {
             _ => {}
         }
     }
+    // A waiting slot says so in words, so no client shows a blank row.
     let (state, text) = match change {
-        Change::Waiting { .. } | Change::Processing | Change::Silent => ("complete", String::new()),
+        Change::Waiting { name, .. } => ("complete", format!("Waiting for {name}.")),
+        Change::Processing => ("processing", String::new()),
+        Change::Silent => ("complete", String::new()),
         Change::Answer(text) => ("complete", text.clone()),
         Change::Failed => ("failed", super::slots::FAILED_TEXT.to_owned()),
         Change::Stopped => ("cancelled", "Stopped".to_owned()),
@@ -212,9 +215,11 @@ mod tests {
         );
         assert_eq!(wire["agentExchangeStatus"], "waiting");
         assert_eq!(wire["agentExchangeWaitingFor"], "Beta");
+        assert_eq!(wire["text"], "Waiting for Beta.", "never a blank row");
         assert!(wire.get("synchronizationOnly").is_none(), "never emptied");
         apply(&mut wire, false, &Change::Processing);
         assert_eq!(wire["agentExchangeStatus"], "processing");
+        assert_eq!(wire["deliveryState"], "processing");
         apply(&mut wire, false, &Change::Answer("Saturday 10am".into()));
         assert_eq!(wire["text"], "Saturday 10am");
         assert!(wire.get("agentExchangeStatus").is_none());

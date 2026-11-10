@@ -17,6 +17,7 @@ pub(crate) mod omp_state;
 mod plain_group_request;
 mod project_unavailable;
 pub(crate) mod prompt_history;
+mod request_language;
 pub(crate) mod route_fill;
 pub mod stop;
 pub(crate) mod subsession_lifecycle;

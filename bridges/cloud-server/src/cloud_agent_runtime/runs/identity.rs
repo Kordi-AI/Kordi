@@ -47,6 +47,18 @@ pub(crate) async fn identity_for_run(pool: &PgPool, run_id: &str) -> RunResult<V
         identity["conversationContext"] = Value::String(note);
         identity["conversationMembersDigest"] = Value::String(digest);
     }
+    // The current request decides the reply's language, not history or memory.
+    let (request_text,): (String,) = query_as("SELECT COALESCE(omp_input_json->>'prompt',prompt,'') FROM cloud_agent_fallback_runs WHERE run_id=$1")
+        .bind(run_id).fetch_one(pool).await?;
+    let language = super::request_language::language_line(&request_text);
+    identity["conversationContext"] =
+        Value::String(match identity["conversationContext"].as_str() {
+            Some(note) => format!(
+                "{note}
+{language}"
+            ),
+            None => language,
+        });
     // Atomic first-writer wins, including competing lease attempts. Avoid holding
     // a pool connection while reading the request envelope on another connection.
     let (identity,): (Value,) = query_as("UPDATE cloud_agent_fallback_runs SET turn_identity=COALESCE(turn_identity,$2) WHERE run_id=$1 RETURNING turn_identity")
