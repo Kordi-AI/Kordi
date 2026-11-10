@@ -17,7 +17,7 @@ type AuthorizedRunRow = (
     bool,
 );
 
-pub(super) struct Parent {
+pub(crate) struct Parent {
     pub run: String,
     pub root: String,
     pub session: String,
@@ -60,7 +60,7 @@ impl Parent {
     }
 }
 
-pub(super) async fn authorize(
+pub(crate) async fn authorize(
     pool: &PgPool,
     run: &str,
     executor: Option<(&str, Option<&str>)>,

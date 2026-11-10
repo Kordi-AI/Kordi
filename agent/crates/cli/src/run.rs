@@ -152,6 +152,7 @@ pub async fn run_print_mode(cli: Cli) -> Result<()> {
             auth.as_ref(),
         )),
         reach_out: None,
+        plan_card: None,
         reflection: crate::session_bootstrap::reflection_runtime_for_settings(
             &settings.memory,
             sibling_conn.clone(),

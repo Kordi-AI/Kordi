@@ -3,7 +3,9 @@
 //! Binary frames only, carrying y-protocols messages exactly as `y-websocket`
 //! sends them: sync (0) and awareness (1), plus awareness queries (3). Close
 //! codes: 4401 bad or used ticket, 4403 access revoked, 4409 unsupported
-//! message, 1011 server error, 1013 the client fell too far behind.
+//! message, 1011 server error, 1013 try again: the client fell too far
+//! behind, or the room was discarded because a change could not be stored
+//! (the client reconnects and sends its changes again).
 //!
 //! Sign-out and device revocation arrive as session signals and close the
 //! socket at once. Document access is rechecked every ~30 s (jittered); a
@@ -24,7 +26,7 @@ use serde::Deserialize;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::time::Instant;
 
-use super::rooms::{Room, RoomError};
+use super::rooms::{Outgoing, Room, RoomError};
 use super::tickets::{consume_ticket, ConsumedTicket, TicketError};
 use crate::auth::routes::CloudSession;
 use crate::auth::session_signals::{SessionSignalSubscription, SignalVerdict};
@@ -149,9 +151,8 @@ async fn run(mut socket: WebSocket, state: Arc<ServerState>, ticket: ConsumedTic
         Access::Denied => return close(socket, CLOSE_FORBIDDEN, "forbidden").await,
         Access::Unavailable => return close(socket, CLOSE_SERVER_ERROR, "unavailable").await,
     }
-    let pool = state.db_pool().clone();
     let registry = state.document_rooms();
-    let room = match registry.join(&pool, &ticket.attachment_id).await {
+    let room = match registry.join(&ticket.attachment_id).await {
         Ok(room) => room,
         Err(error) => {
             eprintln!("[document-collab] join room: {error:?}");
@@ -169,7 +170,7 @@ async fn run(mut socket: WebSocket, state: Arc<ServerState>, ticket: ConsumedTic
         &mut clients,
     )
     .await;
-    registry.leave(&pool, &room, conn, &clients).await;
+    registry.leave(&room, conn, &clients).await;
     if let Some((code, reason)) = close_code {
         close(socket, code, reason).await;
     }
@@ -184,8 +185,11 @@ async fn serve(
     conn: u64,
     clients: &mut HashSet<yrs::ClientID>,
 ) -> Option<(u16, &'static str)> {
-    let pool = state.db_pool();
     let mut outgoing = room.subscribe();
+    // Subscribed first, so a reset after this check still arrives.
+    if room.is_poisoned() {
+        return Some((CLOSE_TRY_AGAIN, "reset"));
+    }
     for frame in room.greeting().await {
         if socket.send(WsMessage::Binary(frame)).await.is_err() {
             return None;
@@ -198,7 +202,7 @@ async fn serve(
         tokio::select! {
             incoming = socket.recv() => match incoming {
                 Some(Ok(WsMessage::Binary(data))) => {
-                    match room.handle(pool, conn, &data, clients).await {
+                    match room.handle(conn, &data, clients).await {
                         Ok(replies) => {
                             for reply in replies {
                                 if socket.send(WsMessage::Binary(reply)).await.is_err() {
@@ -208,9 +212,10 @@ async fn serve(
                         }
                         Err(RoomError::Invalid) => return Some((CLOSE_UNSUPPORTED, "unsupported")),
                         Err(RoomError::Database(error)) => {
-                            eprintln!("[document-collab] apply update: {error}");
-                            return Some((CLOSE_SERVER_ERROR, "storage"));
+                            eprintln!("[document-collab] store update: {error}");
+                            return Some((CLOSE_TRY_AGAIN, "storage"));
                         }
+                        Err(RoomError::Reset) => return Some((CLOSE_TRY_AGAIN, "reset")),
                     }
                 }
                 Some(Ok(WsMessage::Text(_))) => return Some((CLOSE_UNSUPPORTED, "binary only")),
@@ -218,12 +223,13 @@ async fn serve(
                 Some(Ok(WsMessage::Close(_))) | Some(Err(_)) | None => return None,
             },
             sent = outgoing.recv() => match sent {
-                Ok(message) if message.from == conn => {}
-                Ok(message) => {
-                    if socket.send(WsMessage::Binary(message.frame.as_ref().clone())).await.is_err() {
+                Ok(Outgoing::Frame { from, .. }) if from == conn => {}
+                Ok(Outgoing::Frame { frame, .. }) => {
+                    if socket.send(WsMessage::Binary(frame.as_ref().clone())).await.is_err() {
                         return None;
                     }
                 }
+                Ok(Outgoing::Reset) => return Some((CLOSE_TRY_AGAIN, "reset")),
                 Err(RecvError::Lagged(_)) => return Some((CLOSE_TRY_AGAIN, "behind")),
                 Err(RecvError::Closed) => return None,
             },

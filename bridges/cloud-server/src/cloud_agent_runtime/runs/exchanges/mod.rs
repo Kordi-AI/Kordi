@@ -29,7 +29,8 @@ pub(crate) use outcome::{
 pub(crate) use person_replies::match_replies as match_person_replies;
 mod store;
 pub(crate) use lifecycle::{finish, reconcile};
-use store::{authorize, directory, send};
+pub(crate) use store::authorize;
+use store::{directory, send};
 
 pub(crate) const PREFIX: &str = "agent-exchange:";
 

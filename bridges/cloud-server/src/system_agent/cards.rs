@@ -208,17 +208,41 @@ pub(crate) async fn refresh_card_carriers(
 /// needs a view no message shows yet (the vote card when a poll opens, the
 /// calendar card when a poll resolves), the System agent posts it as a new
 /// card-only message and its sequence is returned.
+///
+/// A card a person's agent opened travels in its owner's messages instead
+/// (issue #2446): the System agent may keep its answers, but never posts a
+/// copy of it.
 pub(crate) async fn sync_card_messages(
     pool: &PgPool,
     system_agent_account_id: &str,
+    row: &PlanCardRow,
+) -> Result<Option<i64>, sqlx_core::Error> {
+    if let Some(agent) = row.agent.as_ref() {
+        refresh_card_carriers(pool, system_agent_account_id, row).await?;
+        return sync_card_messages_as(
+            pool,
+            &agent.owner_account_id,
+            crate::common_ground::SYSTEM_NOTICE_KIND,
+            row,
+        )
+        .await;
+    }
+    sync_card_messages_as(pool, system_agent_account_id, "text", row).await
+}
+
+/// Brings `sender`'s card messages for a plan up to date, posting the view no
+/// message shows yet as a new card-only message of `kind`.
+pub(crate) async fn sync_card_messages_as(
+    pool: &PgPool,
+    sender: &str,
+    kind: &str,
     row: &PlanCardRow,
 ) -> Result<Option<i64>, sqlx_core::Error> {
     let Ok(conversation_id) = Uuid::parse_str(&row.conversation_id) else {
         return Ok(None);
     };
     let wanted = card_view(row);
-    let (has_carrier, shows_wanted) =
-        refresh_card_carriers(pool, system_agent_account_id, row).await?;
+    let (has_carrier, shows_wanted) = refresh_card_carriers(pool, sender, row).await?;
     // A canceled plan updates the cards it already has; it never adds one.
     if shows_wanted || (row.state == PlanCardState::Canceled && has_carrier) {
         return Ok(None);
@@ -228,7 +252,7 @@ pub(crate) async fn sync_card_messages(
             &Uuid::NAMESPACE_OID,
             format!("{}:{}", row.event_id, wanted).as_bytes(),
         ),
-        kind: "text".to_string(),
+        kind: kind.to_string(),
         content: json!({
             "schema": 1,
             "blocks": [card_block_from_row(row, wanted)],
@@ -239,14 +263,9 @@ pub(crate) async fn sync_card_messages(
     };
     // The System agent's own messages never wake the sweep, so the cursor stays
     // put and members' messages posted meanwhile are still read.
-    let outcome = crate::chat_sync::store::send_message(
-        pool,
-        system_agent_account_id,
-        conversation_id,
-        request,
-    )
-    .await
-    .map_err(|error| sqlx_core::Error::Protocol(error.to_string()))?;
+    let outcome = crate::chat_sync::store::send_message(pool, sender, conversation_id, request)
+        .await
+        .map_err(|error| sqlx_core::Error::Protocol(error.to_string()))?;
     Ok(Some(outcome.value.conversation_sequence))
 }
 
@@ -271,6 +290,7 @@ mod tests {
             manager_ids: Vec::new(),
             options: Vec::new(),
             note: None,
+            agent: None,
         }
     }
 

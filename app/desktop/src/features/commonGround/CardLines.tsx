@@ -70,10 +70,11 @@ function RefChips({ topic, refs }: { topic: string; refs: CardRef[] }) {
   );
 }
 
-/** One topic: its tag, when it was seen, Hide and Remove on hover, then its references. */
-export function CardLine({ card, topic, onHide, onRemove }: {
+/** One topic: its tag, New after a quiet update added it, when it was seen, Hide and Remove on hover, then its references. */
+export function CardLine({ card, topic, isNew = false, onHide, onRemove }: {
   card: CgOwnCard;
   topic: string;
+  isNew?: boolean;
   onHide: () => void;
   onRemove: () => void;
 }) {
@@ -84,6 +85,7 @@ export function CardLine({ card, topic, onHide, onRemove }: {
     <div className={cn('cg-line', hidden && 'is-off')} id={cardAnchor('topic', topic)}>
       <div className="cg-line-head">
         <CgTag topic={topic} muted={hidden} small />
+        {isNew ? <span className="cg-line-new">New</span> : null}
         {seen ? <span className="cg-line-seen">{seen}</span> : <span className="cg-line-seen" />}
         <button type="button" className="cg-line-act" aria-pressed={hidden} aria-label={hidden ? `Show ${topic}` : `Hide ${topic}`} onClick={onHide}>
           {hidden ? <Eye className="h-[13px] w-[13px]" aria-hidden="true" /> : <EyeOff className="h-[13px] w-[13px]" aria-hidden="true" />}

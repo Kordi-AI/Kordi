@@ -3,10 +3,12 @@ use serde::{Deserialize, Serialize};
 
 mod artifacts;
 mod envelopes;
+mod run;
 pub use artifacts::{ArtifactExportInput, ArtifactExportResponse};
 use envelopes::{
     ArtifactExportEnvelope, HeartbeatEnvelope, LeaseResponse, ProviderAuthEnvelope, RunEnvelope,
 };
+pub use run::{AgentRuntimeRoute, CloudAgentRun};
 
 use crate::memory::{MemoryRequestError, NewRunnerMemory, RunnerMemory, RunnerMemoryContext};
 
@@ -14,51 +16,6 @@ use crate::memory::{MemoryRequestError, NewRunnerMemory, RunnerMemory, RunnerMem
 pub enum RunnerClientError {
     #[error("cloud runner client request failed: {0}")]
     Request(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CloudAgentRun {
-    #[serde(rename = "agentCommunication", default)]
-    pub agent_communication: bool,
-    #[serde(rename = "turnIdentity", default)]
-    pub turn_identity: Option<kordi_core::types::RuntimeIdentity>,
-    #[serde(rename = "historyMessages", default)]
-    pub history_messages: Vec<serde_json::Value>,
-    #[serde(rename = "subsessionId", default)]
-    pub subsession_id: Option<String>,
-    #[serde(rename = "subsessionWriteScope", default)]
-    pub subsession_write_scope: Vec<String>,
-    #[serde(rename = "runId")]
-    pub run_id: String,
-    pub status: String,
-    pub prompt: String,
-    #[serde(rename = "systemPrompt", default)]
-    pub system_prompt: String,
-    #[serde(rename = "ownerAccountId")]
-    pub owner_account_id: String,
-    #[serde(rename = "requesterAccountId")]
-    pub requester_account_id: String,
-    #[serde(rename = "sessionId")]
-    pub session_id: String,
-    #[serde(rename = "sandboxId")]
-    pub sandbox_id: Option<String>,
-    #[serde(rename = "runtimeRoute", default)]
-    pub runtime_route: AgentRuntimeRoute,
-    #[serde(rename = "providerAuthAvailable")]
-    pub provider_auth_available: bool,
-    /// The owner's saved account for this route needs signing in again.
-    #[serde(rename = "providerAuthNeedsReconnect", default)]
-    pub provider_auth_needs_reconnect: bool,
-    /// `trigger` and `connectorTools` from the lease; never a credential.
-    #[serde(flatten)]
-    pub connectors: crate::connectors::LeaseConnectors,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentRuntimeRoute {
-    #[serde(rename = "defaultModel")]
-    pub default_model: Option<String>,
-    pub thinking: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,6 +51,19 @@ pub struct OmpState {
 
 #[async_trait]
 pub trait CloudAgentRunClient {
+    /// A person's agent opening or updating a plan or vote card (issue #2446).
+    async fn plan_card(
+        &self,
+        _run_id: &str,
+        _call_id: &str,
+        _action: &str,
+        _arguments: serde_json::Value,
+    ) -> Result<serde_json::Value, RunnerClientError> {
+        Err(RunnerClientError::Request(
+            "Plan cards are unavailable".into(),
+        ))
+    }
+
     async fn agent_exchange(
         &self,
         _run_id: &str,
@@ -304,6 +274,20 @@ impl HttpCloudAgentRunClient {
 
 #[async_trait]
 impl CloudAgentRunClient for HttpCloudAgentRunClient {
+    async fn plan_card(
+        &self,
+        run_id: &str,
+        call_id: &str,
+        action: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value, RunnerClientError> {
+        self.post_json(
+            &format!("/v1/cloud/agent-runs/{run_id}/agent-plan-card"),
+            serde_json::json!({"runnerId": self.runner_id, "toolCallId": call_id, "action": action, "arguments": arguments}),
+        )
+        .await
+    }
+
     async fn agent_exchange(
         &self,
         run_id: &str,

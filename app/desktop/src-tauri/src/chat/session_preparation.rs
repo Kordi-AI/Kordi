@@ -279,6 +279,9 @@ pub(super) async fn prepare_desktop_session_for_send(
         )));
     }
     runtime.set_reach_out_runtime(outreach.map(|(runtime, _)| runtime));
+    // Plan and vote cards for a run the server lets open them; the tool's
+    // schema is static, so the prompt stays the same for the conversation.
+    runtime.set_plan_card_runtime(super::plan_card_runtime::build(cloud_lease.as_ref()).await);
     let parent_lease = cloud_lease.clone();
     let group_documents =
         super::background_tasks::group_document_lease(cloud_lease.as_ref(), owner_requester)

@@ -17,6 +17,7 @@ impl HostTool for Probe {
 fn run_fixture() -> CloudAgentRun {
     CloudAgentRun {
         agent_communication: false,
+        plan_cards: false,
         turn_identity: None,
         history_messages: vec![],
         subsession_id: None,

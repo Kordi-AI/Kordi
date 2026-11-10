@@ -22,6 +22,7 @@ fn make_ctx(runtime: Option<TaskOperatorRuntime>) -> ToolContext {
         on_output: None,
         web_search: None,
         reach_out: None,
+        plan_card: None,
         reflection: None,
         session_observation: None,
         task_operator: runtime,

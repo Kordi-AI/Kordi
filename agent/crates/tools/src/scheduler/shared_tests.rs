@@ -43,6 +43,7 @@ async fn shared_requests_fail_closed_without_changing_tool_definitions() {
                 | "task_operator"
                 // The server limits whom a non-owner request may ask.
                 | "reach_out"
+                | "plan_card"
         );
         assert_eq!(
             ensure_tool_allowed(tool.as_ref(), &ctx).is_ok(),

@@ -21,7 +21,7 @@ const CANDIDATE_LIMIT: i64 = 16;
 /// imports and Factory tests ask for their own model, the System agent and Common ground run on
 /// a service account, and proactive and personal agent runs carry an agent's
 /// routing.
-const FEATURE_RUN_PREFIXES: &[&str] = &[
+pub(crate) const FEATURE_RUN_PREFIXES: &[&str] = &[
     crate::digest::RUN_PREFIX,
     crate::cloud_agent_runtime::import_runs::RUN_PREFIX,
     crate::cloud_agent_runtime::factory_runs::RUN_PREFIX,

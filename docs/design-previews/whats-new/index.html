@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What’s new · Kordi proposal</title>
+<style>
+:root{
+  --font:-apple-system,"SF Pro Text",Inter,system-ui,sans-serif;
+  --page:#e9e9ee;--chrome-text:#1c1c1e;--chrome-muted:rgba(60,60,67,.6);--chip:rgba(120,120,128,.12);--chip-on:#fff;
+  --stage-a:#f4f6f3;--stage-b:#dfe9df;--stage-line:rgba(0,0,0,.06);
+  /* Transient surface tokens, as theme-tokens.css (light). */
+  --surface:rgb(252 252 253 / .985);--raised:rgb(244 245 247 / .98);--hover:rgb(238 240 243 / .99);
+  --border:rgb(15 23 42 / .105);--text:rgb(23 32 51);--muted:rgb(92 103 121);--subtle:rgb(132 142 158);
+}
+:root[data-theme="dark"]{
+  --page:#141416;--chrome-text:#f2f2f7;--chrome-muted:rgba(235,235,245,.6);--chip:rgba(120,120,128,.24);--chip-on:#3a3a3c;
+  --stage-a:#1b1d21;--stage-b:#1d2620;--stage-line:rgba(255,255,255,.06);
+  --surface:rgb(20 22 27 / .985);--raised:rgb(29 31 37 / .98);--hover:rgb(35 38 45 / .98);
+  --border:rgb(255 255 255 / .095);--text:rgb(244 246 249);--muted:rgb(160 167 179);--subtle:rgb(116 124 138);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--chrome-text);font:13px/1.4 var(--font);-webkit-font-smoothing:antialiased;padding:20px 16px 48px}
+button{font:inherit;color:inherit;border:0;background:transparent;padding:0;cursor:pointer}
+button:focus-visible,summary:focus-visible{outline:none;background:var(--hover)}
+.bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;max-width:1480px;margin:0 auto 18px}
+.bar > div{display:flex;align-items:center;gap:8px}
+.seg{display:inline-flex;background:var(--chip);border-radius:9px;padding:2px}
+.seg button{font-size:12px;padding:5px 10px;border-radius:7px}
+.seg button[aria-pressed="true"]{background:var(--chip-on);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+.label{font-size:12px;color:var(--chrome-muted)}
+
+.stage{max-width:1480px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1px;border-radius:14px;overflow:hidden;border:1px solid var(--stage-line);background:var(--stage-line)}
+.slot{min-height:520px;padding:14px 14px 28px;background:linear-gradient(120deg,var(--stage-b) 0 22%,var(--stage-a) 22%);display:flex;flex-direction:column;align-items:center;gap:14px}
+.slot > .cap{align-self:flex-start;font-size:12px;font-weight:600;color:var(--chrome-text)}
+.slot > .cap span{font-weight:400;color:var(--chrome-muted);margin-left:6px}
+
+/* Shared dense popover surface (dense-menu.css). */
+.menu{width:var(--w,320px);max-width:100%;padding:5px;border:1px solid var(--border);border-radius:12px;color:var(--text);
+  background:color-mix(in srgb,var(--surface) 68%,transparent);
+  -webkit-backdrop-filter:blur(24px) saturate(1.3);backdrop-filter:blur(24px) saturate(1.3);
+  box-shadow:inset 0 1px 0 rgb(255 255 255 / 12%),0 12px 40px rgb(0 0 0 / 24%)}
+.head{display:flex;align-items:center;gap:8px;padding:2px 4px 4px 8px}
+.head h2{flex:1;min-width:0;margin:0;font-size:13px;font-weight:600;line-height:24px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.head button{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;flex-shrink:0}
+.head button:hover{background:var(--hover)}
+.head svg{width:16px;height:16px}
+.head .ver{flex-shrink:0;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* Now: what ships today (help.css). */
+.now{--w:360px}
+.now .body{padding:0 10px 10px}
+.now .body p{font-size:12px;line-height:1.5;color:var(--muted);margin:6px 0 12px}
+.now .body section{padding:12px 0;border-bottom:1px solid var(--border)}
+.now .body h3{font-size:12px;font-weight:600;margin:0 0 4px}
+
+/* Proposals share the body metrics. */
+.new .body{padding:2px 8px 8px}
+.new h3{margin:0;font-size:12px;font-weight:500;line-height:16px;color:var(--text);text-wrap:balance}
+.new p{margin:1px 0 0;font-size:11px;line-height:16px;color:var(--muted);text-wrap:pretty}
+
+/* A: plain list. */
+.a .item{padding:6px 0}
+
+/* B: category column. */
+.b{--w:360px}
+.b .group{display:grid;grid-template-columns:68px minmax(0,1fr);column-gap:8px;padding:6px 0}
+.b .cat{font-size:11px;line-height:16px;color:var(--subtle)}
+.b .group .item + .item{margin-top:8px}
+
+/* C: tiles. */
+.c .body{display:grid;gap:5px;padding-top:4px}
+.c .item{padding:8px 10px;border-radius:8px;background:var(--raised)}
+
+/* Earlier versions: dense rows that open in place. */
+.earlier{margin-top:6px;padding-top:5px;border-top:1px solid var(--border)}
+.c .earlier{margin-top:3px}
+.earlier > .cap{margin:2px 0 2px;font-size:11px;color:var(--muted)}
+.earlier details{margin-inline:-3px}
+.earlier summary{display:flex;align-items:center;justify-content:space-between;min-height:28px;padding:4px 8px 4px 3px;border-radius:6px;font-size:12px;line-height:16px;font-variant-numeric:tabular-nums;cursor:pointer;list-style:none}
+.earlier summary::-webkit-details-marker{display:none}
+.earlier summary:hover{background:var(--hover)}
+.earlier summary svg{width:12px;height:12px;color:var(--subtle);transition:transform .15s}
+.earlier details[open] summary svg{transform:rotate(90deg)}
+.earlier .inner{padding:0 3px 4px}
+.c .earlier .inner{display:grid;gap:5px;padding-top:2px}
+
+.notes{max-width:1480px;margin:16px auto 0;font-size:12px;color:var(--chrome-muted);line-height:1.6}
+.notes b{color:var(--chrome-text);font-weight:600}
+@media (prefers-reduced-motion:reduce){.earlier summary svg{transition:none}}
+</style>
+</head>
+<body>
+<div class="bar">
+  <div><span class="label">Theme</span><div class="seg" id="theme"></div></div>
+  <div><span class="label">Earlier versions</span><div class="seg" id="earlier"></div></div>
+</div>
+<div class="stage" id="stage"></div>
+<div class="notes" id="notes"></div>
+
+<script>
+const RELEASES = [
+  { version: '0.0.2-beta.8', items: [
+    ['Agents', 'Agents reply reliably', 'Replies and long turns keep going when the server is slow.'],
+    ['Agents', 'Background sessions finish their work', 'A slow connection no longer stops a session on your Mac.'],
+    ['Grounding', 'Cards that read your links', 'Builds read pages like Google Scholar and say why they failed.'],
+    ['Grounding', 'References and Interests', 'Topics show their references, and contacts see your Interests.'],
+  ] },
+  { version: '0.0.2-beta.7', items: [
+    ['Web', 'Use Kordi in your browser', 'Sign in at kordi.ai to chat, use Grounding, and import memories.'],
+    ['Agents', 'See your Personal agent at a glance', 'Resume background sessions right in the chat.'],
+    ['Groups', 'Start groups and invite with a link', 'Rename in place, leave, or close groups and channels.'],
+    ['Polish', 'Clearer errors and smoother Grounding', 'One error style everywhere, and memory imports from files.'],
+  ] },
+  { version: '0.0.2-beta.6', items: [
+    ['Grounding', 'Build cards and find common ground', 'Choose sources and share cards in rooms or Nearby.'],
+    ['People', 'Explore profiles and group channels', 'See shared media and choose channels from Contacts.'],
+    ['Memory', 'Organize memories by source and card', 'Import instruction files on Mac.'],
+    ['Chats', 'Share videos and personalize chats', 'Try Classic and keep avatars consistent.'],
+  ] },
+];
+const ICON = {
+  back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>',
+  close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>',
+};
+const item = ([, title, detail]) => `<div class="item"><h3>${title}</h3><p>${detail}</p></div>`;
+const LISTS = {
+  a: (items) => items.map(item).join(''),
+  b: (items) => {
+    const groups = [];
+    for (const entry of items) {
+      const last = groups[groups.length - 1];
+      if (last && last.cat === entry[0]) last.items.push(entry); else groups.push({ cat: entry[0], items: [entry] });
+    }
+    return groups.map((group) => `<div class="group"><span class="cat">${group.cat}</span><div>${group.items.map(item).join('')}</div></div>`).join('');
+  },
+  c: (items) => items.map(item).join(''),
+};
+const head = (version) => `<header class="head"><button aria-label="Back to help menu">${ICON.back}</button><h2>What’s new</h2>${version ? `<span class="ver">${version}</span>` : ''}<button aria-label="Close help">${ICON.close}</button></header>`;
+const earlierBlock = (key) => `<div class="earlier"><p class="cap">Earlier versions</p>${RELEASES.slice(1).map((release) => `<details><summary>${release.version}${ICON.chevron}</summary><div class="inner">${LISTS[key](release.items)}</div></details>`).join('')}</div>`;
+
+const VARIANTS = [
+  { key: 'now', cap: 'Now', sub: 'ships today',
+    html: () => `<div class="menu now">${head('')}<div class="body"><p>Version ${RELEASES[0].version}</p>${RELEASES[0].items.map(([, title, detail]) => `<section><h3>${title}</h3><p>${detail}</p></section>`).join('')}</div></div>` },
+  { key: 'a', cap: 'A', sub: 'plain list' },
+  { key: 'b', cap: 'B', sub: 'category column' },
+  { key: 'c', cap: 'C', sub: 'tiles' },
+];
+
+const params = new URLSearchParams(location.search);
+let theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+let earlier = params.get('earlier') === 'on' ? 'on' : 'off';
+
+function seg(el, options, current, onPick){
+  el.innerHTML = options.map(([k, l]) => `<button aria-pressed="${k === current}" data-k="${k}">${l}</button>`).join('');
+  el.onclick = (event) => { const k = event.target.dataset.k; if (k) onPick(k); };
+}
+function render(){
+  document.documentElement.dataset.theme = theme;
+  seg(document.getElementById('theme'), [['light', 'Light'], ['dark', 'Dark']], theme, (k) => { theme = k; render(); });
+  seg(document.getElementById('earlier'), [['off', 'Off'], ['on', 'On']], earlier, (k) => { earlier = k; render(); });
+  document.getElementById('stage').innerHTML = VARIANTS.map((variant) => {
+    const menu = variant.html ? variant.html() : `<div class="menu new ${variant.key}">${head(RELEASES[0].version)}<div class="body">${LISTS[variant.key](RELEASES[0].items)}${earlier === 'on' ? earlierBlock(variant.key) : ''}</div></div>`;
+    return `<div class="slot"><div class="cap">${variant.cap}<span>${variant.sub}</span></div>${menu}</div>`;
+  }).join('');
+  document.getElementById('notes').innerHTML = '<b>All proposals:</b> version moves into the header, hairlines between items go away, details drop to 11px with no stranded last word, and the panel narrows from 360 to 320px (B stays 360). <b>Earlier versions</b> is optional and uses the highlights already bundled with the app.';
+  history.replaceState(null, '', `?theme=${theme}&earlier=${earlier}`);
+}
+render();
+</script>
+</body>
+</html>

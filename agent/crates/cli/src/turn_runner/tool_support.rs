@@ -26,6 +26,7 @@ pub(super) fn tool_context_with_output_forwarding(
         })),
         web_search: env.tool_ctx.web_search.clone(),
         reach_out: env.tool_ctx.reach_out.clone(),
+        plan_card: env.tool_ctx.plan_card.clone(),
         reflection: env.tool_ctx.reflection.clone(),
         session_observation: env.tool_ctx.session_observation.clone(),
         task_operator: env.tool_ctx.task_operator.clone(),

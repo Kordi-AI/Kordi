@@ -490,4 +490,10 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
         "calendar share availability",
         "0191_calendar_share_availability.sql"
     ),
+    migration!(
+        192,
+        "common ground auto rebuild",
+        "0192_common_ground_auto_rebuild.sql"
+    ),
+    migration!(193, "agent plan cards", "0193_agent_plan_cards.sql"),
 ];

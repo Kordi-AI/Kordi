@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 
 mod calendar;
 pub(crate) mod omp;
+mod plan_card;
 mod prompt;
 mod provider;
 mod reply;
@@ -68,6 +69,9 @@ pub fn run_tool_catalog(run: &CloudAgentRun, memory: &RunMemory) -> Vec<Value> {
             return run.agent_communication
                 && run.subsession_id.is_none()
                 && run.owner_account_id == run.requester_account_id;
+        }
+        if name == kordi_tools::plan_card::NAME {
+            return run.plan_cards && run.subsession_id.is_none();
         }
         if name == "reflection" {
             return memory.enabled;
@@ -241,6 +245,9 @@ pub(crate) async fn execute_model_tool<C: CloudAgentRunClient + Sync>(
                     "The agent request was not confirmed. Do not claim it was sent.".into(),
                 )
             });
+    }
+    if call.name == kordi_tools::plan_card::NAME {
+        return plan_card::call(client, run, call).await;
     }
     if call.name == "task_operator" {
         if run.subsession_id.is_some() {

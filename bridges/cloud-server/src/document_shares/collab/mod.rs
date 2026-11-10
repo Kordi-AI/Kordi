@@ -25,6 +25,9 @@ use crate::auth::rate_limit::{CloudRateLimiter, RateLimitDecision, DOCUMENT_COLL
 use crate::auth::routes::CloudSession;
 use crate::server::ServerState;
 
+mod registry;
+mod relay;
+mod remote;
 mod rooms;
 mod socket;
 pub(crate) mod store;
@@ -33,7 +36,10 @@ pub(crate) mod tickets;
 #[cfg(test)]
 mod tests;
 
-pub use rooms::RoomRegistry;
+pub use registry::RoomRegistry;
+pub(crate) use relay::COLLAB_CHANNEL;
+#[cfg(test)]
+pub(crate) use rooms::{Outgoing, Room};
 
 /// Routes that need a signed-in session (mounted behind the session layer).
 pub(crate) fn protected_routes() -> Router<Arc<ServerState>> {

@@ -15,6 +15,7 @@ use super::session::{
 use super::tests::{account_with_device, test_pool};
 use super::{spawn_wake_listener, ChatSyncWakeHub, ConsumedRealtimeTicket};
 use crate::auth::session_signals::{SessionSignalHub, SignalVerdict};
+use crate::document_shares::collab::RoomRegistry;
 
 fn within_jitter(delay: Duration, interval: Duration) -> bool {
     delay >= interval.mul_f64(0.8) && delay <= interval.mul_f64(1.2)
@@ -242,7 +243,12 @@ async fn revocations_reach_open_sockets_through_the_listener() {
     let url = std::env::var("DATABASE_URL").unwrap();
     let wakes = ChatSyncWakeHub::new();
     let signals = SessionSignalHub::new();
-    spawn_wake_listener(url, wakes.clone(), signals.clone());
+    spawn_wake_listener(
+        url,
+        wakes.clone(),
+        signals.clone(),
+        RoomRegistry::new(pool.clone()),
+    );
     wait_for_listener(&wakes).await;
 
     let (account_id, device_id) = account_with_device(&pool).await;
@@ -295,7 +301,12 @@ async fn account_deletion_reaches_open_sockets() {
     let url = std::env::var("DATABASE_URL").unwrap();
     let wakes = ChatSyncWakeHub::new();
     let signals = SessionSignalHub::new();
-    spawn_wake_listener(url, wakes.clone(), signals.clone());
+    spawn_wake_listener(
+        url,
+        wakes.clone(),
+        signals.clone(),
+        RoomRegistry::new(pool.clone()),
+    );
     wait_for_listener(&wakes).await;
 
     let (account_id, device_id) = account_with_device(&pool).await;

@@ -135,6 +135,18 @@ pub struct PlanCardRow {
     pub options: Vec<PlanCardOption>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// The person's agent that opened the card, when one did (issue #2446).
+    #[serde(skip)]
+    pub agent: Option<PlanCardAgent>,
+}
+
+/// The person's agent that opened a card: its id, its owner (the card's
+/// creator), and the name it had then.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanCardAgent {
+    pub agent_id: String,
+    pub owner_account_id: String,
+    pub name: String,
 }
 
 pub struct PlanCardProposeArgs {
