@@ -266,6 +266,7 @@ struct DigestView: View {
                 Button { changeMonth(-1) } label: { Image(systemName: "chevron.left") }.accessibilityLabel("Previous month")
                 Button("Today") { month = Date(); selectedCalendarDay = month }.font(.caption)
                 Button { changeMonth(1) } label: { Image(systemName: "chevron.right") }.accessibilityLabel("Next month")
+                Button { selectedSheet = .event(DigestDate.newEvent(on: selectedCalendarDay)) } label: { Image(systemName: "plus") }.accessibilityLabel("New event")
             }.buttonStyle(.plain)
             DigestMonthGrid(month: month, events: events, candidates: calendarCandidates, selectedDay: $selectedCalendarDay, onSelect: { selectedSheet = .event($0) }, onReview: reviewCalendarCandidate)
             if events.isEmpty, calendarReadState == .content, !model.digestMutationState.hasPendingRemoval { Text("No saved events.").font(.footnote).foregroundStyle(.secondary) }
