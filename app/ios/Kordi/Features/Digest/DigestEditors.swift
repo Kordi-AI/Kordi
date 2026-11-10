@@ -29,6 +29,8 @@ struct DigestEventEditor: View {
     @Environment(\.dismiss) private var dismiss
     private var planId: String? { DigestPlanEvent.cardId(event) }
     private var declines: Bool { planId != nil && plan?.participant(accountId) != nil && plan?.state != .canceled }
+    // Until the card is read, removing could not answer it, and the next card change would bring the event back.
+    private var removeWaitsForPlan: Bool { planId != nil && plan == nil }
     @State private var recurrence: DigestRecurrence?
     @State private var preview = DigestSeriesPreview()
     @State private var previewRetry = 0
@@ -137,7 +139,7 @@ struct DigestEventEditor: View {
             if proposal?.calendarAction != "delete" {
                 Button(recurrence != nil && event.revision == 0 ? "Confirm series" : proposal?.calendarAction == "update" ? "Confirm change" : event.revision == 0 ? "Add to calendar" : "Save event") { Task { await submit() } }.disabled(busy || !hasStart || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (needsPreview && !ready))
                 if event.revision > 0 {
-                    Button("Remove event", role: .destructive) { if declines { confirmDecline = true } else { confirmRemove = true } }.disabled(busy)
+                    Button("Remove event", role: .destructive) { if declines { confirmDecline = true } else { confirmRemove = true } }.disabled(busy || removeWaitsForPlan)
                         .confirmationDialog("Remove \"\(event.title)\"?", isPresented: $confirmRemove, titleVisibility: .visible) {
                             Button("Remove event", role: .destructive) { Task { await removeReviewedEvent() } }
                             Button("Keep event", role: .cancel) {}

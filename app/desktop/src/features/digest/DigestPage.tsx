@@ -190,6 +190,8 @@ function EventEditor({event,review,sources,accountId,onClose,onSave,onRemove,onD
   const {plan,setPlan}=usePlanEventCard(planId);
   const [confirmDecline,setConfirmDecline]=useState(false);
   const declines=Boolean(planId&&onDecline&&planEventSelf(plan)&&plan?.card.state!=='canceled');
+  // Until the card is read, removing could not answer it, and the next card change would bring the event back.
+  const removeWaitsForPlan=Boolean(planId&&!plan);
   const [error,setError]=useState<string|null>(null);
   const needsPreview=!!rule&&!event.revision&&review?.item.calendarAction!=='delete';
   let previewRequest:string|null=null,previewValidation:string|null=null;
@@ -245,7 +247,7 @@ function EventEditor({event,review,sources,accountId,onClose,onSave,onRemove,onD
     {event.seriesId&&<p className="digest-meta">Part of a repeating series. Editing or removing here affects only this occurrence.</p>}
     {links}{event.sourceIds.length>0&&<DigestPeople item={event} sources={sources} accountId={accountId} showMessages/>}{event.sourceIds.length===0&&event.description&&<p className="digest-event-context">{plainEventNotes(event.description)}</p>}
     {error&&<ErrorLine>{error}</ErrorLine>}
-    <footer>{onRemove&&<button type="button" className="digest-remove-trigger" disabled={busy} onClick={()=>declines?setConfirmDecline(true):setConfirmRemove(true)}>Remove event</button>}<button type="button" onClick={onClose}>Cancel</button><button type="submit" disabled={busy||(needsPreview&&!preview.ready)}>{rule&&!event.revision?'Confirm series':review?.item.calendarAction==='update'?'Confirm change':event.revision?'Save event':'Add to calendar'}</button></footer>
+    <footer>{onRemove&&<button type="button" className="digest-remove-trigger" disabled={busy||removeWaitsForPlan} onClick={()=>declines?setConfirmDecline(true):setConfirmRemove(true)}>Remove event</button>}<button type="button" onClick={onClose}>Cancel</button><button type="submit" disabled={busy||(needsPreview&&!preview.ready)}>{rule&&!event.revision?'Confirm series':review?.item.calendarAction==='update'?'Confirm change':event.revision?'Save event':'Add to calendar'}</button></footer>
     {confirmRemove&&<ConfirmDialog title="Remove this event?" confirmLabel={busy?'Removing…':'Remove'} busy={busy} onKeep={()=>setConfirmRemove(false)} onConfirm={()=>void remove()}><p><strong>{event.title}</strong></p><p className="digest-meta">{removesFromDevice?'It is removed from your Kordi calendar and from your device calendar.':'It is removed from your Kordi calendar.'}</p></ConfirmDialog>}
     {confirmDecline&&<ConfirmDialog title="Can't make it?" confirmLabel={busy?'Updating…':"Can't make it"} busy={busy} onKeep={()=>setConfirmDecline(false)} onConfirm={()=>void decline()}><p className="digest-meta">{event.title} leaves your calendar.</p></ConfirmDialog>}
   </form></Sheet>;

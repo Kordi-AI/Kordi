@@ -321,8 +321,10 @@ pub(super) async fn prepare(
         &work,
         &clock,
     );
+    // An unreadable `deferred` value is cleared too, so it never keeps waking
+    // the sweep.
     if let Some(patch) = state_patch(
-        stored.is_some(),
+        candidate.hooks_fired.get(DEFERRED_KEY).is_some(),
         &assessment.outcome,
         candidate.latest_sequence,
     ) {

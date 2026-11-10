@@ -304,3 +304,47 @@ fn a_run_that_completed_after_the_answer_ends_the_task() {
     let result = assess(Some(task), 0, 2, &messages, &asked, &clock(5));
     waiting_task(&result);
 }
+
+#[test]
+fn a_run_whose_lease_lapsed_owns_no_new_messages() {
+    // A Mac went to sleep mid-run: plain chat stays the System agent's, and
+    // its reply carries no "picking this up" line.
+    let messages = [person(1, 30)];
+    let asleep = work(vec![run("running", Some(5), 2)]);
+    let result = assess(None, 0, 0, &messages, &asleep, &clock(31));
+    assert_eq!(result.outcome, Outcome::Free);
+    assert!(result.owned.is_empty());
+    let mut input = json!({"messages": [{"sequence": 1, "text": "Dinner Friday at 7?"}]});
+    mark(&mut input, &result.owned, &result.agents);
+    assert!(input["messages"][0].get("agentOwned").is_none());
+    assert!(input.get("stepIn").is_none());
+    assert_eq!(with_step_in_line(&input, "Card is up."), "Card is up.");
+}
+
+#[test]
+fn only_the_owning_agents_completed_run_answers_the_task() {
+    let (task, messages) = deferred_answer();
+    let mut other = run("completed", None, 3);
+    other.owner.account_id = Some("acct_bob".to_string());
+    let result = assess(
+        Some(task.clone()),
+        0,
+        2,
+        &messages,
+        &work(vec![other]),
+        &clock(5),
+    );
+    waiting_task(&result);
+    let own = run("completed", None, 3);
+    let result = assess(Some(task), 0, 2, &messages, &work(vec![own]), &clock(5));
+    assert_eq!(result.outcome, Outcome::Replied);
+}
+
+#[test]
+fn an_unreadable_deferred_value_is_cleared() {
+    assert_eq!(
+        Deferral::read(&json!({"deferred": {"checkAfter": "soon"}})),
+        None
+    );
+    assert_eq!(state_patch(true, &Outcome::Free, 4), Some(json!({})));
+}

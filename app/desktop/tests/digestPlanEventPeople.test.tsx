@@ -152,9 +152,32 @@ test('the People button "Can\'t make it" uses the same confirmation', async () =
   });
 });
 
-test('a plan that cannot be read hides the section and Remove event deletes only the row', async () => {
-  await withDigest({ eventId: 'plan:evt-1', load: async () => { throw Object.assign(new Error('Forbidden'), { status: 403 }); } }, async ({ host, editor, click, answers, removals }) => {
+test('a plan that cannot be read hides the section and keeps Remove event disabled', async () => {
+  await withDigest({ eventId: 'plan:evt-1', load: async () => { throw Object.assign(new Error('Offline'), { status: 0 }); } }, async ({ editor, buttons, answers, removals }) => {
     assert.equal(editor().querySelector('.digest-plan-people'), null);
+    const [remove] = buttons('Remove event');
+    assert.ok(remove);
+    assert.equal(remove.disabled, true, 'removing now would not answer the card, so the event would come back');
+    assert.equal(answers.length, 0);
+    assert.deepEqual(removals, []);
+  });
+});
+
+test('Remove event on a card event waits for the card to load', async () => {
+  let release: (card: MessagePlanCard) => void = () => {};
+  const pending = new Promise<MessagePlanCard>(resolve => { release = resolve; });
+  await withDigest({ eventId: 'plan:evt-1', load: () => pending }, async ({ host, buttons, click }) => {
+    assert.equal(buttons('Remove event')[0].disabled, true, 'disabled while the card loads');
+    await act(async () => { release(MIXED); await new Promise(resolve => setTimeout(resolve, 0)); });
+    assert.equal(buttons('Remove event')[0].disabled, false);
+    await click('Remove event');
+    assert.equal(host.querySelector('dialog.digest-confirm')!.getAttribute('aria-label'), "Can't make it?");
+  });
+});
+
+test('a loaded card the viewer is not on removes only the row', async () => {
+  const others = card([person('mira', 'Mira Chen', 'yes', true)]);
+  await withDigest({ eventId: 'plan:evt-1', load: async () => others }, async ({ host, click, answers, removals }) => {
     await click('Remove event');
     assert.equal(host.querySelector('dialog.digest-confirm')!.getAttribute('aria-label'), 'Remove this event?');
     await click('Remove');
