@@ -58,6 +58,12 @@ impl Deferral {
     pub(super) fn read(hooks_fired: &Value) -> Option<Self> {
         serde_json::from_value(hooks_fired.get(DEFERRED_KEY)?.clone()).ok()
     }
+
+    /// Whether `owner` is this task's agent. A task whose owner is unknown
+    /// accepts any agent.
+    fn owned_by(&self, owner: &Owner) -> bool {
+        self.owner.account_id.is_none() || owner.account_id == self.owner.account_id
+    }
 }
 
 /// The messages the System agent took over from a stalled agent, so a retried
@@ -115,10 +121,6 @@ pub(super) struct RunFact {
 }
 
 impl RunFact {
-    fn is_open(&self) -> bool {
-        matches!(self.status.as_str(), "queued" | "leased" | "running")
-    }
-
     fn is_executing(&self) -> bool {
         matches!(self.status.as_str(), "leased" | "running")
     }
@@ -148,12 +150,17 @@ pub(super) struct Work {
 }
 
 impl Work {
-    /// The owner of work still open now, which every new message defers to.
-    fn open_owner(&self, now: DateTime<Utc>) -> Option<Owner> {
+    /// The owner of work still open now, which every new message defers to:
+    /// a recently queued run, a run holding a live lease, or a pending
+    /// exchange. A run whose lease lapsed (its Mac went to sleep) owns nothing.
+    fn open_owner(&self, now: DateTime<Utc>, stall: Duration) -> Option<Owner> {
         let horizon = now - Duration::minutes(OPEN_RUN_HORIZON_MINUTES);
         self.runs
             .iter()
-            .find(|run| run.is_open() && run.updated_at.is_none_or(|updated| updated > horizon))
+            .find(|run| {
+                (run.status == "queued" && run.updated_at.is_none_or(|updated| updated > horizon))
+                    || run.is_alive(now, stall)
+            })
             .map(|run| run.owner.clone())
             .or_else(|| self.pending_exchange.clone())
     }
@@ -199,7 +206,7 @@ pub(super) fn assess(
     let had_task = stored.is_some();
     let mut task = stored.filter(|task| !replied(task, messages));
     let resolved = had_task && task.is_none();
-    let open_owner = work.open_owner(clock.now);
+    let open_owner = work.open_owner(clock.now, clock.stall);
     let mut last_agent: Option<(&MessageFact, &AgentMessage)> = None;
     let mut owned = BTreeSet::new();
     let mut agents = BTreeMap::new();
@@ -271,9 +278,7 @@ fn owner_messages_after<'a>(
         .iter()
         .filter(move |message| message.sequence > task.last_human_sequence)
         .filter_map(|message| message.agent.as_ref())
-        .filter(move |agent| {
-            task.owner.account_id.is_none() || agent.owner.account_id == task.owner.account_id
-        })
+        .filter(move |agent| task.owned_by(&agent.owner))
 }
 
 fn decide(mut task: Deferral, messages: &[MessageFact], work: &Work, clock: &Clock) -> Outcome {
@@ -283,12 +288,20 @@ fn decide(mut task: Deferral, messages: &[MessageFact], work: &Work, clock: &Clo
     let runs: Vec<&RunFact> = work
         .runs
         .iter()
-        .filter(|run| run.is_open() || run.updated_at.is_some_and(|at| at >= task.since))
+        .filter(|run| {
+            run.updated_at.is_some_and(|at| at >= task.since)
+                || run.status == "queued"
+                || run.is_alive(clock.now, clock.stall)
+                || (run.is_executing() && task.owned_by(&run.owner))
+        })
         .collect();
     let newest = runs.iter().max_by_key(|run| run.updated_at);
-    // A run that finished after the last human message answered the task.
+    // The owning agent's run finished after the last human message: it
+    // answered the task.
     if newest.is_some_and(|run| {
-        run.status == "completed" && run.updated_at.is_some_and(|at| at >= task.last_human_at)
+        run.status == "completed"
+            && task.owned_by(&run.owner)
+            && run.updated_at.is_some_and(|at| at >= task.last_human_at)
     }) {
         return Outcome::Replied;
     }
@@ -311,7 +324,7 @@ fn decide(mut task: Deferral, messages: &[MessageFact], work: &Work, clock: &Clo
 /// The sweep row change for an outcome: the keys to drop and the patch to
 /// merge, or None when the row stays as it is.
 pub(super) fn state_patch(
-    had_deferral: bool,
+    has_deferred_key: bool,
     outcome: &Outcome,
     latest_sequence: i64,
 ) -> Option<Value> {
@@ -320,7 +333,7 @@ pub(super) fn state_patch(
         Outcome::Stalled(task) => Some(json!({
             STEPPED_IN_KEY: SteppedIn { through: latest_sequence, owner: task.owner.clone() },
         })),
-        Outcome::Free | Outcome::Replied if had_deferral => Some(json!({})),
+        Outcome::Free | Outcome::Replied if has_deferred_key => Some(json!({})),
         Outcome::Free | Outcome::Replied => None,
     }
 }
