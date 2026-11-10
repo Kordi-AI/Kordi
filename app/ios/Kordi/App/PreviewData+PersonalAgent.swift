@@ -27,7 +27,7 @@ extension PreviewData {
         ) -> ChatMessage {
             ChatMessage(
                 id: id, conversationId: conversation, author: .agent, authorName: name, text: text,
-                createdAt: now.addingTimeInterval(-minutesAgo * 60), deliveryState: .delivered,
+                createdAt: now.addingTimeInterval(-minutesAgo * 60), deliveryState: .sent,
                 errorMessage: nil, requestMessageId: nil, sources: sources
             )
         }

@@ -149,7 +149,7 @@ enum PreviewData {
                     authorName: "Research Agent",
                     text: "I am comparing the TestFlight checklist with the latest device results.",
                     createdAt: now.addingTimeInterval(-160),
-                    deliveryState: .delivered,
+                    deliveryState: .sent,
                     errorMessage: nil,
                     requestMessageId: nil
                 )
@@ -162,13 +162,13 @@ enum PreviewData {
                     authorName: "Support Agent",
                     text: "I can help with that.",
                     createdAt: now.addingTimeInterval(-300),
-                    deliveryState: .delivered,
+                    deliveryState: .sent,
                     errorMessage: nil,
                     requestMessageId: nil
                 )
             ],
             "person:acct_kordi_support": [
-                ChatMessage(id: "support1", conversationId: "person:acct_kordi_support", author: .person, authorName: KordiSupportIdentity.displayName, text: "Welcome to Kordi.", createdAt: now.addingTimeInterval(-25), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil)
+                ChatMessage(id: "support1", conversationId: "person:acct_kordi_support", author: .person, authorName: KordiSupportIdentity.displayName, text: "Welcome to Kordi.", createdAt: now.addingTimeInterval(-25), deliveryState: .sent, errorMessage: nil, requestMessageId: nil)
             ],
             "person:acct_maya": contactProfileSharedMessages(now: now) + mayaConversation(now: now, resurrected: showsDeleteResurrection),
             "person:acct_ethan": [
@@ -179,7 +179,7 @@ enum PreviewData {
                     authorName: "Ethan Park",
                     text: "Sounds good, let’s do it.",
                     createdAt: now.addingTimeInterval(-1_100),
-                    deliveryState: .delivered,
+                    deliveryState: .sent,
                     errorMessage: nil,
                     requestMessageId: nil
                 )
@@ -192,7 +192,7 @@ enum PreviewData {
                     authorName: "Priya Shah",
                     text: "Perfect, I’ll update the deck.",
                     createdAt: now.addingTimeInterval(-82_000),
-                    deliveryState: .delivered,
+                    deliveryState: .sent,
                     errorMessage: nil,
                     requestMessageId: nil
                 )
@@ -205,7 +205,7 @@ enum PreviewData {
                     authorName: "Marcus Johnson",
                     text: "Thanks — that clears it up.",
                     createdAt: now.addingTimeInterval(-86_000),
-                    deliveryState: .delivered,
+                    deliveryState: .sent,
                     errorMessage: nil,
                     requestMessageId: nil
                 )
@@ -214,7 +214,7 @@ enum PreviewData {
                 ? linkShowcaseConversation(now: now)
                 : groupConversation(now: now, includesMentionAttention: showsMentionAttention),
             "group:mobile-release": [
-                ChatMessage(id: "gm2", conversationId: "group:mobile-release", author: .person, authorName: "Ethan Park", text: "I added the device testing notes.", createdAt: now.addingTimeInterval(-240), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil)
+                ChatMessage(id: "gm2", conversationId: "group:mobile-release", author: .person, authorName: "Ethan Park", text: "I added the device testing notes.", createdAt: now.addingTimeInterval(-240), deliveryState: .sent, errorMessage: nil, requestMessageId: nil)
             ]
         ]
         let personal = arguments.contains("--preview-personal-agent") ? personalAgentFixture(now: now) : (conversations: [], messages: [:])
@@ -281,7 +281,7 @@ enum PreviewData {
                 ```
                 """,
                 createdAt: now.addingTimeInterval(-80),
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: "m1",
                 attachments: [
@@ -347,7 +347,7 @@ enum PreviewData {
                 authorName: "BabyTREE",
                 text: "The repository check completed and the useful result is ready.",
                 createdAt: now,
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: requestId,
                 agentExecution: AgentExecutionSnapshot(
@@ -433,9 +433,9 @@ enum PreviewData {
         if ProcessInfo.processInfo.arguments.contains("--preview-group-created") {
             // A new group: the server's "created the group" notice, then a first message.
             return [
-                ChatMessage(id: "msg:group-created:preview", conversationId: conversationId, author: .person, authorName: KordiSystemIdentity.displayName, text: "Maya Chen created the group", createdAt: now.addingTimeInterval(-300), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil, messageKind: ChatMessage.groupEventNoticeMessageKind),
-                ChatMessage(id: "msg:group-member-join:preview:created", conversationId: conversationId, author: .me, authorName: "You", text: "Ethan Park joined the group, invited by Maya.", createdAt: now.addingTimeInterval(-240), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil, messageKind: ChatMessage.groupMemberJoinMessageKind),
-                ChatMessage(id: "gc1", conversationId: conversationId, author: .person, authorName: "Maya Chen", text: "Welcome! This is where we plan the next TestFlight round.", createdAt: now.addingTimeInterval(-180), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil),
+                ChatMessage(id: "msg:group-created:preview", conversationId: conversationId, author: .person, authorName: KordiSystemIdentity.displayName, text: "Maya Chen created the group", createdAt: now.addingTimeInterval(-300), deliveryState: .sent, errorMessage: nil, requestMessageId: nil, messageKind: ChatMessage.groupEventNoticeMessageKind),
+                ChatMessage(id: "msg:group-member-join:preview:created", conversationId: conversationId, author: .me, authorName: "You", text: "Ethan Park joined the group, invited by Maya.", createdAt: now.addingTimeInterval(-240), deliveryState: .sent, errorMessage: nil, requestMessageId: nil, messageKind: ChatMessage.groupMemberJoinMessageKind),
+                ChatMessage(id: "gc1", conversationId: conversationId, author: .person, authorName: "Maya Chen", text: "Welcome! This is where we plan the next TestFlight round.", createdAt: now.addingTimeInterval(-180), deliveryState: .sent, errorMessage: nil, requestMessageId: nil),
             ]
         }
         var messages = (0..<72).map { index in
@@ -465,11 +465,11 @@ enum PreviewData {
             )
         }
         messages.append(contentsOf: [
-            ChatMessage(id: "gm0", conversationId: conversationId, author: .person, authorName: "Maya Chen", text: "Hi", createdAt: now.addingTimeInterval(-1_200), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil),
-            ChatMessage(id: "gm1", conversationId: conversationId, author: .person, authorName: "Maya Chen", text: "The latest iPhone build is ready. Please review the TestFlight notes before we invite the next group of testers.", createdAt: now.addingTimeInterval(-1_170), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil),
+            ChatMessage(id: "gm0", conversationId: conversationId, author: .person, authorName: "Maya Chen", text: "Hi", createdAt: now.addingTimeInterval(-1_200), deliveryState: .sent, errorMessage: nil, requestMessageId: nil),
+            ChatMessage(id: "gm1", conversationId: conversationId, author: .person, authorName: "Maya Chen", text: "The latest iPhone build is ready. Please review the TestFlight notes before we invite the next group of testers.", createdAt: now.addingTimeInterval(-1_170), deliveryState: .sent, errorMessage: nil, requestMessageId: nil),
             ChatMessage(id: "gm2", conversationId: conversationId, author: .me, authorName: "You", text: "Got it", createdAt: now.addingTimeInterval(-700), deliveryState: .read, errorMessage: nil, requestMessageId: nil, readByCount: 2, readByAccountIds: ["acct_maya", "acct_ethan"]),
             ChatMessage(id: "gm2b", conversationId: conversationId, author: .me, authorName: "You", text: "I’ll send the review notes here.", createdAt: now.addingTimeInterval(-670), deliveryState: .read, errorMessage: nil, requestMessageId: nil, readByCount: 2, readByAccountIds: ["acct_maya", "acct_ethan"]),
-            ChatMessage(id: "msg:group-member-join:preview:session:group:mobile", conversationId: conversationId, author: .me, authorName: "You", text: "Ethan Park joined the group, invited by Alex.", createdAt: now.addingTimeInterval(-150), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil, messageKind: ChatMessage.groupMemberJoinMessageKind),
+            ChatMessage(id: "msg:group-member-join:preview:session:group:mobile", conversationId: conversationId, author: .me, authorName: "You", text: "Ethan Park joined the group, invited by Alex.", createdAt: now.addingTimeInterval(-150), deliveryState: .sent, errorMessage: nil, requestMessageId: nil, messageKind: ChatMessage.groupMemberJoinMessageKind),
             ChatMessage(
                 id: "gm3",
                 conversationId: conversationId,
@@ -477,7 +477,7 @@ enum PreviewData {
                 authorName: "Ethan Park",
                 text: "@all I also added the device matrix.",
                 createdAt: now.addingTimeInterval(-120),
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: nil,
                 mentions: [MessageMention(
@@ -490,7 +490,7 @@ enum PreviewData {
                     displayLabel: "All"
                 )]
             ),
-            ChatMessage(id: "gm3b", conversationId: conversationId, author: .person, authorName: "Ethan Park", text: "The accessibility notes are in the same folder.", createdAt: now.addingTimeInterval(-90), editedAt: now.addingTimeInterval(-60), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil),
+            ChatMessage(id: "gm3b", conversationId: conversationId, author: .person, authorName: "Ethan Park", text: "The accessibility notes are in the same folder.", createdAt: now.addingTimeInterval(-90), editedAt: now.addingTimeInterval(-60), deliveryState: .sent, errorMessage: nil, requestMessageId: nil),
             ChatMessage(
                 id: "gm4",
                 conversationId: conversationId,
@@ -499,7 +499,7 @@ enum PreviewData {
                 text: "Long-press to edit or delete this message.",
                 createdAt: now.addingTimeInterval(-30),
                 cloudMessageVersion: 1,
-                deliveryState: .read,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: nil,
                 reactionTargetMessageId: "018f47c2-9f4c-7a5e-b001-000000000006"
@@ -522,8 +522,8 @@ enum PreviewData {
                 targetIdentityId: "human:acct_me"
             )
             messages.append(contentsOf: [
-                ChatMessage(id: "gm-mention-1", conversationId: conversationId, conversationSequence: 73, author: .person, authorName: "Maya Chen", text: "@Alex Can you verify the notification copy?", createdAt: now.addingTimeInterval(-90), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil, mentions: [mention]),
-                ChatMessage(id: "gm-mention-2", conversationId: conversationId, conversationSequence: 74, author: .person, authorName: "Ethan Park", text: "@Alex The overflow count should use 99+.", createdAt: now.addingTimeInterval(-60), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil, mentions: [mention])
+                ChatMessage(id: "gm-mention-1", conversationId: conversationId, conversationSequence: 73, author: .person, authorName: "Maya Chen", text: "@Alex Can you verify the notification copy?", createdAt: now.addingTimeInterval(-90), deliveryState: .sent, errorMessage: nil, requestMessageId: nil, mentions: [mention]),
+                ChatMessage(id: "gm-mention-2", conversationId: conversationId, conversationSequence: 74, author: .person, authorName: "Ethan Park", text: "@Alex The overflow count should use 99+.", createdAt: now.addingTimeInterval(-60), deliveryState: .sent, errorMessage: nil, requestMessageId: nil, mentions: [mention])
             ])
         }
         return messages
@@ -602,7 +602,7 @@ enum PreviewData {
             ChatMessage(id: "links-agent-reference", conversationId: conversationId,
                 author: .agent, authorName: "Research Agent",
                 text: "Read the [GitHub issue](https://github.com/Kordi-AI/Kordi/issues/1643) and [migration guide](https://example.net/migration) before the release.",
-                createdAt: now.addingTimeInterval(-360), deliveryState: .delivered,
+                createdAt: now.addingTimeInterval(-360), deliveryState: .sent,
                 errorMessage: nil, requestMessageId: nil),
             ChatMessage(id: "links-human-prose", conversationId: conversationId,
                 author: .me, authorName: "You",
@@ -612,7 +612,7 @@ enum PreviewData {
             ChatMessage(id: "links-agent-bare-url", conversationId: conversationId,
                 author: .agent, authorName: "Research Agent",
                 text: "https://github.com/Kordi-AI/Kordi/issues/1643",
-                createdAt: now.addingTimeInterval(-240), deliveryState: .delivered,
+                createdAt: now.addingTimeInterval(-240), deliveryState: .sent,
                 errorMessage: nil, requestMessageId: nil),
             ChatMessage(id: "links-own-card", conversationId: conversationId,
                 author: .me, authorName: "You",
@@ -622,17 +622,17 @@ enum PreviewData {
             ChatMessage(id: "links-peer-card", conversationId: conversationId,
                 author: .person, authorName: "Maya Chen",
                 text: "https://example.org/review-checklist",
-                createdAt: now.addingTimeInterval(-120), deliveryState: .delivered,
+                createdAt: now.addingTimeInterval(-120), deliveryState: .sent,
                 errorMessage: nil, requestMessageId: nil),
             ChatMessage(id: "links-file-reference", conversationId: conversationId,
                 author: .agent, authorName: "Research Agent",
                 text: "The [release checklist](https://example.net/release-checklist.pdf) covers the final checks.",
-                createdAt: now.addingTimeInterval(-60), deliveryState: .delivered,
+                createdAt: now.addingTimeInterval(-60), deliveryState: .sent,
                 errorMessage: nil, requestMessageId: nil),
             ChatMessage(id: "links-file-attachment", conversationId: conversationId,
                 author: .person, authorName: "Maya Chen",
                 text: "I attached the release files.",
-                createdAt: now, deliveryState: .delivered,
+                createdAt: now, deliveryState: .sent,
                 errorMessage: nil, requestMessageId: nil,
                 attachments: [ChatAttachment(
                     attachmentId: "att_preview_link_showcase_checklist",
@@ -654,7 +654,7 @@ enum PreviewData {
     private static func themeContrastConversation(now: Date) -> [ChatMessage] {
         let mentions = [MessageMention(label: "Maya", targetKind: "person", humanId: "acct_maya"),
                         MessageMention(label: "Assistant", targetKind: "agent")]
-        var messages = [MessageDeliveryState.sent, .delivered, .read].enumerated().map { index, state in
+        var messages = [MessageDeliveryState.sent, .read].enumerated().map { index, state in
             ChatMessage(id: "theme-state-\(index)", conversationId: "person:acct_maya", author: .me,
                 authorName: "You", text: "@Maya @Assistant This message is \(state.label.lowercased()).",
                 createdAt: now.addingTimeInterval(Double(index - 8) * 60), deliveryState: state,
@@ -662,14 +662,14 @@ enum PreviewData {
         }
         messages.append(ChatMessage(id: "theme-link-received", conversationId: "person:acct_maya", author: .person,
             authorName: "Maya Chen", text: "Here is the review checklist: https://example.org/interface-review",
-            createdAt: now.addingTimeInterval(-180), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil))
+            createdAt: now.addingTimeInterval(-180), deliveryState: .sent, errorMessage: nil, requestMessageId: nil))
         messages.append(ChatMessage(id: "theme-link-sent", conversationId: "person:acct_maya", author: .me,
             authorName: "You", text: "@Maya @Assistant Review the color study: https://example.com/color-study",
             createdAt: now.addingTimeInterval(-120), deliveryState: .read, errorMessage: nil, requestMessageId: nil,
             mentions: mentions))
         messages.append(ChatMessage(id: "theme-link-inline", conversationId: "person:acct_maya", author: .me,
             authorName: "You", text: "Open [the review checklist](https://example.net/review-checklist) from this inline link.",
-            createdAt: now.addingTimeInterval(-60), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil))
+            createdAt: now.addingTimeInterval(-60), deliveryState: .sent, errorMessage: nil, requestMessageId: nil))
         return messages
     }
 
@@ -681,7 +681,7 @@ enum PreviewData {
         if ProcessInfo.processInfo.arguments.contains("--preview-rich-message-actions") {
             return [ChatMessage(id: "rich-menu", conversationId: "person:acct_maya", author: .person,
                 authorName: "Maya Chen", text: richText, createdAt: now.addingTimeInterval(-60),
-                deliveryState: .delivered, errorMessage: nil, requestMessageId: nil,
+                deliveryState: .sent, errorMessage: nil, requestMessageId: nil,
                 reactionTargetMessageId: "rich-menu")]
         }
         if ProcessInfo.processInfo.arguments.contains("--preview-menu-test-chat") {
@@ -698,7 +698,7 @@ enum PreviewData {
                     deliveryState: .read, errorMessage: nil, requestMessageId: nil),
                 ChatMessage(id: "demo-long-formatted", conversationId: "person:acct_maya", author: .person,
                     authorName: "Maya Chen", text: longText + "\n\nEnd of the formatted sample. Photo and voice examples follow below.",
-                    createdAt: now.addingTimeInterval(-270), deliveryState: .delivered,
+                    createdAt: now.addingTimeInterval(-270), deliveryState: .sent,
                     errorMessage: nil, requestMessageId: nil, reactionTargetMessageId: "demo-long-formatted"),
                 ChatMessage(id: "demo-voice", conversationId: "person:acct_maya", author: .me,
                     authorName: "You", text: "This is the sample voice transcript.", createdAt: now.addingTimeInterval(-240),
@@ -714,12 +714,12 @@ enum PreviewData {
                     attachments: Array(photos.prefix(1)), reactionTargetMessageId: "demo-photo"),
                 ChatMessage(id: "demo-photo-group", conversationId: "person:acct_maya", author: .person,
                     authorName: "Maya Chen", text: "A photo group with its own caption. Try holding the stack, then the caption.",
-                    createdAt: now.addingTimeInterval(-120), deliveryState: .delivered,
+                    createdAt: now.addingTimeInterval(-120), deliveryState: .sent,
                     errorMessage: nil, requestMessageId: nil, attachments: Array(photos.prefix(2)),
                     reactionTargetMessageId: "demo-photo-group"),
                 ChatMessage(id: "demo-rich-emoji", conversationId: "person:acct_maya", author: .person,
                     authorName: "Maya Chen", text: richText, createdAt: now.addingTimeInterval(-60),
-                    deliveryState: .delivered, errorMessage: nil, requestMessageId: nil,
+                    deliveryState: .sent, errorMessage: nil, requestMessageId: nil,
                     reactionTargetMessageId: "demo-rich-emoji")
             ]
         }
@@ -749,7 +749,7 @@ enum PreviewData {
                 ChatMessage(id: "m5", conversationId: "person:acct_maya",
                     author: .person, authorName: "Maya Chen",
                     text: sections + "\n\nLong message end marker.",
-                    createdAt: now.addingTimeInterval(-60), deliveryState: .delivered,
+                    createdAt: now.addingTimeInterval(-60), deliveryState: .sent,
                     errorMessage: nil, requestMessageId: nil,
                     reactionTargetMessageId: "long-preview-message")
             ]
@@ -816,7 +816,7 @@ enum PreviewData {
                     transcript: "I reviewed the latest numbers. The release is ready for the final device check."
                 )
             ),
-            ChatMessage(id: "m5", conversationId: conversationId, author: .person, authorName: "Maya Chen", text: "Can you send the latest numbers?", createdAt: now.addingTimeInterval(-60), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil, reactionTargetMessageId: "018f47c2-9f4c-7a5e-b001-000000000005"),
+            ChatMessage(id: "m5", conversationId: conversationId, author: .person, authorName: "Maya Chen", text: "Can you send the latest numbers?", createdAt: now.addingTimeInterval(-60), deliveryState: .sent, errorMessage: nil, requestMessageId: nil, reactionTargetMessageId: "018f47c2-9f4c-7a5e-b001-000000000005"),
             ChatMessage(
                 id: "m5-reply-own",
                 conversationId: conversationId,
@@ -843,7 +843,7 @@ enum PreviewData {
                 authorName: "Maya Chen",
                 text: "@Alex The link and reply stay readable in every theme.",
                 createdAt: now.addingTimeInterval(-40),
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: nil,
                 replyToMessageId: "m5-reply-own",
@@ -868,7 +868,7 @@ enum PreviewData {
                 authorName: "Maya Chen",
                 text: "New message after deletion — this chat is back.",
                 createdAt: now,
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: nil
             ))
@@ -881,16 +881,15 @@ enum PreviewData {
         let cases: [(id: String, author: MessageAuthor, text: String, state: MessageDeliveryState)] = [
             ("sending", .me, "sending", .sending),
             ("sent", .me, "sent", .sent),
-            ("delivered", .me, "delivered", .delivered),
             ("read", .me, "read", .read),
             ("failed", .me, "failed", .failed),
             ("cancelled", .me, "cancelled", .cancelled),
-            ("long-token", .person, "https://example.com/" + String(repeating: "unbroken", count: 28), .delivered),
+            ("long-token", .person, "https://example.com/" + String(repeating: "unbroken", count: 28), .sent),
             ("markdown", .me, "**Bold text** with a [long link](https://kordi.ai) must wrap without widening the bubble.", .read),
-            ("emoji", .person, "🥰🥰🥰🥰🥰🥰🥰", .delivered),
-            ("incoming-wrapped", .person, "recommend everyone use iOS version, its insane🥰🥰🥰", .delivered),
+            ("emoji", .person, "🥰🥰🥰🥰🥰🥰🥰", .sent),
+            ("incoming-wrapped", .person, "recommend everyone use iOS version, its insane🥰🥰🥰", .sent),
             ("outgoing-wrapped", .me, "yes also i found your model still says processing which i removed early", .read),
-            ("incoming-short", .person, "hi", .delivered),
+            ("incoming-short", .person, "hi", .sent),
             ("outgoing-short", .me, "hi", .read),
         ]
         return cases.enumerated().map { index, item in
@@ -966,7 +965,7 @@ enum PreviewData {
                 authorName: "Maya Chen",
                 text: "Maya Chen started a voice call.",
                 createdAt: now.addingTimeInterval(-60),
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: nil,
                 messageKind: ChatCallActivity.messageKind(for: .started, callId: "preview-started")
@@ -1027,7 +1026,7 @@ enum PreviewData {
                     authorName: "You",
                     text: "",
                     createdAt: now.addingTimeInterval(-30),
-                    deliveryState: .delivered,
+                    deliveryState: .sent,
                     errorMessage: nil,
                     requestMessageId: nil,
                     attachments: [
@@ -1056,7 +1055,7 @@ enum PreviewData {
                     authorName: "Maya Chen",
                     text: "I see the same issue on my side.",
                     createdAt: now.addingTimeInterval(-32),
-                    deliveryState: .delivered,
+                    deliveryState: .sent,
                     errorMessage: nil,
                     requestMessageId: nil,
                     attachments: groupedAttachments

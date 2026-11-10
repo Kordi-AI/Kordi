@@ -324,7 +324,7 @@ final class AvatarIdentityTests: XCTestCase {
             authorName: authorName,
             text: "Hello",
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil
         )

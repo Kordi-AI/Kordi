@@ -260,7 +260,7 @@ final class VoiceMessageTests: XCTestCase {
             authorName: "You",
             text: voice.transcript,
             createdAt: Date(timeIntervalSince1970: 1),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             messageKind: "voice",

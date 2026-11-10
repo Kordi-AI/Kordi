@@ -442,7 +442,7 @@ final class ComposerMentionTargetCatalogTests: XCTestCase {
             authorName: "Peer",
             text: text,
             createdAt: Date(timeIntervalSince1970: 1),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             mentions: mentions
@@ -674,7 +674,7 @@ final class ComposerMentionTargetCatalogTests: XCTestCase {
             authorName: author == .me ? "You" : "Maya",
             text: "@Alex please review",
             createdAt: Date(timeIntervalSince1970: TimeInterval(sequence)),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             messageAction: action,

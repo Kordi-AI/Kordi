@@ -25,7 +25,7 @@ final class SystemNoticeIdentityTests: XCTestCase {
         let conversation = makeGroup()
         let notice = ChatMessage(
             id: "notice", conversationId: conversation.id, author: .person, authorName: KordiSystemAgentIdentity.legacyName,
-            text: "Welcome", createdAt: .distantPast, deliveryState: .delivered, errorMessage: nil,
+            text: "Welcome", createdAt: .distantPast, deliveryState: .sent, errorMessage: nil,
             requestMessageId: nil, messageKind: KordiSystemIdentity.messageKind
         )
 
@@ -47,7 +47,7 @@ final class SystemNoticeIdentityTests: XCTestCase {
         for authorName in ["System", KordiSystemAgentIdentity.legacyName] {
             let message = ChatMessage(
                 id: "system-agent", conversationId: conversation.id, author: .person, authorName: authorName,
-                text: "Plan", createdAt: .distantPast, deliveryState: .delivered, errorMessage: nil,
+                text: "Plan", createdAt: .distantPast, deliveryState: .sent, errorMessage: nil,
                 requestMessageId: nil
             )
 

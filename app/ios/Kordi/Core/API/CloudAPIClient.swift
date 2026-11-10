@@ -2487,6 +2487,7 @@ actor CloudAPIClient {
 
     private func remember(_ conversation: CloudChatConversation) {
         activateAccount(conversation.preferences.accountId)
+        let conversation = conversation.keepingReadOutbox(from: chatConversationsById[conversation.id])
         let previousSessionId = chatConversationsById[conversation.id]?.legacySessionId?.nonEmpty
         if previousSessionId != conversation.legacySessionId?.nonEmpty,
            let previousSessionId {
@@ -2512,17 +2513,12 @@ actor CloudAPIClient {
         let peerAccountId = message.senderAccountId != viewerAccountId
             ? message.senderAccountId
             : otherMembers.first?.accountId ?? viewerAccountId
-        let delivered = outgoing
-            ? !otherMembers.isEmpty && otherMembers.allSatisfy {
-                $0.lastDeliveredSequence >= message.conversationSequence
-            }
-            : true
         let readByAccountIds = otherMembers
             .filter { $0.lastReadSequence >= message.conversationSequence }
             .map(\.accountId)
             .sorted()
         let read = outgoing
-            ? !readByAccountIds.isEmpty
+            ? CloudReadReceiptRule.isRead(sequence: message.conversationSequence, in: conversation, viewerAccountId: viewerAccountId)
             : conversation.members.contains {
                 $0.accountId == viewerAccountId && $0.lastReadSequence >= message.conversationSequence
             }
@@ -2536,7 +2532,8 @@ actor CloudAPIClient {
             body: message.deletedAt == nil ? message.content.body : "",
             createdAt: createdAt,
             editedAt: message.editedAt,
-            deliveredAt: delivered ? message.createdAt : nil,
+            // The server has every message it returns; there is no delivered state (#2455).
+            deliveredAt: message.createdAt,
             readAt: read ? message.createdAt : nil,
             readByAccountIds: outgoing && conversation.kind == "group" ? readByAccountIds : nil,
             direction: outgoing ? "outgoing" : "incoming",
@@ -2631,13 +2628,15 @@ actor CloudAPIClient {
         }
         if ["delivery_cursor.updated", "read_cursor.updated"].contains(event.eventType),
            let current = conversation,
-           let cursor = event.payload.cursor {
-            let affectedMessages = cloudChatMessagesAffectedByCursor(
-                chatMessagesById.values,
-                conversation: current,
-                cursor: cursor
+           event.payload.cursor != nil || event.payload.readOutbox != nil {
+            let viewer = current.preferences.accountId
+            let updated = current.applyingReceipts(
+                cursor: event.payload.cursor, readOutbox: event.payload.readOutbox, viewerAccountId: viewer
             )
-            let updated = current.withCursor(cursor)
+            let affectedMessages = cloudChatMessagesAffectedByReceipts(
+                chatMessagesById.values, before: current, after: updated,
+                cursor: event.payload.cursor, viewerAccountId: viewer
+            )
             remember(updated)
             conversation = updated
             return affectedMessages
@@ -3472,49 +3471,6 @@ private extension CloudChatConversation {
             updatedAt: updatedAt,
             members: members,
             preferences: value
-        )
-    }
-
-    func withCursor(_ cursor: CloudChatCursor) -> Self {
-        Self(
-            id: id,
-            kind: kind,
-            sharedTitle: sharedTitle,
-            version: version,
-            createdByAccountId: createdByAccountId,
-            legacySessionId: legacySessionId,
-            personalAgent: personalAgent,
-            organization: organization,
-            forkedFromSessionId: forkedFromSessionId,
-            forkedFromMessageId: forkedFromMessageId,
-            latestMessageSequence: latestMessageSequence,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            members: members.map { member in
-                guard member.accountId == cursor.accountId else { return member }
-                return CloudChatMember(
-                    accountId: member.accountId,
-                    displayName: member.displayName,
-                    avatarUrl: member.avatarUrl,
-                    defaultAgentId: member.defaultAgentId,
-                    defaultAgentDisplayName: member.defaultAgentDisplayName,
-                    defaultAgentAvatarUrl: member.defaultAgentAvatarUrl,
-                    role: member.role,
-                    membershipState: member.membershipState,
-                    version: member.version,
-                    lastDeliveredSequence: max(
-                        member.lastDeliveredSequence,
-                        cursor.lastDeliveredSequence
-                    ),
-                    lastReadSequence: max(
-                        member.lastReadSequence,
-                        cursor.lastReadSequence
-                    ),
-                    joinedAt: member.joinedAt,
-                    leftAt: member.leftAt
-                )
-            },
-            preferences: preferences
         )
     }
 }
