@@ -135,6 +135,7 @@
 		43E411CB1FB2D015C570619C /* VoiceTranscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CFC1783928497E548188B7 /* VoiceTranscriptionTests.swift */; };
 		43FDCB7848B6423B72A2BFA3 /* MessageForwardingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAEE1601DBAF76F3A4F885A6 /* MessageForwardingUITests.swift */; };
 		44FF5E769C70CAA2FFF889C9 /* KordiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 583A0B10599C4D4B56B397F3 /* KordiApp.swift */; };
+		459B74E40BF2B2ED20A97731 /* DigestPlanPeople.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA82263B6E3A35DB0EC20173 /* DigestPlanPeople.swift */; };
 		45DBC71D7DECB3882799CBC3 /* ConversationOutgoingAvatars.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8934C41559CE560F7F8A6E4 /* ConversationOutgoingAvatars.swift */; };
 		45EB81750F6D875D32A66C8C /* SafetyPreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9FC9164D6712EA68EA2B9C /* SafetyPreviews.swift */; };
 		4614BF3CD32F14D2E03B8A13 /* CommonGroundPairCodeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D30C49C637A02BC74CB0EA /* CommonGroundPairCodeRow.swift */; };
@@ -949,6 +950,7 @@
 		E89F1206EB556B444390594D /* Kordi.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Kordi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E9710C8878BC6B3B5D15A24A /* MessageNotificationCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageNotificationCleanupTests.swift; sourceTree = "<group>"; };
 		E98FAE041AD33C06C181B19C /* CommonGroundCreateCodeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundCreateCodeSheet.swift; sourceTree = "<group>"; };
+		EA82263B6E3A35DB0EC20173 /* DigestPlanPeople.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigestPlanPeople.swift; sourceTree = "<group>"; };
 		EB20B780BCC307EE18CF24D3 /* DocumentEditorToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentEditorToolbar.swift; sourceTree = "<group>"; };
 		EB5C03F9FBEE0DC0D15F79B0 /* AgentSubsessionStopPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSubsessionStopPreview.swift; sourceTree = "<group>"; };
 		EBCAAF8E76831DD9D605A11A /* ConversationTimelineVirtualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTimelineVirtualization.swift; sourceTree = "<group>"; };
@@ -1705,6 +1707,7 @@
 				5DCB8DC1661FA97372B754E3 /* DigestEditors.swift */,
 				C0216215122D9CFCEADED62A /* DigestImportView.swift */,
 				FB201FE56A48A0CC09D85718 /* DigestMonthGrid.swift */,
+				EA82263B6E3A35DB0EC20173 /* DigestPlanPeople.swift */,
 				96042CF63F22D2ED8FFE8C1E /* DigestView.swift */,
 				108123CCF91230E14EE21237 /* RollingDigestModels.swift */,
 			);
@@ -2376,6 +2379,7 @@
 				ECE80F15C5A972C2619BE107 /* DigestEditors.swift in Sources */,
 				3DECEFF6E4E2E1A3DDBA1B6E /* DigestImportView.swift in Sources */,
 				2494E85EDBBFE73065C88EE9 /* DigestMonthGrid.swift in Sources */,
+				459B74E40BF2B2ED20A97731 /* DigestPlanPeople.swift in Sources */,
 				F4F1CE25C621F59E5EA38FC9 /* DigestView.swift in Sources */,
 				544E780F1D9A3BC2CDE8251C /* DocumentAgentThreadViews.swift in Sources */,
 				76654062F2429E4B072FD735 /* DocumentBlockRow.swift in Sources */,

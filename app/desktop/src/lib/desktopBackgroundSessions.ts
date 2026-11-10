@@ -1,5 +1,6 @@
 import type { DesktopChatTurnSnapshot } from '@/kordi-app/types';
 import { invokeDesktop } from '@/lib/desktop';
+import { observeStartedTurn, routeWithAvailableModel } from '@/features/chat/modelAvailabilityRoutes';
 import type {
   DesktopChatContextMessage,
   DesktopChatMessageRoute,
@@ -13,7 +14,7 @@ export function desktopSharedRequestAlreadyStarted(error: unknown) {
   return String(error).includes('shared_request_already_started');
 }
 
-export function startDesktopSharedChatMessage(
+export async function startDesktopSharedChatMessage(
   requestId: string,
   sessionId: string,
   text: string,
@@ -27,19 +28,21 @@ export function startDesktopSharedChatMessage(
   backgroundFollowUpRoute: unknown = null,
   workingFolder: DesktopChatWorkingFolder | null = null,
 ) {
-  return invokeDesktop<DesktopChatTurnSnapshot>('desktop_chat_start_shared_message', {
+  // A model the provider refused for the sign-in gives way to its best available model.
+  const runRoute = routeWithAvailableModel(route ?? null);
+  return observeStartedTurn(runRoute, await invokeDesktop<DesktopChatTurnSnapshot>('desktop_chat_start_shared_message', {
     requestId,
     sessionId,
     text,
     attachmentPaths,
-    route: route ?? null,
+    route: runRoute,
     contextMessages,
     visibleTaskRecords,
     scheduledTaskSessionId,
     executionLeaseDeadlineMs,
     backgroundFollowUpRoute,
     workingFolder,
-  });
+  }));
 }
 
 export function markDesktopBackgroundFollowUpPublished(turnId: string) {

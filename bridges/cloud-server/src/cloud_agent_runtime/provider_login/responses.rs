@@ -144,6 +144,17 @@ pub(super) fn login_not_found() -> Response {
     )
 }
 
+/// The saved sign-in a reconnect named is not one of the caller's live
+/// accounts for this provider: unknown, removed, or another provider's. Not a
+/// 404, which clients read as a server without hosted sign-in.
+pub(super) fn renewed_account_not_found() -> Response {
+    error_response(
+        "login_account_not_found",
+        "This account is no longer saved. Add it again.",
+        StatusCode::CONFLICT,
+    )
+}
+
 pub(super) fn login_expired() -> Response {
     error_response(
         "login_expired",

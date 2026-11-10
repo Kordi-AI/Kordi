@@ -22,6 +22,8 @@ import { digestEventLinks } from './links';
 import { DigestRelatedLinks } from './DigestRelatedLinks';
 import { DigestSplit } from './DigestSplit';
 import { useCalendarPreview } from './useCalendarPreview';
+import { PlanEventPeople } from './PlanEventPeople';
+import { answerPlanEvent, planEventCardId, planEventSelf, usePlanEventCard } from './planEventCard';
 import { MarkdownContent } from '@/kordi-app/components/markdown';
 import { providerDisplayLabel } from '@/kordi-app/components/composerModelSelection';
 
@@ -58,7 +60,7 @@ export default function DigestPage({accountId,onOpenProviderSettings,renderConte
   renderContent?: (model: { state: ReturnType<typeof useDigest>; actions: DigestPanelActions }) => ReactNode;
 }){
   const state=useDigest(accountId);
-  const {digest,events,error,digestError,calendarError,reload,calendarLoaded,setFeedback,removeEvents,pendingMutationKeys,mutationError,canRetryMutation,retryMutation}=state;
+  const {digest,events,error,digestError,calendarError,reload,calendarLoaded,setFeedback,removeEvents,declinePlan,pendingMutationKeys,mutationError,canRetryMutation,retryMutation}=state;
   const [view,setView]=useState<'brief'|'tasks'|'calendar'>('brief');
   const mainRef=useRef<HTMLDivElement>(null);
   const scrollPositions=useRef({brief:0,tasks:0,calendar:0});
@@ -163,13 +165,13 @@ export default function DigestPage({accountId,onOpenProviderSettings,renderConte
       </div><DigestAgenda digestStatus={unavailable?<></>:null} calendarStatus={calendarStatus} day={selectedDay} events={events} candidates={output?.calendarCandidates??[]} sources={sources} people={people} evidence={evidence} onEvent={openEvent} onCandidate={calendarCandidate} sync={sync} onCalendarSettings={()=>setCalendarSettingsOpen(true)} onOpenPrivacy={()=>void openDesktopExternalUrl(CALENDAR_PRIVACY_SETTINGS_URL).catch(error=>setActionError(calendarErrorMessage(error,'Could not open System Settings.')))} onRetrySync={()=>requestCalendarSync(accountId)} onImport={()=>setImportOpen(true)}/></DigestSplit>
     </div>}
     {sourceId&&<Sheet title={source?.sessionTitle||'Source unavailable'} onClose={()=>setSourceId(null)}>{source?<>{selectedSources.map(source=><article key={source.id}><p className="digest-meta">@{source.senderName} · {timeLabel(source.createdAt)}</p><blockquote><MarkdownContent text={source.text} tone="inherit" className="whitespace-normal" copySurface="message" preserveLineBreaks /></blockquote></article>)}</>:<p>This message is no longer included or accessible. Refresh the digest.</p>}</Sheet>}
-    {editEvent&&(!review||editEvent.revision>0||output?.calendarCandidates.some(item=>item.id===review.item.id))&&editEvent.sourceIds.every(id=>sources.some(s=>s.id===id))&&<EventEditor key={editEvent.id+(review?.item.id??'')} removesFromDevice={removesFromDevice(editEvent)} event={editEvent} review={review} sources={sources} accountId={accountId} onClose={()=>setEditEvent(null)} onSave={event=>act(async()=>{if(event.recurrence&&!event.revision)await digestClient.saveSeries(accountId,event);else await digestClient.saveEvent(accountId,event);setEditEvent(null);})} onRemove={editEvent.revision?async()=>{const seriesId=review?.series?review.item.existingSeriesId:undefined;const targets=seriesId&&review?.series?review.series:[editEvent];setEditEvent(null);setReview(null);try{await removeEvents(targets,seriesId??undefined);}catch{/* The account-owned store reports failure and restores the event. */}}:undefined}/>}
+    {editEvent&&(!review||editEvent.revision>0||output?.calendarCandidates.some(item=>item.id===review.item.id))&&editEvent.sourceIds.every(id=>sources.some(s=>s.id===id))&&<EventEditor key={editEvent.id+(review?.item.id??'')} removesFromDevice={removesFromDevice(editEvent)} event={editEvent} review={review} sources={sources} accountId={accountId} onClose={()=>setEditEvent(null)} onSave={event=>act(async()=>{if(event.recurrence&&!event.revision)await digestClient.saveSeries(accountId,event);else await digestClient.saveEvent(accountId,event);setEditEvent(null);})} onRemove={editEvent.revision?async()=>{const seriesId=review?.series?review.item.existingSeriesId:undefined;const targets=seriesId&&review?.series?review.series:[editEvent];setEditEvent(null);setReview(null);try{await removeEvents(targets,seriesId??undefined);}catch{/* The account-owned store reports failure and restores the event. */}}:undefined} onDecline={editEvent.revision&&planEventCardId(editEvent)?async answer=>{const target=editEvent;setEditEvent(null);setReview(null);try{await declinePlan(target,answer);}catch{/* The store reports failure and restores the event. */}}:undefined}/>}
     {importOpen&&<ImportSheet events={events} onClose={()=>setImportOpen(false)} onImport={saveImported}/>}
     {settingsOpen&&<Sheet title="Digest settings" onClose={()=>setSettingsOpen(false)}><DigestSettings accountId={accountId} onRebuilt={()=>{setSettingsOpen(false);void reload().catch(()=>{});}}/></Sheet>}
     {calendarSettingsOpen&&<CalendarSettingsSheet accountId={accountId} calendars={sync.calendars} onClose={()=>setCalendarSettingsOpen(false)}/>}
   </section></ActionErrorContext.Provider>;
 }
-function EventEditor({event,review,sources,accountId,onClose,onSave,onRemove,removesFromDevice=false}:{removesFromDevice?:boolean;event:CalendarEvent;review:{item:DigestItem;original?:CalendarEvent;series?:CalendarEvent[]}|null;sources:DigestSource[];accountId:string;onClose:()=>void;onSave:(event:CalendarEvent)=>Promise<void>;onRemove?:()=>Promise<void>}){
+function EventEditor({event,review,sources,accountId,onClose,onSave,onRemove,onDecline,removesFromDevice=false}:{removesFromDevice?:boolean;event:CalendarEvent;review:{item:DigestItem;original?:CalendarEvent;series?:CalendarEvent[]}|null;sources:DigestSource[];accountId:string;onClose:()=>void;onSave:(event:CalendarEvent)=>Promise<void>;onRemove?:()=>Promise<void>;onDecline?:(answer:()=>Promise<void>)=>Promise<void>}){
   const [title,setTitle]=useState(event.title);
   const [start,setStart]=useState(event.allDay?event.startAt.slice(0,10):localInput(event.startAt));
   const initialEnd=shiftedCalendarEnd(event.startAt,event.startAt,event.endAt,event.allDay);
@@ -178,6 +180,14 @@ function EventEditor({event,review,sources,accountId,onClose,onSave,onRemove,rem
   const [rule,setRule]=useState<CalendarRecurrence|null>(()=>event.recurrence?{...event.recurrence,...(!event.recurrence.count&&!event.recurrence.until?{count:event.recurrence.frequency==='yearly'?5:12}:{})}:null);
   const [busy,setBusy]=useState(false);
   const [confirmRemove,setConfirmRemove]=useState(false);
+  // A plan card's event follows the card: its title and time change only through the plan, and
+  // leaving it means answering "Can't make it" so the next card change does not bring it back.
+  const planId=planEventCardId(event);
+  const {plan,setPlan}=usePlanEventCard(planId);
+  const [confirmDecline,setConfirmDecline]=useState(false);
+  const declines=Boolean(planId&&onDecline&&planEventSelf(plan)&&plan?.card.state!=='canceled');
+  // Until the card is read, removing could not answer it, and the next card change would bring the event back.
+  const removeWaitsForPlan=Boolean(planId&&!plan);
   const [error,setError]=useState<string|null>(null);
   const needsPreview=!!rule&&!event.revision&&review?.item.calendarAction!=='delete';
   let previewRequest:string|null=null,previewValidation:string|null=null;
@@ -192,6 +202,8 @@ function EventEditor({event,review,sources,accountId,onClose,onSave,onRemove,rem
     setStart(value);setEnd(event.allDay?nextEnd.slice(0,10):localInput(nextEnd));
   }
   async function remove(){setBusy(true);try{await onRemove?.();}finally{setBusy(false);}}
+  async function answerYes(){if(!planId)return;setBusy(true);setError(null);try{setPlan(await answerPlanEvent(planId,'yes'));}catch(error){setError(calendarErrorMessage(error,'Could not update the plan.'));}finally{setBusy(false);}}
+  async function decline(){if(!planId||!onDecline)return;setBusy(true);try{await onDecline(async()=>{await answerPlanEvent(planId,'no');});}finally{setBusy(false);}}
   if(review?.item.calendarAction==='delete')return <Sheet title="Review cancellation" onClose={onClose}><h3 className="digest-cancel-heading">{event.title}</h3><p>{review.series?`${review.series.length} events in this series`:event.allDay?event.startAt.slice(0,10):timeLabel(event.startAt)}</p>{review.series&&<ol className="digest-import-list">{review.series.map(occurrence=><li key={occurrence.id}>{occurrence.allDay?occurrence.startAt.slice(0,10):timeLabel(occurrence.startAt)}</li>)}</ol>}{links}<p>{review.series?'These events will be removed from your personal Kordi calendar.':'Only this event will be removed from your personal Kordi calendar.'} Source calendars and invitations stay unchanged.</p><footer><button onClick={onClose}>Keep event</button><button className="digest-cancel-action" disabled={busy} onClick={()=>void remove()}>Confirm removal</button></footer></Sheet>;
   function payload():CalendarEvent {
     if(!start)throw new Error('Choose the start date and time.');
@@ -210,11 +222,12 @@ function EventEditor({event,review,sources,accountId,onClose,onSave,onRemove,rem
   }
   return <Sheet title={event.revision?'Edit event':'Review calendar event'} onClose={onClose}><form onSubmit={e=>void save(e)}>
     {review?.original&&<p className="digest-meta">Currently: {review.original.title} · {review.original.allDay?review.original.startAt.slice(0,10):timeLabel(review.original.startAt)}</p>}
-    <label>Title<input required maxLength={500} value={title} onChange={e=>setTitle(e.target.value)}/></label>
-    <label>{event.allDay?'Start date':'Start time'}<input required type={event.allDay?'date':'datetime-local'} value={start} onChange={e=>changeStart(e.target.value)}/></label>
-    <label>{event.allDay?'End date (exclusive)':'End time (optional)'}<input type={event.allDay?'date':'datetime-local'} min={start} value={end} onChange={e=>setEnd(e.target.value)}/></label>
+    <label>Title<input required maxLength={500} readOnly={!!planId} value={title} onChange={e=>setTitle(e.target.value)}/></label>
+    <label>{event.allDay?'Start date':'Start time'}<input required readOnly={!!planId} type={event.allDay?'date':'datetime-local'} value={start} onChange={e=>changeStart(e.target.value)}/></label>
+    <label>{event.allDay?'End date (exclusive)':'End time (optional)'}<input readOnly={!!planId} type={event.allDay?'date':'datetime-local'} min={start} value={end} onChange={e=>setEnd(e.target.value)}/></label>
     {!event.allDay&&<label>Remind me<select value={minutes} onChange={e=>setMinutes(e.target.value)}><option value="">No reminder</option><option value="0">At start</option><option value="5">5 minutes before</option><option value="10">10 minutes before</option><option value="15">15 minutes before</option><option value="60">1 hour before</option></select></label>}
     <p className="digest-meta">Shown in {deviceZone}{event.timezone?' · Event timezone: '+event.timezone:''} · Personal calendar. No invitations are sent.</p>
+    {plan&&<PlanEventPeople plan={plan} busy={busy} onYes={()=>void answerYes()} onNo={()=>setConfirmDecline(true)}/>}
     {!event.revision&&<fieldset><legend>Repeat</legend>
       <label>Frequency<select value={rule?.frequency??''} onChange={e=>setRule(e.target.value?{frequency:e.target.value as CalendarRecurrence['frequency'],interval:1,weekdays:[],timezone:event.timezone??deviceZone,count:e.target.value==='yearly'?5:12}:null)}><option value="">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
       {rule&&<><label>Every<input type="number" min="1" max="99" value={rule.interval} onChange={e=>setRule({...rule,interval:Number(e.target.value)})}/></label>
@@ -230,8 +243,9 @@ function EventEditor({event,review,sources,accountId,onClose,onSave,onRemove,rem
     {event.seriesId&&<p className="digest-meta">Part of a repeating series. Editing or removing here affects only this occurrence.</p>}
     {links}{event.sourceIds.length>0&&<DigestPeople item={event} sources={sources} accountId={accountId} showMessages/>}{event.sourceIds.length===0&&event.description&&<p className="digest-event-context">{plainEventNotes(event.description)}</p>}
     {error&&<ErrorLine>{error}</ErrorLine>}
-    <footer>{onRemove&&<button type="button" className="digest-remove-trigger" disabled={busy} onClick={()=>setConfirmRemove(true)}>Remove event</button>}<button type="button" onClick={onClose}>Cancel</button><button type="submit" disabled={busy||(needsPreview&&!preview.ready)}>{rule&&!event.revision?'Confirm series':review?.item.calendarAction==='update'?'Confirm change':event.revision?'Save event':'Add to calendar'}</button></footer>
+    <footer>{onRemove&&<button type="button" className="digest-remove-trigger" disabled={busy||removeWaitsForPlan} onClick={()=>declines?setConfirmDecline(true):setConfirmRemove(true)}>Remove event</button>}<button type="button" onClick={onClose}>Cancel</button><button type="submit" disabled={busy||(needsPreview&&!preview.ready)}>{rule&&!event.revision?'Confirm series':review?.item.calendarAction==='update'?'Confirm change':event.revision?'Save event':'Add to calendar'}</button></footer>
     {confirmRemove&&<ConfirmDialog title="Remove this event?" confirmLabel={busy?'Removing…':'Remove'} busy={busy} onKeep={()=>setConfirmRemove(false)} onConfirm={()=>void remove()}><p><strong>{event.title}</strong></p><p className="digest-meta">{removesFromDevice?'It is removed from your Kordi calendar and from your device calendar.':'It is removed from your Kordi calendar.'}</p></ConfirmDialog>}
+    {confirmDecline&&<ConfirmDialog title="Can't make it?" confirmLabel={busy?'Updating…':"Can't make it"} busy={busy} onKeep={()=>setConfirmDecline(false)} onConfirm={()=>void decline()}><p className="digest-meta">{event.title} leaves your calendar.</p></ConfirmDialog>}
   </form></Sheet>;
 }
 function ImportSheet({events,onClose,onImport}:{events:CalendarEvent[];onClose:()=>void;onImport:(events:CalendarEvent[])=>Promise<CalendarImportReport>}){

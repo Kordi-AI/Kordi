@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { clearProviderModelAvailability } from '@/features/chat/modelAvailability';
 import { loginCallbackCaptureErrorCode, type LoginCallbackCapture } from '@/features/cloud/loginCallbackCapture';
 import {
   acceptsLoginCallback,
@@ -57,6 +58,7 @@ export function useProviderLogin(
   const noteCompleted = useCallback((session: ProviderLoginSession) => {
     if (session.status !== 'completed' || !session.snapshot || completedRef.current === session.sessionId) return;
     completedRef.current = session.sessionId;
+    clearProviderModelAvailability(session.snapshot.provider);
     onCompletedRef.current(session.snapshot);
   }, []);
 

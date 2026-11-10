@@ -15,6 +15,7 @@ import { changedFileRowsFromTurn } from '@/features/chat/artifacts';
 import { useVisibleLiveTurn } from '@/features/chat/useVisibleLiveTurn';
 import { cloudAgentProviderFailureActionLabel, cloudAgentProviderFailureNotice } from '@/features/cloud/cloudAgentFailureNotices';
 import { ErrorLine } from '@/components/ui/ErrorLine';
+import { useModelRecoveryAction } from '@/features/chat/modelRecovery';
 import { cn } from '@/lib/utils';
 import { SourceMessageQuoteRow } from './transcriptReplyAttribution';
 import { MarkdownContent } from './markdown';
@@ -100,6 +101,8 @@ function LiveChatTurnCardView({
   const showResponsePanel = hasResponseSurface || Boolean(visibleTurn.error);
   // The owner's link to the provider settings under Authentication.
   const openAuthActionLabel = onOpenAuthSettings && visibleTurn.error ? cloudAgentProviderFailureActionLabel(visibleTurn.error) : null;
+  // The owner's one click out of a model the provider refused for the sign-in.
+  const modelRecoveryAction = useModelRecoveryAction(onOpenAuthSettings && !ending ? visibleTurn : null);
   const showsTurnProgress = showResponsePanel && (showLiveProgress || hasOrderedContent || hasTimelineActivity || hasAssistant);
   // Without a live status line (not yet started, or compressing), Stop keeps a line of its own.
   const standaloneStop = stop && !(showsTurnProgress && !visibleTurn.completed)
@@ -159,7 +162,7 @@ function LiveChatTurnCardView({
             <ErrorLine
               className="app-live-turn-error mt-0 px-0.5"
               role={historical ? 'status' : 'alert'}
-              action={openAuthActionLabel && onOpenAuthSettings ? { label: openAuthActionLabel, onClick: onOpenAuthSettings } : null}
+              action={openAuthActionLabel && onOpenAuthSettings ? { label: openAuthActionLabel, onClick: onOpenAuthSettings } : modelRecoveryAction}
             >
               {displayedError}
             </ErrorLine>

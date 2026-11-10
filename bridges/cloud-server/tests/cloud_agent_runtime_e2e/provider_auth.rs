@@ -11,6 +11,8 @@ mod cross_account;
 mod login_method;
 #[path = "provider_auth/login_recovery.rs"]
 mod login_recovery;
+#[path = "provider_auth/login_renew.rs"]
+mod login_renew;
 #[path = "provider_auth/login_session.rs"]
 mod login_session;
 #[path = "provider_auth/omp_worker.rs"]

@@ -18,6 +18,8 @@ const LOGIN_RETURN_DELAY_MS = 2000;
 type AuthLoginPageProps = {
   method: AuthAddMethod;
   suggestedAccountName: string;
+  /** The saved hosted sign-in being reconnected: the login renews it and keeps its name. */
+  renew?: { authChoice: string; label: string } | null;
   client: ProviderLoginClient | null;
   openExternal: (url: string) => void;
   onCompleted: (snapshot: ProviderLoginSnapshot) => void;
@@ -39,7 +41,7 @@ type AuthLoginPageProps = {
  * link and instructions, then each prompt appended in order with earlier
  * answers kept (secrets hidden), progress lines, and the signed-in result.
  */
-export function AuthLoginPage({ method, suggestedAccountName, client, openExternal, onCompleted, onDone, onBack, onStartChat, callbackCapture = null, ompUnavailable = false, onOmpUnavailable }: AuthLoginPageProps) {
+export function AuthLoginPage({ method, suggestedAccountName, renew = null, client, openExternal, onCompleted, onDone, onBack, onStartChat, callbackCapture = null, ompUnavailable = false, onOmpUnavailable }: AuthLoginPageProps) {
   const hosted = method.hosted!;
   const kind = method.kind === 'custom' || method.kind === 'local' ? 'api-key' : method.kind;
   const [accountName, setAccountName] = useState('');
@@ -116,9 +118,10 @@ export function AuthLoginPage({ method, suggestedAccountName, client, openExtern
     start(
       {
         provider: hosted.providerId,
-        label: accountName.trim() || suggestedAccountName,
+        label: renew?.label ?? (accountName.trim() || suggestedAccountName),
         ...(hosted.mode ? { mode: hosted.mode } : {}),
         ...(hosted.method ? { method: hosted.method } : {}),
+        ...(renew ? { renewAuthChoice: renew.authChoice } : {}),
       },
       kind === 'api-key' ? { apiKey: keyValue.trim() } : {},
     );
@@ -145,8 +148,8 @@ export function AuthLoginPage({ method, suggestedAccountName, client, openExtern
               aria-label="Account name"
               placeholder={suggestedAccountName}
               maxLength={80}
-              value={accountName}
-              disabled={started && view.phase !== 'failed' && view.phase !== 'cancelled'}
+              value={renew?.label ?? accountName}
+              disabled={Boolean(renew) || (started && view.phase !== 'failed' && view.phase !== 'cancelled')}
               onChange={(event) => setAccountName(event.target.value)}
               className={inputClass}
             />
@@ -304,7 +307,7 @@ export function AuthLoginPage({ method, suggestedAccountName, client, openExtern
           {view.phase === 'completed' ? (
             <SettingsRow
               role="status"
-              title={`Signed in as ${view.snapshot?.label ?? (accountName.trim() || suggestedAccountName)}`}
+              title={`Signed in as ${view.snapshot?.label ?? renew?.label ?? (accountName.trim() || suggestedAccountName)}`}
               description="The account is saved in your Kordi account."
               control={(
                 <>

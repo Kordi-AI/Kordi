@@ -1450,14 +1450,14 @@ actor CloudAPIClient {
             )
         } catch let error as CloudAPIError where error.code == "plan_card_revision_conflict" {
             // Refresh without replaying a decision against details the user has not seen.
-            let eventID = action.eventId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? action.eventId
-            return try await send(
-                path: "/v1/cloud/plan_cards/\(eventID)",
-                method: "GET",
-                token: token,
-                fallback: "Could not refresh the plan card. Try again."
-            )
+            return try await planCard(token: token, eventID: action.eventId, fallback: "Could not refresh the plan card. Try again.")
         }
+    }
+
+    /// Reads the live card; the server answers only for active members of its chat.
+    func planCard(token: String, eventID: String, fallback: String = "Could not load the plan.") async throws -> PlanCard {
+        let path = eventID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? eventID
+        return try await send(path: "/v1/cloud/plan_cards/\(path)", method: "GET", token: token, fallback: fallback)
     }
 
     func setReaction(
