@@ -125,6 +125,9 @@ pub(super) struct AgentMessage {
     /// A question, a processing row, or an exchange waiting on someone.
     pub waiting: bool,
     pub delivery: Delivery,
+    /// When an agent updated its message in place (a processing row that
+    /// became its answer), which counts as activity at that time.
+    pub changed_at: Option<DateTime<Utc>>,
 }
 
 /// What the ownership check needs to know about one chat message.
@@ -147,6 +150,8 @@ pub(super) struct RunFact {
     pub owner: Owner,
     pub lease_expires_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+    /// When the run was started: a run started during plan talk took it up.
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 impl RunFact {
@@ -311,10 +316,16 @@ fn owner_messages_after<'a>(
     task: &'a Deferral,
     messages: &'a [MessageFact],
 ) -> impl Iterator<Item = &'a AgentMessage> + 'a {
+    // A message after the task's last human message, or an earlier one the
+    // agent updated in place since.
     messages
         .iter()
-        .filter(move |message| message.sequence > task.last_human_sequence)
-        .filter_map(|message| message.agent.as_ref())
+        .filter_map(|message| Some((message, message.agent.as_ref()?)))
+        .filter(move |(message, agent)| {
+            message.sequence > task.last_human_sequence
+                || agent.changed_at.is_some_and(|at| at > task.last_human_at)
+        })
+        .map(|(_, agent)| agent)
         .filter(move |agent| task.owned_by(&agent.owner))
 }
 

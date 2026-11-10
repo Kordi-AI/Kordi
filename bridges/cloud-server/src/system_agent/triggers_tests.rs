@@ -410,3 +410,35 @@ fn loops_and_conflicts_ask_the_task_owner_or_the_other_cards_maker() {
     let found = find_conflict(&cards, &json!({})).unwrap();
     assert_eq!(found.ask.as_deref(), Some("acct_plan_b"));
 }
+
+#[test]
+fn an_agent_result_after_the_discussion_began_closes_it() {
+    let hooks_fired = json!({ DISCUSSION_KEY: {
+        "fromSequence": 4, "since": now() - Duration::minutes(20), "checkAfter": now()} });
+    // The owning agent updated its row in place, or finished a run it
+    // started, after the plan talk began, so it covered it.
+    for finished in [
+        Gate {
+            last_agent_activity_at: Some(now() - Duration::minutes(12)),
+            ..quiet_for(15)
+        },
+        Gate {
+            last_finished_run_started_at: Some(now() - Duration::minutes(12)),
+            ..quiet_for(15)
+        },
+    ] {
+        let mut pass = facts(&finished, &hooks_fired);
+        pass.plan_talk = false;
+        let plan = decide(pass);
+        assert!(plan.run.is_none());
+        assert_eq!(plan.patch[DISCUSSION_KEY], Value::Null);
+    }
+    // A run started for an earlier request does not cover it.
+    let earlier = Gate {
+        last_finished_run_started_at: Some(now() - Duration::minutes(25)),
+        ..quiet_for(15)
+    };
+    let mut pass = facts(&earlier, &hooks_fired);
+    pass.plan_talk = false;
+    assert!(matches!(decide(pass).run, Some(Trigger::Silence { .. })));
+}

@@ -225,7 +225,8 @@ async fn messages_for_an_agent_or_already_answered_do_not_queue_a_run() {
     .fetch_one(&pool)
     .await
     .unwrap();
-    let now = chrono::Utc::now().to_rfc3339();
+    // It answered (b), before (c) below was written.
+    let now = (chrono::Utc::now() - chrono::Duration::minutes(4)).to_rfc3339();
     query("INSERT INTO cloud_agent_fallback_runs(run_id,idempotency_key,request_message_id,session_id,owner_account_id,requester_account_id,status,prompt,created_at,updated_at) VALUES($1,$1,$2,$3,$4,$4,'completed','answer',$5,$5)")
         .bind(format!("run-{suffix}"))
         .bind(&message_id)
@@ -239,6 +240,11 @@ async fn messages_for_an_agent_or_already_answered_do_not_queue_a_run() {
 
     // (c) Plain coordination between people waits until the chat is quiet.
     say(&pool, &jordan, chat, "Dinner Friday at 7?").await;
+    query("UPDATE cloud_chat_messages SET created_at = now() - interval '3 minutes' WHERE conversation_id = $1 AND conversation_sequence = (SELECT max(conversation_sequence) FROM cloud_chat_messages WHERE conversation_id = $1)")
+        .bind(chat)
+        .execute(&pool)
+        .await
+        .unwrap();
     assert_eq!(sweep().await, 0, "people may still be talking");
     query("UPDATE cloud_chat_messages SET created_at = now() - interval '15 minutes' WHERE conversation_id = $1")
         .bind(chat)

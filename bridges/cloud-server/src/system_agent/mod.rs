@@ -17,6 +17,7 @@ mod loops;
 pub mod membership;
 mod mentions;
 mod ownership;
+mod ownership_facts;
 mod ownership_store;
 mod post;
 mod prompt;
@@ -67,6 +68,8 @@ pub(crate) fn test_service_account() -> &'static str {
     SERVICE_ACCOUNT_ID.get_or_init(|| "acct_kordi_pip".to_string())
 }
 
+#[cfg(test)]
+mod agent_answer_sweep_tests;
 #[cfg(test)]
 mod ai_consent_tests;
 #[cfg(test)]

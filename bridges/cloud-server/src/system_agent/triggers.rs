@@ -124,12 +124,20 @@ pub(super) fn decide(facts: PassFacts<'_>) -> PassPlan {
     let mut marks = Map::new();
     let stored = PlanDiscussion::read(facts.hooks_fired);
     // A card made since the discussion began, an agent taking a task, or an
-    // agent speaking up all mean someone is on it.
+    // agent speaking up, updating its answer, or finishing a task all mean
+    // someone is on it. Only new plan talk after that starts a new discussion.
     let resolved = |discussion: &PlanDiscussion| {
         gate.agent_task
             || gate
                 .newest_agent_sequence
                 .is_some_and(|sequence| sequence > discussion.from_sequence)
+            || [
+                gate.last_agent_activity_at,
+                gate.last_finished_run_started_at,
+            ]
+            .into_iter()
+            .flatten()
+            .any(|at| at >= discussion.since)
             || facts
                 .newest_card_created_at
                 .is_some_and(|created| created >= discussion.since)
