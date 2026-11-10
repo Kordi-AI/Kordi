@@ -40,7 +40,8 @@ test('the pinned catalog opens Claude on Sonnet 5.5 and lists it first, keeping 
   assert.equal(anthropic.defaultModel, 'claude-sonnet-5-5');
   assert.equal(anthropic.models[0], 'claude-sonnet-5-5');
   assert.equal(anthropic.models.filter((model) => model === 'claude-sonnet-5-5').length, 1);
-  assert.ok(anthropic.models.includes('claude-opus-5-5'));
+  assert.deepEqual(anthropic.models.slice(0, 4), ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-fable-5-2', 'claude-haiku-5-5']);
+  assert.deepEqual(catalogModelThinkingLevels(catalog, 'anthropic', 'claude-fable-5-2'), ['low', 'medium', 'high', 'xhigh', 'max']);
   assert.deepEqual(catalogModelThinkingLevels(catalog, 'anthropic', 'claude-sonnet-5-5'), ['low', 'medium', 'high', 'xhigh', 'max']);
 
   const refreshed = await refreshOmpCatalog({ version: null, providers: catalog }, async () => ({
@@ -54,6 +55,12 @@ test('a catalog without Sonnet 5.5, and other providers, keep their own default'
   assert.equal(withClaudeModelCatalog(older), older);
   const bedrock = { id: 'amazon-bedrock', models: ['claude-sonnet-5-5'], defaultModel: 'us.anthropic.claude-opus-5-5' };
   assert.equal(withClaudeModelCatalog(bedrock), bedrock);
+});
+
+test('a stored older Claude model keeps its route while the current models stay listed first', () => {
+  const stored = claudeAccount('claude-opus-4-8');
+  assert.deepEqual(stored.models.slice(0, 4), ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-fable-5-2', 'claude-haiku-5-5']);
+  assert.equal(hostedRouteForChoice(stored, { catalog })?.model, 'anthropic/claude-opus-4-8');
 });
 
 test('a fresh hosted Claude account opens on Sonnet 5.5 and leaves its effort to the runtime', () => {

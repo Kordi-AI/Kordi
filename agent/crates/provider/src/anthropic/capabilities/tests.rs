@@ -9,11 +9,13 @@ use kordi_core::agent_session::ThinkingLevel::{
 
 const EXPECTED_MODEL_IDS: &[&str] = &[
     "claude-sonnet-5-5",
+    "claude-opus-5-5",
+    "claude-fable-5-2",
+    "claude-haiku-5-5",
     "claude-fable-5-1",
     "claude-fable-5",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
-    "claude-haiku-5-5",
     "claude-opus-4-1",
     "claude-opus-4-1-20250805",
     "claude-opus-4-5",
@@ -22,7 +24,6 @@ const EXPECTED_MODEL_IDS: &[&str] = &[
     "claude-opus-4-7",
     "claude-opus-4-8",
     "claude-opus-5",
-    "claude-opus-5-5",
     "claude-sonnet-4-5",
     "claude-sonnet-4-5-20250929",
     "claude-sonnet-4-6",
@@ -39,7 +40,12 @@ const BUDGET_MODEL_IDS: &[&str] = &[
     "claude-sonnet-4-5",
     "claude-sonnet-4-5-20250929",
 ];
-const ALWAYS_ON_MODEL_IDS: &[&str] = &["claude-fable-5", "claude-fable-5-1", "claude-opus-5-5"];
+const ALWAYS_ON_MODEL_IDS: &[&str] = &[
+    "claude-fable-5",
+    "claude-fable-5-1",
+    "claude-fable-5-2",
+    "claude-opus-5-5",
+];
 /// Adaptive models whose Off is `{type: "disabled"}`, with OMP's low..max efforts.
 const DISABLED_OFF_MODEL_IDS: &[&str] = &[
     "claude-haiku-5-5",

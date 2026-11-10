@@ -116,7 +116,7 @@ describe('shared accepts-key rule', () => {
     }
     const kinds = Object.fromEntries(catalog.map((row) => [row.id, [row.auth.kind, row.auth.acceptsApiKey]]));
     for (const id of ['bedrock-mantle', 'google-vertex', 'local', 'web', 'minimax-cn']) expect(kinds[id]).toEqual(['native', false]);
-    expect(kinds.mistral).toEqual(['api-key', true]);
+    expect(kinds.mistral).toEqual(['custom', true]);
     sessions.close();
   });
 });
