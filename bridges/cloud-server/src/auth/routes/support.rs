@@ -105,6 +105,7 @@ pub(super) fn owner_account_response_from_rows(
         birthday: Some(row.birthday.map(|date| date.format("%Y-%m-%d").to_string())),
         account_number: Some(row.account_number),
         kordi_id_change_available_at: Some(change_available_at),
+        share_calendar_availability: Some(row.share_calendar_availability),
         ..account_response_from_rows(row.account, default_agent_row)
     }
 }
@@ -227,6 +228,7 @@ pub(super) fn account_response_from_rows(
         account_number: None,
         kordi_id_change_available_at: None,
         ai_consent: None,
+        share_calendar_availability: None,
     }
 }
 

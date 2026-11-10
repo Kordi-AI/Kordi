@@ -407,6 +407,8 @@ mod avatar_assets;
 mod calendar;
 #[path = "cloud_agent_runtime_e2e/calendar_availability.rs"]
 mod calendar_availability;
+#[path = "cloud_agent_runtime_e2e/calendar_member_availability.rs"]
+mod calendar_member_availability;
 #[path = "cloud_agent_runtime_e2e/claims.rs"]
 mod claims;
 #[path = "cloud_agent_runtime_e2e/cloud_subsessions.rs"]

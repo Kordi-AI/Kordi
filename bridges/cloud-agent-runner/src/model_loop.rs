@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
+mod calendar;
 pub(crate) mod omp;
 mod prompt;
 mod provider;
@@ -269,23 +270,7 @@ pub(crate) async fn execute_model_tool<C: CloudAgentRunClient + Sync>(
         }
     }
     if call.name == "read_calendar" {
-        if run.owner_account_id != run.requester_account_id || run.subsession_id.is_some() {
-            return Err(format!(
-                "Calendar reads require a direct request to the owner's own Agent. {}",
-                kordi_tools::calendar::CALENDAR_UNAVAILABLE
-            )
-            .into());
-        }
-        // In a shared conversation the server returns busy windows only unless the
-        // owner explicitly asked to share event details.
-        let mut arguments = call.arguments.clone();
-        if (run.session_id.starts_with("session:group:")
-            || run.session_id.starts_with("session:direct-person:"))
-            && arguments["shareInConversation"] != true
-            && arguments.is_object()
-        {
-            arguments["disclosure"] = "availability".into();
-        }
+        let arguments = calendar::calendar_arguments(run, &call.arguments)?;
         return match client
             .read_context(&run.run_id, &call.name, arguments)
             .await

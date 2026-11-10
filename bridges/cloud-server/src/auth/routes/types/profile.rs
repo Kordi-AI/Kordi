@@ -43,6 +43,9 @@ pub struct UpdateProfileRequest {
         deserialize_with = "crate::auth::routes::profile_handlers::double_option"
     )]
     pub birthday: Option<Option<String>>,
+    /// Owner setting; absent leaves it unchanged.
+    #[serde(rename = "shareCalendarAvailability")]
+    pub share_calendar_availability: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -92,6 +95,13 @@ pub struct AccountResponse {
     /// Owner payloads from `/v1/cloud/auth/me` only: the AI consent decision.
     #[serde(rename = "aiConsent", skip_serializing_if = "Option::is_none")]
     pub ai_consent: Option<crate::ai_consent::AiConsent>,
+    /// Owner payloads only: whether people in the owner's chats may ask the
+    /// owner's agent for busy/free times (never event details).
+    #[serde(
+        rename = "shareCalendarAvailability",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub share_calendar_availability: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]

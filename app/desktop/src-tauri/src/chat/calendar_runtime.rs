@@ -29,6 +29,10 @@ pub(super) fn build(
     ))
 }
 
+/// Only the signed-in owner's agent reads, and only the owner's calendar.
+/// Another member's request (directly or through their agent) is allowed in a
+/// shared conversation; the server then returns busy windows only, and only
+/// while the owner shares busy/free with people in their chats.
 fn authorized_scope(
     account: &str,
     identity: Option<&RuntimeIdentity>,
@@ -36,7 +40,8 @@ fn authorized_scope(
 ) -> Result<Option<(String, String)>, ()> {
     if account.is_empty()
         || identity.is_some_and(|identity| {
-            identity.owner_account_id != account || identity.requester_account_id != account
+            identity.owner_account_id != account
+                || (identity.requester_account_id != account && shared_session.is_none())
         })
     {
         return Err(());
@@ -57,7 +62,7 @@ fn authorized_scope(
 mod tests {
     use super::*;
     #[test]
-    fn calendar_scope_requires_the_signed_in_owner_and_authenticated_shared_request() {
+    fn calendar_scope_requires_the_signed_in_owner_and_a_shared_scope_for_other_requesters() {
         let mut identity = RuntimeIdentity {
             request_id: "request".into(),
             agent_id: "agent".into(),
@@ -75,7 +80,18 @@ mod tests {
             Ok(Some(("group".into(), "request".into())))
         );
         assert!(authorized_scope("other-account", Some(&identity), None).is_err());
+        // Another member's request reaches the owner's calendar only in a shared
+        // conversation; the server limits it to busy windows.
         identity.requester_account_id = "peer".into();
-        assert!(authorized_scope("owner", Some(&identity), Some("group")).is_err());
+        identity.request_id = "agent-exchange:exchange:request".into();
+        assert_eq!(
+            authorized_scope("owner", Some(&identity), Some("group")),
+            Ok(Some((
+                "group".into(),
+                "agent-exchange:exchange:request".into()
+            )))
+        );
+        assert!(authorized_scope("owner", Some(&identity), None).is_err());
+        assert!(authorized_scope("peer", Some(&identity), Some("group")).is_err());
     }
 }

@@ -474,4 +474,9 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
         "common ground link errors",
         "0187_common_ground_link_errors.sql"
     ),
+    migration!(
+        191,
+        "calendar share availability",
+        "0191_calendar_share_availability.sql"
+    ),
 ];

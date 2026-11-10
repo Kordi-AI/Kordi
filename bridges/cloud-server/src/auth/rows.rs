@@ -16,7 +16,8 @@ pub(super) const OWNER_ACCOUNT_RECORD_COLUMNS: &str = "account_id, \
     primary_email, avatar_url, password_hash, avatar_source, avatar_style, avatar_seed, \
     avatar_renderer_version, avatar_version, avatar_updated_at, about, location, time_zone, \
     website, primary_email_verified_at IS NOT NULL AS primary_email_verified, \
-    public_account_number::TEXT AS account_number, birthday, public_handle_changed_at";
+    public_account_number::TEXT AS account_number, birthday, public_handle_changed_at, \
+    share_calendar_availability";
 
 /// An account as anyone who may see it sees it.
 pub(super) struct AccountRecordRow {
@@ -70,6 +71,8 @@ pub(super) struct OwnerAccountRecordRow {
     pub(super) account_number: String,
     pub(super) birthday: Option<NaiveDate>,
     pub(super) public_handle_changed_at: Option<DateTime<Utc>>,
+    /// Whether people in the owner's chats may ask the owner's agent for busy/free.
+    pub(super) share_calendar_availability: bool,
 }
 
 impl<'row> FromRow<'row, PgRow> for OwnerAccountRecordRow {
@@ -80,6 +83,7 @@ impl<'row> FromRow<'row, PgRow> for OwnerAccountRecordRow {
             account_number: row.try_get("account_number")?,
             birthday: row.try_get("birthday")?,
             public_handle_changed_at: row.try_get("public_handle_changed_at")?,
+            share_calendar_availability: row.try_get("share_calendar_availability")?,
         })
     }
 }

@@ -216,7 +216,8 @@ pub(super) async fn update_me(
             location = CASE WHEN $16::BOOLEAN THEN $17 ELSE location END, \
             time_zone = CASE WHEN $18::BOOLEAN THEN $19 ELSE time_zone END, \
             website = CASE WHEN $20::BOOLEAN THEN $21 ELSE website END, \
-            birthday = CASE WHEN $22::BOOLEAN THEN $23::DATE ELSE birthday END \
+            birthday = CASE WHEN $22::BOOLEAN THEN $23::DATE ELSE birthday END, \
+            share_calendar_availability = COALESCE($24, share_calendar_availability) \
          WHERE account_id = $10 \
          RETURNING {OWNER_ACCOUNT_RECORD_COLUMNS}",
     ))
@@ -243,6 +244,7 @@ pub(super) async fn update_me(
     .bind(website.flatten())
     .bind(birthday.is_some())
     .bind(birthday.flatten())
+    .bind(req.share_calendar_availability)
     .fetch_optional(&mut *tx)
     .await
     {
