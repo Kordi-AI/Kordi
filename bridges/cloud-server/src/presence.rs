@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx_core::query::query;
@@ -38,6 +40,13 @@ pub struct AccountPresenceSummary {
 pub const DEFAULT_PRESENCE_TIMEOUT_SECONDS: i64 = 35;
 pub const DEFAULT_PRESENCE_SWEEP_SECONDS: u64 = 5;
 type DevicePresenceRow = (String, Option<String>, Option<String>, Option<String>);
+type AccountDevicePresenceRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
 
 pub fn presence_timeout() -> ChronoDuration {
     let seconds = std::env::var("KORDI_CLOUD_PRESENCE_TIMEOUT_SECONDS")
@@ -118,6 +127,16 @@ pub async fn account_presence_status(
     .bind(account_id)
     .fetch_all(pool)
     .await?;
+    Ok(summarize_account_presence(account_id, &rows, now, timeout))
+}
+
+/// Rolls one account's non-revoked device rows up into its presence summary.
+fn summarize_account_presence(
+    account_id: &str,
+    rows: &[DevicePresenceRow],
+    now: DateTime<Utc>,
+    timeout: ChronoDuration,
+) -> AccountPresenceSummary {
     let status = rollup_account_presence(rows.iter().map(|(state, heartbeat, _, _)| {
         device_presence_is_currently_online(state, parse_rfc3339(heartbeat.clone()), now, timeout)
     }));
@@ -148,14 +167,14 @@ pub async fn account_presence_status(
         )
         .map(|timestamp| timestamp.to_rfc3339())
     };
-    Ok(AccountPresenceSummary {
+    AccountPresenceSummary {
         account_id: account_id.to_string(),
         status,
         updated_at: now.to_rfc3339(),
         last_seen_at,
         desktop_online,
         desktop_last_seen_at,
-    })
+    }
 }
 
 pub async fn account_has_online_desktop(
@@ -305,13 +324,34 @@ pub async fn contact_presence_summaries(
     .bind(account_id)
     .fetch_all(pool)
     .await?;
+    let ids: Vec<String> = contact_ids.into_iter().map(|(id,)| id).collect();
     let now = Utc::now();
     let timeout = presence_timeout();
-    let mut rows = Vec::with_capacity(contact_ids.len());
-    for (id,) in contact_ids {
-        rows.push(account_presence_status(pool, &id, now, timeout).await?);
+    // One statement for every listed account's devices, so the request costs
+    // the same however many contacts the account has.
+    let device_rows: Vec<AccountDevicePresenceRow> = query_as(
+        "SELECT p.account_id, p.state, p.last_heartbeat_at, p.last_offline_at, d.device_platform \
+         FROM cloud_device_presence p \
+         JOIN cloud_devices d ON d.device_id = p.device_id \
+         WHERE p.account_id = ANY($1) AND d.revoked_at IS NULL",
+    )
+    .bind(&ids)
+    .fetch_all(pool)
+    .await?;
+    let mut rows_by_account: HashMap<String, Vec<DevicePresenceRow>> = HashMap::new();
+    for (id, state, heartbeat, offline, platform) in device_rows {
+        rows_by_account
+            .entry(id)
+            .or_default()
+            .push((state, heartbeat, offline, platform));
     }
-    Ok(rows)
+    Ok(ids
+        .iter()
+        .map(|id| {
+            let rows = rows_by_account.get(id).map(Vec::as_slice).unwrap_or(&[]);
+            summarize_account_presence(id, rows, now, timeout)
+        })
+        .collect())
 }
 
 pub async fn sweep_stale_presence(
@@ -347,6 +387,9 @@ pub async fn sweep_stale_presence(
     }
     Ok(changed)
 }
+
+#[cfg(test)]
+mod contacts_tests;
 
 #[cfg(test)]
 mod tests {
