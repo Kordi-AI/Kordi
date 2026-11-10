@@ -4,7 +4,7 @@
 
 /// A task about planning or choosing is the asking agent's to decide: it
 /// closes with a card (or a short result), never silently.
-pub(super) const DECIDE: &str = "If the originalRequest is about planning or choosing something (a day, time, place, event, or option), the task is yours to decide: never finish silently; close it with a decision step using the plan_card tool when you have it, a vote (propose with state polling and 2 to 4 options) when options remain or others must agree, or a plan (propose with state awaitingConfirmation) when one option is settled, plus one short line with the result; without that tool, publish the choices or the settled plan as that short result.";
+pub(super) const DECIDE: &str = "If the originalRequest is about planning or choosing something (a day, time, place, event, or option), the task is yours to decide: never finish silently; close it with a decision step using the plan_card tool when you have it: plan_card create with kind vote (2 to 4 options) while options remain or others must agree, kind plan once one option is settled, and update the same card (its eventId) as details settle; add one short line with the result. Without that tool, publish the choices or the settled plan as that short result.";
 
 #[cfg(test)]
 mod tests {
@@ -33,8 +33,14 @@ mod tests {
             assert!(rules.contains(
                 "never finish silently; close it with a decision step using the plan_card tool"
             ));
-            assert!(rules.contains("a vote (propose with state polling and 2 to 4 options)"));
-            assert!(rules.contains("a plan (propose with state awaitingConfirmation)"));
+            assert!(rules.contains("plan_card create with kind vote (2 to 4 options) while options remain or others must agree"));
+            assert!(rules.contains("kind plan once one option is settled"));
+            assert!(rules.contains("update the same card (its eventId) as details settle"));
+            assert!(rules.contains("one short line with the result"));
+            assert!(
+                !rules.contains("propose"),
+                "the person agent's tool has create and update"
+            );
             // A pure relay whose visible answer fully answers it may stay silent.
             assert!(rules.contains("Otherwise, after a single round, if the originalRequest only relayed a question to that agent and its visible answer fully answers it, finish silently"));
             assert!(!rules.contains("was only to ask or check with that agent"));

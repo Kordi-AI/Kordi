@@ -53,9 +53,10 @@ anything left open. A continuation that asks again stays a quiet yield, and
 a single relayed question that the visible answer fully completes still
 finishes silently. A task about planning or choosing (a day, time, place,
 event, or option) is the asking agent's to decide: it never finishes
-silently, and closes with a plan card (a vote while options remain or others
-must agree, a plan once settled) when the run has that tool, plus one short
-result line. The continuation prompt carries
+silently, and closes with `plan_card` when the run has it (`create` with
+`kind: vote` and 2 to 4 options while options remain or others must agree,
+`kind: plan` once settled, then `update` of the same card by `eventId` as
+details settle), plus one short result line. The continuation prompt carries
 `remainingRequests` and the earlier answered rounds of the task. A follow-up's
 recipient receives the earlier rounds with that same requester. Both are
 public messages of this conversation, sent as untrusted data and clipped to a
@@ -232,6 +233,10 @@ the agent asks another agent or a person, that slot shows whom it waits for
 instead of being emptied: it stays `processing` with the text "Waiting for
 <name>." while the task is open, never a finished empty row; when the answer
 arrives it shows processing; the resumed task's result replaces it in place.
+A yield writes that waiting state in the same version that records it, on
+the Mac and the cloud runner, so no version is ever finished and empty while
+the task is open. An agent is named as people know it ("Waiting for Maya's
+Kordi."), and only a person's wait carries their account.
 A cloud runner shows the slot as processing as soon as it takes the run, as
 the owner's Mac does. The question stays a plain message from its first
 version (no exchange status; until the task has a slot, the question carries
@@ -244,8 +249,8 @@ visible as waiting too, past the usual processing timeout.
 
 Only the agent answering another agent's request, which has no row of its
 own, gets an added processing row: its reply row is created with the
-question, retired while it asks its own owner, reopened when the owner
-replies, and replaced by its answer; on the cloud runner it has `reach_out`
+question, shows "Waiting for <owner>." (still processing) while it asks its
+own owner, reopens when the owner replies, and is replaced by its answer; on the cloud runner it has `reach_out`
 for that one question too. Every turn's runtime note names the current
 request's language (for a continuation, its original request), and the
 continuation prompts repeat it, so owner memories, Chinese history, or the

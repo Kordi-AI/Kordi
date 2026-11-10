@@ -14,11 +14,12 @@ pub(super) fn slot_id(request: &str) -> Option<Uuid> {
     Uuid::parse_str(exchange).ok()
 }
 
-/// How a slot row ends when its run produced no answer of its own.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// How a slot row ends its run when the run produced no answer of its own.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(super) enum Ending {
-    /// Waiting: the row disappears (complete, empty, synchronization only).
-    Retired,
+    /// The answering agent asked its owner: the row stays in progress and
+    /// says whom it waits for, never an empty finished row.
+    Waiting { name: String, account: String },
 }
 
 /// Ends `sender`'s slot row `client` if it is still processing; a row that
@@ -61,22 +62,12 @@ pub(super) async fn finish(
     if message["deliveryState"] != "processing" {
         return Ok(());
     }
-    match ending {
-        Ending::Retired => {
-            // As a yielded outcome: complete, empty, synchronization only.
-            message["deliveryState"] = json!("complete");
-            message["text"] = json!("");
-            let flags = if group {
-                &mut message["structuredContent"]
-            } else {
-                &mut *message
-            };
-            if !flags.is_object() {
-                *flags = json!({});
-            }
-            flags["synchronizationOnly"] = json!(true);
-        }
-    }
+    let Ending::Waiting { name, account } = ending;
+    super::main_row::apply(
+        &mut wire,
+        group,
+        &super::main_row::Change::Waiting { name, account },
+    );
     block["text"] = json!(format!(
         "{prefix}:{}",
         URL_SAFE_NO_PAD.encode(wire.to_string())

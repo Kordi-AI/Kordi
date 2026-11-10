@@ -52,7 +52,14 @@ pub(super) async fn waiting_for(
     let mut fields = vec![
         ("agentExchangeStatus", json!("waiting")),
         ("agentExchangeWaitingFor", json!(name)),
-        ("agentExchangeWaitingForAccountId", json!(account)),
+        (
+            "agentExchangeWaitingForAccountId",
+            if account.is_empty() {
+                Value::Null
+            } else {
+                json!(account)
+            },
+        ),
     ];
     if owner_requester {
         fields.push(("agentExchangeWaitingForRequester", json!(true)));

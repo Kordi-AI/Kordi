@@ -166,10 +166,11 @@ async fn an_answering_run_keeps_one_reply_row_through_asking_its_owner() {
     f.post(1, &path, json!({"claimId":claim,"toolCallId":"owner","arguments":{"target":f.people[1].account_id,"targetKind":"person","message":"OK to share Friday?"}})).await;
     f.finish(1, &run, claim, r#"{"agentExchangeOutcome":"waiting"}"#)
         .await;
-    assert_eq!(
-        reply_row(&exchange).await.1["structuredContent"]["synchronizationOnly"],
-        true
-    );
+    // On the Mac too, the reply row waits for the owner in words, never blank.
+    let (_, waiting) = reply_row(&exchange).await;
+    assert_eq!(waiting["deliveryState"], "processing");
+    assert_eq!(waiting["text"], "Waiting for Exchange Beta.");
+    assert!(waiting["structuredContent"]["synchronizationOnly"].is_null());
     f.end_parent().await;
     f.say(1, "Yes, Friday 7pm", None).await;
     let resume = f.pending(1).await.remove(0);

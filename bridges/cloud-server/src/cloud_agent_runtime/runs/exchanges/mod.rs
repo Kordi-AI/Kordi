@@ -33,7 +33,8 @@ pub(crate) use outcome::{
 pub(crate) use person_replies::match_replies as match_person_replies;
 mod store;
 pub(crate) use lifecycle::{finish, reconcile};
-pub(crate) use main_row::show_waiting;
+pub(crate) use main_row::{show_waiting, yield_in_place};
+pub(crate) use outcome::WAITING;
 pub(crate) use store::authorize;
 use store::{directory, send};
 

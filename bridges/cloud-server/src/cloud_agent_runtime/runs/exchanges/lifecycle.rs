@@ -106,10 +106,12 @@ pub(crate) async fn finish(
         }
         answer
     } else if silent {
-        // The answering agent asked its owner: its reply row leaves for now.
-        if let Some(row) = super::slots::slot_id(&format!("{PREFIX}{reply_exchange}:reply")) {
-            super::slots::finish(&mut tx, &parent.owner, row, super::slots::Ending::Retired)
-                .await?;
+        // The answering agent asked its owner: its reply row waits for them.
+        let row = super::slots::slot_id(&format!("{PREFIX}{reply_exchange}:reply"));
+        if let (Some(row), Some((name, account))) = (row, outcome::waiting_target(pool, run).await?)
+        {
+            let ending = super::slots::Ending::Waiting { name, account };
+            super::slots::finish(&mut tx, &parent.owner, row, ending).await?;
         }
         None
     } else {

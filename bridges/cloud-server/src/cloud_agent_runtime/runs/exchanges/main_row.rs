@@ -86,7 +86,12 @@ pub(super) async fn set(
     else {
         return Ok(false);
     };
+    let before = wire.clone();
     apply(&mut wire, group, &change);
+    // Only a real change makes a new version of the slot.
+    if wire == before {
+        return Ok(true);
+    }
     block["text"] = json!(format!(
         "{prefix}:{}",
         URL_SAFE_NO_PAD.encode(wire.to_string())
@@ -157,7 +162,9 @@ pub(super) fn apply(wire: &mut Value, group: bool, change: &Change) {
             Change::Waiting { name, account } => {
                 object.insert("agentExchangeStatus".into(), json!("waiting"));
                 object.insert("agentExchangeWaitingFor".into(), json!(name));
-                object.insert("agentExchangeWaitingForAccountId".into(), json!(account));
+                if !account.is_empty() {
+                    object.insert("agentExchangeWaitingForAccountId".into(), json!(account));
+                }
             }
             Change::Processing => {
                 object.insert("agentExchangeStatus".into(), json!("processing"));
@@ -182,21 +189,37 @@ pub(super) fn apply(wire: &mut Value, group: bool, change: &Change) {
     message["text"] = json!(text);
 }
 
+/// A person's run that yields to wait: its own slot shows whom it waits for
+/// in the same version that records the yield, never an empty finished row.
+/// Returns the slot when there is one.
+pub(crate) async fn yield_in_place(pool: &PgPool, run: &str) -> RunResult<Option<String>> {
+    let (slot,): (Option<String>,) =
+        query_as("SELECT response_message_id FROM cloud_agent_fallback_runs WHERE run_id=$1")
+            .bind(run)
+            .fetch_one(pool)
+            .await?;
+    let Some(slot) = slot else {
+        return Ok(None);
+    };
+    Ok(show_waiting(pool, run).await?.then_some(slot))
+}
+
 /// After `run` yields to wait, its task's slot names whom it waits for.
-pub(crate) async fn show_waiting(pool: &PgPool, run: &str) -> RunResult<()> {
+pub(crate) async fn show_waiting(pool: &PgPool, run: &str) -> RunResult<bool> {
     let Some((name, account)) = super::outcome::waiting_target(pool, run).await? else {
-        return Ok(());
+        return Ok(false);
     };
     let (exchange,): (Uuid,) = query_as("SELECT exchange_id FROM cloud_agent_exchanges WHERE parent_run_id=$1 AND status='pending' ORDER BY created_at DESC LIMIT 1")
         .bind(run)
         .fetch_one(pool)
         .await?;
     let mut tx = pool.begin().await?;
-    if set(&mut tx, exchange, Change::Waiting { name, account }).await? {
+    let shown = set(&mut tx, exchange, Change::Waiting { name, account }).await?;
+    if shown {
         super::progress::clear(&mut tx, exchange).await?;
     }
     tx.commit().await?;
-    Ok(())
+    Ok(shown)
 }
 
 #[cfg(test)]
