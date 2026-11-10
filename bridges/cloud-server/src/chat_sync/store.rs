@@ -273,6 +273,7 @@ mod subtyped_attachment_validation;
 pub use message::{update_voice_transcript, UpdateVoiceTranscriptRequest};
 mod pin_snapshots;
 mod reaction;
+mod receipts;
 mod service_members;
 mod support;
 mod sync_events;
@@ -286,7 +287,7 @@ pub(crate) use conversation::{
     create_conversation_in_transaction, create_personal_session_in_transaction,
     create_room_group_in_transaction,
 };
-pub use cursors::{advance_delivery_cursor, advance_read_cursor, bootstrap, history, sync_batch};
+pub use cursors::{bootstrap, history, sync_batch};
 pub use members::{accept_invited_conversation_member, add_conversation_members};
 pub use message::{
     conversation_id_for_session, delete_message, edit_message, load_message_snapshot,
@@ -298,6 +299,7 @@ pub(crate) use personal_session::{
 };
 use reaction::reactions_by_message;
 pub use reaction::set_reaction;
+pub use receipts::{advance_delivery_cursor, advance_read_cursor};
 pub use service_members::{join_service_member, remove_service_member};
 pub use support::{
     append_user_sync_events_in_transaction, identity_sync_recipient_ids, publish_user_sync_events,

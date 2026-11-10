@@ -43,7 +43,7 @@ POST /v2/chat/realtime/ticket
 WS   /v2/chat/realtime
 ```
 
-PostgreSQL is the server source of truth. Every accepted message has one canonical UUID, a conversation sequence, a stable client-generated idempotency UUID, and durable per-user sync events committed in the same transaction. Retrying the same operation returns the original result. Read and delivery cursors are monotonic. Shared titles and account-specific titles are versioned conversation preferences and travel through the same durable stream.
+PostgreSQL is the server source of truth. Every accepted message has one canonical UUID, a conversation sequence, a stable client-generated idempotency UUID, and durable per-user sync events committed in the same transaction. Retrying the same operation returns the original result. Read and delivery cursors are monotonic. A `delivery_cursor.updated` or `read_cursor.updated` event goes to the member whose cursor moved and to the active authors of the messages the move passed, not to every member: a client may hold an older copy of another member's cursors, which is current for its own outgoing messages and is refreshed by bootstrap and conversation snapshots. Shared titles and account-specific titles are versioned conversation preferences and travel through the same durable stream.
 
 The UI reads the account-scoped local database. A sync batch applies entity snapshots and advances its opaque cursor in one local transaction. Unknown critical events stop the client before the cursor advances. Cursor expiry requires a new consistent bootstrap.
 
