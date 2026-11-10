@@ -134,6 +134,15 @@ enum DigestDate {
         let duration = end?.timeIntervalSince(start) ?? 0
         return nextStart.addingTimeInterval(duration > 0 ? duration : 1800)
     }
+    /// A blank personal event for the editor: the next full hour on `day` (today by default), one hour long.
+    static func newEvent(on day: Date, now: Date = Date(), calendar: Calendar = .current) -> DigestCalendarEvent {
+        let thisHour = calendar.dateInterval(of: .hour, for: now)?.start ?? now
+        let nextHour = calendar.date(byAdding: .hour, value: 1, to: thisHour) ?? now
+        let start = calendar.isDate(day, inSameDayAs: now) ? nextHour
+            : calendar.date(bySettingHour: calendar.component(.hour, from: nextHour), minute: 0, second: 0, of: day) ?? nextHour
+        let formatter = ISO8601DateFormatter()
+        return DigestCalendarEvent(id: "manual-\(UUID().uuidString.lowercased())", title: "", startAt: formatter.string(from: start), endAt: formatter.string(from: start.addingTimeInterval(3600)), reminderAt: nil)
+    }
     static func eventDate(_ event: DigestCalendarEvent) -> Date? {
         guard event.allDay else { return parse(event.startAt) }
         let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
