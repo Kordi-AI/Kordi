@@ -3,8 +3,10 @@ import { CloudAuthError } from '@/features/cloud/cloudAuthError';
 import type { CanonicalAvatarMutation } from '@/features/cloud/canonicalAvatar';
 import { normalizeKordiId } from '@/features/cloud/kordiId';
 
-/** Optional profile fields, each sent as a string where "" clears it. */
-export const CLOUD_PROFILE_FIELDS = ['kordiId', 'about', 'location', 'timeZone', 'website', 'birthday'] as const;
+/** Optional profile fields, each sent as a string where "" clears it, and the two field modes. */
+export const CLOUD_PROFILE_FIELDS = [
+  'kordiId', 'about', 'location', 'timeZone', 'website', 'birthday', 'locationMode', 'timeZoneMode',
+] as const;
 export type CloudProfileField = (typeof CLOUD_PROFILE_FIELDS)[number];
 export type CloudProfileFieldDraft = Record<CloudProfileField, string>;
 /** Where a save error is shown: under one row, or under the Save row. */
@@ -60,11 +62,25 @@ export function cloudProfileFieldDraft(account: CloudAccount | null): CloudProfi
     timeZone: account?.timeZone?.trim() ?? '',
     website: account?.website?.trim() ?? '',
     birthday: account?.birthday?.trim() ?? '',
+    locationMode: account?.locationMode ?? 'manual',
+    // Older servers have no mode: a stored zone was picked, none means automatic.
+    timeZoneMode: account?.timeZoneMode ?? (account?.timeZone?.trim() ? 'manual' : 'automatic'),
   };
 }
 
+/** A field that stays automatic belongs to the devices, so the editor never sends it. */
+export function cloudProfileDeviceOwned(
+  field: 'location' | 'timeZone',
+  draft: CloudProfileFieldDraft,
+  saved: CloudProfileFieldDraft,
+): boolean {
+  const mode = field === 'location' ? 'locationMode' : 'timeZoneMode';
+  return draft[mode] === 'automatic' && saved[mode] === 'automatic';
+}
+
 function changedFields(draft: CloudProfileFieldDraft, saved: CloudProfileFieldDraft): CloudProfileField[] {
-  return CLOUD_PROFILE_FIELDS.filter((field) => draft[field].trim() !== saved[field]);
+  return CLOUD_PROFILE_FIELDS.filter((field) => draft[field].trim() !== saved[field]
+    && !((field === 'location' || field === 'timeZone') && cloudProfileDeviceOwned(field, draft, saved)));
 }
 
 export function cloudProfileSaveInput({

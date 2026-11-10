@@ -474,4 +474,5 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
         "common ground link errors",
         "0187_common_ground_link_errors.sql"
     ),
+    migration!(190, "profile field modes", "0190_profile_field_modes.sql"),
 ];

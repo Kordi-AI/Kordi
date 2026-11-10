@@ -151,15 +151,17 @@ test('profile editor groups identity controls without resizing the settings dial
 
 test('profile rows use borderless accent values with per-row errors', () => {
   const panel = readSource('pages/CloudProfilePanel.tsx');
+  const autoRows = readSource('pages/CloudProfileAutoRows.tsx');
   const row = readSource('kordi-app/cloud/CloudProfileFieldRow.tsx');
   const profileCss = readSource('styles/cloud-profile-editor.css');
 
   for (const label of ['Name', 'Kordi ID', 'About', 'Location', 'Time zone', 'Website', 'Birthday']) {
-    assert.match(panel, new RegExp(`["']${label}["']`), label);
+    assert.match(panel + autoRows, new RegExp(`["']${label}["']`), label);
   }
   assert.match(panel, /layout="profile"/);
-  assert.doesNotMatch(panel, /app-input-shell/);
-  assert.match(panel, /<option value="">Automatic<\/option>/);
+  assert.doesNotMatch(panel + autoRows, /app-input-shell/);
+  // Automatic leads the time zone menu and names this device's zone.
+  assert.match(autoRows, /<option value="">\{`Automatic · \$\{timeZoneOptionLabel\(deviceZone\)\}`\}<\/option>/);
   assert.match(panel, /type="date"[\s\S]*min=\{BIRTHDAY_MIN\}[\s\S]*max=\{today\}/);
   assert.match(panel, /aria-label="Clear birthday"/);
   assert.match(panel, /disabled=\{editor\.isSaving \|\| !editor\.isDirty\}/);
@@ -265,14 +267,17 @@ test('profile save sends only the optional fields that changed', () => {
     avatar: { entityType: 'human', entityId: 'acct_1', source: 'generated', style: 'lorelei', seed: 's', rendererVersion: 'v', uploadedAsset: null, version: 1, updatedAt: '' },
     about: 'Climber', location: 'Lisbon', timeZone: null, website: null, birthday: '1996-03-04', nodeId: null, passwordSet: false,
   });
-  assert.deepEqual(saved, { kordiId: '', about: 'Climber', location: 'Lisbon', timeZone: '', website: '', birthday: '1996-03-04' });
+  assert.deepEqual(saved, {
+    kordiId: '', about: 'Climber', location: 'Lisbon', timeZone: '', website: '', birthday: '1996-03-04',
+    locationMode: 'manual', timeZoneMode: 'automatic',
+  });
 
   assert.deepEqual(cloudProfileSaveInput({
     displayNameDraft: ' Maya ',
     avatarMutationDraft: null,
-    fieldDraft: { ...saved, kordiId: 'shuyhere', location: '', timeZone: 'Europe/Lisbon', about: 'Climber ' },
+    fieldDraft: { ...saved, kordiId: 'shuyhere', location: '', timeZone: 'Europe/Lisbon', timeZoneMode: 'manual', about: 'Climber ' },
     savedFields: saved,
-  }), { displayName: 'Maya', kordiId: 'shuyhere', location: '', timeZone: 'Europe/Lisbon' });
+  }), { displayName: 'Maya', kordiId: 'shuyhere', location: '', timeZone: 'Europe/Lisbon', timeZoneMode: 'manual' });
 });
 
 test('profile Kordi ID field keeps handles and routes server errors to their rows', () => {
@@ -309,15 +314,21 @@ test('profile editor does not reset avatar drafts while open for same account sy
 });
 
 test('cloud profile updates publish owner snapshots and viewer-safe invalidations', () => {
-  const profileHandlers = readFileSync(
-    new URL('../../../bridges/cloud-server/src/auth/routes/profile_handlers.rs', import.meta.url),
+  const source = (path: string) => readFileSync(
+    new URL(`../../../bridges/cloud-server/src/auth/routes/${path}`, import.meta.url),
     'utf8',
   );
+  // Profile edits and device reports share one publisher.
+  const profileHandlers = source('profile_handlers.rs');
+  const deviceProfile = source('profile_handlers/device_profile.rs');
+  const sync = source('profile_handlers/sync.rs');
+  assert.match(profileHandlers, /sync::publish_profile_change\(&state, tx, &session\.account_id, &account\)/);
+  assert.match(deviceProfile, /sync::publish_profile_change\(&state, tx, &session\.account_id, &account\)/);
 
-  assert.match(profileHandlers, /identity_sync_recipient_ids/);
-  assert.match(profileHandlers, /std::slice::from_ref\(&session\.account_id\)[\s\S]*"account\.profile\.updated"/);
-  assert.match(profileHandlers, /&viewer_recipients,[\s\S]*"account\.directory\.changed"/);
-  assert.match(profileHandlers, /for observer_account_id in observer_account_ids/);
+  assert.match(sync, /identity_sync_recipient_ids/);
+  assert.match(sync, /std::slice::from_ref\(&owner\)[\s\S]*"account\.profile\.updated"/);
+  assert.match(sync, /&viewer_recipients,[\s\S]*"account\.directory\.changed"/);
+  assert.match(sync, /for observer_account_id in observer_account_ids/);
 });
 
 test('provider tray opens the cloud account settings authentication panel', () => {

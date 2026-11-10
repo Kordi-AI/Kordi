@@ -102,6 +102,7 @@
 		334D5D158BF8F36F8643CA6C /* DocumentEditorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = E156AB8850E4AB9DE3401275 /* DocumentEditorSession.swift */; };
 		3369E116205FF6BDB09AC162 /* LocalMessageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1381CF79C72E0D7F70A6AF27 /* LocalMessageStore.swift */; };
 		33A95833DE67008E0C7D3ED8 /* KordiID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D6D4254D09283B27D15B674 /* KordiID.swift */; };
+		34BFD942374C05AD4B3A5CC8 /* TimeZonePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C6C173BCBD95FBF643DB349 /* TimeZonePickerView.swift */; };
 		34D1737CBEFA979EC9353A72 /* digest in Resources */ = {isa = PBXBuildFile; fileRef = EC7028A6ADF145A7DE23EB58 /* digest */; };
 		354F791494399C7EA20CBA9D /* CommonGroundCardMemoriesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 949D9778803DE7915795407E /* CommonGroundCardMemoriesSection.swift */; };
 		355C449A0A563748B9371015 /* DocumentTitleViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D6E60F374E48C3B3B5A869A /* DocumentTitleViews.swift */; };
@@ -116,6 +117,7 @@
 		38C11253A99BCADD8038B6EB /* BlockedAuthorFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3BEC6048EECB196B051230C /* BlockedAuthorFilterTests.swift */; };
 		3944D8D3F65FF85635C5F966 /* CommonGroundCardDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 509B7E9F27B599320FB93D6B /* CommonGroundCardDesign.swift */; };
 		3B05C6EC8DDE3B8793B5CC38 /* AppSignInClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71D5BE11ECF1B8B596622615 /* AppSignInClientTests.swift */; };
+		3B4A1D0C5C651A9A695B801F /* ProfileDeviceSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 494AB84475D72E7308490B29 /* ProfileDeviceSync.swift */; };
 		3BD3A3D1C8A3CCECFFA523CD /* ProviderLoginMethodTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADB7FC1E4F59FD3D947E2DE0 /* ProviderLoginMethodTests.swift */; };
 		3C0B3DEC6C27850CAE0349E4 /* VoiceTranscription.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45D11E3168D8265F3579537 /* VoiceTranscription.swift */; };
 		3C0D1EFE87F4929F5963E148 /* ProviderLoginControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFE5854F35FB895C4354C9D /* ProviderLoginControllerTests.swift */; };
@@ -283,6 +285,7 @@
 		96F16B068DC05933B3741306 /* ChatProjectSectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D4D5C57FF938B60B634156 /* ChatProjectSectionHeader.swift */; };
 		9742C64E3D476EC0503A7C96 /* VoiceMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E0E98754E4D3E74B787C6A /* VoiceMessageView.swift */; };
 		97FE7B56ED21F0CDBDC8AAEB /* DigestViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 568EBC3F7D9760AAD86C912C /* DigestViewTests.swift */; };
+		987027BB3180BE83E52EC75F /* CloudAPIClient+Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E47E5FE99D03C96C2AB9B5 /* CloudAPIClient+Profile.swift */; };
 		98933D6DCE206D97DA22FD9D /* MemoryOrganizerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D71E37F22FAEBBD6BDBAA3 /* MemoryOrganizerModel.swift */; };
 		994F7C45677606161A38C7D7 /* KordiReleaseConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0676A85B5C6E75428E339FDB /* KordiReleaseConfiguration.swift */; };
 		9C6613A5B66EE25328C93EC8 /* KordiMarkdownListParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 366FB25C511905DAAB4EEEC8 /* KordiMarkdownListParser.swift */; };
@@ -601,6 +604,7 @@
 		2BD932A38840C17EA0B8EF01 /* AppModel+Digest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Digest.swift"; sourceTree = "<group>"; };
 		2C3B095B928F7F9FD86101EE /* BlockedAuthorFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedAuthorFilter.swift; sourceTree = "<group>"; };
 		2C4AAEAEA5A157A0B9F537F6 /* AppSignInSessionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSignInSessionStoreTests.swift; sourceTree = "<group>"; };
+		2C6C173BCBD95FBF643DB349 /* TimeZonePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeZonePickerView.swift; sourceTree = "<group>"; };
 		2D532A8DAAC5AE9484BF6B4E /* ContactProfileSharedItemsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactProfileSharedItemsTests.swift; sourceTree = "<group>"; };
 		2FE8118A29D27F692382BAD6 /* GroupInviteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupInviteTests.swift; sourceTree = "<group>"; };
 		30170A4D2C1A1AF7B87BF136 /* noto-emoji */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "noto-emoji"; path = "Kordi/Resources/noto-emoji"; sourceTree = SOURCE_ROOT; };
@@ -653,6 +657,7 @@
 		482CC7C6F89AFDDA5C218D0E /* PreviewData+ContactProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PreviewData+ContactProfile.swift"; sourceTree = "<group>"; };
 		48C933E64AB182D0C9D4561A /* ConnectorDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorDetailView.swift; sourceTree = "<group>"; };
 		48DDE089740349743BBE866D /* AgentResponseDeduplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentResponseDeduplicationTests.swift; sourceTree = "<group>"; };
+		494AB84475D72E7308490B29 /* ProfileDeviceSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileDeviceSync.swift; sourceTree = "<group>"; };
 		497A7EB3740B07B363C49D37 /* ProviderUITestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderUITestCase.swift; sourceTree = "<group>"; };
 		49AF5B6EA34A07100AE9668D /* CommonGroundWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundWalletView.swift; sourceTree = "<group>"; };
 		49D71E37F22FAEBBD6BDBAA3 /* MemoryOrganizerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryOrganizerModel.swift; sourceTree = "<group>"; };
@@ -863,6 +868,7 @@
 		B61579460A0EA262925C48BE /* DigestCalendarSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigestCalendarSyncTests.swift; sourceTree = "<group>"; };
 		B75148E5F100C3A8048D7E31 /* NetworkProxyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkProxyPolicy.swift; sourceTree = "<group>"; };
 		B7C0162644ADAD950961A3EF /* SessionRuntimeRouteStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRuntimeRouteStoreTests.swift; sourceTree = "<group>"; };
+		B7E47E5FE99D03C96C2AB9B5 /* CloudAPIClient+Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudAPIClient+Profile.swift"; sourceTree = "<group>"; };
 		B829E6583F62108007ADC212 /* CloudDocuments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDocuments.swift; sourceTree = "<group>"; };
 		B8907D09B7736B6EBC799138 /* AgentSessionPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSessionPresentationTests.swift; sourceTree = "<group>"; };
 		B8A9FFC456D58053BB00863A /* CloudOAuthCallbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOAuthCallbackTests.swift; sourceTree = "<group>"; };
@@ -1105,11 +1111,13 @@
 				5101422FFF620FF837A563E8 /* MemorySettingsView.swift */,
 				B00ABE2AF59B23CA70F1598B /* OpenSourceLicensesView.swift */,
 				29909C6255BCF356E3B6A61D /* PreviewMemoryCards.swift */,
+				494AB84475D72E7308490B29 /* ProfileDeviceSync.swift */,
 				04DB13168D004CFB223E9828 /* ProfileEditorView.swift */,
 				91F583054F514DF4B9CE1523 /* ProviderAuthenticationDetailView.swift */,
 				F2EFF937AFEAB7652C8D71E4 /* ProviderAuthenticationView.swift */,
 				6960F2FBF7187F8CADB51C15 /* ProviderLoginFlow.swift */,
 				784A32DA3FCDE2B4F52C5571 /* SettingsRowStyle.swift */,
+				2C6C173BCBD95FBF643DB349 /* TimeZonePickerView.swift */,
 				EE3FE75D23EC3F943BB9728A /* UsageModels.swift */,
 				55F879220CECB2FA8550256F /* UsageSettingsModel.swift */,
 				1204F62F1868736E42A00966 /* UsageSettingsView.swift */,
@@ -1729,6 +1737,7 @@
 				1891761174EB0D425725600A /* CloudAPIClient.swift */,
 				ECFCD1627B2E3378161EFD75 /* CloudAPIClient+ContactPermissions.swift */,
 				F84338335ED5C3245CFA8E68 /* CloudAPIClient+ContactProfile.swift */,
+				B7E47E5FE99D03C96C2AB9B5 /* CloudAPIClient+Profile.swift */,
 				C7FF31565F03088CEE730267 /* CloudAPIClient+Safety.swift */,
 				5E24067FAE92D2E21D10ED67 /* CloudConnectorsAPI.swift */,
 				4DCEE1B4AB8ED2647728BD25 /* CloudConversationCatalog.swift */,
@@ -2243,6 +2252,7 @@
 				74DA3D7911D1DD424D1ED0AF /* CloudAPIClient+ContactPermissions.swift in Sources */,
 				E522BAFC88E2486E83D8D185 /* CloudAPIClient+ContactProfile.swift in Sources */,
 				04C1E641012B45A98CFB6C0F /* CloudAPIClient+Digest.swift in Sources */,
+				987027BB3180BE83E52EC75F /* CloudAPIClient+Profile.swift in Sources */,
 				EBBE4BF8FE63F4C7DF4647A0 /* CloudAPIClient+Safety.swift in Sources */,
 				798E25FC71EFE3AFBBD92A56 /* CloudAPIClient.swift in Sources */,
 				4FFE4CFD925C858A5F2D3B7B /* CloudAccountPrivacy.swift in Sources */,
@@ -2483,6 +2493,7 @@
 				D67B2FDF891943457DB0C1F3 /* PreviewMemoryCards.swift in Sources */,
 				11DBFE58DCB91D13EE71F491 /* PreviewProviderLoginSimulator.swift in Sources */,
 				C02ECC4C56779FDA9C23948B /* ProfileCardView.swift in Sources */,
+				3B4A1D0C5C651A9A695B801F /* ProfileDeviceSync.swift in Sources */,
 				B448AA97D036B9F71899B43F /* ProfileDraft.swift in Sources */,
 				9CEBF0C58D657729FB89529F /* ProfileEditorView.swift in Sources */,
 				16130E0686D6373A72FC4A54 /* ProviderAuthentication.swift in Sources */,
@@ -2520,6 +2531,7 @@
 				D469A952DDE0D5B95CE7EDE9 /* ThreadDateDivider.swift in Sources */,
 				7C25B920649D3F40D42918B4 /* ThreadDatePreview.swift in Sources */,
 				2FCD87F86002B097DC4048AE /* ThreadMessageHeader.swift in Sources */,
+				34BFD942374C05AD4B3A5CC8 /* TimeZonePickerView.swift in Sources */,
 				59F10B00EDCFB7F0572DDC38 /* UsageModels.swift in Sources */,
 				815401CF8A4EACBD885CF830 /* UsageSettingsModel.swift in Sources */,
 				5B9361FC05AF8979043DD7CD /* UsageSettingsView.swift in Sources */,

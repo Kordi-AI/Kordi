@@ -193,9 +193,8 @@ struct KordiApp: App {
                     callCoordinator.receive(callSnapshots: [call])
                 }
                 .onReceive(model.$account) { account in
-                    if account != nil {
-                        callCoordinator.configure(model: model)
-                    }
+                    if account != nil { callCoordinator.configure(model: model) }
+                    ProfileDeviceSync.shared.accountChanged(model)
                     notificationCoordinator.accountDidChange()
                 }
                 .onReceive(model.$conversations) { _ in
