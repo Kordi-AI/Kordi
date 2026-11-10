@@ -41,6 +41,35 @@ const INVALID_BIRTHDAY: FieldError = FieldError {
     code: "invalid_birthday",
     message: "Enter a valid date.",
 };
+const INVALID_FIELD_MODE: FieldError = FieldError {
+    code: "invalid_profile_field_mode",
+    message: "Choose automatic or manual.",
+};
+
+/// Whether a field follows the owner's devices or keeps the owner's value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum FieldMode {
+    Automatic,
+    Manual,
+}
+
+impl FieldMode {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Automatic => "automatic",
+            Self::Manual => "manual",
+        }
+    }
+}
+
+fn clean_mode(value: Option<&str>) -> Result<Option<FieldMode>, FieldError> {
+    match value.map(str::trim) {
+        None => Ok(None),
+        Some("automatic") => Ok(Some(FieldMode::Automatic)),
+        Some("manual") => Ok(Some(FieldMode::Manual)),
+        Some(_) => Err(INVALID_FIELD_MODE),
+    }
+}
 
 /// The change requested for one field: `None` leaves it alone, `Some(None)`
 /// clears it and `Some(Some(value))` stores `value`.
@@ -54,6 +83,11 @@ pub(super) struct ProfileFieldChanges {
     pub(super) time_zone: FieldChange<String>,
     pub(super) website: FieldChange<String>,
     pub(super) birthday: FieldChange<NaiveDate>,
+    /// An explicit mode. Without one, a changed Location becomes manual and a
+    /// changed Time zone becomes manual, or automatic when it is cleared, which
+    /// is what the "Automatic" choice of older clients sends.
+    pub(super) location_mode: Option<FieldMode>,
+    pub(super) time_zone_mode: Option<FieldMode>,
 }
 
 impl ProfileFieldChanges {
@@ -66,6 +100,8 @@ impl ProfileFieldChanges {
             birthday: clean_with(req.birthday.as_ref(), |value| {
                 clean_birthday(value, Utc::now().date_naive())
             })?,
+            location_mode: clean_mode(req.location_mode.as_deref())?,
+            time_zone_mode: clean_mode(req.time_zone_mode.as_deref())?,
         })
     }
 }
@@ -91,14 +127,14 @@ fn clean_about(value: &str) -> Result<String, FieldError> {
     Ok(value.to_string())
 }
 
-fn clean_location(value: &str) -> Result<String, FieldError> {
+pub(super) fn clean_location(value: &str) -> Result<String, FieldError> {
     if value.chars().count() > LOCATION_MAX_CHARS || value.contains(['\n', '\r']) {
         return Err(INVALID_LOCATION);
     }
     Ok(value.to_string())
 }
 
-fn clean_time_zone(value: &str) -> Result<String, FieldError> {
+pub(super) fn clean_time_zone(value: &str) -> Result<String, FieldError> {
     chrono_tz::Tz::from_str(value)
         .map(|zone| zone.name().to_string())
         .map_err(|_| INVALID_TIME_ZONE)
@@ -246,6 +282,23 @@ mod tests {
             assert_eq!(
                 clean_birthday(invalid, today),
                 Err(INVALID_BIRTHDAY),
+                "{invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn field_modes_are_automatic_or_manual() {
+        assert_eq!(clean_mode(None), Ok(None));
+        assert_eq!(
+            clean_mode(Some("automatic")),
+            Ok(Some(FieldMode::Automatic))
+        );
+        assert_eq!(clean_mode(Some(" manual ")), Ok(Some(FieldMode::Manual)));
+        for invalid in ["", "auto", "Automatic", "device"] {
+            assert_eq!(
+                clean_mode(Some(invalid)),
+                Err(INVALID_FIELD_MODE),
                 "{invalid}"
             );
         }

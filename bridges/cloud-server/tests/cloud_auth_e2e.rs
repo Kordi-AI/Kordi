@@ -225,6 +225,8 @@ mod group_invitation_links;
 mod group_invitations;
 #[path = "cloud_auth_e2e/legacy_signup.rs"]
 mod legacy_signup;
+#[path = "cloud_auth_e2e/profile_field_modes.rs"]
+mod profile_field_modes;
 #[path = "cloud_auth_e2e/public_identity.rs"]
 mod public_identity;
 #[path = "cloud_auth_e2e/realtime_sign_out.rs"]

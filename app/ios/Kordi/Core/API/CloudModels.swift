@@ -207,11 +207,11 @@ struct CloudAccount: Codable, Hashable {
     // Profile details; nil when unset or when the server predates them.
     var about: String? = nil
     var location: String? = nil
-    /// IANA identifier, such as "Europe/Lisbon".
-    var timeZone: String? = nil
+    var timeZone: String? = nil // IANA identifier, such as "Europe/Lisbon".
     var website: String? = nil
-    /// "YYYY-MM-DD".
-    var birthday: String? = nil
+    var birthday: String? = nil // "YYYY-MM-DD".
+    var locationMode: String? = nil // "automatic" or "manual"; owner only, nil from older servers.
+    var timeZoneMode: String? = nil
 
     var preferredName: String {
         displayName?.nonEmpty ?? primaryEmail?.nonEmpty ?? "Kordi user"

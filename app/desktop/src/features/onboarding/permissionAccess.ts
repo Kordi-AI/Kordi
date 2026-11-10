@@ -8,7 +8,7 @@ export type PermissionStatus = 'allowed' | 'not-requested' | 'denied' | 'restric
 export type PermissionDefinition = { id: PermissionId; name: string; description: string; settingsPane?: string };
 export const permissionDefinitions: readonly PermissionDefinition[] = [
   { id: 'notifications', name: 'Notifications', description: 'Alerts for new messages and updates.' },
-  { id: 'location', name: 'Location', description: 'Find nearby people using this device’s location. Others see only a rough distance.', settingsPane: 'Privacy_LocationServices' },
+  { id: 'location', name: 'Location', description: 'Keep your profile city current and find nearby people. Others see only your city or a rough distance.', settingsPane: 'Privacy_LocationServices' },
   { id: 'microphone', name: 'Microphone', description: 'Record voice messages and join audio calls.', settingsPane: 'Privacy_Microphone' },
   { id: 'camera', name: 'Camera', description: 'Record video messages and join video calls.', settingsPane: 'Privacy_Camera' },
   { id: 'speech', name: 'Speech recognition', description: 'Turn your voice messages into text.', settingsPane: 'Privacy_SpeechRecognition' },

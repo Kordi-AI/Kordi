@@ -23,6 +23,7 @@ mod organization_tests;
 mod personal_agent_tests;
 mod pin_stack_tests;
 mod proactive_tests;
+mod profile_mode_tests;
 mod projection_tests;
 mod resource_pool_tests;
 mod safety_tests;
