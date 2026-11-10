@@ -37,8 +37,14 @@ final class DocumentEditorSession: ObservableObject {
     private var readers: [String: Task<Void, Never>] = [:]
     private var sendTails: [String: Task<Void, Never>] = [:]
     private var updateObserver: NSObjectProtocol?
+    /// The longest one close waits for queued frames to go out.
+    private let closeTimeout: Duration
 
-    init(attachmentId: String, title: String, user: DocumentEditorUser, transport: any DocumentEditorTransport) {
+    init(
+        attachmentId: String, title: String, user: DocumentEditorUser, transport: any DocumentEditorTransport,
+        closeTimeout: Duration = .seconds(2)
+    ) {
+        self.closeTimeout = closeTimeout
         self.attachmentId = attachmentId
         self.title = title
         self.user = user
@@ -110,11 +116,14 @@ final class DocumentEditorSession: ObservableObject {
     /// Saves pending edits, leaves the room, and waits for those requests.
     func close() async {
         await closePage?()
+        let channels = Array(sockets.values)
+        let tails = Array(sendTails.values)
         readers.values.forEach { $0.cancel() }
         readers.removeAll()
         sendTails.removeAll()
-        sockets.values.forEach { $0.close() }
         sockets.removeAll()
+        await finish(tails)
+        channels.forEach { $0.close() }
     }
 
     private func forward(_ update: DocumentUpdate) {
@@ -175,10 +184,38 @@ final class DocumentEditorSession: ObservableObject {
         }
     }
 
+    /// The page closed the socket: frames it queued first still go out, up to
+    /// the close timeout. Later sends find no socket and are ignored.
     private func drop(socket id: String) {
-        sendTails[id] = nil
+        let tail = sendTails.removeValue(forKey: id)
         readers.removeValue(forKey: id)?.cancel()
-        sockets.removeValue(forKey: id)?.close()
+        guard let channel = sockets.removeValue(forKey: id) else { return }
+        Task {
+            await finish(tail.map { [$0] } ?? [])
+            channel.close()
+        }
+    }
+
+    /// Waits for the send chains to drain, or for the close timeout.
+    private func finish(_ tails: [Task<Void, Never>]) async {
+        guard !tails.isEmpty else { return }
+        let timeout = closeTimeout
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            var resumed = false
+            let resume = {
+                guard !resumed else { return }
+                resumed = true
+                continuation.resume()
+            }
+            Task {
+                for tail in tails { await tail.value }
+                resume()
+            }
+            Task {
+                try? await Task.sleep(for: timeout)
+                resume()
+            }
+        }
     }
 }
 
