@@ -35,6 +35,7 @@ type MessageRow = (
 /// account_id, display name, role, timezone
 type MemberRow = (String, Option<String>, String, Option<String>);
 
+#[derive(Clone)]
 pub(super) struct Candidate {
     pub conversation_id: Uuid,
     pub legacy_session_id: String,

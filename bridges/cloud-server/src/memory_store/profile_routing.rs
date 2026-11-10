@@ -52,25 +52,47 @@ pub(super) fn routed_categories(kind: &str) -> Vec<String> {
         .collect()
 }
 
-/// Rows `mem` of `cloud_account_memories` routed to a profile: `$1` owner,
-/// `$2` profile id, `$3` categories received by default, `$4` whether every
-/// memory not added to any card counts, `$5` only rows updated after this
-/// time.
-const ROUTED_WHERE: &str = "mem.archived_at IS NULL AND mem.owner_account_id = $1 \
+/// Rows `mem` of the owner's memories, live or archived, that the routing
+/// rules send to a profile: `$1` owner, `$2` profile id, `$3` categories
+/// received by default, `$4` whether every memory not added to any card
+/// counts.
+macro_rules! routed_rules {
+    () => {
+        "mem.owner_account_id = $1 \
      AND mem.scope <> 'group' AND ( \
        EXISTS (SELECT 1 FROM cloud_account_memory_card_overrides o \
          WHERE o.memory_id = mem.memory_id AND o.profile_id = $2 AND o.included) \
        OR (mem.category = ANY($3) AND NOT EXISTS (SELECT 1 FROM cloud_account_memory_card_overrides o \
          WHERE o.memory_id = mem.memory_id AND o.profile_id = $2 AND NOT o.included)) \
        OR ($4 AND NOT EXISTS (SELECT 1 FROM cloud_account_memory_card_overrides o \
-         WHERE o.memory_id = mem.memory_id AND (o.included OR o.profile_id = $2)))) \
-     AND ($5::timestamptz IS NULL OR mem.updated_at > $5)";
+         WHERE o.memory_id = mem.memory_id AND (o.included OR o.profile_id = $2))))"
+    };
+}
+
+/// Live rows routed to a profile, with the [`routed_rules`] binds and `$5`:
+/// only rows updated after this time.
+const ROUTED_WHERE: &str = concat!(
+    "mem.archived_at IS NULL AND ",
+    routed_rules!(),
+    " AND ($5::timestamptz IS NULL OR mem.updated_at > $5)"
+);
+
+/// The owner's rows outside groups that changed after `$5` and no longer
+/// reach the profile: archived, taken off its card, or moved to another
+/// category.
+const LEFT_WHERE: &str = concat!(
+    "mem.owner_account_id = $1 AND mem.scope <> 'group' AND mem.updated_at > $5 \
+     AND NOT (mem.archived_at IS NULL AND ",
+    routed_rules!(),
+    ")"
+);
 
 async fn select(
     pool: &PgPool,
     account_id: &str,
     target: ProfileTarget<'_>,
     any_unpinned: bool,
+    since: Option<DateTime<Utc>>,
     limit: i64,
 ) -> sqlx_core::Result<Vec<MemoryResponse>> {
     let rows: Vec<MemoryRow> = query_as(&format!(
@@ -82,7 +104,7 @@ async fn select(
     .bind(target.profile_id)
     .bind(routed_categories(target.kind))
     .bind(any_unpinned)
-    .bind(None::<DateTime<Utc>>)
+    .bind(since)
     .bind(limit)
     .fetch_all(pool)
     .await?;
@@ -95,7 +117,7 @@ pub(crate) async fn profile_memories(
     account_id: &str,
     target: ProfileTarget<'_>,
 ) -> sqlx_core::Result<Vec<ProfileMemory>> {
-    let memories = select(pool, account_id, target, false, MAX_PROFILE_MEMORIES).await?;
+    let memories = select(pool, account_id, target, false, None, MAX_PROFILE_MEMORIES).await?;
     // Memories added to this card by hand are shown through that choice, not
     // through their category.
     let ids: Vec<&str> = memories.iter().map(|m| m.memory_id.as_str()).collect();
@@ -130,7 +152,45 @@ pub(crate) async fn build_memories(
 ) -> sqlx_core::Result<Vec<MemoryResponse>> {
     let any_unpinned = !FIXED_PROFILE_KINDS.contains(&target.kind);
     let limit = i64::try_from(limit).unwrap_or(i64::MAX);
-    select(pool, account_id, target, any_unpinned, limit).await
+    select(pool, account_id, target, any_unpinned, None, limit).await
+}
+
+/// The memories a build of the profile reads that changed after `since`,
+/// newest first: what an automatic card update reads.
+pub(crate) async fn build_memories_since(
+    pool: &PgPool,
+    account_id: &str,
+    target: ProfileTarget<'_>,
+    since: DateTime<Utc>,
+    limit: i64,
+) -> sqlx_core::Result<Vec<MemoryResponse>> {
+    let any_unpinned = !FIXED_PROFILE_KINDS.contains(&target.kind);
+    select(pool, account_id, target, any_unpinned, Some(since), limit).await
+}
+
+/// `(text, updated_at)` of the owner's memories that changed after `since`
+/// and no longer reach the profile a build reads, newest first. The texts
+/// are for matching the card's references only; archived text never goes to
+/// a model.
+pub(crate) async fn left_since(
+    pool: &PgPool,
+    account_id: &str,
+    target: ProfileTarget<'_>,
+    since: DateTime<Utc>,
+    limit: i64,
+) -> sqlx_core::Result<Vec<(String, DateTime<Utc>)>> {
+    query_as(&format!(
+        "SELECT mem.text, mem.updated_at FROM cloud_account_memories mem WHERE {LEFT_WHERE} \
+         ORDER BY mem.updated_at DESC, mem.memory_id LIMIT $6"
+    ))
+    .bind(account_id)
+    .bind(target.profile_id)
+    .bind(routed_categories(target.kind))
+    .bind(!FIXED_PROFILE_KINDS.contains(&target.kind))
+    .bind(since)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
 }
 
 /// How many memories routed to the profile changed after `since`; all of

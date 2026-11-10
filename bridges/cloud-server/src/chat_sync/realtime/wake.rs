@@ -6,6 +6,7 @@ use sqlx_postgres::PgListener;
 use tokio::sync::{broadcast, watch};
 
 use crate::auth::session_signals::{SessionSignal, SessionSignalHub, SESSION_SIGNAL_CHANNEL};
+use crate::document_shares::collab::{RoomRegistry, COLLAB_CHANNEL};
 
 const WAKE_CHANNEL: &str = "chat_sync_events";
 
@@ -106,32 +107,40 @@ impl Drop for ChatSyncWakeSubscription {
     }
 }
 
-/// Starts this replica's single notification listener: chat sync wakes and
-/// session revocation signals share one PostgreSQL connection.
+/// Starts this replica's single notification listener: chat sync wakes,
+/// session revocation signals, and collaboration room signals share one
+/// PostgreSQL connection. Also starts the room registry's relay tasks.
 pub(crate) fn spawn_wake_listener(
     database_url: String,
     hub: Arc<ChatSyncWakeHub>,
     sessions: Arc<SessionSignalHub>,
+    rooms: Arc<RoomRegistry>,
 ) {
+    rooms.start();
     tokio::spawn(async move {
         loop {
             let result: Result<(), sqlx_core::Error> = async {
                 let mut listener = PgListener::connect(&database_url).await?;
                 listener
-                    .listen_all([WAKE_CHANNEL, SESSION_SIGNAL_CHANNEL])
+                    .listen_all([WAKE_CHANNEL, SESSION_SIGNAL_CHANNEL, COLLAB_CHANNEL])
                     .await?;
                 hub.set_listener_connected(true);
+                rooms.listener_connected();
                 // `try_recv` reports a lost connection instead of silently
                 // reconnecting, so the status (and the catch-up it drives)
                 // follows every gap in which notifications may be lost.
                 while let Some(notification) = listener.try_recv().await? {
                     let payload = notification.payload().trim();
-                    if notification.channel() == SESSION_SIGNAL_CHANNEL {
-                        if let Some(signal) = SessionSignal::parse(payload) {
-                            sessions.publish(signal);
+                    match notification.channel() {
+                        SESSION_SIGNAL_CHANNEL => {
+                            if let Some(signal) = SessionSignal::parse(payload) {
+                                sessions.publish(signal);
+                            }
                         }
-                    } else if !payload.is_empty() {
-                        hub.wake(payload);
+                        // Never waits: room work runs in its own tasks.
+                        COLLAB_CHANNEL => rooms.receive(payload),
+                        _ if !payload.is_empty() => hub.wake(payload),
+                        _ => {}
                     }
                 }
                 Ok(())

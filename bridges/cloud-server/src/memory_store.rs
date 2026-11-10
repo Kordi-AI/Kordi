@@ -29,7 +29,9 @@ pub(crate) use edit::{archive, update_memory};
 use row::{memory_from_row, MemoryRow, MEMORY_SELECT};
 
 pub(crate) use groups::is_active_group_member;
-pub(crate) use profile_routing::{build_memories, count_since, profile_memories, ProfileTarget};
+pub(crate) use profile_routing::{
+    build_memories, build_memories_since, count_since, left_since, profile_memories, ProfileTarget,
+};
 pub(crate) use routing::{
     category_allowed_in_group, check_category, DEFAULT_CATEGORY, MEMORY_CATEGORIES,
     MEMORY_CONFIDENCES,
@@ -74,6 +76,14 @@ pub(crate) async fn protected_texts_for_scope(
     _scope_id: &str,
 ) -> MemoryResult<Vec<String>> {
     Ok(Vec::new())
+}
+
+/// After a committed write, marks the owner's Grounding cards that update
+/// automatically. Group memories never feed a card. Never fails the write.
+async fn note_change(pool: &PgPool, owner_account_id: &str, scope: &str) {
+    if scope != "group" {
+        crate::common_ground::note_memory_change(pool, owner_account_id).await;
+    }
 }
 
 /// Guard settings for a write into `scope`. Group memories are shared, so
@@ -325,6 +335,7 @@ pub(crate) async fn save(
     .await?;
     if let Some(row) = duplicate {
         transaction.commit().await?;
+        note_change(pool, account_id, scope).await;
         return Ok(SaveOutcome::Existing(memory_from_row(row)));
     }
 
@@ -352,6 +363,9 @@ pub(crate) async fn save(
     .fetch_optional(&mut *transaction)
     .await?;
     transaction.commit().await?;
+    if inserted.is_some() {
+        note_change(pool, account_id, scope).await;
+    }
     // No row means the clientMemoryId belongs to another account.
     inserted
         .map(|row| SaveOutcome::Created(memory_from_row(row)))
@@ -376,5 +390,8 @@ pub(crate) async fn archive_all(pool: &PgPool, account_id: &str) -> MemoryResult
     .bind(account_id)
     .execute(pool)
     .await?;
+    if result.rows_affected() > 0 {
+        note_change(pool, account_id, "global").await;
+    }
     Ok(result.rows_affected())
 }

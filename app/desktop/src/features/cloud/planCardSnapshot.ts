@@ -126,3 +126,33 @@ export function resolveTranscriptPlanCards<T extends { id?: string; planCard?: M
     return newest.revision <= card.revision ? message : { ...message, planCard: { ...newest, view: cardView } };
   });
 }
+
+/** Short counts for large groups: 1200 reads "1.2k". */
+export function compactCount(value: number): string {
+  if (value < 1000) return String(value);
+  return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+}
+
+export type PlanCardAttendance = {
+  going: MessagePlanCardParticipant[];
+  declined: MessagePlanCardParticipant[];
+  waiting: MessagePlanCardParticipant[];
+};
+
+/** Everyone on a plan, split by their answer. */
+export function planCardAttendance(participants: readonly MessagePlanCardParticipant[]): PlanCardAttendance {
+  return {
+    going: participants.filter((participant) => participant.rsvp === 'yes'),
+    declined: participants.filter((participant) => participant.rsvp === 'no'),
+    waiting: participants.filter((participant) => participant.rsvp === 'pending'),
+  };
+}
+
+/** The card's counts line: "2 going · 1 can't · 1 no reply". */
+export function planCardCountsLabel({ going, declined, waiting }: PlanCardAttendance): string {
+  return [
+    `${compactCount(going.length)} going`,
+    ...(declined.length ? [`${compactCount(declined.length)} can't`] : []),
+    ...(waiting.length ? [`${compactCount(waiting.length)} no reply`] : []),
+  ].join(' · ');
+}

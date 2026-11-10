@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { DocumentShareApi } from '@/features/documents/documentShareApi';
 import type { DocumentResponse } from '@/features/documents/documentShareTypes';
-import { presenceColor, type DocumentCollabState } from '@/features/documents/documentPresence';
+import { NO_COLLAB, presenceColor, type DocumentCollabState } from '@/features/documents/documentPresence';
 import { UPDATED_ELSEWHERE, useCloudDocumentEdits } from '@/features/documents/useCloudDocumentEdits';
 import DocumentEditor from '@/features/documents/editor/DocumentEditor';
 
@@ -17,9 +17,9 @@ export type EditorFlush = { current: (() => Promise<void>) | null };
 
 /**
  * The Mac's document editor for one cloud document: joins the document's
- * collaboration room, and saves revisioned Markdown while the room is not
- * connected. The app draws the title, toolbar and presence from what this
- * reports over the bridge.
+ * collaboration room, and saves revisioned Markdown until the editor is bound
+ * to it. The app draws the title, toolbar and presence from what this reports
+ * over the bridge.
  */
 export function IosDocumentEditor({ api, bridge, config, flushRef, onEditor }: {
   api: DocumentShareApi;
@@ -29,7 +29,7 @@ export function IosDocumentEditor({ api, bridge, config, flushRef, onEditor }: {
   onEditor: (editor: Editor | null) => void;
 }) {
   const [document, setDocument] = useState<DocumentResponse | null>(null);
-  const [collabState, setCollabState] = useState<DocumentCollabState>({ status: 'offline', peers: [] });
+  const [collabState, setCollabState] = useState<DocumentCollabState>(NO_COLLAB);
   const createProvider = useMemo(() => nativeProviderFactory(bridge), [bridge]);
 
   useEffect(() => {
@@ -47,7 +47,8 @@ export function IosDocumentEditor({ api, bridge, config, flushRef, onEditor }: {
   }, [api, bridge, config.attachmentId]);
 
   const canEdit = document?.format === 'markdown' && Boolean(document.viewerCan.edit);
-  const collaborating = collabState.status === 'connected';
+  // Bound to the room (connected or reconnecting): the room carries the edits.
+  const collaborating = collabState.bound;
   const onAnnotations = useCallback((_reactions: unknown, _comments: unknown, remote?: DocumentResponse) => {
     if (remote) setDocument((current) => (current ? { ...current, title: remote.title } : current));
   }, []);
@@ -105,6 +106,7 @@ export function IosDocumentEditor({ api, bridge, config, flushRef, onEditor }: {
         collab={collab}
         onCollab={setCollabState}
         onSnapshot={setDocument}
+        storeDocument={cloud.storeDocument}
         createProvider={createProvider}
         blocks={blocks}
         revisionKey={revisionKey}

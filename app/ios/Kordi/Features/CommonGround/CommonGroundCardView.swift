@@ -6,6 +6,8 @@ import SwiftUI
 struct CommonGroundCardView: View {
     @Environment(\.kordiChatTheme) private var chatTheme
     @EnvironmentObject private var model: CommonGroundModel
+    @EnvironmentObject private var appModel: AppModel
+    @Environment(\.scenePhase) private var scenePhase
     @Binding var path: [CommonGroundRoute]
     @State private var references: CommonGroundReferenceTopic?
     @State private var adding: WritableKeyPath<CommonGroundTopics, [String]>?
@@ -69,6 +71,10 @@ struct CommonGroundCardView: View {
             }
         }
         .task(id: model.currentProfileID) { await model.loadProfileMemories() }
+        .task { await model.refreshCard() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await model.refreshCard() } }
+        }
         .commonGroundProfileEditor($editing) { path = [] }
         .sheet(item: $references) { topic in
             CommonGroundReferences(topic: topic.label, profile: profile)
@@ -95,7 +101,19 @@ struct CommonGroundCardView: View {
                 .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)
                 .frame(minHeight: SessionDetailMetrics.rowMinHeight)
                 SessionDetailSeparator(leading: SessionDetailMetrics.rowHorizontalInset)
-                CommonGroundRow(title: "Rebuild card", subtitle: model.memoriesSinceBuildCaption) { path.append(.build) }
+                CommonGroundRow(title: "Rebuild", subtitle: model.memoriesSinceBuildCaption) { path.append(.build) }
+                if let auto = model.autoRebuild {
+                    SessionDetailSeparator(leading: SessionDetailMetrics.rowHorizontalInset)
+                    Toggle(isOn: Binding(get: { auto }, set: { on in
+                        guard !on || appModel.requireAIConsent() else { return }
+                        Task { await model.setAutoRebuild(on) }
+                    })) {
+                        Text("Rebuild automatically").font(.body)
+                    }
+                    .disabled(model.busy == "autoRebuild")
+                    .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)
+                    .frame(minHeight: SessionDetailMetrics.rowMinHeight)
+                }
             }
             CommonGroundSection {
                 Button(role: .destructive) { confirmsDelete = true } label: {

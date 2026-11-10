@@ -14,6 +14,8 @@ mod input;
 mod limits;
 pub mod membership;
 mod mentions;
+mod ownership;
+mod ownership_store;
 mod prompt;
 mod retry;
 pub mod store;
@@ -68,6 +70,8 @@ mod card_update_tests;
 mod context_boundary_tests;
 #[cfg(test)]
 mod membership_tests;
+#[cfg(test)]
+mod ownership_sweep_tests;
 #[cfg(test)]
 pub(crate) mod pool_tests;
 #[cfg(test)]

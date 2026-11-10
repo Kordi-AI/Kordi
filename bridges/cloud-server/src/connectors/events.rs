@@ -81,6 +81,10 @@ pub async fn record_event(
     .bind(expires_at)
     .fetch_optional(pool)
     .await?;
+    if row.is_some() {
+        // Grounding cards that update automatically from this provider.
+        crate::common_ground::note_connector_event(pool, event.connector_id, event.provider).await;
+    }
     Ok(row.map(|(event_id,)| event_id))
 }
 

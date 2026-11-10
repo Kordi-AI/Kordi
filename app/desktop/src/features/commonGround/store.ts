@@ -7,6 +7,7 @@ import { BUILD_NOT_STARTED, buildFailureMessage, emptySourcesMessage } from './b
 import { CommonGroundError, commonGroundErrorCode, commonGroundErrorMessage, isRouteMissing, isTransientFailure, type CommonGroundClient } from './client';
 import type { CgProfileMemory } from './profiles';
 import { BUILD_CHECK_MS, startedBuild } from './storeBuild';
+import * as autoOps from './storeAutoRebuild';
 import * as pairOps from './storePairing';
 import * as profileOps from './storeProfiles';
 import * as roomOps from './storeRooms';
@@ -216,9 +217,9 @@ export class CommonGroundStore {
     this.lastSync = now;
     try {
       await profileOps.loadProfiles(this);
-      const profileId = this.state.profileId;
+      const { profileId, owner: before } = this.state;
       const owner = await this.client.card(profileId);
-      if (this.state.profileId === profileId && !this.state.busy) this.applyOwner(owner);
+      autoOps.landFetchedOwner(this, profileId, before, owner);
       await this.loadActivity();
       if (this.top().name !== 'home') await this.loadScreen();
       return true;
@@ -264,11 +265,12 @@ export class CommonGroundStore {
     } catch {
       return screen.name === 'lobby' ? LOBBY_POLL_MS : MATCH_POLL_MS;
     }
+    if (autoOps.cardRefreshDue(this)) return autoOps.refreshCard(this);
     await this.syncFromServer();
     return null;
   }
 
-  private applyOwner(owner: CgOwnerView) {
+  applyOwner(owner: CgOwnerView) {
     const wasBuilding = this.state.owner?.build.status === 'building';
     this.set({ owner, loaded: true, ...(this.state.owner?.sharing && !owner.sharing ? { matches: {}, people: {}, results: {}, recent: [] } : {}) });
     if (!wasBuilding || owner.build.status === 'building') return;
@@ -332,6 +334,7 @@ export class CommonGroundStore {
     const saved = await this.run('sharing', () => this.client.setSharing(sharing, this.state.profileId));
     if (saved) this.applyOwner(saved);
   }
+  setAutoRebuild = (on: boolean) => autoOps.setAutoRebuild(this, on);
 
   async deleteCard(): Promise<boolean> {
     const view = await this.run('delete', () => this.client.deleteCard(this.state.profileId));

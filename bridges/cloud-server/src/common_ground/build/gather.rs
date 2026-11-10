@@ -167,7 +167,8 @@ fn summary_title(summary: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
-fn provider_label(provider: &str) -> &str {
+/// The source label of a connector provider's evidence.
+pub(in crate::common_ground) fn provider_label(provider: &str) -> &str {
     match provider {
         "gmail" => "Gmail",
         "google_calendar" => "Google Calendar",
@@ -175,6 +176,34 @@ fn provider_label(provider: &str) -> &str {
         "slack" => "Slack",
         other => other,
     }
+}
+
+/// One of the account's memories as evidence.
+pub(in crate::common_ground) fn memory_item(text: &str, updated_at: &str) -> Gathered {
+    let title: String = text.chars().take(80).collect();
+    item(
+        "Memory",
+        &title,
+        evidence_date(Some(updated_at)),
+        None,
+        text,
+    )
+}
+
+/// One connector event as evidence.
+pub(in crate::common_ground) fn event_item(
+    event: &crate::connectors::digest_input::ConnectorEventSummary,
+) -> Gathered {
+    let mut strings = Vec::new();
+    summary_strings(&event.summary, &mut strings);
+    let title = summary_title(&event.summary).unwrap_or_else(|| event.kind.clone());
+    item(
+        provider_label(&event.provider),
+        &title,
+        evidence_date(Some(&event.occurred_at)),
+        None,
+        &strings.join(" · "),
+    )
 }
 
 /// What the build of `target` reads, in the order the model sees it.
@@ -199,14 +228,7 @@ pub(in crate::common_ground) async fn gather(
             Vec::new()
         };
         for memory in &own {
-            let title: String = memory.text.chars().take(80).collect();
-            evidence.push(item(
-                "Memory",
-                &title,
-                evidence_date(Some(&memory.updated_at)),
-                None,
-                &memory.text,
-            ));
+            evidence.push(memory_item(&memory.text, &memory.updated_at));
         }
         if !own.is_empty() {
             used.push("Memory".to_string());
@@ -220,20 +242,11 @@ pub(in crate::common_ground) async fn gather(
                 .await?;
         let mut providers = Vec::new();
         for event in events {
-            let mut strings = Vec::new();
-            summary_strings(&event.summary, &mut strings);
-            let title = summary_title(&event.summary).unwrap_or_else(|| event.kind.clone());
-            let source = provider_label(&event.provider).to_string();
-            evidence.push(item(
-                &source,
-                &title,
-                evidence_date(Some(&event.occurred_at)),
-                None,
-                &strings.join(" · "),
-            ));
-            if !providers.contains(&source) {
-                providers.push(source);
+            let gathered = event_item(&event);
+            if !providers.contains(&gathered.source) {
+                providers.push(gathered.source.clone());
             }
+            evidence.push(gathered);
         }
         used.extend(providers);
     }

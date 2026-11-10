@@ -28,5 +28,5 @@ export function useDigest(accountId: string) {
     };
   }, [store]);
   return { ...state, error: state.digestError ?? state.calendarError, reload,
-    setFeedback: store.setFeedback, removeEvents: store.removeEvents, retryMutation: store.retryMutation };
+    setFeedback: store.setFeedback, removeEvents: store.removeEvents, declinePlan: store.declinePlan, retryMutation: store.retryMutation };
 }

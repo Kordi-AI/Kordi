@@ -6,12 +6,17 @@ use sqlx_core::query::query;
 use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 
+use crate::cloud_agent_runtime::provider_auth::equivalent_provider_ids;
+
 pub(super) struct LoginTarget {
     pub provider: String,
     pub worker_provider: String,
     pub label: String,
     /// `default` or `api-key`.
     pub method: String,
+    /// The saved sign-in this login renews; its result keeps that account
+    /// choice instead of naming a new one.
+    pub renews_auth_choice: Option<String>,
 }
 
 pub(super) struct SavedSnapshot {
@@ -51,6 +56,7 @@ type LoginSessionRow = (
     Option<String>,
     String,
     bool,
+    Option<String>,
 );
 
 /// A claim asks the worker once (30-second timeout) and saves one row, so a
@@ -66,8 +72,9 @@ pub(super) async fn insert(
 ) -> Result<LoginSession, sqlx_core::Error> {
     query(
         "INSERT INTO cloud_agent_provider_login_sessions \
-         (session_id, account_id, device_id, provider, worker_provider, label, method) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+         (session_id, account_id, device_id, provider, worker_provider, label, method, \
+          renews_auth_choice) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(session_id)
     .bind(account_id)
@@ -76,6 +83,7 @@ pub(super) async fn insert(
     .bind(&target.worker_provider)
     .bind(&target.label)
     .bind(&target.method)
+    .bind(&target.renews_auth_choice)
     .execute(pool)
     .await?;
     Ok(LoginSession {
@@ -103,7 +111,8 @@ pub(super) async fn owned(
                 login.created_at < now() - interval '20 minutes', \
                 snapshot.snapshot_id, snapshot.provider, snapshot.auth_choice, snapshot.label, \
                 login.method, \
-                login.status = 'claiming' AND login.updated_at < now() - $3::INTERVAL \
+                login.status = 'claiming' AND login.updated_at < now() - $3::INTERVAL, \
+                login.renews_auth_choice \
          FROM cloud_agent_provider_login_sessions login \
          LEFT JOIN cloud_agent_provider_auth_snapshots snapshot \
            ON snapshot.snapshot_id = login.snapshot_id \
@@ -123,6 +132,7 @@ pub(super) async fn owned(
             worker_provider: row.3,
             label: row.4,
             method: row.12,
+            renews_auth_choice: row.14,
         },
         status: row.5,
         failure_reason: row.6,
@@ -138,6 +148,31 @@ pub(super) async fn owned(
             _ => None,
         },
     }))
+}
+
+/// The label of the live saved sign-in `auth_choice` names for this account
+/// and provider family: `Some(label)` when the account still holds it, `None`
+/// when it is unknown, removed, or saved for another provider.
+pub(super) async fn renewable_label(
+    pool: &PgPool,
+    account_id: &str,
+    provider: &str,
+    auth_choice: &str,
+) -> Result<Option<Option<String>>, sqlx_core::Error> {
+    let provider_ids =
+        equivalent_provider_ids(Some(provider)).unwrap_or_else(|| vec![provider.to_string()]);
+    let row: Option<(Option<String>,)> = query_as(
+        "SELECT label FROM cloud_agent_provider_auth_snapshots \
+         WHERE account_id = $1 AND provider = ANY($2) AND auth_choice = $3 \
+           AND revoked_at IS NULL \
+         ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(account_id)
+    .bind(&provider_ids)
+    .bind(auth_choice)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(label,)| label))
 }
 
 /// Moves a session from one of `from` to `to`. Returns whether this caller

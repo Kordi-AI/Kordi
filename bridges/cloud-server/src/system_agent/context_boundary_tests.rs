@@ -82,6 +82,7 @@ async fn provider_context_excludes_pre_join_messages_across_retry_and_completion
         agent_id: "system-agent-boundary-test".to_string(),
         name: "System".to_string(),
         subtitle: "Test".to_string(),
+        stall_minutes: super::config::DEFAULT_STALL_MINUTES,
         provider_auth: super::SystemAgentProviderAuth::openai_api_key(
             "synthetic-key",
             "synthetic-model",
