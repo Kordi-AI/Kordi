@@ -323,6 +323,12 @@ async fn claim_run_with_executor(
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
+    // A chat run carries its identity, with who is in the conversation, from
+    // admission: every executor (a Mac on any path, or the cloud runner) and
+    // every later reader see the same frozen identity.
+    if shared_conversation(&input.session_id) {
+        super::identity::identity_for_run(pool, &row.0).await?;
+    }
     if let Some(executor) = desktop_executor.filter(|_| row.0 != run_id) {
         // A concurrent cloud admission won the insert; the Mac still goes first.
         super::desktop_takeover::take(pool, &row.0, input, executor).await?;
@@ -337,6 +343,12 @@ async fn claim_run_with_executor(
         updated_at: row.4,
         execution_backend: row.5,
     })
+}
+
+/// A direct or group conversation, whose runs carry a conversation context.
+fn shared_conversation(session: &str) -> bool {
+    let session = session.trim();
+    session.starts_with("session:group:") || session.starts_with("session:direct-person:")
 }
 
 /// The route an owner's Mac chose for a run it claims, to store on the run:

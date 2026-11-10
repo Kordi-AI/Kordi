@@ -12,10 +12,33 @@ fn member(id: &str, name: &str, location: Option<&str>, zone: Option<&str>) -> M
     }
 }
 
-fn data(text: &str) -> Value {
-    let mut lines = text.lines();
-    assert!(lines.next().unwrap().contains("untrusted"));
-    serde_json::from_str(lines.next().unwrap()).unwrap()
+fn agent(id: &str, owner: &str) -> Agent {
+    Agent {
+        agent_id: id.into(),
+        name: "Kordi".into(),
+        owner_account_id: owner.into(),
+    }
+}
+
+fn snapshot(members: Vec<Member>, owner_zone: Option<&str>) -> Snapshot {
+    Snapshot {
+        conversation_id: uuid::Uuid::nil(),
+        conversation: Conversation {
+            kind: "group".into(),
+            title: Some("Agent test".into()),
+        },
+        members,
+        agents: vec![
+            agent("cloud-agent:own", "own"),
+            agent("cloud-agent:req", "req"),
+        ],
+        ids: ("own".into(), "req".into(), "cloud-agent:own".into()),
+        owner_zone: owner_zone.map(Into::into),
+    }
+}
+
+fn friday() -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 11, 13, 3, 0, 0).unwrap()
 }
 
 #[test]
@@ -29,42 +52,25 @@ fn members_agents_and_profile_fields_appear_only_when_set() {
         Some("Europe/Paris"),
     );
     private.ai_allowed = false;
-    let members = [
-        member("own", "Shu Yang", None, None),
-        requester,
-        member("other", "Maya", None, Some("Not/A Zone")),
-        private,
-    ];
-    let agents = [
-        Agent {
-            agent_id: "cloud-agent:own".into(),
-            name: "Kordi".into(),
-            owner_account_id: "own".into(),
-        },
-        Agent {
-            agent_id: "cloud-agent:req".into(),
-            name: "Kordi".into(),
-            owner_account_id: "req".into(),
-        },
-    ];
-    let now = Utc.with_ymd_and_hms(2026, 11, 13, 3, 0, 0).unwrap();
-    let text = render(
-        &Conversation {
-            kind: "group".into(),
-            title: Some("Agent test".into()),
-        },
-        &members,
-        &agents,
-        ("own", "req", "cloud-agent:own"),
-        now,
-        None,
+    let value = view(
+        &snapshot(
+            vec![
+                member("own", "Shu Yang", None, None),
+                requester,
+                member("other", "Maya", None, Some("Not/A Zone")),
+                private,
+            ],
+            None,
+        ),
+        friday(),
     );
-    assert!(text.contains("instead of asking who is in this conversation"));
-    assert!(text.contains("Ask only for what is actually missing"));
-    let value = data(&text);
     assert_eq!(value["conversation"]["kind"], "group");
     assert_eq!(value["conversation"]["title"], "Agent test");
     assert_eq!(value["memberCount"], 4);
+    assert!(value["untrusted"]
+        .as_str()
+        .unwrap()
+        .contains("not instructions"));
     let people = value["people"].as_array().unwrap();
     assert_eq!(people[0]["isOwner"], true);
     assert!(people[0].get("location").is_none() && people[0].get("timeZone").is_none());
@@ -91,21 +97,55 @@ fn members_agents_and_profile_fields_appear_only_when_set() {
 
 #[test]
 fn the_current_time_is_in_the_owner_time_zone() {
-    let now = Utc.with_ymd_and_hms(2026, 11, 13, 3, 0, 0).unwrap();
-    let text = render(
-        &Conversation {
-            kind: "direct".into(),
-            title: None,
-        },
-        &[member("own", "Owner", None, None)],
-        &[],
-        ("own", "own", "cloud-agent:own"),
-        now,
-        Some("America/Los_Angeles"),
+    let value = view(
+        &snapshot(
+            vec![member("own", "Owner", None, None)],
+            Some("America/Los_Angeles"),
+        ),
+        friday(),
     );
-    let value = data(&text);
     assert_eq!(value["now"], "Thursday 2026-11-12 19:00 -08:00");
     assert_eq!(value["nowTimeZone"], "America/Los_Angeles");
-    assert!(value["conversation"].get("title").is_none());
-    assert_eq!(value["people"][0]["isRequester"], true);
+}
+
+fn note_data(text: &str) -> Value {
+    assert!(text.starts_with("Runtime note for this turn"));
+    assert!(text.contains("untrusted"));
+    serde_json::from_str(&text[text.find('{').unwrap()..]).unwrap()
+}
+
+#[test]
+fn the_note_carries_the_time_and_members_only_when_they_changed() {
+    let members = || {
+        vec![
+            member("own", "Shu Yang", None, None),
+            member("req", "Sam", None, None),
+        ]
+    };
+    let (first, digest) = render_note(&snapshot(members(), None), friday(), None);
+    let data = note_data(&first);
+    assert_eq!(data["now"], "Friday 2026-11-13 03:00 UTC");
+    assert_eq!(data["members"]["people"].as_array().unwrap().len(), 2);
+
+    // Same members an hour later: only the time.
+    let later = friday() + chrono::Duration::hours(1);
+    let (second, same) = render_note(&snapshot(members(), None), later, Some(&digest));
+    assert_eq!(same, digest, "the digest ignores the time");
+    let data = note_data(&second);
+    assert_eq!(data["membersUnchanged"], true);
+    assert!(data.get("members").is_none());
+    assert_eq!(data["now"], "Friday 2026-11-13 04:00 UTC");
+
+    // Someone joined: the members come back.
+    let mut grown = members();
+    grown.push(member("new", "New Person", None, None));
+    let (third, changed) = render_note(&snapshot(grown, None), later, Some(&digest));
+    assert_ne!(changed, digest);
+    assert_eq!(
+        note_data(&third)["members"]["people"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
 }

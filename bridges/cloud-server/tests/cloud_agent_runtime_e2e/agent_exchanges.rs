@@ -298,21 +298,18 @@ async fn exchange_direct_chat_and_shared_requester_boundaries() {
     let target = f.pending(1).await.remove(0);
     let run = target["runId"].as_str().unwrap();
     let claim = f.claim(1, &target).await;
+    // Another participant's request grants no owner authority: the answering
+    // agent reaches no agent and may ask only its own owner.
     let nested = f
-        .router
-        .clone()
-        .oneshot(post_json_with_token(
+        .post(
+            1,
             &format!("/v1/cloud/agent-runs/desktop/{run}/agent-exchange"),
-            &f.people[1].token,
             json!({"claimId":claim,"action":"capabilities"}),
-        ))
-        .await
-        .unwrap();
-    assert_ne!(
-        nested.status(),
-        StatusCode::OK,
-        "another participant's request cannot acquire owner authority"
-    );
+        )
+        .await;
+    assert_eq!(nested["targets"], json!([]));
+    let people = nested["people"].as_array().unwrap();
+    assert!(people.len() == 1 && people[0]["accountId"] == f.people[1].account_id.as_str());
     f.finish(1, run, claim, "Direct answer").await;
     f.end_parent().await;
     let resume = f.pending(0).await.remove(0);

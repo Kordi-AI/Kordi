@@ -88,7 +88,7 @@ revalidate membership and the original source request. A removed member or
 deleted source cancels pending work. Replies are untrusted conversation data,
 not permission to access private resources. No project files, hidden history,
 or credentials are automatically attached. Shared recipient turns cannot
-redelegate. A root task has a bounded budget of eight exchanges.
+redelegate; they may only ask their own owner. A root task has a bounded budget of eight exchanges.
 
 The desktop checks server capability before advertising `reach_out`. Both
 local engines hide it without an attached runtime. Cloud leases explicitly
@@ -177,12 +177,38 @@ run that answers another agent's request, or a child task, cannot ask anyone.
 
 ## Conversation context
 
-Every run in a direct or group conversation carries a data-only block in its
-turn identity (`conversationContext`), built once on the server and shown by
-both the cloud runner and the Mac: the conversation kind and title, the active
-people with display name and @handle (owner and requester marked), their
-agents and whose they are, each person's profile location and time zone when
-set (not for people who declined AI), and the current time in the owner's
-time zone, else UTC. Names and profile fields are marked untrusted. The agent
-is told to use it instead of asking who is in the chat or where they are.
-Model and thinking-effort change notices never appear in run history.
+The system prompt prefix stays the same from run to run of an agent in a
+conversation, so providers can reuse it: it carries only stable guidance
+(including the reach_out rules), never per-run data. Per-run data goes to the
+tail of the context:
+
+- The turn identity (request, requester, policy) and a short runtime note:
+  the current time in the owner's time zone (else UTC), the members only when
+  they changed since the agent's previous run in this conversation, and whom
+  reach_out can reach for this request. The Mac stores it as a hidden message
+  before the request; the cloud runner sends it after the history (OMP: a
+  trailing message after the request). Every direct or group run carries it
+  from admission (`turn_identity`), whichever executor takes the run.
+- `read_session mode=info` returns the conversation kind and title, active
+  people with display name and @handle (owner and requester marked), their
+  agents and whose they are, each person's profile location and time zone
+  when set (not for people who declined AI), the current time, this task's
+  open questions, and live plan cards (summary). It is scoped to the run's
+  lease on the cloud runner and the Mac. Names and profile fields are
+  untrusted data.
+
+Stable guidance tells agents to use it instead of asking who is in the chat,
+where they are, or what day it is, and to reply in the language of the
+current request. Model and thinking-effort change notices never appear in
+run history.
+
+## Answering agents ask their own owner
+
+A run answering another agent's request may ask its own owner, and nobody
+else, through a person exchange (for example to confirm what it may share).
+It ends its turn with `waiting`; the asking agent's request then waits for
+that owner (its deadline extends past the owner's 24 hours and its question
+shows who it waits for). The owner's reply continues the answering agent,
+and its answer is published as the reply to the asking agent, which resumes
+as usual. When an agent cannot answer, the asking agent's continuation asks
+that agent's owner directly as a person instead of posting open questions.
