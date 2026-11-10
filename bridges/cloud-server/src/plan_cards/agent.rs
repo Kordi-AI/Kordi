@@ -369,16 +369,16 @@ async fn update(
 
 /// A live card a person's agent opened in this conversation in the last day
 /// for an overlapping time (or with no time yet): the System agent keeps its
-/// answers but opens no second card for the same plan.
+/// answers but opens no second card for the same plan. Returns the card and
+/// the agent's name.
 pub(super) async fn agent_card_for_same_plan(
     pool: &PgPool,
     conversation_id: Uuid,
     start_at: Option<&str>,
     end_at: Option<&str>,
 ) -> Result<Option<(String, String)>, sqlx_core::Error> {
-    query_as(concat!(
-        "SELECT card.event_id, COALESCE(card.created_by_agent_name, 'A person''s agent')
-         FROM cloud_plan_cards card
+    let found: Option<(String,)> = query_as(concat!(
+        "SELECT card.event_id FROM cloud_plan_cards card
          WHERE card.conversation_id = $1 AND card.created_by_agent_id IS NOT NULL
            AND card.created_at > now() - interval '1 day' AND ",
         crate::plan_cards::live_plan_card_sql!(),
@@ -391,20 +391,21 @@ pub(super) async fn agent_card_for_same_plan(
     .bind(start_at)
     .bind(end_at)
     .fetch_optional(pool)
-    .await
+    .await?;
+    match found {
+        Some((event_id,)) => opened_by_agent(pool, &event_id).await,
+        None => Ok(None),
+    }
 }
 
-/// Whether a person's agent opened this card.
+/// The card and the name of the person's agent that opened it, when one did.
 pub(super) async fn opened_by_agent(
     pool: &PgPool,
     event_id: &str,
-) -> Result<Option<String>, sqlx_core::Error> {
-    let row: Option<(Option<String>,)> = query_as(
-        "SELECT created_by_agent_name FROM cloud_plan_cards
-         WHERE event_id = $1 AND created_by_agent_id IS NOT NULL",
-    )
-    .bind(event_id)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row.map(|(name,)| name.unwrap_or_else(|| "A person's agent".to_string())))
+) -> Result<Option<(String, String)>, sqlx_core::Error> {
+    let card = super::store::load(pool, event_id).await?;
+    Ok(card.and_then(|card| {
+        let label = card.agent.as_ref()?.label();
+        Some((card.event_id, label))
+    }))
 }

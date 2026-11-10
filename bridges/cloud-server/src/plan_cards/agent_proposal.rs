@@ -181,13 +181,13 @@ pub(super) async fn proposal(
     request.into_args(Some(run.conversation))
 }
 
-/// "<owner>'s <agent>", as the card and calendar entries name the agent.
+/// The agent's own name and its owner's, as the card names the agent.
 pub(super) async fn agent_author(
     pool: &PgPool,
     run: &AgentRun,
 ) -> Result<PlanCardAgent, sqlx_core::Error> {
     let (owner_name, agent_name): (String, String) = query_as(
-        "SELECT COALESCE(NULLIF(trim(account.display_name), ''), 'Someone'),
+        "SELECT COALESCE(NULLIF(trim(account.display_name), ''), ''),
                 COALESCE(
                     (SELECT NULLIF(trim(definition.name), '') FROM cloud_agent_definitions definition
                      WHERE definition.agent_id = $2 AND definition.owner_account_id = $1),
@@ -203,6 +203,37 @@ pub(super) async fn agent_author(
     Ok(PlanCardAgent {
         agent_id: run.agent.clone(),
         owner_account_id: run.owner.clone(),
-        name: format!("{owner_name}'s {agent_name}"),
+        name: agent_name,
+        owner_name,
+        avatar_url: None,
+    })
+}
+
+/// The person's agent that opened a card, with its owner's current name and,
+/// for an owner's default agent, its picture.
+pub(super) async fn planner(
+    conn: &mut sqlx_postgres::PgConnection,
+    agent_id: String,
+    owner_account_id: String,
+    name: String,
+) -> Result<PlanCardAgent, sqlx_core::Error> {
+    let found: Option<(Option<String>, Option<String>)> = query_as(
+        "SELECT NULLIF(trim(account.display_name), ''),
+                (SELECT NULLIF(trim(profile.avatar_url), '') FROM cloud_default_agent_profiles profile
+                 WHERE profile.owner_account_id = account.account_id
+                   AND $2 = 'cloud-agent:' || account.account_id)
+         FROM cloud_accounts account WHERE account.account_id = $1",
+    )
+    .bind(&owner_account_id)
+    .bind(&agent_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let (owner_name, avatar_url) = found.unwrap_or_default();
+    Ok(PlanCardAgent {
+        agent_id,
+        owner_account_id,
+        name,
+        owner_name: owner_name.unwrap_or_default(),
+        avatar_url,
     })
 }

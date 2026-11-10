@@ -46,6 +46,11 @@ async fn chat() -> Chat {
     }
     let conversation = Uuid::new_v4();
     seed_conversation(&pool, conversation, &owner, &[&owner, &member]).await;
+    query("UPDATE cloud_accounts SET display_name = 'Ada' WHERE account_id = $1")
+        .bind(&owner)
+        .execute(&pool)
+        .await
+        .unwrap();
     query("UPDATE cloud_chat_conversations SET group_title = 'Team' WHERE conversation_id = $1")
         .bind(conversation)
         .execute(&pool)
@@ -54,7 +59,9 @@ async fn chat() -> Chat {
     let author = PlanCardAgent {
         agent_id: format!("cloud-agent:{owner}"),
         owner_account_id: owner.clone(),
-        name: "Ada's Kordi".to_string(),
+        name: "Kordi".to_string(),
+        owner_name: "Ada".to_string(),
+        avatar_url: None,
     };
     Chat {
         pool,
@@ -125,7 +132,15 @@ async fn a_confirmed_agent_plan_names_the_agent_in_calendar_entries() {
     let chat = chat().await;
     let card = chat.agent_card(at(3, 17)).await;
     let stored = card.agent.clone().expect("the card records its agent");
-    assert_eq!(stored, chat.author);
+    assert_eq!(
+        (&stored.agent_id, &stored.owner_account_id, stored.label()),
+        (
+            &chat.author.agent_id,
+            &chat.author.owner_account_id,
+            chat.author.label()
+        )
+    );
+    assert!(stored.avatar_url.is_some(), "the default agent's picture");
     super::store::rsvp(
         &chat.pool,
         &card.event_id,
