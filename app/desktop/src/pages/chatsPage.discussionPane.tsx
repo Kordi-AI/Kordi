@@ -1,10 +1,12 @@
 import type { ComponentProps } from 'react';
 
 import { localOwnedAgentSenderLabel } from '@/app/viewModels/helpers';
+import { MessageSeenByProvider } from '@/features/chat/MessageSeenByProvider';
 import { threadRootSource, type MessageThread } from '@/features/chat/messageThreads';
 import type { useThreadReadStatus } from '@/features/cloud/useThreadReadStatus';
 import type { Conversation, DesktopChatTurnSnapshot, QueuedDesktopChatMessage } from '@/kordi-app/types';
 import { ChatThreadPanel } from '@/pages/ChatThreadPanel';
+import { conversationIsGroupChat } from '@/pages/chatsPage.model';
 import type { ChatsPageComposer, ChatsPageRuntime, ChatsPageTranscript } from '@/pages/chatsPage.types';
 import type { useChatCollaborationRouting } from '@/pages/useChatCollaborationRouting';
 import type { useChatPins } from '@/pages/useChatPins';
@@ -49,7 +51,10 @@ export function chatDiscussionPane({
   if (!activeThread) return null;
   const loadedThreadPage = unreadThreads.page;
   const { composerSelection, composerProviderOptions, chatModelOptions } = runtime;
+  // The side panel sits outside the main transcript's provider; a group
+  // discussion offers the same Seen row on the viewer's own messages.
   return (
+    <MessageSeenByProvider isGroup={conversationIsGroupChat(activeConv)} participants={activeConv.canonicalParticipants}>
     <ChatThreadPanel
       conversation={activeConv}
       thread={activeThread}
@@ -123,5 +128,6 @@ export function chatDiscussionPane({
         onRequestUnpinMessage: pins.requestUnpin,
       }}
     />
+    </MessageSeenByProvider>
   );
 }
