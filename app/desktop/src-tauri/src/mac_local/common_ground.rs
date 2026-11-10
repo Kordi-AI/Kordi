@@ -86,8 +86,7 @@ pub async fn common_ground_device_request(
                 Source::Calendar => EKEntityType::Event,
                 Source::Reminders => EKEntityType::Reminder,
             };
-            let store = super::eventkit::store();
-            super::eventkit::request_full_access(&store, entity).map(|_| ())
+            super::eventkit::request_full_access(entity).map(|_| ())
         })
         .await??;
     }

@@ -191,21 +191,6 @@ type BootstrapConversationRow = (
     Option<Value>,
 );
 
-type MemberRow = (
-    String,
-    Option<String>,
-    Option<String>,
-    String,
-    Option<String>,
-    String,
-    String,
-    i32,
-    i64,
-    i64,
-    DateTime<Utc>,
-    Option<DateTime<Utc>>,
-);
-
 type MessageRow = (
     Uuid,
     Uuid,
@@ -262,6 +247,7 @@ mod cursors;
 mod grounding_origin;
 mod legacy_client_events;
 mod live_photo_validation;
+mod member_snapshots;
 mod members;
 mod message;
 mod organization;
@@ -273,6 +259,8 @@ mod subtyped_attachment_validation;
 pub use message::{update_voice_transcript, UpdateVoiceTranscriptRequest};
 mod pin_snapshots;
 mod reaction;
+mod readers;
+pub use readers::{message_readers, READERS_UNAVAILABLE_CODE};
 mod receipts;
 mod service_members;
 mod support;

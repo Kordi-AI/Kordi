@@ -5,6 +5,7 @@ import { isBuiltInAccountId, isSystemAccountId, KORDI_SYSTEM_NOTICE_KIND } from 
 import { normalizedLivePhoto } from '@/features/chat/livePhotos';
 import type { CloudMessage, CloudMessageAttachment, CloudVoiceMessage, SendCloudMessageAttachmentInput } from './authClient';
 import type { ChatSyncConversation, ChatSyncMessage } from './chatSyncTypes';
+import { chatSyncOtherReaders, chatSyncOwnMessagesReadThrough } from './chatSyncReadReceipts';
 import {
   encodeCloudGroupControl,
   isCloudGroupSessionId,
@@ -345,9 +346,7 @@ export function cloudMessageFromChatSync(
 ): CloudMessage {
   const peerAccountId = conversationPeer(conversation, viewerAccountId, message.sender_account_id);
   const outgoing = message.sender_account_id === viewerAccountId;
-  const otherMembers = conversation.members.filter(
-    (member) => member.account_id !== viewerAccountId && member.membership_state === 'active' && !isBuiltInAccountId(member.account_id),
-  );
+  const otherMembers = chatSyncOtherReaders(conversation, viewerAccountId);
   const readByAccountIds = otherMembers
     .filter((member) => member.last_read_sequence >= message.conversation_sequence)
     .map((member) => member.account_id)
@@ -358,7 +357,7 @@ export function cloudMessageFromChatSync(
     )
     : true;
   const read = outgoing
-    ? readByAccountIds.length > 0
+    ? message.conversation_sequence <= chatSyncOwnMessagesReadThrough(conversation, viewerAccountId)
     : conversation.members.some(
       (member) => member.account_id === viewerAccountId
         && member.last_read_sequence >= message.conversation_sequence,

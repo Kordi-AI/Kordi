@@ -10,6 +10,8 @@ export type ChatSyncMember = {
   version: number;
   last_delivered_sequence: number;
   last_read_sequence: number;
+  /** Highest sequence of this member's own messages another member has read. Absent on older servers. */
+  read_outbox_sequence?: number;
   joined_at: string;
   left_at: string | null;
 };

@@ -589,11 +589,7 @@ struct MessageBubble: View, Equatable {
             if showsMediaDeliveryStatus {
                 mediaDeliveryStatusOverlay
             } else {
-                MessageDeliveryGlyph(
-                    state: message.deliveryState,
-                    readByCount: message.readByCount,
-                    tint: bubbleDeliveryColor
-                )
+                MessageDeliveryGlyph(state: message.deliveryState, tint: bubbleDeliveryColor)
                 .font(.caption2)
                 .foregroundStyle(bubbleSecondaryTextColor)
                 .padding(.trailing, 8)
@@ -774,7 +770,6 @@ struct MessageBubble: View, Equatable {
                     reservesDeliveryStatus: message.author == .me && (!isThreadLayout || message.deliveryState != .read),
                     onPrepare: onPrepareVoiceMessage,
                     deliveryState: message.author == .me && message.agentQueuePosition == nil && (!isThreadLayout || message.deliveryState != .read) ? message.deliveryState : nil,
-                    readByCount: message.readByCount,
                     deliveryTint: bubbleDeliveryColor,
                     transcriptions: voiceTranscriptions,
                     isSender: message.author == .me,
@@ -882,11 +877,7 @@ struct MessageBubble: View, Equatable {
                     }
                     Text("edited", comment: "Message metadata indicating that its text was changed after sending.")
                     if message.author == .me, !isThreadLayout || message.deliveryState != .read {
-                        MessageDeliveryGlyph(
-                            state: message.deliveryState,
-                            readByCount: message.readByCount,
-                            tint: bubbleDeliveryColor
-                        )
+                        MessageDeliveryGlyph(state: message.deliveryState, tint: bubbleDeliveryColor)
                     }
                 }
                 .font(.caption2)
@@ -993,10 +984,7 @@ struct MessageBubble: View, Equatable {
         } else {
             HStack(spacing: 4) {
                 Text(message.createdAt, format: .dateTime.hour().minute())
-                MessageDeliveryGlyph(
-                    state: message.deliveryState,
-                    readByCount: message.readByCount
-                )
+                MessageDeliveryGlyph(state: message.deliveryState)
             }
             .font(.caption2.weight(.semibold))
             .monospacedDigit()
@@ -1302,11 +1290,10 @@ struct MessageBubble: View, Equatable {
     }
 
     private var accessibilityLabel: String {
-        let receipt = if message.deliveryState == .read, let count = message.readByCount, count > 0 {
-            "Seen by \(count)"
-        } else {
-            message.deliveryState.label
-        }
+        // Your own message says Sent or Seen, with no reader count (#2455).
+        // Someone else's says nothing about receipts unless its reply failed.
+        let receipt = message.author == .me || ![MessageDeliveryState.sent, .read].contains(message.deliveryState)
+            ? ", \(message.deliveryState.label)" : ""
         let attachmentLabel = message.voiceMessage != nil
             ? ", voice message"
             : message.attachments.contains(where: { $0.isPlayableVideo })
@@ -1319,7 +1306,7 @@ struct MessageBubble: View, Equatable {
         )
         // A voice transcript update sets editedAt, but the message itself did not change.
         let editedLabel = message.isEdited && message.voiceMessage == nil ? ", edited" : ""
-        return "\(message.authorName), \(messageText)\(attachmentLabel)\(editedLabel), \(receipt)"
+        return "\(message.authorName), \(messageText)\(attachmentLabel)\(editedLabel)\(receipt)"
     }
 
     private func attachmentCountText(_ count: Int) -> String {
@@ -3735,9 +3722,9 @@ enum AttachmentImageDecoder {
     }
 }
 
+/// One tick once the server has the message, two once it is read; no reader count (#2455).
 struct MessageDeliveryGlyph: View {
     let state: MessageDeliveryState
-    let readByCount: Int?
     var tint: Color? = nil
 
     var body: some View {
@@ -3750,7 +3737,7 @@ struct MessageDeliveryGlyph: View {
         }
         .font(.caption2.weight(.semibold))
         .frame(width: 16, height: 14)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(state.label)
     }
 
     private var glyph: some View {
@@ -3759,7 +3746,7 @@ struct MessageDeliveryGlyph: View {
             case .sending:
                 Image(systemName: "clock")
                     .symbolEffect(.pulse)
-            case .sent, .delivered:
+            case .sent:
                 Image(systemName: "checkmark")
             case .read:
                 ZStack {
@@ -3773,13 +3760,6 @@ struct MessageDeliveryGlyph: View {
                 Image(systemName: "xmark")
             }
         }
-    }
-
-    private var accessibilityLabel: String {
-        if state == .read, let readByCount, readByCount > 0 {
-            return "Seen by \(readByCount)"
-        }
-        return state.label
     }
 }
 

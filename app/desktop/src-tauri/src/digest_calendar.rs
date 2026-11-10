@@ -184,7 +184,7 @@ pub async fn clear_reminders(account_id: Option<String>) {
 #[cfg(target_os = "macos")]
 pub(crate) mod native {
     use super::*;
-    pub(crate) use crate::mac_local::eventkit::store;
+    pub(crate) use crate::mac_local::eventkit::with_store;
     use objc2_event_kit::{EKAuthorizationStatus, EKEntityType, EKEvent, EKEventStore};
     use objc2_foundation::{NSArray, NSDate};
     /// Stable identity for a device event. Occurrences of a repeating event share the item
@@ -268,26 +268,27 @@ pub(crate) mod native {
             })
         }
     }
-    pub(crate) fn access(store: &EKEventStore) -> Result<(), String> {
-        if !crate::mac_local::eventkit::request_full_access(store, EKEntityType::Event)? {
+    pub(crate) fn access() -> Result<(), String> {
+        if !crate::mac_local::eventkit::request_full_access(EKEntityType::Event)? {
             return Err("Calendar access is off. Allow Kordi in Privacy & Security → Calendars, or import ICS.".into());
         }
         Ok(())
     }
     pub fn calendars() -> Result<Vec<DeviceCalendar>, String> {
-        let store = store();
-        access(&store)?;
-        // EventKit objects stay on this blocking thread; only owned strings cross the boundary.
-        Ok(unsafe { store.calendarsForEntityType(EKEntityType::Event) }
-            .iter()
-            .map(|c| unsafe {
-                DeviceCalendar {
-                    id: c.calendarIdentifier().to_string(),
-                    title: c.title().to_string(),
-                    allows_modifications: c.allowsContentModifications(),
-                }
-            })
-            .collect())
+        access()?;
+        // EventKit objects stay inside the store call; only owned strings leave it.
+        Ok(with_store(|store| {
+            unsafe { store.calendarsForEntityType(EKEntityType::Event) }
+                .iter()
+                .map(|c| unsafe {
+                    DeviceCalendar {
+                        id: c.calendarIdentifier().to_string(),
+                        title: c.title().to_string(),
+                        allows_modifications: c.allowsContentModifications(),
+                    }
+                })
+                .collect()
+        }))
     }
     pub fn events(
         ids: Vec<String>,
@@ -303,12 +304,19 @@ pub(crate) mod native {
         if end <= start || end.signed_duration_since(start) > chrono::Duration::days(366) {
             return Err("Choose a range of up to one year.".into());
         }
-        let store = store();
         if unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) }
             != EKAuthorizationStatus::FullAccess
         {
             return Err("Calendar permission was revoked.".into());
         }
+        with_store(|store| selected_events(store, &ids, start, end))
+    }
+    fn selected_events(
+        store: &EKEventStore,
+        ids: &[String],
+        start: chrono::DateTime<chrono::FixedOffset>,
+        end: chrono::DateTime<chrono::FixedOffset>,
+    ) -> Result<Vec<CalendarEvent>, String> {
         let selected: Vec<_> = unsafe { store.calendarsForEntityType(EKEntityType::Event) }
             .iter()
             .filter(|c| ids.contains(&unsafe { c.calendarIdentifier() }.to_string()))

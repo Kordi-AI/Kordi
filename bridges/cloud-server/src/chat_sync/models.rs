@@ -34,6 +34,10 @@ pub struct MemberSnapshot {
     pub version: i32,
     pub last_delivered_sequence: i64,
     pub last_read_sequence: i64,
+    /// The highest sequence of this member's own messages that another member
+    /// has read; 0 when none. Stored operation results predate it.
+    #[serde(default)]
+    pub read_outbox_sequence: i64,
     pub joined_at: DateTime<Utc>,
     pub left_at: Option<DateTime<Utc>>,
 }
@@ -228,6 +232,24 @@ pub struct ThreadReadSnapshot {
     pub root_message_id: Uuid,
     pub root_client_message_id: Uuid,
     pub last_read_sequence: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReadersQuery {
+    pub limit: Option<i64>,
+}
+
+/// Who read one of the caller's messages (issue #2455).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct MessageReadersResponse {
+    pub total: i64,
+    pub readers: Vec<MessageReader>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct MessageReader {
+    pub account_id: String,
+    pub read_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]

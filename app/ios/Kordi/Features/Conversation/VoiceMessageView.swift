@@ -1006,7 +1006,6 @@ struct VoiceMessageBubbleContent: View {
     let reservesDeliveryStatus: Bool
     let onPrepare: (VoiceMessage) async -> URL?
     var deliveryState: MessageDeliveryState? = nil
-    var readByCount: Int? = nil
     var deliveryTint: Color? = nil
     var transcriptions: VoiceTranscriptionJobs? = nil
     var isSender = false
@@ -1111,7 +1110,7 @@ struct VoiceMessageBubbleContent: View {
 
                         if reservesDeliveryStatus {
                             if let deliveryState {
-                                MessageDeliveryGlyph(state: deliveryState, readByCount: readByCount, tint: deliveryTint)
+                                MessageDeliveryGlyph(state: deliveryState, tint: deliveryTint)
                                     .allowsHitTesting(false)
                             } else {
                                 Color.clear.frame(width: 16, height: 14).accessibilityHidden(true)

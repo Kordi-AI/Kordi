@@ -52,14 +52,14 @@ final class ConversationSendQueueTests: XCTestCase {
     func testPendingSendsStayAfterConfirmedMessagesWithAnOlderDeviceClock() {
         let model = AppModel(previewMode: true)
         let conversation = orderingConversation()
-        let confirmed = orderingMessage("confirmed", sequence: 40, time: 100, state: .delivered)
+        let confirmed = orderingMessage("confirmed", sequence: 40, time: 100, state: .sent)
         let first = orderingMessage("draft-first", clientID: "first", time: 1, state: .sending)
         let second = orderingMessage("draft-second", clientID: "second", time: 2, state: .sending)
         [confirmed, first, second].forEach(model.upsertPreviewMessage)
 
         XCTAssertEqual(model.messages(for: conversation).map(\.id), ["confirmed", "draft-first", "draft-second"])
 
-        let acknowledged = orderingMessage("server-first", clientID: "first", sequence: 41, time: 101, state: .delivered)
+        let acknowledged = orderingMessage("server-first", clientID: "first", sequence: 41, time: 101, state: .sent)
         let reconciled = AppModel.mergePartialProjection([acknowledged], preserving: [confirmed, first, second])
         let acknowledgedModel = AppModel(previewMode: true)
         reconciled.forEach(acknowledgedModel.upsertPreviewMessage)
@@ -71,7 +71,7 @@ final class ConversationSendQueueTests: XCTestCase {
         let model = AppModel(previewMode: true)
         let conversation = orderingConversation()
         let history = orderingMessage("imported-history", sequence: 90, time: 50, state: .read)
-        let confirmed = orderingMessage("confirmed", sequence: 40, time: 100, state: .delivered)
+        let confirmed = orderingMessage("confirmed", sequence: 40, time: 100, state: .sent)
         let pending = orderingMessage("draft", time: 1, state: .sending)
         [confirmed, pending, history].forEach(model.upsertPreviewMessage)
 
@@ -84,9 +84,9 @@ final class ConversationSendQueueTests: XCTestCase {
         for kind in [ConversationKind.group, .agent] {
             let model = AppModel(previewMode: true)
             let conversation = orderingConversation(kind: kind)
-            let confirmed = orderingMessage("confirmed", sequence: 40, time: 100, state: .delivered)
+            let confirmed = orderingMessage("confirmed", sequence: 40, time: 100, state: .sent)
             let pending = orderingMessage("draft", clientID: "draft-client", time: 1, state: .sending)
-            let progress = orderingMessage("progress", time: 1.001, state: .delivered,
+            let progress = orderingMessage("progress", time: 1.001, state: .sent,
                 author: .agent, requestID: "draft-client")
             [pending, progress, confirmed].forEach(model.upsertPreviewMessage)
 
@@ -96,12 +96,12 @@ final class ConversationSendQueueTests: XCTestCase {
 
     func testOlderFailureDoesNotMoveAfterNewAcknowledgedMessages() {
         let failed = orderingMessage("failed", time: 2, state: .failed)
-        let later = orderingMessage("later", sequence: 41, time: 3, state: .delivered)
+        let later = orderingMessage("later", sequence: 41, time: 3, state: .sent)
         XCTAssertEqual(ConversationMessageOrdering.displayMessages([later, failed]).map(\.id), ["failed", "later"])
     }
 
     func testAnchoredFailureRetainsItsPlaceAcrossRetryAndAcknowledgement() {
-        let confirmed = orderingMessage("confirmed", sequence: 40, time: 100, state: .delivered)
+        let confirmed = orderingMessage("confirmed", sequence: 40, time: 100, state: .sent)
         var draft = orderingMessage("draft", clientID: "draft-client", time: 1, state: .failed)
         draft.localTimelineAnchorID = "confirmed"
         var newer = orderingMessage("new", clientID: "new-client", time: 2, state: .sending)
@@ -110,12 +110,12 @@ final class ConversationSendQueueTests: XCTestCase {
             draft.deliveryState = state
             XCTAssertEqual(ConversationMessageOrdering.displayMessages([newer, draft, confirmed]).map(\.id), ["confirmed", "draft", "new"])
         }
-        let accepted = orderingMessage("server-new", clientID: "new-client", sequence: 41, time: 101, state: .delivered)
+        let accepted = orderingMessage("server-new", clientID: "new-client", sequence: 41, time: 101, state: .sent)
         XCTAssertEqual(ConversationMessageOrdering.displayMessages([accepted, draft, confirmed]).map(\.id), ["confirmed", "draft", "server-new"])
     }
 
     func testAnchorFollowsAcknowledgedClientIdentityAndSurvivesCacheRoundTrip() throws {
-        let accepted = orderingMessage("server-first", clientID: "first-client", sequence: 41, time: 101, state: .delivered)
+        let accepted = orderingMessage("server-first", clientID: "first-client", sequence: 41, time: 101, state: .sent)
         var pending = orderingMessage("pending", time: 1, state: .sending)
         pending.localTimelineAnchorID = "first-client"
         let restored = try JSONDecoder().decode(ChatMessage.self, from: JSONEncoder().encode(pending))
@@ -137,7 +137,7 @@ final class ConversationSendQueueTests: XCTestCase {
         let model = AppModel(previewMode: true)
         let conversation = orderingConversation()
         let failed = orderingMessage("failed", time: 1, state: .failed)
-        let later = orderingMessage("later", sequence: 42, time: 2, state: .delivered)
+        let later = orderingMessage("later", sequence: 42, time: 2, state: .sent)
         [failed, later].forEach(model.upsertPreviewMessage)
         let sharedDelete = await model.deleteMessage(failed, forEveryone: true, in: conversation)
         XCTAssertFalse(sharedDelete)
@@ -148,7 +148,7 @@ final class ConversationSendQueueTests: XCTestCase {
 
     func testRemovingFailureReanchorsLaterPendingSends() async {
         let model = AppModel(previewMode: true)
-        let confirmed = orderingMessage("confirmed", sequence: 40, time: 100, state: .delivered)
+        let confirmed = orderingMessage("confirmed", sequence: 40, time: 100, state: .sent)
         var failed = orderingMessage("failed", clientID: "failed-client", time: 1, state: .failed)
         failed.localTimelineAnchorID = "confirmed"
         var pending = orderingMessage("pending", time: 2, state: .sending)
@@ -186,7 +186,7 @@ final class ConversationSendQueueTests: XCTestCase {
         let conversation = orderingConversation()
         let accountID = try XCTUnwrap(model.account?.accountId)
         var messages = (0..<40).map { index in
-            orderingMessage("history-\(index)", sequence: Int64(index + 1), time: Double(100 + index), state: .delivered)
+            orderingMessage("history-\(index)", sequence: Int64(index + 1), time: Double(100 + index), state: .sent)
         }
         messages.append(orderingMessage("old-failure", time: 135.5, state: .failed))
         store.saveMessages(messages, conversationId: conversation.id, accountId: accountID, hasEarlier: false)

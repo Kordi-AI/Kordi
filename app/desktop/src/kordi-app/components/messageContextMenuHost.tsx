@@ -15,7 +15,11 @@ type ContextMenuState = {
   clientY: number;
   targetRect: Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom'>;
   mediaAttachment: MessageAttachment | null;
+  /** Each opening loads its own data, such as who has seen the message. */
+  openId: number;
 };
+
+let nextMessageContextMenuOpenId = 0;
 
 export function MessageContextMenuHost({
   msg, id, className, children, onPointerDown, onPointerEnter, onPointerMove,
@@ -58,6 +62,7 @@ export function MessageContextMenuHost({
       clientY: event.clientY,
       targetRect,
       mediaAttachment: messageContextMenuMediaAttachment(msg, eventTarget),
+      openId: ++nextMessageContextMenuOpenId,
     });
   };
 
@@ -116,6 +121,7 @@ export function MessageContextMenuHost({
       role="menu"
     >
       <MessageContextMenuContent
+        key={menu.openId}
         msg={msg}
         onClose={() => setMenu(null)}
         onReplyMessage={onReplyMessage}
