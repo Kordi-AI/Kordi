@@ -102,6 +102,11 @@ export async function resolvePreferredAgentMentionTarget(
       targetKind: 'agent',
       sharedCloudAgents,
       localAccountId: activeHost?.humanId ?? activeHost?.nodeId ?? null,
+      // The viewer's own agent keeps its handle; another agent of the same
+      // name needs its own, so a typed handle never picks the wrong agent.
+      reservedHandles: canResolveLocal
+        ? localAgentMentionLabels(desktopChatState, collaborationState).filter((label) => normalizeMentionLabel(label) !== 'kordi')
+        : [],
     },
   );
   const localCandidate = !skip && canResolveLocal

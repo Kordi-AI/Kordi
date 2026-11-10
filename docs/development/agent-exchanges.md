@@ -40,7 +40,8 @@ The agent mentioned first leads the request; agents mentioned later are its
 discussion partners. Only the leading agent runs, and its prompt keeps the
 partner's mention so it can `reach_out` to it. When the sender's own agent
 leads in a direct or group chat, it runs on the sender's Mac as the owner's
-own request, which is the only kind of run that may reach other agents.
+own request, which may reach any agent; another person's request may reach
+only that person's own agents.
 
 An owner can ask agents to keep talking, discuss, or align. Each continuation
 may answer back with one new `reach_out` to the same agent and yield with
@@ -80,7 +81,10 @@ leases, rather than adopting a second message server or chat read cursor.
 ## Authorization
 
 Only a live execution lease for an owner's own request can send outreach to
-agents; another person's request can only ask that person (see below).
+any agent; another person's request can only ask that person or reach their
+own agents (see below). Only a person's message starts an agent's run: an
+agent's reply that mentions another agent starts nothing, since agents reach
+each other only through reach_out.
 Targets must be active agents belonging to current conversation members;
 custom agents must allow participant conversations. Handles must be unique,
 or the caller must supply the exact agent ID. Both execution and publication
@@ -170,8 +174,10 @@ same agent supersedes and cancels the open question. In the owner's private
 agent chat every message already reaches the agent, so nobody there is a target.
 
 A run requested by someone other than the agent's owner may ask only that
-requester: the capability lists no agents and only them, any other target is
-refused, and owner-private tools, calendar, and connectors stay unavailable.
+requester, or reach the requester's own agents (which then answer with their
+owner's authority, since the requester owns them): any other agent or person
+is refused, and the asking agent's owner-private tools, calendar, and
+connectors stay unavailable.
 The continuation keeps the same owner and requester and the same limits. A
 run that answers another agent's request, or a child task, cannot ask anyone.
 
@@ -223,3 +229,16 @@ answer it continues from. The run's answer replaces that row in place. A run
 that ends silently or waits retires the row (complete, empty, synchronization
 only); a failure shows the failure and a stop shows "Stopped". The server
 ends every such row, so the desktop keeps it without a heartbeat.
+
+## Identity, not names
+
+Two people, and so their agents, can share a name. Agent and person handles
+are unique within a conversation: a handle two entries would share gets the
+owner's suffix (public handle, else the end of the account number), in the
+reach_out directory, `read_session mode=info`, and the desktop mention list,
+where the viewer's own agent keeps its plain handle and every other agent
+shows its owner. Routing follows the structured agent id of a mention, never
+the text handle; a text-only mention that matches more than one agent starts
+no run. `read_session mode=info` marks `ownerAccountId` and
+`requesterAccountId`, and stable guidance tells agents to identify people and
+agents by id or handle, never by display name.

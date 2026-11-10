@@ -48,7 +48,8 @@ impl Parent {
     }
 
     /// Whether this run may use reach_out at all. The owner's own request
-    /// keeps every target; another person's request may only ask them back;
+    /// keeps every target; another person's request may only ask them back
+    /// or reach their own agents;
     /// a run answering another agent may only ask its own owner, outside the
     /// owner's private agent chat. A child task keeps its parent's rule for
     /// the owner's own request and asks nobody otherwise.
@@ -131,12 +132,16 @@ fn normalized(value: &str) -> String {
 
 /// The agents a run may reach out to; agents whose owner stopped the run's
 /// requester, or the owner of the agent reaching out, from using them, and
-/// agents whose Access is private to their owner, are left out. A run
-/// limited to one person (see `Parent::only_person`) reaches no agent.
+/// agents whose Access is private to their owner, are left out. A request
+/// made by someone other than the owner reaches only that requester's own
+/// agents, and a run answering another agent reaches none.
 pub(super) async fn directory(pool: &PgPool, parent: &Parent) -> RunResult<Vec<Target>> {
-    if parent.only_person().is_some() {
+    // An answering run reaches no agent; another person's request reaches
+    // only that requester's own agents.
+    if parent.answering.is_some() || !parent.may_reach_out() {
         return Ok(Vec::new());
     }
+    let only_owner = parent.only_person();
     let rows: Vec<(String,String,String,String)> = query_as(&format!(
         "SELECT 'cloud-agent:'||a.account_id,a.account_id,COALESCE(p.display_name,'Kordi'),a.display_name FROM cloud_chat_conversation_members m JOIN cloud_accounts a USING(account_id) LEFT JOIN cloud_default_agent_profiles p ON p.owner_account_id=a.account_id WHERE m.conversation_id=$1 AND m.membership_state='active' AND {member_allowed} AND {member_go_between} AND {member_access} AND {member_go_between_access}
          UNION ALL SELECT d.agent_id,d.owner_account_id,d.name,a.display_name FROM cloud_agent_definitions d JOIN cloud_accounts a ON a.account_id=d.owner_account_id JOIN cloud_chat_conversation_members m ON m.account_id=d.owner_account_id WHERE m.conversation_id=$1 AND m.membership_state='active' AND d.status='active' AND d.access_scope='participant_conversations' AND {definition_allowed} AND {definition_go_between}
@@ -155,7 +160,8 @@ pub(super) async fn directory(pool: &PgPool, parent: &Parent) -> RunResult<Vec<T
     let rows = rows
         .into_iter()
         .filter(|r| !blocked.iter().any(|(id,)| *id == r.1));
-    Ok(rows
+    let mut targets: Vec<Target> = rows
+        .filter(|r| only_owner.is_none_or(|owner| r.1 == owner))
         .filter(|r| r.0 != parent.agent && !crate::system_account::is_service_account(&r.1))
         .map(|(agent_id, owner_account_id, name, owner_name)| {
             let handle = format!("{name} {owner_name}")
@@ -171,7 +177,15 @@ pub(super) async fn directory(pool: &PgPool, parent: &Parent) -> RunResult<Vec<T
                 handle,
             }
         })
-        .collect())
+        .collect();
+    // Names can repeat; each agent's handle is unique, told apart by its owner.
+    let owners: Vec<String> = targets.iter().map(|t| t.owner_account_id.clone()).collect();
+    let mut handles: Vec<String> = targets.iter().map(|t| t.handle.clone()).collect();
+    super::super::conversation_context::unique_owner_handles(pool, &mut handles, &owners).await?;
+    for (target, handle) in targets.iter_mut().zip(handles) {
+        target.handle = handle;
+    }
+    Ok(targets)
 }
 
 pub(super) fn resolve_target<'a>(targets: &'a [Target], value: &str) -> RunResult<&'a Target> {
@@ -212,8 +226,9 @@ pub(super) async fn send(
     if let Some(person) = super::person::requested(pool, parent, args, target_ref).await? {
         return super::person::send(pool, parent, executor, account, key, text, &person).await;
     }
-    // A run limited to one person reaches no agent.
-    if parent.only_person().is_some() {
+    // An answering run reaches no agent (the directory below enforces whose
+    // agents another person's request may reach).
+    if parent.answering.is_some() {
         return Err(RunError::NotFound);
     }
     let targets = directory(pool, parent).await?;

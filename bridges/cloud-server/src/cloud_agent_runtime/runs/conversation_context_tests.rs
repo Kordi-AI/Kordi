@@ -9,6 +9,7 @@ fn member(id: &str, name: &str, location: Option<&str>, zone: Option<&str>) -> M
         location: location.map(Into::into),
         time_zone: zone.map(Into::into),
         ai_allowed: true,
+        suffix: format!("{id}1234"),
     }
 }
 
@@ -148,4 +149,44 @@ fn the_note_carries_the_time_and_members_only_when_they_changed() {
             .len(),
         3
     );
+}
+
+#[test]
+fn people_and_agents_with_the_same_name_get_unique_handles_and_ids_decide() {
+    let mut snapshot = snapshot(
+        vec![
+            member("own", "Shu Yang", None, None),
+            member("req", "shu yang", None, None),
+        ],
+        None,
+    );
+    snapshot.members[1].suffix = "5033".into();
+    let value = view(&snapshot, friday());
+    let handles: Vec<&str> = value["people"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["handle"].as_str().unwrap())
+        .collect();
+    assert_eq!(handles, ["@ShuYangown1234", "@shuyang5033"]);
+    let agents: Vec<&str> = value["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["handle"].as_str().unwrap())
+        .collect();
+    assert_eq!(agents, ["@KordiShuYangown1234", "@Kordishuyang5033"]);
+    assert_eq!(value["ownerAccountId"], "own");
+    assert_eq!(value["requesterAccountId"], "req");
+    assert!(value["identity"]
+        .as_str()
+        .unwrap()
+        .contains("never by display name"));
+}
+
+#[test]
+fn unique_handles_leave_distinct_handles_alone() {
+    let mut handles = vec!["@Maya".to_string(), "@Sam".to_string()];
+    unique_handles(&mut handles, &["a".into(), "b".into()]);
+    assert_eq!(handles, ["@Maya", "@Sam"]);
 }
