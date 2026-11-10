@@ -224,6 +224,8 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
     ),
     setHidden: (hidden: string[], profileId?: string | null) => data<CgOwnerView>('PUT', cg('card/hidden'), withProfileId({ hidden }, profileId)),
     setSharing: (sharing: boolean, profileId?: string | null) => data<CgOwnerView>('PUT', cg('settings'), withProfileId({ sharing }, profileId)),
+    /** "Rebuild automatically" for one card; the body carries only this field. */
+    setAutoRebuild: (autoRebuild: boolean, profileId?: string | null) => data<CgOwnerView>('PUT', cg('settings'), withProfileId({ autoRebuild }, profileId)),
     rooms: async () => {
       const list = await data<{ rooms?: Array<Partial<CgRoomSummary> & { code: string }> }>('GET', cg('rooms'));
       return (list?.rooms ?? []).map(roomSummary);

@@ -95,6 +95,8 @@ final class CommonGroundModel: ObservableObject {
     var isBuilding: Bool { owner?.build.status == "building" }
     var buildFailed: Bool { owner?.build.status == "failed" }
     var sharing: Bool { owner?.sharing ?? true }
+    /// The "Rebuild automatically" switch; nil hides the row (older server).
+    var autoRebuild: Bool? { owner?.autoRebuild }
 
     /// The topics others see: the card minus hidden ones.
     var myTopics: [String] {
@@ -325,6 +327,14 @@ final class CommonGroundModel: ObservableObject {
         let profileId = activeProfileID
         guard let saved = await run("sharing", {
             try await $0.setCommonGroundSharing(token: $1, sharing: sharing, profileId: profileId)
+        }) else { return }
+        apply(saved)
+    }
+
+    func setAutoRebuild(_ autoRebuild: Bool) async {
+        let profileId = activeProfileID
+        guard let saved = await run("autoRebuild", {
+            try await $0.setCommonGroundAutoRebuild(token: $1, autoRebuild: autoRebuild, profileId: profileId)
         }) else { return }
         apply(saved)
     }

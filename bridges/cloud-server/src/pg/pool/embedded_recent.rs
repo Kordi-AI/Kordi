@@ -476,7 +476,12 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
     ),
     migration!(
         188,
+        "common ground auto rebuild",
+        "0188_common_ground_auto_rebuild.sql"
+    ),
+    migration!(
+        189,
         "document outside room revision",
-        "0188_document_outside_room_revision.sql"
+        "0189_document_outside_room_revision.sql"
     ),
 ];

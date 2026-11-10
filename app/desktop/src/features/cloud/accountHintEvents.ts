@@ -11,9 +11,12 @@
  * runs like a proactive evaluation.
  * `common_ground.nearby.updated`
  * and `common_ground.nearby.alert` refresh open Grounding Nearby views
- * (`features/commonGround/nearbyHints`).
+ * (`features/commonGround/nearbyHints`). `common_ground.card.updated` (a card
+ * build finished, by hand or automatically) refreshes an open Grounding page
+ * (`features/commonGround/cardHints`).
  */
 export const ACCOUNT_HINT_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'common_ground.card.updated',
   'common_ground.nearby.alert',
   'common_ground.nearby.updated',
   'digest.run_requested',

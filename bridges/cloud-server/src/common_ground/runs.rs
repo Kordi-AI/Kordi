@@ -172,6 +172,8 @@ pub async fn complete(
 ) -> sqlx_core::Result<()> {
     if run_id.starts_with(CARD_PREFIX) {
         super::build::complete(pool, run_id, runner_id, text).await
+    } else if run_id.starts_with(super::auto::AUTO_PREFIX) {
+        super::auto::complete(pool, run_id, runner_id, text).await
     } else if run_id.starts_with(INTRO_PREFIX) {
         super::intro::complete(pool, run_id, runner_id, text).await
     } else if run_id.starts_with(super::nearby::NEED_PREFIX) {
@@ -189,6 +191,8 @@ pub async fn fail(
 ) -> sqlx_core::Result<()> {
     if run_id.starts_with(CARD_PREFIX) {
         super::build::fail(pool, run_id, runner_id, code).await
+    } else if run_id.starts_with(super::auto::AUTO_PREFIX) {
+        super::auto::fail(pool, run_id, runner_id, code).await
     } else if run_id.starts_with(INTRO_PREFIX) {
         super::intro::fail(pool, run_id, runner_id, code).await
     } else if run_id.starts_with(super::nearby::NEED_PREFIX) {

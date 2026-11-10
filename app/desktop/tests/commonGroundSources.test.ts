@@ -19,7 +19,7 @@ const saved: CgSourcePicks = {
   memory: true, connectors: ['gmail', 'slack'], device: ['calendar'], agents: false, documents: ['att_1', 'att_2'], links: 'kordi.ai', notes: '',
 };
 
-test('sources: the screen opens with the saved picks, and Rebuild from memory turns Memory on', () => {
+test('sources: the screen opens with the saved picks, and Rebuild on the card page turns Memory on', () => {
   assert.deepEqual(initialPicks(null), NO_PICKS);
   assert.deepEqual(initialPicks(saved), saved);
   assert.deepEqual(initialPicks({ ...saved, memory: false }, true), saved);

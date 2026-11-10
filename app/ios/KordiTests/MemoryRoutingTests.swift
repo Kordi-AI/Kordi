@@ -129,6 +129,16 @@ final class MemoryRoutingTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(CommonGroundOwnerView.self, from: Data(json.utf8)).memoriesSinceBuild, 3)
     }
 
+    func testOwnerViewDecodesAutoRebuildFields() throws {
+        let old = try JSONDecoder().decode(CommonGroundOwnerView.self, from: Data(CommonGroundTests.ownerJSON.utf8))
+        XCTAssertNil(old.autoRebuild)
+        XCTAssertNil(old.autoUpdating)
+        let json = #"{"card": null, "sharing": true, "build": {"status": "idle", "errorCode": null}, "autoRebuild": true, "autoUpdating": true}"#
+        let view = try JSONDecoder().decode(CommonGroundOwnerView.self, from: Data(json.utf8))
+        XCTAssertEqual(view.autoRebuild, true)
+        XCTAssertEqual(view.autoUpdating, true)
+    }
+
     func testMemoriesSinceBuildCaption() {
         XCTAssertNil(MemoryPresentation.memoriesSinceBuildCaption(nil))
         XCTAssertNil(MemoryPresentation.memoriesSinceBuildCaption(0))
@@ -140,6 +150,17 @@ final class MemoryRoutingTests: XCTestCase {
         XCTAssertFalse(MemoryPresentation.hasProfileRouting(nil))
         XCTAssertFalse(MemoryPresentation.hasProfileRouting(CloudAuthCapabilities(memoryVersion: 1)))
         XCTAssertTrue(MemoryPresentation.hasProfileRouting(CloudAuthCapabilities(memoryVersion: 2)))
+    }
+
+    @MainActor
+    func testRebuildCaptionShowsUpdatingWhileAutoUpdating() throws {
+        let me = CommonGroundPerson(accountId: "acct_a", name: "Alex", avatarUrl: nil)
+        let model = CommonGroundModel(me: me, profilesEnabled: true, memoriesEnabled: true, context: { throw CancellationError() })
+        let base = #"{"card": null, "sharing": true, "build": {"status": "idle", "errorCode": null}, "memoriesSinceBuild": 3, "autoRebuild": true"#
+        model.apply(try JSONDecoder().decode(CommonGroundOwnerView.self, from: Data((base + "}").utf8)))
+        XCTAssertEqual(model.memoriesSinceBuildCaption, "3 new memories since this card was built")
+        model.apply(try JSONDecoder().decode(CommonGroundOwnerView.self, from: Data((base + #", "autoUpdating": true}"#).utf8)))
+        XCTAssertEqual(model.memoriesSinceBuildCaption, "Updating")
     }
 
     @MainActor
