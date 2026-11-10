@@ -1,6 +1,6 @@
 //! Receipt, continuation, and acknowledgement are separate durable transitions.
 use super::*;
-use store::{authorize, insert_run, publish};
+use store::{authorize, insert_run, publish_state};
 
 type PendingExchangeRow = (
     String,
@@ -35,7 +35,7 @@ pub(crate) async fn finish(
     let text = if success {
         text.trim()
     } else {
-        "The agent could not complete this request, so no answer is available. Please try again."
+        super::slots::FAILED_TEXT
     };
     if text.is_empty() || text.len() > 128_000 {
         return Err(RunError::NotFound);
@@ -72,25 +72,32 @@ pub(crate) async fn finish(
         }
         None => (id, reply_to),
     };
+    let slot = format!(
+        "{PREFIX}{reply_exchange}:{}",
+        if target || answered.is_some() {
+            "reply"
+        } else {
+            "continued"
+        }
+    );
     let message = if silent {
+        // Silent or waiting: the processing row leaves without a bubble.
+        if let Some(row) = super::slots::slot_id(&slot) {
+            super::slots::finish(&mut tx, &parent.owner, row, super::slots::Ending::Retired)
+                .await?;
+        }
         None
     } else {
         Some(
-            publish(
+            publish_state(
                 &mut tx,
                 &parent,
                 &parent.owner,
                 &parent.agent,
-                &format!(
-                    "{PREFIX}{reply_exchange}:{}",
-                    if target || answered.is_some() {
-                        "reply"
-                    } else {
-                        "continued"
-                    }
-                ),
+                &slot,
                 text,
                 reply_to,
+                if success { "complete" } else { "failed" },
             )
             .await?,
         )
@@ -276,6 +283,45 @@ pub(crate) async fn reconcile(pool: &PgPool) -> RunResult<()> {
             ready,
         )
         .await?;
+        // The resume run's processing row shows at once: an answering agent
+        // reopens its reply to the asking agent, any other continuation
+        // replies to the answer it continues from.
+        match parent.answering {
+            Some(answered) => {
+                let (question,): (Option<Uuid>,) = query_as(
+                    "SELECT request_message_id FROM cloud_agent_exchanges WHERE exchange_id=$1",
+                )
+                .bind(answered)
+                .fetch_one(&mut *tx)
+                .await?;
+                publish_state(
+                    &mut tx,
+                    &parent,
+                    &parent.owner,
+                    &parent.agent,
+                    &format!("{PREFIX}{answered}:reply"),
+                    "",
+                    question,
+                    "processing",
+                )
+                .await?;
+            }
+            None => {
+                let (answer,): (Option<Uuid>,) = query_as("SELECT COALESCE(response_message_id,request_message_id) FROM cloud_agent_exchanges WHERE exchange_id=$1")
+                    .bind(id).fetch_one(&mut *tx).await?;
+                publish_state(
+                    &mut tx,
+                    &parent,
+                    &parent.owner,
+                    &parent.agent,
+                    &format!("{PREFIX}{id}:continued"),
+                    "",
+                    answer,
+                    "processing",
+                )
+                .await?;
+            }
+        }
         query("UPDATE cloud_agent_exchanges SET resume_run_id=$2,status='resuming' WHERE exchange_id=$1").bind(id).bind(run).execute(&mut *tx).await?;
         progress::update(&mut tx, id, "processing").await?;
         tx.commit().await?;

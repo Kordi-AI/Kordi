@@ -326,3 +326,6 @@ mod shared_requests;
 
 #[path = "agent_exchange_conversation_info.rs"]
 mod conversation_info;
+
+#[path = "agent_exchange_slots.rs"]
+mod slots;

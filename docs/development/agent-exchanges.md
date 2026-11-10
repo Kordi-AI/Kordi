@@ -212,3 +212,14 @@ shows who it waits for). The owner's reply continues the answering agent,
 and its answer is published as the reply to the asking agent, which resumes
 as usual. When an agent cannot answer, the asking agent's continuation asks
 that agent's owner directly as a person instead of posting open questions.
+
+## Processing rows for runs without a mention
+
+A run started by an exchange rather than a fresh mention shows its processing
+row as soon as the run exists, for both the Mac and the cloud runner: the
+answering agent's reply row is created with the question, and an asking
+agent's continuation row is created with its resume run, replying to the
+answer it continues from. The run's answer replaces that row in place. A run
+that ends silently or waits retires the row (complete, empty, synchronization
+only); a failure shows the failure and a stop shows "Stopped". The server
+ends every such row, so the desktop keeps it without a heartbeat.
