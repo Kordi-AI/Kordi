@@ -206,21 +206,29 @@ pub(super) async fn prepare_desktop_session_for_send(
         .flat_map(|lease| lease.connector_tools.iter().flatten())
         .any(|tool| tool.is_group_document_create())
         .then_some(super::background_tasks::GROUP_DOCUMENTS_POLICY);
-    runtime.set_session_prompt_context(Some(format!(
-        "{}\n{}{}",
-        local_session_context.clone().unwrap_or_default(),
-        kordi_tools::session_observation::CHAT_HISTORY_GUIDANCE,
-        documents
-            .map(|policy| format!("\n{policy}"))
-            .unwrap_or_default()
-    )));
-    let calendar = calendar_runtime::build(runtime, context_session_id);
     // Owner-only tools follow this turn's identity; the stored one is only a
     // fallback for Mac-local sources.
     let turn_identity = system_context
         .iter()
         .find(|message| message.context_role.as_deref() == Some("runtimeIdentity"))
         .map(|message| message.text.as_str());
+    let owner_request = turn_identity.is_none_or(mac_local_runtime::is_owner_identity);
+    // The owner asking in a shared conversation gets no connector tools, so
+    // the agent is told where they work instead of trying a workaround.
+    let shared_connectors =
+        connector_tools_runtime::shared_turn_guidance(cloud_lease.as_ref(), owner_request);
+    let policies = [documents, shared_connectors]
+        .into_iter()
+        .flatten()
+        .map(|policy| format!("\n{policy}"))
+        .collect::<String>();
+    runtime.set_session_prompt_context(Some(format!(
+        "{}\n{}{}",
+        local_session_context.clone().unwrap_or_default(),
+        kordi_tools::session_observation::CHAT_HISTORY_GUIDANCE,
+        policies
+    )));
+    let calendar = calendar_runtime::build(runtime, context_session_id);
     // Mac-local sources are the owner's: never on a cloud-lease turn or for
     // a request that another account made through the owner's agent.
     // The requester is the owner: this turn's identity decides, else the
@@ -241,7 +249,6 @@ pub(super) async fn prepare_desktop_session_for_send(
     // own request; a request from anyone else keeps the read-only document
     // tools. The owner's own local turn (no lease, no shared conversation)
     // gets the connect link only.
-    let owner_request = turn_identity.is_none_or(mac_local_runtime::is_owner_identity);
     runtime.set_connector_tools_runtime(match cloud_lease.as_ref() {
         Some(lease) if owner_request => connector_tools_runtime::build(lease),
         Some(lease) => connector_tools_runtime::build(lease)
@@ -268,10 +275,10 @@ pub(super) async fn prepare_desktop_session_for_send(
         super::agent_exchange_runtime::build(cloud_lease.as_ref(), owner_requester).await;
     if let Some((_, guidance)) = outreach.as_ref() {
         runtime.set_session_prompt_context(Some(format!(
-            "{}\n{}\n{}\n{}",
+            "{}\n{}{}\n{}",
             local_session_context.clone().unwrap_or_default(),
             kordi_tools::session_observation::CHAT_HISTORY_GUIDANCE,
-            documents.unwrap_or_default(),
+            policies,
             guidance
         )));
     }
