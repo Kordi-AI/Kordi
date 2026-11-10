@@ -201,3 +201,129 @@ async fn a_run_continuing_the_task_through_its_parent_plans_for_the_root() {
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{again}");
 }
+
+/// A runner lease for `run`, which must offer the card tool.
+async fn runner_lease(f: &Fixture, run: &str, runner: &str) {
+    query("UPDATE cloud_agent_fallback_runs SET desktop_preferred_until = now() - interval '1 second' WHERE run_id = $1")
+        .bind(run)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    std::env::set_var("KORDI_CLOUD_RUNNER_TOKEN", "runner-test-token");
+    let lease = f
+        .router
+        .clone()
+        .oneshot(post_json_with_runner_token(
+            "/v1/cloud/agent-runs/lease",
+            "runner-test-token",
+            json!({"runnerId": runner, "canaryRunId": run}),
+        ))
+        .await
+        .unwrap();
+    let lease = read_json(lease).await;
+    assert_eq!(lease["run"]["runId"], run);
+    assert_eq!(lease["run"]["planCards"], true, "{lease}");
+}
+
+async fn runner_card(
+    f: &Fixture,
+    run: &str,
+    runner: &str,
+    arguments: Value,
+) -> (StatusCode, Value) {
+    let response = f
+        .router
+        .clone()
+        .oneshot(post_json_with_runner_token(
+            &format!("/v1/cloud/agent-runs/{run}/agent-plan-card"),
+            "runner-test-token",
+            json!({"runnerId": runner, "toolCallId": "call", "action": arguments["action"], "arguments": arguments}),
+        ))
+        .await
+        .unwrap();
+    let status = response.status();
+    (status, read_json(response).await)
+}
+
+/// The decision step of a resumed exchange, worded as chat guidance for the
+/// System agent: propose a vote, then propose the settled plan on it.
+async fn decide_with_propose(
+    call: impl Fn(
+        Value,
+    )
+        -> std::pin::Pin<Box<dyn std::future::Future<Output = (StatusCode, Value)> + Send>>,
+    root: &str,
+    pool: &sqlx_postgres::PgPool,
+) {
+    let (status, vote) = call(
+        json!({"action": "propose", "state": "polling", "title": "Bike ride",
+        "unresolvedFields": ["place"], "options": [
+            {"label": "Sun 13:00", "startAt": later(0)}, {"label": "Sun 15:00", "startAt": later(2)}
+        ]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{vote}");
+    assert_eq!(vote["kind"], "vote");
+    let event_id = vote["eventId"].as_str().unwrap().to_string();
+    let (status, plan) = call(json!({"action": "propose", "existingEventId": event_id,
+        "state": "awaitingConfirmation", "startAt": later(0), "options": []}))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{plan}");
+    assert_eq!(plan["eventId"], event_id.as_str());
+    assert_eq!(plan["kind"], "plan");
+    assert_eq!(plan["card"]["unresolvedFields"], json!(["place"]));
+    let (task,): (String,) =
+        query_as("SELECT created_by_task_run_id FROM cloud_plan_cards WHERE event_id = $1")
+            .bind(&event_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    assert_eq!(task, root);
+}
+
+#[tokio::test]
+async fn a_resumed_exchange_on_the_cloud_runner_decides_with_a_card() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    let resume = resumed_task(&f).await;
+    let run = resume["runId"].as_str().unwrap().to_string();
+    runner_lease(&f, &run, "runner-decides").await;
+    let f = std::sync::Arc::new(f);
+    let (shared, id) = (f.clone(), run.clone());
+    decide_with_propose(
+        move |arguments| {
+            let (f, run) = (shared.clone(), id.clone());
+            Box::pin(async move { runner_card(&f, &run, "runner-decides", arguments).await })
+        },
+        &f.root,
+        &f.pool,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn a_resumed_exchange_on_the_mac_decides_with_a_card() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    let resume = resumed_task(&f).await;
+    let run = resume["runId"].as_str().unwrap().to_string();
+    let claim = f.claim(0, &resume).await;
+    let (status, capabilities) = card_call(&f, 0, &run, claim, "capabilities", json!({})).await;
+    assert_eq!(status, StatusCode::OK, "{capabilities}");
+    let f = std::sync::Arc::new(f);
+    let (shared, id) = (f.clone(), run.clone());
+    decide_with_propose(
+        move |arguments| {
+            let (f, run) = (shared.clone(), id.clone());
+            Box::pin(async move {
+                let action = arguments["action"].as_str().unwrap_or_default().to_string();
+                card_call(&f, 0, &run, claim, &action, arguments).await
+            })
+        },
+        &f.root,
+        &f.pool,
+    )
+    .await;
+}
