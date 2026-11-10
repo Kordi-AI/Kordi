@@ -34,6 +34,8 @@ export type CloudAccount = {
   passwordSet: boolean;
   /** Whether the person lets Kordi send their content to AI models. Absent on older servers. */
   aiConsent?: CloudAiConsent | null;
+  /** Owner payload only: people in the owner's chats may ask the owner's agent for busy/free. Absent on older servers. */
+  shareCalendarAvailability?: boolean;
 };
 
 export type CloudAiConsentStatus = 'unset' | 'allowed' | 'declined';
