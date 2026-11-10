@@ -14,6 +14,16 @@ pub(super) async fn update(
     if state != "waiting" {
         retire_unanswered(tx, exchange).await?;
     }
+    // A continuation that never answered shows how it ended.
+    match state {
+        "cancelled" => {
+            super::slots::finish_continued(tx, exchange, super::slots::Ending::Stopped).await?
+        }
+        "failed" => {
+            super::slots::finish_continued(tx, exchange, super::slots::Ending::Failed).await?
+        }
+        _ => {}
+    }
     patch(tx, exchange, &[("agentExchangeStatus", json!(state))]).await
 }
 

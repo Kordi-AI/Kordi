@@ -22,6 +22,7 @@ mod person;
 mod person_replies;
 mod progress;
 mod rounds;
+mod slots;
 pub(crate) use outcome::{
     control_safe_body, is_control_progress, is_control_response, parent_completion,
     parent_completion_body, separate_control_outcome,

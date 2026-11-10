@@ -378,13 +378,10 @@ pub(super) async fn publish_state(
 ) -> RunResult<Uuid> {
     let row: (String,String)=query_as("SELECT a.display_name,COALESCE((SELECT name FROM cloud_agent_definitions WHERE agent_id=$2 AND owner_account_id=$1),p.display_name,'Kordi') FROM cloud_accounts a LEFT JOIN cloud_default_agent_profiles p ON p.owner_account_id=a.account_id WHERE a.account_id=$1")
         .bind(owner).bind(agent).fetch_one(&mut **tx).await?;
-    // The recipient's pending row becomes its answer in place, including retries.
-    let id = request
-        .strip_prefix(PREFIX)
-        .and_then(|value| value.strip_suffix(":reply"))
-        .and_then(|value| Uuid::parse_str(value).ok())
-        .unwrap_or_else(Uuid::new_v4);
-    let created_at: Option<(Value,)> = if request.ends_with(":reply") {
+    // A run's processing row becomes its answer in place, including retries.
+    let slot = super::slots::slot_id(request);
+    let id = slot.unwrap_or_else(Uuid::new_v4);
+    let created_at: Option<(Value,)> = if slot.is_some() {
         query_as("SELECT content FROM cloud_chat_messages WHERE sender_account_id=$1 AND client_message_id=$2")
             .bind(owner).bind(id).fetch_optional(&mut **tx).await?
     } else {
@@ -426,7 +423,7 @@ pub(super) async fn publish_state(
         )
     };
     let content = json!({"schema":1,"blocks":[{"type":"text","text":body}]});
-    if request.ends_with(":reply") {
+    if slot.is_some() {
         if let Some(message) = crate::chat_sync::store::replace_server_message_in_transaction(
             tx,
             owner,
