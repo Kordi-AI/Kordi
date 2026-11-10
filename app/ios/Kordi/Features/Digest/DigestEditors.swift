@@ -57,7 +57,7 @@ struct DigestEventEditor: View {
         let draftStart = start ?? Date()
         _title = State(initialValue: event.title); _hasStart = State(initialValue: start != nil); _start = State(initialValue: draftStart)
         _hasEnd = State(initialValue: true); _end = State(initialValue: DigestDate.shiftedEnd(from: draftStart, to: draftStart, end: end, allDay: event.allDay))
-        _reminder = State(initialValue: start.flatMap { start in DigestDate.parse(event.reminderAt).map { max(0, Int(start.timeIntervalSince($0) / 60)) } } ?? (event.revision == 0 && !event.allDay ? 10 : -1))
+        _reminder = State(initialValue: start.flatMap { start in DigestDate.parse(event.reminderAt).map { max(0, Int(start.timeIntervalSince($0) / 60)) } } ?? (event.revision == 0 && !event.allDay && start.map { $0.addingTimeInterval(-600) >= Date() } != false ? 10 : -1))
     }
     private static func date(_ value: String?, allDay: Bool) -> Date? {
         guard let value else { return nil }
@@ -146,7 +146,7 @@ struct DigestEventEditor: View {
                         } message: { Text(removesFromDevice ? "It is removed from your Kordi calendar and from your device calendar." : "It is removed from your Kordi calendar.") }
                 }
             }
-        }.navigationTitle(event.revision == 0 ? "Review calendar event" : "Edit event").navigationBarTitleDisplayMode(.inline)
+        }.navigationTitle(event.revision != 0 ? "Edit event" : proposal == nil ? "New event" : "Review calendar event").navigationBarTitleDisplayMode(.inline)
             .confirmationDialog("Can't make it?", isPresented: $confirmDecline, titleVisibility: .visible) {
                 Button("Can't make it", role: .destructive) { declinePlan() }
                 Button("Keep event", role: .cancel) {}

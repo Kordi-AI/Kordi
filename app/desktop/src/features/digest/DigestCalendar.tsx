@@ -1,6 +1,6 @@
 import {useLayoutEffect,useMemo,useRef,useState,type ReactNode,type MouseEvent} from 'react';
 import {AnimatePresence,motion,useReducedMotion} from 'framer-motion';
-import { ChevronLeft, ChevronRight, FileUp, Settings2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileUp, Plus, Settings2 } from 'lucide-react';
 import type { CalendarSyncStatus } from './calendarSyncRunner';
 import { CalendarSyncLine } from './CalendarSyncLine';
 import { dateKey, eventOnDay, monthDays } from './calendar';
@@ -15,6 +15,7 @@ type CalendarProps = {
   month: string; selectedDay: string; events: CalendarEvent[]; candidates: DigestItem[];
   onMonth: (month: string) => void; onDay: (day: string) => void;
   onEvent: (event: CalendarEvent) => void; onCandidate: (item: DigestItem) => void;
+  onNewEvent: (day: string, minuteOfDay?: number) => void;
 };
 export function DigestCalendar(props:CalendarProps) {
   const [view,setView]=useState<'month'|'week'>('month');
@@ -26,11 +27,11 @@ export function DigestCalendar(props:CalendarProps) {
     <motion.div key={view} className="digest-calendar-pane" custom={settings} initial={instant?false:enter}
       animate={{opacity:1,transform:'scale(1)',transition:{duration:instant?0:reduce?0.1:0.18,ease:[0.23,1,0.32,1]}}}
       exit="leave" variants={{leave:({instant,reduce}:{instant:boolean;reduce:boolean})=>({opacity:0,transform:reduce?'none':'scale(0.97)',transition:{duration:instant?0:0.1,ease:[0.23,1,0.32,1]}})}}>
-      {view==='month'?<DigestMonth {...props} restoreFocus={opened} onOpenWeek={(day,event)=>{setOpened(true);setInstant(event.detail===0);props.onMonth(day.slice(0,7));props.onDay(day);setView('week');}}/>:<DigestWeek day={props.selectedDay} events={props.events} candidates={props.candidates} onDay={day=>{props.onMonth(day.slice(0,7));props.onDay(day);}} onBack={event=>{setInstant(event.detail===0);setView('month');}} onEvent={props.onEvent} onCandidate={props.onCandidate}/>}
+      {view==='month'?<DigestMonth {...props} restoreFocus={opened} onOpenWeek={(day,event)=>{setOpened(true);setInstant(event.detail===0);props.onMonth(day.slice(0,7));props.onDay(day);setView('week');}}/>:<DigestWeek day={props.selectedDay} events={props.events} candidates={props.candidates} onDay={day=>{props.onMonth(day.slice(0,7));props.onDay(day);}} onBack={event=>{setInstant(event.detail===0);setView('month');}} onEvent={props.onEvent} onNewEvent={props.onNewEvent} onCandidate={props.onCandidate}/>}
     </motion.div>
   </AnimatePresence></div>;
 }
-function DigestMonth({ month, selectedDay, events, candidates, onMonth, onDay, onEvent, onCandidate, onOpenWeek, restoreFocus }: CalendarProps & {onOpenWeek:(day:string,event:MouseEvent<HTMLButtonElement>)=>void;restoreFocus:boolean}) {
+function DigestMonth({ month, selectedDay, events, candidates, onMonth, onDay, onEvent, onCandidate, onNewEvent, onOpenWeek, restoreFocus }: CalendarProps & {onOpenWeek:(day:string,event:MouseEvent<HTMLButtonElement>)=>void;restoreFocus:boolean}) {
   const grid=useRef<HTMLDivElement>(null),[cellHeight,setCellHeight]=useState(120);
   useLayoutEffect(()=>{
     const element=grid.current;if(!element)return;
@@ -48,6 +49,7 @@ function DigestMonth({ month, selectedDay, events, candidates, onMonth, onDay, o
         <button aria-label="Previous month" onClick={() => step(-1)}><ChevronLeft size={16}/></button>
         <button onClick={() => { const today = dateKey(new Date()); onMonth(today.slice(0, 7)); onDay(today); }}>Today</button>
         <button aria-label="Next month" onClick={() => step(1)}><ChevronRight size={16}/></button>
+        <button aria-label="New event" title="New event" onClick={() => onNewEvent(selectedDay)}><Plus size={16}/></button>
       </div>
     </div>
     <div className="digest-calendar-legend"><span><i className="scheduled"/> Scheduled</span><span><i className="proposed"/> To review</span></div>
@@ -61,7 +63,7 @@ function DigestMonth({ month, selectedDay, events, candidates, onMonth, onDay, o
           const slots=total<=full?full:Math.max(0,Math.floor((available-18)/25));
           const shown=Math.min(total,slots);
           return <div key={day} className={`${day.startsWith(month) ? '' : 'outside'} ${day === selectedDay ? 'selected' : ''}`}>
-            <button className="digest-day-hitbox" tabIndex={-1} aria-hidden="true" onClick={event=>onOpenWeek(day,event)}/>
+            <button className="digest-day-hitbox" tabIndex={-1} aria-hidden="true" onClick={()=>onNewEvent(day)}/>
             <button className={`digest-day-number ${day === dateKey(new Date()) ? 'today' : ''}`} aria-label={new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' })} aria-pressed={day === selectedDay} onClick={event=>onOpenWeek(day,event)}>{Number(day.slice(-2))}</button>
             <div className="digest-day-events">
               {matching.slice(0,slots).map(entry=><button className={`digest-calendar-event${entry.proposal?' proposed':''}${entry.proposal?.calendarAction==='delete'?' digest-cancellation':''}`} key={entry.key} title={`${entry.proposal?.calendarAction==='delete'?'Cancellation to review: ':entry.proposal?'To review: ':''}${entry.title}`} onClick={()=>entry.proposal?onCandidate(entry.proposal):entry.event&&onEvent(entry.event)}><span>{entry.allDay?'All day':new Date(entry.startAt).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}</span><strong>{entry.proposal?.calendarAction==='delete'?'Cancel: ':''}{entry.title}</strong></button>)}

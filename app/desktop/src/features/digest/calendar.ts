@@ -24,6 +24,18 @@ export function eventOnDay(event: Pick<CalendarEvent,'startAt'|'endAt'|'allDay'>
   const last=event.endAt?dateKey(new Date(new Date(event.endAt).getTime()-1)):start;
   return day>=start&&day<=last;
 }
+/**
+ * A blank personal event for the editor, one hour long: at `minuteOfDay` on `day` when a time
+ * slot was chosen, otherwise at the next full hour (today, or that hour on another day).
+ */
+export function newCalendarEvent(day?: string|null, minuteOfDay?: number|null, now = new Date()): CalendarEvent {
+  const nextHour=new Date(now);nextHour.setMinutes(0,0,0);nextHour.setHours(nextHour.getHours()+1);
+  let start=nextHour;
+  if(minuteOfDay!=null){start=new Date(`${day??dateKey(now)}T00:00:00`);start.setHours(0,minuteOfDay);}
+  else if(day&&day!==dateKey(now)){start=new Date(`${day}T00:00:00`);start.setHours(nextHour.getHours());}
+  return {id:`manual-${crypto.randomUUID()}`,title:'',startAt:start.toISOString(),endAt:new Date(start.getTime()+3_600_000).toISOString(),
+    reminderAt:null,allDay:false,sourceIds:[],description:'',revision:0};
+}
 type ImportedEvent = { id: string; title: string; startAt: string; endAt: string; allDay: boolean; date: string; endDateExclusive: string; description: string };
 type WorkerReply = { error?: string; result?: { events: ImportedEvent[]; warnings: string[] } };
 export type CalendarImport = { events: CalendarEvent[]; warnings: string[] };
