@@ -1,6 +1,6 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { Send } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ErrorLine } from '@/components/ui/ErrorLine';
@@ -408,7 +408,7 @@ export function CompanionComposer({
               disabled={isPreparing || subsession?.sending || subsession?.disabled || (!draftText.trim() && chatComposerAttachments.length === 0)}
               data-companion-send-control="true"
             >
-              <Send className="h-4 w-4" />
+              <ArrowUp className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" />
             </Button>}
           </div>
         </div>

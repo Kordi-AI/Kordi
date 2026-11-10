@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LoaderCircle, Send, Square } from 'lucide-react';
+import { LoaderCircle, ArrowUp, Square } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import type { AgentRequestStopHandler } from '@/features/chat/agentRequestStop';
@@ -112,7 +112,7 @@ export function VoiceComposerControls({
         title={activeLiveTurnIsRunning ? 'Queue message for this session' : 'Send message'}
         aria-label="Send message"
       >
-        <Send className="h-[15px] w-[15px]" />
+        <ArrowUp className="h-[15px] w-[15px]" strokeWidth={2.5} aria-hidden="true" />
       </Button>}
     </div>
   );
