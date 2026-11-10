@@ -85,7 +85,14 @@ pub async fn fail_unreachable_agent_request(
     .bind(&agent_id)
     .fetch_one(pool)
     .await?;
-    let message = format!("Couldn't reach {owner}'s {agent}.");
+    // The agent's display name already names its owner ("Maya's Kordi");
+    // only the plain default name needs the owner added.
+    let name = if agent == "Kordi" {
+        format!("{owner}'s Kordi")
+    } else {
+        agent
+    };
+    let message = format!("Couldn't reach {name}.");
     match fail_request(pool, input, &message, AGENT_UNREACHABLE_ERROR_CODE).await {
         Ok(run) => Ok(Some(run)),
         Err(RunError::NotFound) => Ok(None),
@@ -233,6 +240,32 @@ async fn fail_request(
         .await?;
         return existing.map(run_response).ok_or(RunError::NotFound);
     };
+    // A group reply has the same shape as any failed agent reply there.
+    if error_code == AGENT_UNREACHABLE_ERROR_CODE {
+        let group = super::delivery::ensure_group_response_messages(
+            pool,
+            super::delivery::GroupResponse {
+                run_id: &row.0,
+                owner_account_id: &input.owner_account_id,
+                session_id: &input.session_id,
+                request_message_id: &request_id,
+                response_text: message,
+                delivery_state: "failed",
+                failure_code: Some(AGENT_UNREACHABLE_ERROR_CODE),
+            },
+        )
+        .await?;
+        if let Some(message_id) = group {
+            sqlx_core::query::query(
+                "UPDATE cloud_agent_fallback_runs SET response_message_id=$2 WHERE run_id=$1",
+            )
+            .bind(&row.0)
+            .bind(&message_id)
+            .execute(pool)
+            .await?;
+            return Ok(run_response(row));
+        }
+    }
     let body = encode_cloud_agent_response_body_with_state(&request_id, message, "failed");
     crate::cloud_agent_runtime::artifacts::ensure_response_message(
         pool,

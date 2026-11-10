@@ -464,4 +464,12 @@ async fn a_mention_no_agent_can_take_fails_for_everyone_as_that_agent() {
             .starts_with("Couldn't reach "),
         "{reply}"
     );
+    // The same shape as any failed agent reply in a group, named once.
+    assert_eq!(reply["senderKind"], "agent");
+    assert_eq!(reply["failureCode"], "agent_unreachable");
+    assert_eq!(reply["requestId"], logical.as_str());
+    assert_eq!(
+        reply["text"], "Couldn't reach Exchange Gamma's Kordi.",
+        "named once"
+    );
 }
