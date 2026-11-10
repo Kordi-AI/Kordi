@@ -59,6 +59,25 @@
   text-shadow: none;
 }
 
+/* WebKit also fills the empty space beside and between the blocks of a
+ * selection, in the same translucent color, so the fills overlap the text
+ * highlight as full-width bars with darker bands. It skips that for a
+ * `column-span: all` block, which changes nothing else outside a multi-column
+ * layout. Table cells, code blocks, block frames and list rows start a fill of
+ * their own, so they opt out the same way. */
+:where(
+  [data-kordi-copy-surface="message"],
+  [data-kordi-copy-surface="message"] :is(td, th, pre, div[data-kordi-copy-block], [data-markdown-list-text])
+) {
+  column-span: all;
+}
+
+/* WebKit paints a list marker in its item's selection color. The item's text
+ * sits in a child element with a selection color of its own. */
+[data-kordi-copy-surface="message"] li[data-markdown-list-item]::selection {
+  background-color: transparent;
+}
+
 [data-virtual-transcript-scroll][data-message-selection-mode="true"]
   :where([data-kordi-copy-surface="message"], [data-kordi-copy-surface="message"] *) {
   -webkit-user-select: none;
