@@ -321,7 +321,7 @@ export function mapCollaborationConversationToViewModel(
         showSenderMeta: true,
         senderAvatarSeed: isRemoteAgentResponse ? remoteAgentAvatarSeed : localAgentAvatarSeed,
         senderProfileImageUrl: isRemoteAgentResponse ? remoteAgentProfileImageUrl : null,
-        text: '',
+        text: '', mentions,
         time: message.timeLabel,
         timestampMs: message.timestampMs,
         conversationSequence: message.conversationSequence,

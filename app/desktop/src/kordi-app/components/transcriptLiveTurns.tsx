@@ -31,6 +31,7 @@ function LiveChatTurnCardView({
   showReasoning = false,
   plainAgentResponse = false,
   stopMessage,
+  mentions,
   onStopCollaborationAgentRequest,
   onStopActiveTurn,
   onNavigateToMessage,
@@ -44,6 +45,8 @@ function LiveChatTurnCardView({
   plainAgentResponse?: boolean;
   /** The reply's message, which decides whether the viewer may stop it. */
   stopMessage?: Pick<Message, 'role' | 'senderOwnerName'>;
+  /** Mentions the reply names by id, so names render as whole mentions. */
+  mentions?: Message['mentions'];
   onStopCollaborationAgentRequest?: StopCollaborationAgentRequestHandler;
   onStopActiveTurn?: StopActiveTurnHandler;
   onNavigateToMessage?: (messageId: string, sourceMessage?: MessageSourceReference) => void;
@@ -140,7 +143,7 @@ function LiveChatTurnCardView({
             <TurnProgress turn={visibleTurn}
               renderTool={tool => <ToolActivityRow key={tool.id} tool={tool} stateKey={`turn:${visibleTurn.id}:tool:${tool.id}`} onOpenFile={onOpenArtifact} />}
               trailing={stop}
-              legacyAnswer={hasAssistant ? <FoldableAssistantAnswer text={assistantText} foldable={!plainAgentResponse}
+              legacyAnswer={hasAssistant ? <FoldableAssistantAnswer text={assistantText} mentions={mentions} foldable={!plainAgentResponse}
                 tone={visibleTurn.status === 'cancelled' && !ending ? 'cancelled' : 'default'} /> : null}
             />
           ) : null}
@@ -184,6 +187,7 @@ export const LiveChatTurnCard = memo(
     && previous.hideSourceQuote === next.hideSourceQuote
     && previous.showReasoning === next.showReasoning
     && previous.plainAgentResponse === next.plainAgentResponse
+    && previous.mentions === next.mentions
     && previous.stopMessage?.role === next.stopMessage?.role
     && previous.stopMessage?.senderOwnerName === next.stopMessage?.senderOwnerName
     && previous.onStopCollaborationAgentRequest === next.onStopCollaborationAgentRequest

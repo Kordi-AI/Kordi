@@ -156,7 +156,12 @@ question, or their reply, quote, or thread reply to it. Their agent's
 messages, forwards, replies to other messages, messages before the question,
 and messages that ask an agent for something (a new request, routed as usual)
 never count. With several open questions to the same person, a reply
-to one question answers that question; any other message answers the oldest.
+to one question answers that question; any other message answers the newest.
+A new question to a person ends older open questions to them in the same
+conversation from other tasks at once: those tasks resume as unanswered
+(`personSuperseded`) instead of waiting 24 hours or taking the new answer.
+The question always addresses the person by name with a mention by account
+id, in a direct chat too.
 Matching runs when the message is stored and again in the reconcile sweep, so
 a missed hook is recovered from durable records. The answer then resumes the
 asking agent through the ordinary continuation, with person-specific wording.

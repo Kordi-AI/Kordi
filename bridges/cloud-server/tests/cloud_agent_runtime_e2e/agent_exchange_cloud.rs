@@ -303,3 +303,49 @@ async fn an_answering_slot_waits_for_its_owner_without_a_blank_version() {
     assert_eq!(last["deliveryState"], "processing");
     assert_eq!(last["text"], "Waiting for Exchange Beta.", "{versions:?}");
 }
+
+#[tokio::test]
+async fn a_newer_question_to_a_person_supersedes_older_ones_and_takes_their_plain_reply() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    // An earlier task asked Beta and is still waiting.
+    let old = f.ask_ok("old", 1, "Coffee next week?").await;
+    f.end_parent().await;
+    // A new task asks Beta in the same conversation.
+    f.macs_offline().await;
+    let request = f.group_request(1, "Find a day for a bike ride").await;
+    let body = json!({"requestMessageId":request,"sessionId":f.session,"ownerAccountId":f.people[0].account_id,"requesterAccountId":f.people[1].account_id,"prompt":"Find a day","idempotencyKey":format!("newer:{request}")});
+    let run = f.post(1, "/v1/cloud/agent-runs/claim", body).await["runId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    f.runner_lease(&run).await;
+    let asked = f
+        .runner_ask(&run, "new", json!({"target":f.people[1].account_id,"targetKind":"person","message":"Saturday or Sunday?"}))
+        .await;
+    assert_eq!(asked.status(), StatusCode::OK);
+    let new = read_json(asked).await;
+    // Beta's plain reply answers the newest question, never the old one.
+    f.say(1, "Sunday afternoon works for me", None).await;
+    let (status, answer, _) = f.exchange(&new["exchangeId"]).await;
+    assert_eq!(
+        (status.as_str(), answer.as_deref()),
+        ("reply_received", Some("Sunday afternoon works for me"))
+    );
+    // The old task resumes at once as unanswered, superseded.
+    f.pending(0).await;
+    let (prompt,): (String,) = query_as("SELECT r.prompt FROM cloud_agent_exchanges e JOIN cloud_agent_fallback_runs r ON r.run_id=e.resume_run_id WHERE e.exchange_id=$1::uuid")
+        .bind(old["exchangeId"].as_str().unwrap()).fetch_one(&f.pool).await.unwrap();
+    let resumed: Value = serde_json::from_str(prompt.split_once('\n').unwrap().1).unwrap();
+    assert_eq!(resumed["personReplied"], false);
+    assert_eq!(resumed["personSuperseded"], true);
+    assert!(resumed["personReply"]
+        .as_str()
+        .unwrap()
+        .contains("A newer question"));
+    assert_ne!(
+        f.exchange(&old["exchangeId"]).await.1.as_deref(),
+        Some("Sunday afternoon works for me")
+    );
+}

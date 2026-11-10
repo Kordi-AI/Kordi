@@ -244,9 +244,11 @@ async fn the_requester_is_asked_and_their_plain_reply_continues() {
         .ask_ok("ask-requester", 0, "What time are you free?")
         .await;
     let wire = f.question_wire(&receipt["exchangeId"]).await;
+    // Addressed to them by name with a mention by id, in a direct chat too.
+    assert_eq!(wire["text"], "@Exchange Alpha What time are you free?");
     assert_eq!(
-        wire["text"], "What time are you free?",
-        "no self-mention in a direct chat"
+        wire["mentions"][0]["humanId"],
+        f.people[0].account_id.as_str()
     );
     assert_eq!(wire["agentExchangeWaitingFor"], "Exchange Alpha");
     assert_eq!(wire["agentExchangeWaitingForRequester"], true);

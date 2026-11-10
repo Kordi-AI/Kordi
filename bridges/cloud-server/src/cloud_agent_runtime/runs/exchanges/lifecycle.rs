@@ -219,7 +219,7 @@ pub(crate) async fn reconcile(pool: &PgPool) -> RunResult<()> {
             continue;
         }
         if let (Some(p), true, "pending") = (&person, expired, status.as_str()) {
-            answer = Some(super::person::no_reply(&p.name));
+            answer = Some(super::person::unanswered(p));
             query("UPDATE cloud_agent_exchanges SET status='reply_received',response_text=$2,received_at=now() WHERE exchange_id=$1")
                 .bind(id).bind(&answer).execute(&mut *tx).await?;
             status = "reply_received".into();

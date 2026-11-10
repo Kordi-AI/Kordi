@@ -1,7 +1,7 @@
 //! Which message answers a question to a person. Only that person's own human
 //! messages after the question count; their agent's messages, forwards, and
 //! replies to other messages do not. A reply or quote of a question answers
-//! that question; any other message answers the oldest open question before it.
+//! that question; any other message answers the newest open question before it.
 //! A message that asks an agent for something is a new request, routed as
 //! usual, and never an answer; when the requester asks the same agent again,
 //! its open question to them is superseded and cancelled.
@@ -148,7 +148,7 @@ fn reply(person: &str, row: MessageRow, participants: &[CloudGroupParticipant]) 
     })
 }
 
-/// Pair answers with open questions, oldest first. Returns the (exchange,
+/// Pair answers with open questions: a quote picks its own, a plain reply the newest. Returns the (exchange,
 /// reply index) pairs and the questions superseded by a new request.
 fn assign(questions: &[Question], replies: &[Reply]) -> (Vec<(Uuid, usize)>, Vec<Uuid>) {
     let mut open: Vec<&Question> = questions.iter().collect();
@@ -167,8 +167,9 @@ fn assign(questions: &[Question], replies: &[Reply]) -> (Vec<(Uuid, usize)>, Vec
             });
             continue;
         }
+        // A plain reply answers the newest open question asked before it.
         let chosen = if reply.refs.is_empty() {
-            open.iter().position(eligible)
+            open.iter().rposition(eligible)
         } else {
             open.iter()
                 .position(|q| eligible(q) && q.refs.iter().any(|r| reply.refs.contains(r)))
@@ -330,7 +331,22 @@ mod tests {
     }
 
     #[test]
-    fn the_next_message_answers_the_oldest_open_question() {
+    fn a_plain_reply_answers_the_newest_open_question() {
+        let questions = [question(4, "older"), question(8, "newer")];
+        let replies = [
+            reply_of(row(9, json!({"text":"Sunday afternoon"}))).unwrap(),
+            reply_of(row(10, json!({"text":"Also this"}))).unwrap(),
+        ];
+        let (pairs, _) = assign(&questions, &replies);
+        assert_eq!(
+            pairs,
+            vec![(questions[1].exchange, 0), (questions[0].exchange, 1)],
+            "the newest question first, then the older one"
+        );
+    }
+
+    #[test]
+    fn each_message_answers_a_question_asked_before_it() {
         let questions = [question(10, "q-a"), question(4, "q-b")];
         let replies = [
             reply_of(row(3, json!({"text":"Before any question"}))).unwrap(),
