@@ -111,9 +111,12 @@ export async function deviceTimeZone(): Promise<string | null> {
   }
 }
 
-/** This Mac's city, without asking for access. Rejects with a location failure code. */
-export function deviceCity(): Promise<string> {
-  return invokeDesktop<string>('desktop_profile_city');
+/**
+ * This Mac's city. With `prompt`, asks for location access first when it was
+ * never asked for. Rejects with a location failure code such as `location_denied`.
+ */
+export function deviceCity(prompt = false): Promise<string> {
+  return invokeDesktop<string>('desktop_profile_city', { prompt });
 }
 
 /**

@@ -23,7 +23,8 @@ import type { CloudProfileEditor } from './useCloudProfileEditor';
 /** This device's location access, replaceable in tests. */
 export type ProfileDeviceLocation = {
   permission: (request: boolean) => Promise<string>;
-  city: () => Promise<string>;
+  /** With `prompt`, asks for access first; rejects with a failure code such as `location_denied`. */
+  city: (prompt: boolean) => Promise<string>;
   openSettings: () => void;
 };
 
@@ -33,6 +34,7 @@ const nativeDeviceLocation: ProfileDeviceLocation = {
   openSettings: () => { void openDesktopExternalUrl(LOCATION_SETTINGS_URL); },
 };
 
+const LOCATION_DENIED = 'location_denied';
 const blocked = (status: string) => status === 'denied' || status === 'restricted';
 
 function AutomaticMark() {
@@ -95,22 +97,23 @@ export function CloudProfileAutoRows({ account, editor, id, deviceLocation }: {
   const turnOnLocation = async () => {
     if (!location || locating) return;
     setLocationError(null);
+    setLocating(true);
     try {
-      const status = await location.permission(true);
-      setPermission(status);
-      if (blocked(status)) {
-        // The person's choice stays; the row explains how to allow access.
-        editor.setField('locationMode', 'automatic');
-        return;
-      }
-      if (status !== 'granted') return;
-      setLocating(true);
-      const city = await location.city();
+      // One native step: ask for access when it was never asked for, wait for
+      // the answer, then read the city.
+      const city = await location.city(true);
+      setPermission('granted');
       editor.setField('location', city);
       editor.setField('locationMode', 'automatic');
-    } catch {
-      // The app log has "[profile-location] <code>: <detail>"; the row stays short.
-      setLocationError('Could not find your city.');
+    } catch (caught) {
+      if (caught instanceof Error && caught.message === LOCATION_DENIED) {
+        // The person's choice stays; the row explains how to allow access.
+        setPermission('denied');
+        editor.setField('locationMode', 'automatic');
+      } else {
+        // The app log has "[profile-location] <code>: <detail>"; the row stays short.
+        setLocationError('Could not find your city.');
+      }
     } finally {
       setLocating(false);
     }

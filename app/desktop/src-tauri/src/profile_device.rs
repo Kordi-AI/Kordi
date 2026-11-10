@@ -95,26 +95,30 @@ pub async fn desktop_profile_location_permission(
 ) -> Result<String, String> {
     let result = crate::nearby_location::desktop_nearby_location_permission(app, request).await;
     match &result {
-        Ok(status) if status != "granted" => {
-            eprintln!("[profile-location] permission: {status}");
-        }
+        Ok(status) if request => eprintln!("[profile-location] permission: {status}"),
         Err(code) => eprintln!("[profile-location] {code}: permission request failed"),
         Ok(_) => {}
     }
     result
 }
 
-/// The city this Mac is in, without asking for access. Fails with the
-/// location failure codes when access is missing or no fix arrives.
+/// The city this Mac is in. With `prompt` (the person turned automatic
+/// Location on), asks for access first when it was never asked for. Fails
+/// with the location failure codes, such as `location_denied`.
 #[tauri::command]
-pub async fn desktop_profile_city(app: tauri::AppHandle) -> Result<String, String> {
+pub async fn desktop_profile_city(
+    app: tauri::AppHandle,
+    prompt: Option<bool>,
+) -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
-        macos::city(app).await.map_err(String::from)
+        macos::city(app, prompt.unwrap_or(false))
+            .await
+            .map_err(String::from)
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = app;
+        let _ = (app, prompt);
         Err(crate::nearby_location::failure::UNAVAILABLE.into())
     }
 }
