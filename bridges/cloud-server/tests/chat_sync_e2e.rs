@@ -35,6 +35,10 @@ mod membership;
 mod message_mutations;
 #[path = "chat_sync_e2e/reactions.rs"]
 mod reactions;
+#[path = "chat_sync_e2e/receipts.rs"]
+mod receipts;
+#[path = "chat_sync_e2e/receipts_membership.rs"]
+mod receipts_membership;
 #[path = "chat_sync_e2e/session_pins.rs"]
 mod session_pins;
 #[path = "chat_sync_e2e/session_visibility.rs"]
@@ -367,12 +371,14 @@ async fn message_sync_is_idempotent_ordered_and_convergent_across_members() {
     assert_eq!(stale.last_delivered_sequence, 1);
     assert_eq!(stale.last_read_sequence, 1);
 
+    // The owner delivering their own message tells only the owner; the peer
+    // reading it tells the peer and the owner, its author.
     assert_eq!(sync_head(&pool, &owner).await.0, 6);
-    assert_eq!(sync_head(&pool, &peer).await.0, 5);
+    assert_eq!(sync_head(&pool, &peer).await.0, 4);
     let bootstrap = store::bootstrap(&pool, &peer)
         .await
         .expect("bootstrap peer state");
-    assert_eq!(bootstrap.stream_seq, 5);
+    assert_eq!(bootstrap.stream_seq, 4);
     assert_eq!(bootstrap.conversations.len(), 1);
     assert_eq!(bootstrap.latest_messages.len(), 1);
     assert_eq!(
