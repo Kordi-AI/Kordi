@@ -67,7 +67,8 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // Presence text in group Info, Add people and the Chat Info participants adds 0.9 kB, so it moves to 5.82 MB.
 // Plan RSVPs in the event dialog, renewing an expired sign-in and per-sign-in model
 // availability add 9 kB, so it moves to 5.831 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_831_000;
+// Adding calendar events with + or by clicking a day or time adds 2 kB, so it moves to 5.833 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_833_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -88,7 +89,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // Presence text in group Info, Add people and the Chat Info participants adds 0.9 kB there, so it moves to 5.837 MB.
 // Plan RSVPs in the event dialog, sign-in renewal and per-sign-in model availability add
 // 8 kB there, plus the cloud-edition build's margin, so it moves to 5.847 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_847_000;
+// Adding calendar events with + or by clicking a day or time adds 2 kB there, plus the
+// cloud-edition build's margin, so it moves to 5.849 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_849_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
