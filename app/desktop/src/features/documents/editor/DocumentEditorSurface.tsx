@@ -25,6 +25,8 @@ export type DocumentEditorProps = {
   onCollab?: (state: DocumentCollabState) => void;
   /** A snapshot the room's writer saved (new revision, remapped annotations). */
   onSnapshot?: (document: DocumentResponse) => void;
+  /** The newest document from the Markdown store the view has (load, refetch, a save's answer); a bound room compares revisions with it. */
+  storeDocument?: DocumentResponse | null;
   /** Blocks from outside: the server's (`k:` or index ids, sources without comments) or a local file's. */
   blocks: readonly SourceBlock[];
   /** Changes whenever `blocks` is a new outside version (load, remote update, a save's answer). */
@@ -51,8 +53,11 @@ export type DocumentEditorProps = {
 
 type Slash = { query: string; range: { from: number; to: number }; position: { top: number; left: number } };
 
-/** What the surface shares with the room wrapper: the latest Markdown and the first-stamping id map. */
-export type SurfaceOutput = { markdown: string | null; blockIds: Record<string, string> | null };
+/**
+ * What the surface shares with the room wrapper: the latest Markdown, the first-stamping id map, and the outside
+ * version the unbound editor last loaded (normalized blocks), which its unsaved edits merge against at binding.
+ */
+export type SurfaceOutput = { markdown: string | null; blockIds: Record<string, string> | null; base: readonly SourceBlock[] };
 
 type SurfaceProps = DocumentEditorProps & {
   /** Bound to the room's Y document when set; revisioned otherwise. */
@@ -90,14 +95,20 @@ export function DocumentEditorSurface(props: SurfaceProps) {
     editor.state.doc.forEach((node) => { if (typeof node.attrs.id === 'string') present.add(node.attrs.id); });
     const stamped = Object.entries(sync.current.legacyIds).filter(([, id]) => present.has(id));
     const output = { markdown, blockIds: stamped.length > 0 ? Object.fromEntries(stamped) : null };
-    latest.current.output.current = output;
+    latest.current.output.current = { ...latest.current.output.current, ...output };
     return output;
+  }, []);
+
+  /** Outside blocks the unbound editor holds; the bound one's content is the room's. */
+  const setSync = useCallback((next: SyncState) => {
+    sync.current = next;
+    if (!latest.current.room) latest.current.output.current = { ...latest.current.output.current, base: next.base };
   }, []);
 
   const emitChange = useCallback((editor: Editor) => {
     const { markdown, blockIds } = emitOutput(editor);
-    // While the room is connected it carries every change; revisioned saves only happen without it.
-    if (latest.current.room?.status === 'connected') return;
+    // A bound editor's changes travel through the room, connected or reconnecting; revisioned saves only happen unbound.
+    if (latest.current.room) return;
     // Transactions that change nothing in the Markdown (id stamping after a load, selection-only steps) are not edits.
     if (markdown === sourceOfBlocks(sync.current.base) && !latest.current.dirty) return;
     latest.current.dirty = true;
@@ -160,19 +171,19 @@ export function DocumentEditorSurface(props: SurfaceProps) {
         emitOutput(editor);
         return;
       }
-      sync.current = loadBlocks(editor, props.blocks, legacyIds);
+      setSync(loadBlocks(editor, props.blocks, legacyIds));
       emitOutput(editor);
       return;
     }
-    // In a room, outside versions are snapshots of the room itself.
+    // In a room, outside versions reach the room wrapper instead (`storeDocument`).
     if (props.room) return;
     if (applied.current.key === props.revisionKey) return;
     applied.current.key = props.revisionKey;
     const result = applyRemoteBlocks(editor, sync.current, props.blocks, legacyIds);
-    sync.current = result.sync;
+    setSync(result.sync);
     if (result.conflict) latest.current.onUpdatedElsewhere?.();
     if (result.localChanges) emitChange(editor);
-  }, [editor, emitChange, emitOutput, legacyIds, props.blocks, props.revisionKey, props.room]);
+  }, [editor, emitChange, emitOutput, legacyIds, props.blocks, props.revisionKey, props.room, setSync]);
 
   useEffect(() => { editor?.setEditable(props.editable); }, [editor, props.editable]);
 

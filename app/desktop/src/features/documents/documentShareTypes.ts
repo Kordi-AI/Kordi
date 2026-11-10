@@ -96,6 +96,8 @@ export type DocumentResponse = {
   updatedAt: string;
   /** Revision of the stored source; a save names the revision it was based on. */
   revision?: number;
+  /** Revision of the latest save that did not come from the collaboration room (0 or absent: none, or an older server). */
+  outsideRoomRevision?: number;
   /** Agent whose edit produced this revision, when one did. */
   updatedByAgentName?: string | null;
   sessionId: string | null;
@@ -137,10 +139,13 @@ export type UpdateDocumentCommentInput = {
 };
 
 export type SaveDocumentContentInput = {
-  /** Required for revisioned saves; snapshots from the collaboration room have none. */
+  /**
+   * Required for revisioned saves. On a snapshot, the revision the room last agreed with: a newer save from outside
+   * the room answers 409 with the current document. Snapshots without it are not checked.
+   */
   baseRevision?: number;
   source: string;
-  /** `snapshot`: written by the room's snapshot writer, no revision check. */
+  /** `snapshot`: written by the room's snapshot writer. */
   mode?: 'snapshot';
   /** On a document's first save with stamped ids: index ids (`b3`) to the `k:` ids that replace them. */
   blockIds?: Record<string, string>;

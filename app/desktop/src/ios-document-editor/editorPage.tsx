@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/core';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { notifyDocumentSyncEvents } from '@/features/documents/documentSyncEvents';
+import { closingRoomCount } from '@/features/documents/editor/documentRoom';
 
 import { runEditorCommand } from './editorCommands';
 import { IosDocumentEditor, type EditorConfig, type EditorFlush } from './IosDocumentEditor';
@@ -17,7 +18,7 @@ export type EditorPage = {
   command(name: string, value?: string): boolean;
   documentUpdated(payload: { attachmentId: string; revision: number; change?: string }): void;
   setAccent(color: string): void;
-  /** Saves what is pending, leaves the room (the room's writer saves a snapshot), and waits for those requests. */
+  /** Saves what is pending, leaves the room (the room's writer saves a snapshot, an offline room delivers its edits), and waits for those. */
   close(): Promise<void>;
 };
 
@@ -57,9 +58,10 @@ export function createEditorPage(post: NativePost, container: HTMLElement): { pa
       root?.unmount();
       root = null;
       const deadline = Date.now() + CLOSE_WAIT_MS;
-      // Leaving the room may start a snapshot save; let the app finish it before the page goes away.
+      // Leaving the room may start a snapshot save, or keep an offline room reconnecting to deliver its edits;
+      // let the app finish them before the page goes away.
       await sleep(0);
-      while (bridge.pendingRequests > 0 && Date.now() < deadline) await sleep(50);
+      while ((bridge.pendingRequests > 0 || closingRoomCount() > 0) && Date.now() < deadline) await sleep(50);
     },
   };
   const receiver: NativeReceiver = {

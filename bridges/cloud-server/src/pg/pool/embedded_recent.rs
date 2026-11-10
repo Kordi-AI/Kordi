@@ -481,7 +481,12 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
     ),
     migration!(
         189,
+        "document outside room revision",
+        "0189_document_outside_room_revision.sql"
+    ),
+    migration!(
+        190,
         "provider login renewal",
-        "0189_provider_login_renewal.sql"
+        "0190_provider_login_renewal.sql"
     ),
 ];

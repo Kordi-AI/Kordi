@@ -8,9 +8,13 @@
 //! (see [`super::events`]).
 //!
 //! While a collaboration room is in use, editors write Markdown snapshots
-//! with `"mode": "snapshot"` instead: no base check, and a new revision only
-//! when the source changed. A revisioned save marks the room stale so the
-//! next editor reconciles the Y document with the new Markdown.
+//! with `"mode": "snapshot"` instead: a new revision only when the source
+//! changed. A revisioned save (a person's or an agent's) records its revision
+//! as `outside_room_revision` and marks the room stale so the next editor
+//! reconciles the Y document with the new Markdown. A snapshot may send the
+//! revision it was based on; it then conflicts like a stale save when a save
+//! from outside the room is newer, so it cannot overwrite a save the room has
+//! not seen yet. A snapshot without a base is not checked.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -53,9 +57,10 @@ fn edit_forbidden() -> Response {
 pub(super) enum SaveMode {
     /// A save based on `baseRevision`; stale bases conflict.
     Revision(i64),
-    /// A collaboration room snapshot: no base check, and no new revision
-    /// when the source did not change.
-    Snapshot,
+    /// A collaboration room snapshot, with the `baseRevision` it sent: no new
+    /// revision when the source did not change, and a conflict when a save
+    /// from outside the room is newer than that base.
+    Snapshot(Option<i64>),
 }
 
 pub(super) enum SaveOutcome {
@@ -103,7 +108,7 @@ pub(crate) async fn save_content(
         );
     }
     let mode = match (req.mode.as_deref(), req.base_revision) {
-        (Some("snapshot"), _) => SaveMode::Snapshot,
+        (Some("snapshot"), base) => SaveMode::Snapshot(base),
         (None, Some(base)) => SaveMode::Revision(base),
         _ => {
             return err(
@@ -202,42 +207,54 @@ pub(super) async fn save(
         stamped,
     } = input;
     let mut tx = pool.begin().await?;
-    let (old_text, revision, updated_at): (String, i64, String) = query_as(
-        "SELECT source, revision, updated_at FROM cloud_document_contents \
-         WHERE attachment_id = $1 FOR UPDATE",
-    )
-    .bind(&record.attachment_id)
-    .fetch_one(&mut *tx)
-    .await?;
+    let (old_text, revision, updated_at, outside_room_revision): (String, i64, String, i64) =
+        query_as(
+            "SELECT source, revision, updated_at, outside_room_revision \
+             FROM cloud_document_contents WHERE attachment_id = $1 FOR UPDATE",
+        )
+        .bind(&record.attachment_id)
+        .fetch_one(&mut *tx)
+        .await?;
     let current = |text: String| DocumentSource {
         text,
         revision,
         updated_at: (revision > 1).then_some(updated_at.clone()),
+        outside_room_revision,
     };
     match mode {
         SaveMode::Revision(base) if base != revision => {
             tx.rollback().await?;
             return Ok(SaveOutcome::Conflict(current(old_text)));
         }
+        // A snapshot based before the latest save from outside the room
+        // would overwrite that save.
+        SaveMode::Snapshot(Some(base)) if base < outside_room_revision => {
+            tx.rollback().await?;
+            return Ok(SaveOutcome::Conflict(current(old_text)));
+        }
         // Snapshots of an unchanged document keep the revision.
-        SaveMode::Snapshot if old_text == text => {
+        SaveMode::Snapshot(_) if old_text == text => {
             tx.rollback().await?;
             return Ok(SaveOutcome::Unchanged(current(old_text)));
         }
         _ => {}
     }
     let now = Utc::now().to_rfc3339();
-    let (new_revision,): (i64,) = query_as(
+    // SET expressions read the old row, so `revision + 1` is the new revision.
+    let (new_revision, new_outside_room_revision): (i64, i64) = query_as(
         "UPDATE cloud_document_contents \
          SET source = $2, revision = revision + 1, updated_by_account_id = $3, updated_at = $4, \
-             updated_by_agent_id = $5 \
-         WHERE attachment_id = $1 RETURNING revision",
+             updated_by_agent_id = $5, \
+             outside_room_revision = CASE WHEN $6::boolean THEN revision + 1 \
+                                          ELSE outside_room_revision END \
+         WHERE attachment_id = $1 RETURNING revision, outside_room_revision",
     )
     .bind(&record.attachment_id)
     .bind(text)
     .bind(account_id)
     .bind(&now)
     .bind(agent_id)
+    .bind(matches!(mode, SaveMode::Revision(_)))
     .fetch_one(&mut *tx)
     .await?;
     let targets = annotation_targets(&markdown_blocks(&old_text), &markdown_blocks(text), stamped);
@@ -247,6 +264,7 @@ pub(super) async fn save(
         text: text.to_string(),
         revision: new_revision,
         updated_at: Some(now),
+        outside_room_revision: new_outside_room_revision,
     }))
 }
 
