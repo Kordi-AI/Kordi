@@ -16,6 +16,7 @@ fn ctx_with_runtime(runtime: Option<SessionObservationRuntime>) -> ToolContext {
         on_output: None,
         web_search: None,
         reach_out: None,
+        plan_card: None,
         reflection: None,
         session_observation: runtime,
         task_operator: None,

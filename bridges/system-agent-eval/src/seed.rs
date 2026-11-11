@@ -296,6 +296,21 @@ async fn seed_card(pool: &PgPool, seeded: &Seeded, card: &SeedCard) -> Result<St
     Ok(row.event_id)
 }
 
+/// Cards already in the conversation, seeded or opened in an earlier turn,
+/// were made before this turn's messages, which are back-dated. The System
+/// agent tells a new discussion from one a card already answers by that order.
+pub async fn age_cards(pool: &PgPool, seeded: &Seeded) -> Result<()> {
+    query(&format!(
+        "UPDATE cloud_plan_cards
+         SET created_at = LEAST(created_at, now() - interval '{SEEDED_CARD_MINUTES_AGO} minutes')
+         WHERE conversation_id = $1"
+    ))
+    .bind(seeded.conversation_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 async fn vote(
     pool: &PgPool,
     seeded: &Seeded,

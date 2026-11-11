@@ -107,13 +107,17 @@ test('a lost completion acknowledgement retries the same result without running 
   assert.equal(attempts, 2); assert.equal(turns, 1);
 });
 
-test('silent continuation acknowledges durably, while empty answers and recipient silence fail', async () => {
+test('silent continuation and an answering agent waiting on its owner acknowledge durably, while empty answers and recipient silence fail', async () => {
   for (const [suffix, text, expected] of [
     ['resume', '{"agentExchangeOutcome":"silent"}', 'completed'],
     ['request', '{"agentExchangeOutcome":"silent"}', 'failed'],
     ['resume', '{"agentExchangeOutcome":"waiting"}', 'completed'],
-    ['request', '{"agentExchangeOutcome":"waiting"}', 'failed'],
+    // An answering agent that asked its own owner yields; it never fails.
+    ['request', '{"agentExchangeOutcome":"waiting"}', 'completed'],
     ['resume', '', 'failed'],
+    // The one retry of a planning answer is a continuation too.
+    ['decide', 'Sunday it is.', 'completed'],
+    ['decide', '{"agentExchangeOutcome":"silent"}', 'completed'],
   ]) {
     const { value, requests } = runtime({ startTurn: async () => ({ id: 'turn', completed: true, succeeded: true, assistantText: text }) as DesktopChatTurnSnapshot });
     assert.equal(await runAgentExchangeOnMac({ ...run, requestMessageId: `agent-exchange:synthetic:${suffix}` }, value), expected);

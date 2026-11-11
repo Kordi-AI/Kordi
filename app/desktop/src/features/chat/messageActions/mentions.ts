@@ -1,13 +1,13 @@
 import type { SharedCloudAgentSummary } from '@/features/cloud/cloudAgents';
 import { isCollaborationAgentRuntime } from '@/features/collaboration/runtime';
-import type {
-Conversation,
-DesktopCollaborationState
-} from '@/kordi-app/types';
+import type { Conversation, DesktopCollaborationState } from '@/kordi-app/types';
 import { defaultAgentDisplayName,publicScopedAgentMentionHandle,stripSelfPossessivePrefix } from '@/lib/identityLabels';
 
 import { mentionTextStartsWithLabel } from './localAgentMentions';
 import { mentionHandleForLabel,normalizeMentionLabel } from './mentionHandles';
+import { directChatHasMember, directChatMemberKeys } from './directChatMembers';
+import { ambiguousOwnerNames, identitySuffixForCandidate, uniqueAgentMentionCandidates, uniqueHandle } from './uniqueAgentMentions';
+export { reserveAgentMentionHandles, uniqueAgentMentionCandidates } from './uniqueAgentMentions';
 
 export {
 leadingAddressRest,
@@ -23,7 +23,6 @@ stripLeadingAddressMentions
 } from './localAgentMentions';
 export { mentionHandleForLabel,normalizeMentionLabel } from './mentionHandles';
 
-
 export type CollaborationMentionCandidate = {
   host: DesktopCollaborationState['hosts'][number];
   peer: DesktopCollaborationState['hosts'][number]['visiblePeers'][number];
@@ -31,6 +30,8 @@ export type CollaborationMentionCandidate = {
   normalizedHandle: string;
   displayLabel: string;
   targetKind: 'person' | 'agent';
+  /** The friendly handle people see; `handle` may carry a hidden suffix. */
+  baseHandle?: string;
 };
 
 function normalizedOwnerKey(value: string | null | undefined) {
@@ -97,7 +98,7 @@ export function conversationHasGroupMentionScope(conversation: MentionScopeConve
 
 export function conversationHasParticipantMentionScope(conversation: MentionScopeConversation | null | undefined) {
   if (!conversation) return false;
-  if (conversationHasGroupMentionScope(conversation)) return true;
+  if (conversationHasGroupMentionScope(conversation) || directChatMemberKeys(conversation).size > 0) return true;
   const humanKeys = conversationHumanOwnerKeys(conversation);
   const collaborationTargetIsPerson = conversation.collaborationTarget?.runtime === 'person' || conversation.collaborationTarget?.agentId === null;
   if (humanKeys.size === 0 && !collaborationTargetIsPerson) return false;
@@ -110,10 +111,13 @@ export function conversationHasParticipantMentionScope(conversation: MentionScop
 export function collaborationMentionOwnerMatchesConversationHumans(
   owner: Pick<DesktopCollaborationState['hosts'][number]['visiblePeers'][number], 'humanId' | 'ownerName'> & { nodeId?: string | null },
   conversation: MentionScopeConversation | null | undefined,
+  ambiguousNames?: ReadonlySet<string>,
 ) {
   const ownerHumanKey = normalizedOwnerKey(owner.humanId);
   const ownerNodeKey = normalizedOwnerKey(owner.nodeId);
   const ownerNameKey = normalizedOwnerKey(owner.ownerName);
+  const member = directChatHasMember(conversation, ownerHumanKey, ownerNodeKey);
+  if (member !== null) return member;
   let sawCanonicalNameMatch = false;
 
   for (const participant of conversation?.canonicalParticipants ?? []) {
@@ -129,7 +133,8 @@ export function collaborationMentionOwnerMatchesConversationHumans(
     if (!ownerHumanKey || identityKeys.length === 0) return true;
   }
 
-  if (sawCanonicalNameMatch) return false;
+  // Names repeat: without ids, a name two known people share never decides.
+  if (sawCanonicalNameMatch || (ownerNameKey && ambiguousNames?.has(ownerNameKey))) return false;
   return Boolean(ownerNameKey && conversationParticipantNameKeys(conversation?.participants).includes(ownerNameKey));
 }
 
@@ -138,14 +143,16 @@ export function filterCollaborationMentionCandidatesForConversation(
   conversation: MentionScopeConversation | null | undefined,
 ) {
   if (!conversationHasParticipantMentionScope(conversation)) return candidates;
+  const ambiguous = ambiguousOwnerNames(candidates);
   return dedupeCollaborationMentionCandidateHandles(
-    candidates.filter((candidate) => collaborationMentionOwnerMatchesConversationHumans(candidate.peer, conversation)),
+    candidates.filter((candidate) => collaborationMentionOwnerMatchesConversationHumans(candidate.peer, conversation, ambiguous)),
   );
 }
 
 function conversationContainsAccountId(conversation: MentionScopeConversation | null | undefined, accountId: string) {
   const key = normalizedOwnerKey(accountId);
   if (!key) return false;
+  if (directChatHasMember(conversation, key)) return true;
   for (const participant of conversation?.canonicalParticipants ?? []) {
     if (participant.kind !== 'human') continue;
     if (participantHumanIdentityKeys(participant).includes(key)) return true;
@@ -167,6 +174,7 @@ export type SharedCloudAgentMentionCandidate = {
   targetKind: 'cloud-shared-agent';
   targetAgentId: string;
   targetOwnerAccountId: string;
+  baseHandle?: string;
 };
 
 export function sharedCloudAgentMentionCandidatesForConversation(
@@ -205,7 +213,7 @@ export function sharedCloudAgentMentionCandidatesForConversation(
       normalizedHandle = normalizeMentionLabel(handle);
     }
     used.add(normalizedHandle);
-    return { ...candidate, handle, normalizedHandle };
+    return { ...candidate, handle, normalizedHandle, baseHandle: candidate.handle };
   });
 }
 
@@ -289,20 +297,6 @@ export function filterCollaborationMentionCandidatesForHost(
   });
 }
 
-function identitySuffixForCandidate(candidate: Pick<CollaborationMentionCandidate, 'peer' | 'handle'>) {
-  const source = candidate.peer.humanId?.trim()
-    || candidate.peer.agentId?.trim()
-    || candidate.peer.nodeId?.trim()
-    || candidate.handle;
-  return mentionHandleForLabel(source, 'target').slice(0, 8);
-}
-
-function uniqueHandle(baseHandle: string, suffix: string) {
-  const cleanSuffix = mentionHandleForLabel(suffix, 'target');
-  const availableBaseLength = Math.max(1, 64 - cleanSuffix.length);
-  return `${baseHandle.slice(0, availableBaseLength)}${cleanSuffix}`;
-}
-
 function candidateWithBaseMentionHandle(candidate: CollaborationMentionCandidate) {
   const handle = candidate.targetKind === 'agent'
     && (candidate.peer.isDefaultAgent || candidate.peer.displayName?.trim() !== candidate.displayLabel)
@@ -335,7 +329,7 @@ function dedupeCollaborationMentionCandidateHandles(candidates: CollaborationMen
       collisionIndex += 1;
     }
     usedHandles.add(normalizedHandle);
-    return { ...candidate, handle, normalizedHandle };
+    return { ...candidate, handle, normalizedHandle, baseHandle: candidate.handle };
   });
 }
 
@@ -440,21 +434,27 @@ export type ResolveMentionedCollaborationTargetOptions = {
   targetKind?: CollaborationMentionCandidate['targetKind'];
   sharedCloudAgents?: SharedCloudAgentSummary[];
   localAccountId?: string | null;
+  /** Handles already taken here, such as the viewer's own agent. */
+  reservedHandles?: readonly string[];
 };
-
 export function resolveMentionedCollaborationTarget(
   text: string,
   collaborationState: DesktopCollaborationState | null,
   conversation?: MentionScopeConversation | null,
   options: ResolveMentionedCollaborationTargetOptions = {},
 ) {
-  const scopedCandidates = filterCollaborationMentionCandidatesForConversation(buildCollaborationMentionCandidates(collaborationState), conversation);
+  const unique = uniqueAgentMentionCandidates(
+    filterCollaborationMentionCandidatesForConversation(buildCollaborationMentionCandidates(collaborationState), conversation),
+    options.targetKind && options.targetKind !== 'agent'
+      ? []
+      : sharedCloudAgentMentionCandidatesForConversation(options.sharedCloudAgents ?? [], conversation, options.localAccountId),
+    options.reservedHandles,
+  );
+  const scopedCandidates = unique.collaboration;
   const candidates = options.targetKind
     ? scopedCandidates.filter((candidate) => candidate.targetKind === options.targetKind)
     : scopedCandidates;
-  const sharedCandidates = options.targetKind && options.targetKind !== 'agent'
-    ? []
-    : sharedCloudAgentMentionCandidatesForConversation(options.sharedCloudAgents ?? [], conversation, options.localAccountId);
+  const sharedCandidates = unique.shared;
   if (candidates.length === 0 && sharedCandidates.length === 0) return null;
   const mentionMatches = Array.from(text.matchAll(/(^|\s)@/g));
   if (mentionMatches.length === 0) return null;
@@ -501,7 +501,7 @@ export function resolveMentionedCollaborationTarget(
         label: sharedMatch.handle,
         displayLabel: sharedMatch.displayLabel,
         targetKind: 'agent' as const,
-        requestText,
+        requestText, mentionStart,
       };
     }
 
@@ -565,7 +565,7 @@ export function resolveMentionedCollaborationTarget(
       label: match.handle,
       displayLabel: match.displayLabel,
       targetKind: match.targetKind,
-      requestText,
+      requestText, mentionStart,
     };
   }
 

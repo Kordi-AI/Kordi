@@ -38,6 +38,7 @@ mod session_lifecycle;
 pub(crate) mod tool_approval;
 pub use session_commands::*;
 mod agent_exchange_runtime;
+mod plan_card_runtime;
 pub(crate) mod session_observation;
 pub(crate) mod session_preparation;
 mod transient_drafts;

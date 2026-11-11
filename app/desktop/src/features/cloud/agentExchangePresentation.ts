@@ -17,21 +17,53 @@ export function publicAgentExchangeTurn(turn: DesktopChatTurnSnapshot): DesktopC
   };
 }
 
-/** The durable question owns one progress indicator through reply and continuation. */
+/** Who a question to a person waits for; absent for a question to an agent. */
+export function agentExchangeWaitingFor(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim().slice(0, 120) : undefined;
+}
+
+/**
+ * Whether a question waits for the viewer: the server names the account it
+ * waits for, and marks a question the owner's agent asked the owner, as the
+ * requester (`ownAgentAskedOwner`), which older servers send alone.
+ */
+export function agentExchangeWaitsForViewer(waitingForAccountId: unknown, viewerAccountId: string | null | undefined, ownAgentAskedOwner: boolean): boolean {
+  const waiting = typeof waitingForAccountId === 'string' ? waitingForAccountId.trim() : '';
+  const viewer = viewerAccountId?.trim() ?? '';
+  return ownAgentAskedOwner || (Boolean(waiting) && waiting === viewer);
+}
+
+/**
+ * The durable question owns one progress indicator through reply and continuation.
+ * `forViewer` marks a question that waits for the viewer's own answer.
+ */
 export function agentExchangeProgressTurn(
   state: unknown, text: string, id: string, sessionId: string,
-  turn?: DesktopChatTurnSnapshot | null,
+  turn?: DesktopChatTurnSnapshot | null, waitingFor?: unknown, forViewer = false,
 ): DesktopChatTurnSnapshot | null {
   const status = agentExchangeStatus(state);
   if (status !== 'waiting' && status !== 'processing') return turn ?? null;
+  const person = agentExchangeWaitingFor(waitingFor);
   return {
     sessionId, prompt: '', message: '', assistantText: text, thinkingText: '', tools: [],
     ...turn, id: `collaboration-live-turn:exchange:${id}`, status: 'processing', completed: false, succeeded: false, error: null,
-    agentExchangeStatus: status,
+    agentExchangeStatus: status, ...(person ? { agentExchangeWaitingFor: person } : {}),
+    ...(person && forViewer ? { agentExchangeWaitingForViewer: true } : {}),
   };
 }
 
-export function withAgentExchangeProgress(message: Message, state: unknown): Message {
-  const turn = agentExchangeProgressTurn(state, message.text, `exchange-progress:${message.id}`, '', message.turn);
+export function withAgentExchangeProgress(message: Message, state: unknown, waitingFor?: unknown, forViewer = false): Message {
+  const turn = agentExchangeProgressTurn(state, message.text, `exchange-progress:${message.id}`, '', message.turn, waitingFor, forViewer);
   return turn === message.turn || !turn ? message : { ...message, turn };
+}
+
+/**
+ * The slot of an agent whose own turn yielded to wait for another agent or a
+ * person: it stays visible as waiting (#2416) instead of disappearing until
+ * the resumed task answers in the same slot.
+ */
+export function yieldingCollaborationMessage<T extends { localTurn?: DesktopChatTurnSnapshot | null }>(
+  message: T, id: string, sessionId: string, waitingFor?: unknown,
+): T {
+  return { ...message, localTurn: agentExchangeProgressTurn('waiting', '', id, sessionId, null, waitingFor) ?? message.localTurn ?? null };
 }

@@ -100,6 +100,8 @@ export function resolveMentionedLocalAgentTarget(
     displayLabel,
     targetKind: 'agent' as const,
     requestText: stripLeadingAddressMentions(text, [displayLabel, label, 'Kordi', 'My Kordi']).trim(),
+    // Only a leading address mentions the local agent; it starts after any whitespace.
+    ...(text.trimStart().startsWith('@') ? { mentionStart: text.length - text.trimStart().length } : {}),
   };
 }
 

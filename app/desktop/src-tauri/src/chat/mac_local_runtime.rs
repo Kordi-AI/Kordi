@@ -235,6 +235,7 @@ mod tests {
             requester_account_id: requester.into(),
             requester_name: "Requester".into(),
             request_policy: None,
+            conversation_context: None,
         })
         .unwrap()
     }

@@ -570,7 +570,7 @@ function MessageBubbleView({
               hideSourceQuote={threadLayout}
               historical={msg.turn.completed} showReasoning={msg.role === 'owned-agent'}
               plainAgentResponse={plainAgentResponse}
-              stopMessage={msg}
+              stopMessage={msg} mentions={msg.mentions}
               onStopCollaborationAgentRequest={onStopCollaborationAgentRequest}
               onStopActiveTurn={onStopActiveTurn}
               onNavigateToMessage={onNavigateToMessage}

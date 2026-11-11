@@ -130,6 +130,10 @@ pub async fn harness(
     pending: PendingSystemAgentConfig,
     engine: Engine,
 ) -> Result<Harness> {
+    // Each fixture turn is one pass after its quiet period ended, so plan
+    // talk is summed up at once instead of waiting for the silence window.
+    let mut pending = pending;
+    pending.silence_minutes = 0;
     let config = bootstrap_system_agent(&pool, pending)
         .await
         .map_err(|error| anyhow::anyhow!("provisioning the System agent: {error}"))?;

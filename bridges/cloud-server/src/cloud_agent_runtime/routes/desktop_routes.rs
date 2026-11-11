@@ -28,6 +28,10 @@ pub(super) fn routes() -> Router<Arc<ServerState>> {
             post(crate::cloud_agent_runtime::runs::exchanges::desktop_tool),
         )
         .route(
+            "/v1/cloud/agent-runs/desktop/:run_id/plan-card",
+            post(crate::plan_cards::agent::desktop_route),
+        )
+        .route(
             "/v1/cloud/agent-runs/desktop/:run_id/cancel",
             post(desktop::cancel),
         )

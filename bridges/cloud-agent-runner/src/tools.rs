@@ -195,6 +195,7 @@ fn cloud_tool_context(sandbox: &SandboxBackendHandle) -> ToolContext {
         on_output: None,
         web_search: None,
         reach_out: None,
+        plan_card: None,
         reflection: None,
         session_observation: None,
         task_operator: None,

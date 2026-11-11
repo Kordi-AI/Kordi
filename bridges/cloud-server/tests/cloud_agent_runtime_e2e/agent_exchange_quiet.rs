@@ -89,7 +89,10 @@ impl Fixture {
         let message = value.get("message").unwrap_or(&value);
         let metadata = message.get("structuredContent").unwrap_or(message);
         (
-            metadata["agentExchangeStatus"].as_str().unwrap().into(),
+            metadata["agentExchangeStatus"]
+                .as_str()
+                .unwrap_or_default()
+                .into(),
             sequence,
             message["text"].as_str().unwrap().into(),
         )
@@ -111,6 +114,29 @@ impl Fixture {
         .unwrap();
         (id, sequence, wire.get("message").unwrap_or(&wire).clone())
     }
+    /// The first root's own slot (its reply row) and its progress metadata.
+    async fn slot(&self, root: &str) -> (String, Value) {
+        let (id, content): (String, Value) = query_as("SELECT m.message_id::text,m.content FROM cloud_agent_fallback_runs r JOIN cloud_chat_messages m ON m.message_id::text=r.response_message_id WHERE r.run_id=$1")
+            .bind(root).fetch_one(&self.pool).await.unwrap();
+        let body = content["blocks"][0]["text"]
+            .as_str()
+            .unwrap()
+            .split_once(':')
+            .unwrap()
+            .1;
+        let wire: Value = serde_json::from_slice(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(body)
+                .unwrap(),
+        )
+        .unwrap();
+        let message = wire.get("message").unwrap_or(&wire).clone();
+        let meta = message
+            .get("structuredContent")
+            .cloned()
+            .unwrap_or_else(|| message.clone());
+        (id, meta)
+    }
     async fn public_texts(&self) -> Vec<String> {
         let rows: Vec<(Value,)> = query_as("SELECT m.content FROM cloud_chat_messages m JOIN cloud_chat_conversations c USING(conversation_id) WHERE c.legacy_session_id=$1 ORDER BY m.conversation_sequence")
             .bind(&self.session).fetch_all(&self.pool).await.unwrap();
@@ -125,7 +151,9 @@ impl Fixture {
                 let response = envelope.get("message").unwrap_or(&envelope);
                 let text = response["text"].as_str()?;
                 (response["deliveryState"] == "complete"
+                    && !text.is_empty()
                     && text != WAITING
+                    && response["structuredContent"]["agentExchangeStatus"] != "waiting"
                     && response["synchronizationOnly"] != true
                     && response["structuredContent"]["synchronizationOnly"] != true)
                     .then(|| text.to_owned())
@@ -145,7 +173,7 @@ async fn shared_question_silently_finishes_after_a_reply_on_mac_and_cloud() {
         assert_eq!(recipient["deliveryState"], "processing");
         assert_eq!(recipient["text"], "");
         let (state, sequence, question) = f.question_progress().await;
-        assert_eq!(state, "waiting");
+        assert_eq!(state, "waiting", "no slot yet: the question carries it");
         let parent = f.complete_parent(cloud).await;
         {
             let body = parent["body"].as_str().unwrap().split_once(':').unwrap().1;
@@ -156,11 +184,24 @@ async fn shared_question_silently_finishes_after_a_reply_on_mac_and_cloud() {
             )
             .unwrap();
             let response = value.get("message").unwrap_or(&value);
-            assert_eq!(response["text"], "");
+            // A waiting slot says whom it waits for, never a blank row.
+            assert_eq!(response["text"], "Waiting for Exchange Beta's Kordi.");
             let control = response.get("structuredContent").unwrap_or(response);
-            assert_eq!(control["synchronizationOnly"], true);
-            assert_eq!(control["agentExchangeOutcome"], "waiting");
+            if !cloud {
+                // The yield keeps the slot visible as waiting (#2416), never emptied.
+                assert!(control.get("synchronizationOnly").is_none());
+                assert_eq!(control["agentExchangeStatus"], "waiting");
+            }
         }
+        let root = f.root.clone();
+        let (slot_id, slot) = f.slot(&root).await;
+        assert_eq!(slot["agentExchangeStatus"], "waiting", "{slot}");
+        assert!(slot.get("synchronizationOnly").is_none());
+        assert_eq!(
+            f.question_progress().await.0,
+            "",
+            "the question leaves progress to the slot"
+        );
         let target = f.pending(1).await.remove(0);
         let target_run = target["runId"].as_str().unwrap();
         let target_claim = f.claim(1, &target).await;
@@ -189,9 +230,10 @@ async fn shared_question_silently_finishes_after_a_reply_on_mac_and_cloud() {
         assert_eq!(answered["text"], "Synthetic status: ready");
         assert_eq!(answered.get("createdAtMs"), recipient.get("createdAtMs"));
         let resume = f.pending(0).await.remove(0);
+        assert_eq!(f.slot(&root).await.1["agentExchangeStatus"], "processing");
         assert_eq!(
             f.question_progress().await,
-            ("processing".into(), sequence, question.clone())
+            ("".into(), sequence, question.clone())
         );
         assert!(resume["prompt"]
             .as_str()
@@ -244,11 +286,17 @@ async fn shared_question_silently_finishes_after_a_reply_on_mac_and_cloud() {
             .bind(resume_run).fetch_one(&f.pool).await.unwrap();
         assert_eq!(state, "completed");
         assert!(processed);
-        assert!(message.is_none());
         assert_eq!(
-            f.question_progress().await,
-            ("completed".into(), sequence, question)
+            message.as_deref(),
+            Some(slot_id.as_str()),
+            "the task's one slot"
         );
+        let (_, ended) = f.slot(&root).await;
+        assert_eq!(
+            ended["synchronizationOnly"], true,
+            "a silent end leaves no empty bubble"
+        );
+        assert_eq!(f.question_progress().await, ("".into(), sequence, question));
         assert!(f.pending(0).await.is_empty());
         let texts = f.public_texts().await;
         assert_eq!(
@@ -379,7 +427,7 @@ async fn a_follow_up_that_delegates_again_yields_without_another_acknowledgement
     assert_eq!(
         texts.len(),
         3,
-        "first question, answer, and new question only"
+        "first question, answer, and new question only: {texts:?}"
     );
     assert!(texts.iter().all(|text| !text.contains("am waiting")));
     assert_eq!(f.pending(2).await.len(), 1);

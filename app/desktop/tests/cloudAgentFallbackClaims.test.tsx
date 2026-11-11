@@ -50,10 +50,11 @@ const message: CloudMessage = {
 };
 
 test('cloud fallback claim keeps legacy presence conflicts retryable during mixed-version rollout', () => {
-  for (const code of ['network_error', 'owner_online', 'agent_not_available', 'rate_limited', 'server_error']) {
+  for (const code of ['network_error', 'owner_online', 'rate_limited', 'server_error']) {
     assert.equal(cloudFallbackClaimErrorIsRetryable({ code }), true, code);
   }
-  for (const code of ['provider_auth_not_configured', 'requester_mismatch', 'invalid_session']) {
+  // A request naming no agent this account may run is refused for good.
+  for (const code of ['agent_not_available', 'provider_auth_not_configured', 'requester_mismatch', 'invalid_session']) {
     assert.equal(cloudFallbackClaimErrorIsRetryable({ code }), false, code);
   }
 });

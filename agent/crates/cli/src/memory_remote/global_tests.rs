@@ -124,6 +124,7 @@ fn tool_context(runtime: kordi_tools::ReflectionRuntime) -> kordi_tools::ToolCon
         on_output: None,
         web_search: None,
         reach_out: None,
+        plan_card: None,
         reflection: Some(runtime),
         session_observation: None,
         task_operator: None,

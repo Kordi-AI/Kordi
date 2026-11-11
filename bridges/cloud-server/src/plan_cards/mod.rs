@@ -25,6 +25,8 @@ macro_rules! live_plan_card_sql {
 }
 pub(crate) use live_plan_card_sql;
 
+pub(crate) mod agent;
+mod agent_proposal;
 pub mod calendar;
 pub mod models;
 pub(crate) mod projection;
@@ -39,6 +41,8 @@ pub use runner::runner_action;
 
 pub use routes::routes;
 
+#[cfg(test)]
+mod agent_tests;
 #[cfg(test)]
 mod confirmation_tests;
 #[cfg(test)]
