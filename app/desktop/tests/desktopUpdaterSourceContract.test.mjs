@@ -36,8 +36,11 @@ test('the real updater adapter delegates download and install to the native upda
   assert.match(native, /tauri_plugin_updater::/);
   assert.match(native, /fn install_downloaded_update_on_exit/);
   assert.match(native, /fn classify_install_location/);
-  assert.match(lifecycle, /Command::new\("\/usr\/bin\/open"\)/);
-  assert.match(lifecycle, /\.arg\("-n"\)/);
+  // Relaunch waits for this process to exit and opens the app without -n,
+  // so the Dock reuses the pinned tile instead of adding a second Kordi.
+  assert.match(lifecycle, /kill -0 "\$1"/);
+  assert.match(lifecycle, /exec \/usr\/bin\/open "\$2" --args "\$3"/);
+  assert.doesNotMatch(lifecycle, /\.arg\("-n"\)/);
   assert.match(lifecycle, /--kordi-update-relaunch/);
   assert.match(lifecycle, /app\.exit\(tauri::RESTART_EXIT_CODE\)/);
   assert.match(controller, /manualUpdateUrlForVersion\(update\.version\)/);

@@ -12,6 +12,12 @@ const UPDATE_RELAUNCH_ARG: &str = "--kordi-update-relaunch";
 #[cfg(target_os = "macos")]
 const UPDATE_RELAUNCH_RECOVERY: &str =
     "The update was installed, but Kordi could not relaunch. Quit Kordi and open it from Applications.";
+/// Waits up to 30 seconds for the old process ($1) to exit, then opens the
+/// bundle ($2) with the relaunch flag ($3). Arguments are never interpolated.
+#[cfg(any(target_os = "macos", test))]
+const UPDATE_RELAUNCH_SCRIPT: &str = r#"i=0
+while kill -0 "$1" 2>/dev/null && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i + 1)); done
+exec /usr/bin/open "$2" --args "$3""#;
 
 #[cfg(any(target_os = "macos", test))]
 pub(crate) fn macos_app_bundle_path(executable: &Path) -> Option<PathBuf> {
@@ -137,17 +143,24 @@ pub(crate) fn desktop_relaunch_after_update(app: tauri::AppHandle) -> Result<(),
             .map_err(|_| UPDATE_RELAUNCH_RECOVERY.to_string())?;
         let bundle = macos_app_bundle_path(&executable)
             .ok_or_else(|| UPDATE_RELAUNCH_RECOVERY.to_string())?;
-        super::run_external_command(
-            Command::new("/usr/bin/open")
-                .arg("-n")
-                .arg(bundle)
-                .arg("--args")
-                .arg(UPDATE_RELAUNCH_ARG)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null()),
-        )
-        .map_err(|_| UPDATE_RELAUNCH_RECOVERY.to_string())?;
+        // `open -n` while this process is alive starts a second instance, and
+        // the Dock gives it a tile of its own next to the pinned one. A
+        // detached helper waits for this process to exit first, so the new
+        // version opens in the pinned tile.
+        use std::os::unix::process::CommandExt;
+        Command::new("/bin/sh")
+            .arg("-c")
+            .arg(UPDATE_RELAUNCH_SCRIPT)
+            .arg("kordi-update-relaunch")
+            .arg(std::process::id().to_string())
+            .arg(bundle)
+            .arg(UPDATE_RELAUNCH_ARG)
+            .process_group(0)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|_| UPDATE_RELAUNCH_RECOVERY.to_string())?;
         // LaunchServices owns the replacement; the restart code only makes
         // shutdown non-cancelable and skips the presence-offline hook.
         app.exit(tauri::RESTART_EXIT_CODE);
@@ -228,6 +241,38 @@ mod tests {
     fn dock_reopen_restores_main_window_when_none_are_visible() {
         assert!(should_show_main_window_on_reopen(false));
         assert!(!should_show_main_window_on_reopen(true));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn update_relaunch_opens_only_after_the_old_process_exits() {
+        use std::process::Command;
+        use std::time::{Duration, Instant};
+
+        // Stand in for the old Kordi and for `open`, which echoes its arguments.
+        let mut old = Command::new("/bin/sleep").arg("0.6").spawn().expect("old");
+        let old_pid = old.id();
+        // Reap it as soon as it exits; a zombie still answers `kill -0`.
+        let reaper = std::thread::spawn(move || old.wait());
+        let script = super::UPDATE_RELAUNCH_SCRIPT.replace("/usr/bin/open", "echo");
+        let started = Instant::now();
+        let output = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(script)
+            .arg("kordi-update-relaunch")
+            .arg(old_pid.to_string())
+            .arg("/Applications/Kordi Test.app")
+            .arg(super::UPDATE_RELAUNCH_ARG)
+            .output()
+            .expect("relaunch helper");
+        reaper.join().expect("reaper").expect("old exits");
+
+        assert!(output.status.success());
+        assert!(started.elapsed() >= Duration::from_millis(500));
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "/Applications/Kordi Test.app --args --kordi-update-relaunch"
+        );
     }
 
     #[test]
