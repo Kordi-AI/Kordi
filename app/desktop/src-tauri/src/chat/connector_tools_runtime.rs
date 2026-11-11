@@ -69,6 +69,19 @@ fn lease_is_owner_private(lease: &DesktopCloudExecutionLease) -> bool {
     lease.connector_audience.as_deref() == Some("owner_private")
 }
 
+/// Guidance for the owner's own request on a lease the server marked
+/// `shared`: that run gets no connector tools, so the agent is told where
+/// they work. `None` for any other lease, any other requester, a missing
+/// audience, or a turn without a lease.
+pub(super) fn shared_turn_guidance(
+    lease: Option<&DesktopCloudExecutionLease>,
+    owner_request: bool,
+) -> Option<&'static str> {
+    lease
+        .filter(|lease| owner_request && lease.connector_audience.as_deref() == Some("shared"))
+        .map(|_| kordi_tools::connector_tools::SHARED_RUN_CONNECTOR_GUIDANCE)
+}
+
 /// Connector-shaped descriptors from the lease; `None` when there are none.
 fn lease_descriptors(lease: &DesktopCloudExecutionLease) -> Option<Vec<ConnectorToolDescriptor>> {
     let descriptors = lease
@@ -341,6 +354,25 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["connectors_request_connect"]
         );
+    }
+
+    #[test]
+    fn only_the_owner_on_a_shared_lease_is_told_where_connectors_work() {
+        let mut shared = lease(None);
+        shared.connector_audience = Some("shared".into());
+        assert_eq!(
+            shared_turn_guidance(Some(&shared), true),
+            Some(kordi_tools::connector_tools::SHARED_RUN_CONNECTOR_GUIDANCE)
+        );
+        assert_eq!(shared_turn_guidance(Some(&shared), false), None);
+        let mut private = lease(None);
+        private.connector_audience = Some("owner_private".into());
+        assert_eq!(shared_turn_guidance(Some(&private), true), None);
+        assert_eq!(shared_turn_guidance(Some(&lease(None)), true), None);
+        assert_eq!(shared_turn_guidance(None, true), None);
+        let guidance = kordi_tools::connector_tools::SHARED_RUN_CONNECTOR_GUIDANCE;
+        assert!(guidance.contains("private chat"));
+        assert!(guidance.contains("desktop automation"));
     }
 
     #[tokio::test]

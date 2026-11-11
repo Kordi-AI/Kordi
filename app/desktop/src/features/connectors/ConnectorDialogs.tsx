@@ -37,6 +37,11 @@ const dialogMuted = 'text-[color:var(--app-transient-muted-text)]';
 const dialogSubtle = 'text-[color:var(--app-transient-subtle-text)]';
 const dialogFailure = 'text-[color:var(--app-error-text)]';
 
+/** Provider pages can take minutes (an unverified-app screen, for example). */
+function serviceWaitingLine(providerName: string): string {
+  return `Waiting for ${providerName}… Finish in your browser. It can take a few minutes.`;
+}
+
 function auditTimeLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
@@ -87,6 +92,8 @@ export function ConnectorDialogs({
           titleId={`${idPrefix}-connect-title`}
           descriptionId={`${idPrefix}-connect-description`}
           onDismiss={closeDialog}
+          // A pending sign-in survives Escape and backdrop clicks; only Cancel stops it.
+          dismissDisabled={dialogBusy}
           busy={dialogBusy}
           className="max-w-md rounded-[20px]"
           backdropClassName="!z-[100000]"
@@ -116,7 +123,7 @@ export function ConnectorDialogs({
           <ScopeList scopes={connectScopes(dialogDefinition)} />
           {dialogBusy ? (
             <p className={cn('m-0 mt-4 text-[12px] leading-5', dialogMuted)} role="status">
-              {dialogDefinition.kind === 'service' ? `Waiting for ${dialogDefinition.providerName}…` : 'Waiting for macOS…'}
+              {dialogDefinition.kind === 'service' ? serviceWaitingLine(dialogDefinition.providerName) : 'Waiting for macOS…'}
             </p>
           ) : null}
           <AppDialogActions>
@@ -134,6 +141,8 @@ export function ConnectorDialogs({
           titleId={`${idPrefix}-grant-title`}
           descriptionId={`${idPrefix}-grant-description`}
           onDismiss={closeDialog}
+          // A pending sign-in survives Escape and backdrop clicks; only Cancel stops it.
+          dismissDisabled={dialogBusy}
           busy={dialogBusy}
           className="max-w-md rounded-[20px]"
           backdropClassName="!z-[100000]"
@@ -148,7 +157,7 @@ export function ConnectorDialogs({
           </p>
           {dialogBusy && dialogDefinition.kind === 'service' ? (
             <p className={cn('m-0 mt-3 text-[12px] leading-5', dialogMuted)} role="status">
-              Waiting for {dialogDefinition.providerName}…
+              {serviceWaitingLine(dialogDefinition.providerName)}
             </p>
           ) : null}
           <AppDialogActions>

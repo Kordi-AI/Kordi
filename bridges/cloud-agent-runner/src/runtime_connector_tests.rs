@@ -458,5 +458,26 @@ async fn request_connect_returns_a_settings_link_only_on_owner_private_runs() {
     assert!(!LeaseConnectors::default().is_owner_private());
 }
 
+#[test]
+fn only_the_owner_in_a_shared_run_is_told_where_connectors_work() {
+    let guidance = kordi_tools::connector_tools::SHARED_RUN_CONNECTOR_GUIDANCE;
+    let mut shared = run("person_started", Vec::new());
+    shared.connectors.audience = Some("shared".into());
+    assert_eq!(connectors::shared_run_guidance(&shared), Some(guidance));
+    assert!(guidance.contains("private chat"));
+    assert!(guidance.contains("desktop automation"));
+
+    let mut member = shared.clone();
+    member.requester_account_id = "acct_member".into();
+    assert_eq!(connectors::shared_run_guidance(&member), None);
+
+    let private = run("person_started", Vec::new());
+    assert_eq!(connectors::shared_run_guidance(&private), None);
+
+    let mut unknown = shared.clone();
+    unknown.connectors.audience = None;
+    assert_eq!(connectors::shared_run_guidance(&unknown), None);
+}
+
 #[path = "runtime_connector_lease_tests.rs"]
 mod lease_tests;

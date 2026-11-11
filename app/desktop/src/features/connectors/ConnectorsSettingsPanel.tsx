@@ -88,7 +88,7 @@ export function ConnectorsSettingsPanel({
   const idPrefix = useId();
   // Only the latest `list()` may update the panel, so a superseded client cannot.
   const listRequestRef = useRef(0);
-  // The pending connect or act grant, aborted when the dialog closes.
+  // The pending connect or act grant, aborted only by the dialog's Cancel.
   const flowRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async ({ quiet = false }: { quiet?: boolean } = {}) => {
@@ -108,7 +108,10 @@ export function ConnectorsSettingsPanel({
     }
   }, [client]);
 
-  useEffect(() => () => { flowRef.current?.abort(); }, []);
+  // Leaving the panel (closing Settings, switching tabs) does not abort a
+  // pending sign-in: the browser step can take minutes, and the loopback
+  // listener must stay up for the redirect. The flow finishes on its own and
+  // stops at its 10-minute timeout; the next list shows the result.
 
   useEffect(() => {
     let active = true;

@@ -128,6 +128,10 @@ where
         Some(section) => format!("{system_prompt}\n\n{section}"),
         None => system_prompt,
     };
+    let system_prompt = match crate::connectors::shared_run_guidance(run) {
+        Some(guidance) => format!("{system_prompt}\n\n{guidance}"),
+        None => system_prompt,
+    };
     let system_prompt = match memory_prompt_section(run, &memory) {
         Some(section) => format!("{system_prompt}\n\n{section}"),
         None => system_prompt,
