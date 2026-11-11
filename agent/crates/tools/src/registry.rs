@@ -22,6 +22,7 @@ pub fn builtin_tools() -> Vec<Box<dyn Tool>> {
         Box::new(crate::web_fetch::WebFetchTool),
         Box::new(crate::browser_fetch::BrowserFetchTool),
         Box::new(crate::reach_out::ReachOutTool),
+        Box::new(crate::plan_card::PlanCardTool),
         Box::new(crate::reflection_tool::ReflectionTool),
     ]
 }

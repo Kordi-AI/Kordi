@@ -82,6 +82,24 @@ pub(super) fn addresses_other_agent(
         })
 }
 
+/// Whether a decoded envelope targets or mentions the System agent itself.
+pub(super) fn addresses_system_agent(envelope: &Value, system_agent_account_id: &str) -> bool {
+    let is_system_agent = |value: &str| value.contains(system_agent_account_id);
+    envelope_field(envelope, "targetCloudAgentId")
+        .and_then(non_empty)
+        .is_some_and(is_system_agent)
+        || envelope_field(envelope, "mentions")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .any(|mention| {
+                ["targetIdentityId", "agentId", "humanId"]
+                    .iter()
+                    .filter_map(|key| mention.get(*key).and_then(non_empty))
+                    .any(is_system_agent)
+            })
+}
+
 /// Member handles as `addresses_other_agent` compares them.
 pub(super) fn member_handles<'a>(display_names: impl Iterator<Item = &'a str>) -> BTreeSet<String> {
     display_names.map(normalized_handle).collect()
@@ -206,6 +224,24 @@ mod tests {
             &group(json!({"text": "Dinner Friday at 7?"})),
             system_agent,
             &handles()
+        ));
+        // Asking the System agent itself is a request for it.
+        assert!(addresses_system_agent(
+            &group(
+                json!({"mentions": [{"label": "System", "targetKind": "agent",
+                "targetIdentityId": "agent:cloud-agent:acct_kordi_pip"}]})
+            ),
+            system_agent
+        ));
+        assert!(addresses_system_agent(
+            &json!({"targetCloudAgentId": "cloud-agent:acct_kordi_pip"}),
+            system_agent
+        ));
+        assert!(!addresses_system_agent(
+            &group(
+                json!({"text": "Dinner Friday at 7?", "targetCloudAgentId": "cloud-agent:acct_a"})
+            ),
+            system_agent
         ));
     }
 

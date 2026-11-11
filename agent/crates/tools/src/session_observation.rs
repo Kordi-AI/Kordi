@@ -184,8 +184,8 @@ impl Tool for ReadSessionTool {
                 "offset": { "type": ["integer", "null"], "minimum": 0, "description": "Set null or omit for an initial read. Only use a returned nextOffset to continue a truncated message body." },
                 "mode": {
                     "type": ["string", "null"],
-                    "enum": ["index", "messages", "participants", "attachment", null],
-                    "description": "Use index first to list message ids without message text. Use messages with messageIds to disclose selected message bodies. Use participants only when participant names or mention handles are needed. Defaults to index."
+                    "enum": ["index", "messages", "participants", "attachment", "info", null],
+                    "description": "Use index first to list message ids without message text. Use messages with messageIds to disclose selected message bodies. Use participants only when participant names or mention handles are needed. In a shared conversation, use info for its members (owner and requester marked, profile location and time zone), their agents, the current date and time, this task's open questions, and plan cards, instead of asking. Defaults to index."
                 },
                 "messageIds": {
                     "type": ["array", "null"],

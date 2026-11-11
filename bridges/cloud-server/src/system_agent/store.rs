@@ -14,14 +14,11 @@ use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 use uuid::Uuid;
 
-use crate::chat_sync::models::SendMessageRequest;
-
-use super::addressing;
 use super::cards::{mark_card_seen, sync_card_messages};
 use super::config::SystemAgentConfig;
 use super::input::Candidate;
 use super::limits;
-use super::mentions::{encode_system_agent_message_with_mentions, resolve_mentions};
+use super::post::post_text;
 use crate::resource_pools::usage::{settle, Settlement};
 use crate::resource_pools::Feature;
 
@@ -30,6 +27,13 @@ pub use super::retry::{fail, release_stale_runs};
 /// Stored run ids keep the old prefix.
 pub const RUN_PREFIX: &str = "pip_";
 const SWEEP_BATCH: i64 = 10;
+
+/// A SQL pattern for an RFC 3339 time as the sweep row stores it.
+macro_rules! iso_time {
+    () => {
+        "'^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}'"
+    };
+}
 
 /// Conversations worth a run. Every condition reads the same card as the run
 /// input (the newest one still in play), so a selected conversation always
@@ -77,9 +81,35 @@ pub(super) const SWEEP_SQL: &str = concat!(
                THEN (s.hooks_fired->>('card_seen:' || card.event_id))::bigint ELSE 0 END
              AND card.updated_at <= now() - interval '45 seconds')
          -- A person's agent owns a task here and it is time to check whether it stalled.
-         OR CASE WHEN jsonb_typeof(s.hooks_fired #> '{deferred,checkAfter}') = 'string'
+         -- Stored times are cast only when they look like one, so one bad row
+         -- never fails the sweep for every conversation.
+         OR CASE WHEN s.hooks_fired #>> '{deferred,checkAfter}' ~ ",
+    iso_time!(),
+    "
               THEN (s.hooks_fired #>> '{deferred,checkAfter}')::timestamptz <= now()
               ELSE false END
+         -- A held plan discussion may have gone quiet, or a loop or conflict waited.
+         OR CASE WHEN s.hooks_fired #>> '{planDiscussion,checkAfter}' ~ ",
+    iso_time!(),
+    "
+              THEN (s.hooks_fired #>> '{planDiscussion,checkAfter}')::timestamptz <= now()
+              ELSE false END
+         OR CASE WHEN s.hooks_fired ->> 'triggerCheckAfter' ~ ",
+    iso_time!(),
+    "
+              THEN (s.hooks_fired ->> 'triggerCheckAfter')::timestamptz <= now()
+              ELSE false END
+         -- A live card changed since the last conflict check, 45 seconds ago or more.
+         OR EXISTS (SELECT 1 FROM cloud_plan_cards card
+              WHERE card.conversation_id = c.conversation_id
+                AND card.updated_at <= now() - interval '45 seconds'
+                AND card.updated_at > CASE WHEN s.hooks_fired ->> 'cardsCheckedAt' ~ ",
+    iso_time!(),
+    "
+                  THEN (s.hooks_fired ->> 'cardsCheckedAt')::timestamptz ELSE '-infinity' END
+                AND ",
+    crate::plan_cards::live_plan_card_sql!(),
+    ")
          -- A reminder is due: one window at a time, as the run input offers it.
          OR (card.start_at > now() AND (
                (card.start_at <= now() + interval '2 hours'
@@ -171,11 +201,38 @@ pub async fn sweep(pool: &PgPool, config: &SystemAgentConfig) -> Result<usize, s
             context_start_sequence,
             hooks_fired,
         };
-        if enqueue(pool, config, &candidate).await? {
-            queued += 1;
+        // One conversation's bad data or failed read must never stop the
+        // System agent everywhere else: log it, hold that conversation back
+        // briefly, and go on with the rest.
+        match enqueue(pool, config, &candidate).await {
+            Ok(true) => queued += 1,
+            Ok(false) => {}
+            Err(error) => {
+                eprintln!("[system-agent] Skipped conversation {conversation_id}: {error}");
+                if let Err(error) = hold_back(pool, conversation_id).await {
+                    eprintln!("[system-agent] Could not hold back {conversation_id}: {error}");
+                }
+            }
         }
     }
     Ok(queued)
+}
+
+/// How long a conversation that could not be evaluated waits for its next try.
+const HOLD_BACK_SECONDS: f64 = 60.0;
+
+async fn hold_back(pool: &PgPool, conversation_id: Uuid) -> Result<(), sqlx_core::Error> {
+    query(
+        "UPDATE cloud_pip_conversation_state
+         SET retry_after = now() + ($2 * interval '1 second'), last_error = 'sweep_failed',
+             updated_at = now()
+         WHERE conversation_id = $1 AND active_run_id IS NULL",
+    )
+    .bind(conversation_id)
+    .bind(HOLD_BACK_SECONDS)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 async fn enqueue(
@@ -183,24 +240,18 @@ async fn enqueue(
     config: &SystemAgentConfig,
     candidate: &Candidate,
 ) -> Result<bool, sqlx_core::Error> {
+    #[cfg(test)]
+    tests::fail_if_broken(candidate.conversation_id)?;
     // A person's agent owns its task: its messages stay context until it
     // replies, or come back as new here once it stalls.
-    let (candidate, input) = super::ownership_store::prepare(pool, config, candidate).await?;
-    let candidate = &candidate;
-    let hook_names: Vec<&str> = input["hooks"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|hook| hook["name"].as_str())
-        .collect();
-    // New chat alone is checked for free first: small talk with no day, time,
-    // place, or plan word (or no answer while a card is open), and messages
+    let (prepared, input, gate) = super::ownership_store::prepare(pool, config, candidate).await?;
+    // The System agent acts only on a trigger: plan talk waits for silence,
+    // and loops, conflicts and stalls step in once. Small talk, and messages
     // for an agent or already answered by one, never reach the model.
-    let only_new_messages = hook_names == ["new_messages"];
-    let worth_a_look = !only_new_messages || addressing::new_chat_worth_a_look(&input);
-    if hook_names.is_empty() || !worth_a_look {
-        // Nothing to react to after all (for example a card whose reminder
-        // already fired). Advance the cursor so the row stops looking dirty.
+    let planned = super::triggers_store::plan(pool, config, prepared, input, gate).await?;
+    let Some((candidate, input)) = planned else {
+        // Nothing to react to now. Advance the cursor so the row stops
+        // looking dirty; a held plan discussion keeps its own place.
         query(
             "UPDATE cloud_pip_conversation_state SET seen_sequence = $2, updated_at = now()
              WHERE conversation_id = $1 AND active_run_id IS NULL",
@@ -210,7 +261,8 @@ async fn enqueue(
         .execute(pool)
         .await?;
         return Ok(false);
-    }
+    };
+    let candidate = &candidate;
 
     let run_id = format!("{RUN_PREFIX}{}", Uuid::new_v4().simple());
     let mut tx = pool.begin().await?;
@@ -307,51 +359,6 @@ async fn active_run(
     ))
 }
 
-/// Posts the System agent's words as their own message, with `@Handle` mentions
-/// resolved.
-async fn post_text(
-    pool: &PgPool,
-    run_id: &str,
-    run: &ActiveRun,
-    text: &str,
-) -> Result<Option<String>, sqlx_core::Error> {
-    let members: Vec<(String, String)> = query_as(
-        "SELECT member.account_id, COALESCE(account.display_name, 'Member')
-         FROM cloud_chat_conversation_members member
-         JOIN cloud_accounts account ON account.account_id = member.account_id
-         WHERE member.conversation_id = $1 AND member.membership_state = 'active'",
-    )
-    .bind(run.conversation_id)
-    .fetch_all(pool)
-    .await?;
-    let mentions = resolve_mentions(text, &members);
-    let request = SendMessageRequest {
-        client_message_id: Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("{run_id}:text").as_bytes()),
-        kind: "text".to_string(),
-        content: json!({
-            "schema": 1,
-            "blocks": [{"type": "text", "text": encode_system_agent_message_with_mentions(text, mentions)}],
-            "legacy_attachments": [],
-        }),
-        reply_to_message_id: None,
-        attachment_ids: Vec::new(),
-    };
-    match crate::chat_sync::store::send_message(
-        pool,
-        &run.owner_account_id,
-        run.conversation_id,
-        request,
-    )
-    .await
-    {
-        Ok(outcome) => Ok(Some(outcome.value.id.to_string())),
-        Err(error) => {
-            eprintln!("[system-agent] Could not post the System agent's text message: {error}");
-            Ok(None)
-        }
-    }
-}
-
 /// Every reminder a run was offered counts as fired once the run finishes,
 /// whether the System agent posted a nudge or chose to stay silent. The sweep
 /// keeps picking a chat while a due reminder is unmarked, so waiting for the
@@ -395,6 +402,7 @@ pub async fn complete(
     .bind(&run.created_at)
     .fetch_optional(pool)
     .await?;
+    let card_touched = touched.is_some();
     if let Some((event_id,)) = touched {
         if let Some(row) = crate::plan_cards::store::load(pool, &event_id).await? {
             if let Err(error) = sync_card_messages(pool, &run.owner_account_id, &row).await {
@@ -404,13 +412,22 @@ pub async fn complete(
     }
     let response_message_id = match output.message.as_deref().map(str::trim) {
         Some(text) if !text.is_empty() => {
-            let text = super::ownership::with_step_in_line(&run.input, text);
-            post_text(pool, run_id, &run, &text).await?
+            let (sender, conversation) = (&run.owner_account_id, run.conversation_id);
+            post_text(
+                pool,
+                run_id,
+                sender,
+                conversation,
+                &run.input,
+                text,
+                card_touched,
+            )
+            .await?
         }
         _ => None,
     };
 
-    let hooks = offered_reminders(&run.input);
+    let hooks = super::triggers::finish_marks(&run.input);
 
     let now = Utc::now().to_rfc3339();
     let mut tx = pool.begin().await?;
@@ -449,33 +466,5 @@ pub async fn complete(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn run_output_accepts_json_and_bare_text() {
-        let json =
-            parse_run_output(r#"{"message":"Lunch card is up.","hooksHandled":["t_minus_24h"]}"#);
-        assert_eq!(json.message.as_deref(), Some("Lunch card is up."));
-        assert_eq!(json.hooks_handled, vec!["t_minus_24h".to_string()]);
-        let silent = parse_run_output(r#"{"message":null,"hooksHandled":[]}"#);
-        assert!(silent.message.is_none());
-        let bare = parse_run_output("Still on for tomorrow?");
-        assert_eq!(bare.message.as_deref(), Some("Still on for tomorrow?"));
-        assert!(parse_run_output("   ").message.is_none());
-    }
-
-    #[test]
-    fn offered_reminders_fire_even_when_the_run_stays_silent() {
-        let input = json!({"hooks": [
-            {"name": "new_messages", "sinceSequence": 4},
-            {"name": "t_minus_24h", "key": "t_minus_24h:plan_a", "eventId": "plan_a"},
-            {"name": "card_changed", "eventId": "plan_a", "revision": 3},
-        ]});
-        assert_eq!(
-            offered_reminders(&input),
-            json!({"t_minus_24h:plan_a": true})
-        );
-        assert_eq!(offered_reminders(&json!({"hooks": []})), json!({}));
-    }
-}
+#[path = "store_tests.rs"]
+pub(super) mod tests;

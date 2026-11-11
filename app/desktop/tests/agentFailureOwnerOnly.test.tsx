@@ -155,3 +155,18 @@ test('the owner line for each failure never asks to sign in', () => {
     assert.doesNotMatch(text, /sign in/i, failureCode);
   }
 });
+
+test('an unreachable agent fails in the same row as any failed reply', () => {
+  for (const viewer of [OWNER, MEMBER]) {
+    const failed = render(failedReply({ error: "Pebble couldn't reply.", failureCode: 'missing_provider_auth' }), viewer);
+    const unreachable = render(failedReply({ error: "Couldn't reach Pebble.", failureCode: 'agent_unreachable' }), viewer);
+    for (const { mapped } of [failed, unreachable]) {
+      assert.equal(mapped.role, failed.mapped.role);
+      assert.equal(mapped.turn?.status, 'failed');
+      assert.equal(mapped.turn?.completed, true);
+      assert.equal(mapped.turn?.succeeded, false);
+      assert.ok(mapped.turn?.error, 'a visible failure line');
+    }
+    assert.doesNotMatch(unreachable.markup, /aria-busy="true"|Working/);
+  }
+});

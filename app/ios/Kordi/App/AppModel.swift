@@ -6497,8 +6497,9 @@ final class AppModel: ObservableObject {
     private func mapMessage(_ message: CloudMessageDTO, conversation: ConversationSummary, ownAccountId: String) -> ChatMessage {
         let isAgentResponse = CloudMessageCodec.isAgentResponse(message.body)
         let responseRequestId = isAgentResponse ? CloudMessageCodec.agentResponseRequestId(message.body) : nil
-        let messageKind = CloudMessageCodec.canonicalMessageKind(message)
-        let author: MessageAuthor = isAgentResponse ? .agent : KordiSystemIdentity.author(
+        let cardAgent = KordiSystemIdentity.planCardAgent(message, ownAccountId: ownAccountId)
+        let messageKind = cardAgent == nil ? CloudMessageCodec.canonicalMessageKind(message) : PlanCardAgentSender.messageKind
+        let author: MessageAuthor = isAgentResponse || cardAgent != nil ? .agent : KordiSystemIdentity.author(
             messageKind: messageKind, fromAccountId: message.fromAccountId, ownAccountId: ownAccountId)
         let state = CloudMessageStateProjector.deliveryState(for: message, ownAccountId: ownAccountId)
         let isOwnerRun = isAgentResponse && message.fromAccountId == ownAccountId && message.toAccountId == ownAccountId
@@ -6509,8 +6510,9 @@ final class AppModel: ObservableObject {
             conversationId: conversation.id,
             conversationSequence: message.conversationSequence,
             author: author,
-            authorName: author == .me ? "You" : KordiSystemIdentity.directAuthorName(
-                messageKind: messageKind, fromAccountId: message.fromAccountId, fallback: conversation.displayName),
+            authorName: cardAgent?.authorName ?? (author == .me ? "You" : KordiSystemIdentity.directAuthorName(
+                messageKind: messageKind, fromAccountId: message.fromAccountId, fallback: conversation.displayName)),
+            senderOwnerName: cardAgent?.ownerName,
             text: CloudMessageCodec.viewerText(message.body, viewerOwnsAgent: message.fromAccountId == ownAccountId, agentName: nil),
             createdAt: parseCloudDate(message.createdAt),
             editedAt: message.editedAt.map(parseCloudDate),
@@ -6519,14 +6521,11 @@ final class AppModel: ObservableObject {
             errorMessage: nil,
             requestMessageId: responseRequestId,
             attachments: message.attachments.map { $0.chatAttachment(messageKind: messageKind) },
-            replyToMessageId: CloudMessageCodec.directEnvelope(message.body)?.messageAction?.replyToMessageId
-                ?? responseRequestId,
+            replyToMessageId: CloudMessageCodec.directEnvelope(message.body)?.messageAction?.replyToMessageId ?? responseRequestId,
             reactionTargetMessageId: message.messageId,
             messageAction: CloudMessageCodec.directEnvelope(message.body)?.messageAction,
             mentions: MessageMention.rebased(
-                CloudMessageCodec.directEnvelope(message.body)?.mentions ?? [],
-                in: CloudMessageCodec.displayText(message.body)
-            ),
+                CloudMessageCodec.directEnvelope(message.body)?.mentions ?? [], in: CloudMessageCodec.displayText(message.body)),
             messageKind: messageKind,
             voiceMessage: message.voiceMessage,
             planCard: message.planCard,
@@ -6556,7 +6555,8 @@ final class AppModel: ObservableObject {
         for wire in messages {
             guard let envelope = CloudGroupMessageCodec.parse(wire.body) else {
                 guard ChatCallActivity(messageKind: wire.messageKind) == nil else { continue }
-                let author = KordiSystemIdentity.author(
+                let cardAgent = KordiSystemIdentity.planCardAgent(wire, ownAccountId: ownAccountId)
+                let author: MessageAuthor = cardAgent != nil ? .agent : KordiSystemIdentity.author(
                     messageKind: wire.messageKind, fromAccountId: wire.fromAccountId, ownAccountId: ownAccountId)
                 canonicalMessagesByID[wire.messageId] = ChatMessage(
                     id: wire.messageId,
@@ -6564,11 +6564,10 @@ final class AppModel: ObservableObject {
                     conversationId: conversation.id,
                     conversationSequence: wire.conversationSequence,
                     author: author,
-                    authorName: author == .me
-                        ? "You"
-                        : KordiSystemIdentity.groupAuthorName(
-                            messageKind: wire.messageKind, fromAccountId: wire.fromAccountId,
-                            participantNames: participantNames, fallback: conversation.displayName),
+                    authorName: cardAgent?.authorName ?? (author == .me ? "You" : KordiSystemIdentity.groupAuthorName(
+                        messageKind: wire.messageKind, fromAccountId: wire.fromAccountId,
+                        participantNames: participantNames, fallback: conversation.displayName)),
+                    senderOwnerName: cardAgent?.ownerName,
                     text: CloudMessageCodec.displayText(wire.body),
                     createdAt: parseCloudDate(wire.createdAt),
                     editedAt: wire.editedAt.map(parseCloudDate),
@@ -6585,7 +6584,7 @@ final class AppModel: ObservableObject {
                         $0.chatAttachment(messageKind: wire.messageKind)
                     },
                     reactionTargetMessageId: wire.messageId,
-                    messageKind: wire.messageKind,
+                    messageKind: cardAgent == nil ? wire.messageKind : PlanCardAgentSender.messageKind,
                     voiceMessage: wire.voiceMessage,
                     planCard: wire.planCard,
                     reactions: wire.reactions,

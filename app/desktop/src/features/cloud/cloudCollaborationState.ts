@@ -1,4 +1,4 @@
-import { agentExchangeProgressTurn } from './agentExchangePresentation';
+import { agentExchangeProgressTurn, agentExchangeWaitsForViewer, yieldingCollaborationMessage } from './agentExchangePresentation';
 import { agentExchangeTurnIsWaiting, agentExchangeTurnIsYielding } from './agentExchangeOutcome';
 import {
   cloudCollaborationConversationId,
@@ -80,7 +80,7 @@ import { cleanCloudConversationTitle,cleanCloudSessionId } from './cloudConversa
 import {
   cloudDirectMessageAction,
   cloudDirectMessageDisplayText,
-  cloudDirectMessageMentions,
+  cloudDirectMessageMentions, cloudAgentResponseMentions,
   cloudDirectMessageTargetCloudAgentId,
   cloudDirectMessageTargetCloudAgentName,
   cloudDirectMessageTargetCloudAgentOwnerAccountId,
@@ -203,11 +203,11 @@ export function cloudMessageToCollaborationMessage(
     ),
     detail: undefined,
     attachments: cloudMessageAttachmentsForPresentation(message.attachments, message.voiceMessage),
-    mentions: agentResponse ? undefined : cloudDirectMessageMentions(message.body),
+    mentions: agentResponse ? cloudAgentResponseMentions(message.body) : cloudDirectMessageMentions(message.body),
     messageAction: directMessageAction,
     messageKind: message.messageKind ?? null, voiceMessage: message.voiceMessage ? cloudVoiceMessageToMessageVoice(message.voiceMessage) : null, planCard: message.planCard ?? null, reactionConversationId: message.conversationId ?? null, reactionTargetMessageId: message.messageId, cloudMessageVersion: message.version ?? null, editedAt: agentResponse?.agentExchangeStatus ? null : message.editedAt ?? null, reactions: message.reactions ?? [], ...cloudAgentFailureCodeField(agentResponse?.failureCode),
     localTurn: agentExchangeProgressTurn(agentResponse?.agentExchangeStatus, displayText, message.messageId, message.sessionId ?? '',
-      agentResponse?.requestId ? options.localAgentTurnsByRequestId?.[agentResponse.requestId] ?? syncedExecutionTurn ?? syncedBackgroundTurn : null),
+      agentResponse?.requestId ? options.localAgentTurnsByRequestId?.[agentResponse.requestId] ?? syncedExecutionTurn ?? syncedBackgroundTurn : null, agentResponse?.agentExchangeWaitingFor, agentExchangeWaitsForViewer(agentResponse?.agentExchangeWaitingForAccountId, account.accountId, isOwn && agentResponse?.agentExchangeWaitingForRequester === true)),
   };
 }
 
@@ -548,7 +548,7 @@ export function buildCloudCollaborationConversation({
   const collaborationMessages = visibleCloudMessages.flatMap((message) => {
     const responseId = parseCloudAgentResponse(message.body)?.requestId;
     const responseTurn = responseId ? localAgentTurnsByRequestId[responseId] : undefined;
-    if (responseTurn && agentExchangeTurnIsYielding(responseTurn)) return [];
+    if (responseTurn && agentExchangeTurnIsYielding(responseTurn)) return [yieldingCollaborationMessage(cloudMessageToCollaborationMessage(account, message, contact, { cancelledRequestIds, localAgentTurnsByRequestId: {}, targetAgentNameByRequestId: explicitResponseAgentNames }), message.messageId, message.sessionId ?? '', parseCloudAgentResponse(message.body)?.agentExchangeWaitingFor)];
     const mapped = cloudMessageToCollaborationMessage(account, message, contact, { cancelledRequestIds, localAgentTurnsByRequestId, targetAgentNameByRequestId: explicitResponseAgentNames });
     const targetAccountId = requestTargetAccountIds.get(message.messageId);
     if (!targetAccountId) return [mapped];
