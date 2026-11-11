@@ -99,48 +99,6 @@ enum SessionVisibilitySnapshotPolicy {
     }
 }
 
-private struct CloudRealtimeConnectFrame: Encodable {
-    let type = "connect"
-    let protocolVersion = 2
-    let deviceId: String
-    let cursor: String
-
-    enum CodingKeys: String, CodingKey {
-        case type, cursor
-        case protocolVersion = "protocol_version"
-        case deviceId = "device_id"
-    }
-}
-
-private struct CloudRealtimeHeartbeatFrame: Encodable {
-    let type = "heartbeat"
-    let lastAppliedSequence: Int64
-
-    enum CodingKeys: String, CodingKey {
-        case type
-        case lastAppliedSequence = "last_applied_seq"
-    }
-}
-
-struct CloudRealtimeServerFrame: Decodable {
-    let type: String
-    let streamSequence: Int64?
-    let event: CloudChatEvent?
-
-    var call: CloudCall? {
-        guard let event,
-              event.eventType == "call.created" || event.eventType == "call.updated" else {
-            return nil
-        }
-        return event.payload.call
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case type, event
-        case streamSequence = "stream_seq"
-    }
-}
-
 struct ConversationHistoryLoadKey: Hashable {
     let accountID: String
     let conversationID: String
@@ -349,8 +307,10 @@ final class AppModel: ObservableObject {
     private var connectorsClientCache: CloudConnectorsClient?
     private var deviceOperationIds: [String: String] = [:]
     private var cloudSyncTask: Task<Void, Never>?
+    private var cloudSyncLoopToken: String?
     private var cloudRealtimeTask: Task<Void, Never>?
-    private var cloudRealtimeSyncWakeTask: Task<Void, Never>?
+    /// Wakes the sync loop between passes; a wake never cancels a running pass.
+    private let cloudSyncPasses = CoalescingWakeSignal()
     private var expressiveMediaSyncTask: Task<Void, Never>?
     private var agentRunTasks: [String: Task<Void, Never>] = [:]
     private var expressiveMediaSyncTaskID: UUID?
@@ -359,7 +319,6 @@ final class AppModel: ObservableObject {
     private var cloudSyncLastStreamSequence: Int64 = 0
     private var cloudSyncHasCurrentSequence = false
     private var hasPendingDirectoryRefresh = false
-    private var cloudRealtimeLastReceivedSequence: Int64 = 0
     private var hasHydratedWireSnapshot = false
     private var hasHydratedSessionVisibility = false
     private var hasHydratedForkLineage = false
@@ -387,6 +346,7 @@ final class AppModel: ObservableObject {
     private var pendingProviderAuthBindingsBySessionID: [String: String] = [:]
     private var providerAuthenticationSyncTask: Task<Void, Never>?
     private let conversationSendQueue: ConversationSendQueue
+    private let sendOutbox = MessageSendOutbox()
     private var pendingAttachmentDraftsByMessageId: [String: [PendingAttachment]] = [:]
     private var videoCacheTasks: [String: Task<Void, Never>] = [:]
     private var pendingVoiceDraftsByMessageId: [String: PendingVoiceMessage] = [:]
@@ -461,7 +421,6 @@ final class AppModel: ObservableObject {
     deinit {
         cloudSyncTask?.cancel()
         cloudRealtimeTask?.cancel()
-        cloudRealtimeSyncWakeTask?.cancel()
         expressiveMediaSyncTask?.cancel()
         agentRunTasks.values.forEach { $0.cancel() }
     }
@@ -772,8 +731,7 @@ final class AppModel: ObservableObject {
         cloudSyncTask = nil
         cloudRealtimeTask?.cancel()
         cloudRealtimeTask = nil
-        cloudRealtimeSyncWakeTask?.cancel()
-        cloudRealtimeSyncWakeTask = nil
+        sendOutbox.reset()
         expressiveMediaSyncTask?.cancel()
         expressiveMediaSyncTask = nil
         expressiveMediaSyncTaskID = nil
@@ -782,7 +740,6 @@ final class AppModel: ObservableObject {
         cloudSyncCursor = "0"
         cloudSyncLastStreamSequence = 0
         cloudSyncHasCurrentSequence = false
-        cloudRealtimeLastReceivedSequence = 0
         hasHydratedWireSnapshot = false
         hasHydratedSessionVisibility = false
         hasHydratedForkLineage = false
@@ -2440,6 +2397,7 @@ final class AppModel: ObservableObject {
                 let sentRows = try await sendGroupMessage(
                     text: text,
                     localMessageId: localId,
+                    createdAt: optimistic.createdAt,
                     conversation: conversation,
                     token: token,
                     account: account,
@@ -2614,12 +2572,30 @@ final class AppModel: ObservableObject {
             }
         } catch {
             recordCloudConnectionFailure(error)
+            // A network failure or timeout is an unknown outcome, not a failure: the
+            // outbox sends it again with the same client message id until the
+            // response or the sync confirms it.
+            if self.account?.accountId == account.accountId, sendOutbox.keep(optimistic, in: conversation, after: error,
+                resend: { [weak self] in await self?.resendUnconfirmed($1, in: $0) }) {
+                return scheduleRealtimeSyncWake()
+            }
             if pendingAgentRequestIds[conversation.id, default: []].contains(localId) {
                 finishPendingAgentRequest(conversationId: conversation.id, requestMessageId: localId, failed: true)
             }
             noteIfAIConsentRequired(error)
             markMessageFailed(localId, error: userFacing(error, fallback: "Message not sent."))
         }
+    }
+
+    /// Sends a kept message again while the server has not confirmed it, or while
+    /// its agent request still waits for the response that dispatches the agent.
+    private func resendUnconfirmed(_ message: ChatMessage, in kept: ConversationSummary) async {
+        let conversation = ConversationIdentityResolver.current(kept, in: conversations)
+        let isUnconfirmed = messagesByConversation[conversation.id]?.contains {
+            $0.id == message.id && $0.deliveryState == .sending
+        } == true
+        guard isUnconfirmed || pendingAgentRequestIds[conversation.id]?.contains(message.id) == true else { return }
+        await retry(message, in: conversation)
     }
 
     func retry(_ message: ChatMessage, in conversation: ConversationSummary) async {
@@ -6372,6 +6348,7 @@ final class AppModel: ObservableObject {
     private func sendGroupMessage(
         text: String,
         localMessageId: String,
+        createdAt: Date,
         conversation: ConversationSummary,
         token: String,
         account: CloudAccount,
@@ -6400,7 +6377,8 @@ final class AppModel: ObservableObject {
                 id: localMessageId,
                 senderAccountId: account.accountId,
                 text: text,
-                createdAtMs: Date().timeIntervalSince1970 * 1_000,
+                // The send time, so a repeat with the same client message id has the same content.
+                createdAtMs: createdAt.timeIntervalSince1970 * 1_000,
                 senderKind: "human",
                 senderDisplayName: account.preferredName,
                 deliveryState: "complete",
@@ -6806,13 +6784,18 @@ final class AppModel: ObservableObject {
             .sorted { $0.value < $1.value }
     }
 
-    /// Realtime frames wake the durable HTTP cursor reader immediately. This
-    /// two-second poll is the bounded repair path when realtime is unavailable.
+    /// Realtime frames, pushes and the foreground wake the durable HTTP cursor
+    /// reader. A wake never cancels a running pass; it makes one more pass run
+    /// after it. The two-second poll is the repair path when realtime is
+    /// unavailable, and it also refreshes thread attention, contact requests
+    /// and presence.
     private func startCloudSync(resetCursor: Bool) {
         guard let token else { return }
         startCloudRealtime(token: token)
+        if !resetCursor, cloudSyncTask != nil, cloudSyncLoopToken == token { return cloudSyncPasses.wake() }
         let isForkLineageReplay = resetCursor
         cloudSyncTask?.cancel()
+        cloudSyncLoopToken = token
         if resetCursor {
             cloudSyncCursor = "0"
             cloudSyncHasCurrentSequence = false
@@ -6820,194 +6803,171 @@ final class AppModel: ObservableObject {
         }
         cloudSyncTask = Task { [weak self] in
             guard let self else { return }
-            var hasUnpersistedChanges = resetCursor
-            var nextCursor = cloudSyncCursor
-            var pendingEvents: [CloudSyncEvent] = []
-            var chatPollsUntilContactRefresh = 0
-            var chatPollsUntilPresenceRefresh = 0
-            while !Task.isCancelled {
-                do {
-                    let response = try await api.sync(token: token, cursor: nextCursor)
-                    guard sessionIdentity.contains(token), !Task.isCancelled else { return }
-                    if cloudConnectionState != .connected {
-                        cloudConnectionState = .connected
-                        if errorMessage == Self.cloudUnavailableMessage {
-                            errorMessage = nil
-                        }
-                    }
-                    if !response.events.isEmpty {
-                        hasUnpersistedChanges = true
-                        pendingEvents.append(contentsOf: response.events)
-                    }
-                    nextCursor = response.cursor
-                    cloudSyncLastStreamSequence = response.lastStreamSequence
-                    if response.hasMore { continue }
-
-                    var shouldRefreshProjections = !pendingEvents.isEmpty
-                    if !pendingEvents.isEmpty {
-                        let hasProviderAuthenticationChanges = pendingEvents.contains {
-                            $0.eventType == "provider-auth.updated"
-                        }
-                        if hasProviderAuthenticationChanges {
-                            await refreshProviderAuthentication()
-                        }
-                        guard sessionIdentity.contains(token), !Task.isCancelled else { return }
-                        applyCloudSyncEvents(pendingEvents)
-                        await refreshPersonalAgentsIfNeeded(after: pendingEvents)
-                        let hasDirectoryChanges = pendingEvents.contains {
-                            $0.eventType != "message.upsert"
-                                && $0.eventType != "session.pin.updated"
-                                && $0.eventType != "message.read"
-                                && $0.eventType != "provider-auth.updated"
-                        }
-                        if hasDirectoryChanges { hasPendingDirectoryRefresh = true }
-                        pendingEvents.removeAll(keepingCapacity: true)
-                    }
-                    // A concurrent older refresh cannot satisfy a new directory event.
-                    // Coalesce changes and retry on the next poll when busy or failed,
-                    // without replaying message, call or device effects.
-                    if hasPendingDirectoryRefresh {
-                        let refreshed = await refreshWorkspace(showSyncActivity: false)
-                        guard sessionIdentity.contains(token), !Task.isCancelled else { return }
-                        if refreshed {
-                            hasPendingDirectoryRefresh = false
-                            shouldRefreshProjections = true
-                        }
-                    }
-                    if shouldRefreshProjections {
-                        await rebuildConversationCatalog()
-                        await refreshLoadedConversationProjections()
-                    }
-                    guard sessionIdentity.contains(token), !Task.isCancelled else { return }
-                    cloudSyncCursor = nextCursor
-                    cloudSyncHasCurrentSequence = true
-                    hasHydratedWireSnapshot = true
-                    if isForkLineageReplay { hasHydratedForkLineage = true }
-                    if messageSyncState != .upToDate { messageSyncState = .upToDate }
-                    if hasUnpersistedChanges, let accountId = account?.accountId {
-                        lastMessageSyncAt = Date()
-                        await persistCloudSnapshot(accountId: accountId)
-                        hasUnpersistedChanges = false
-                    }
-                } catch {
-                    if Task.isCancelled { return }
-                    // No page has been committed yet. Retry from the last
-                    // persisted cursor so a background transition cannot skip
-                    // a partially received batch.
-                    nextCursor = cloudSyncCursor
-                    pendingEvents.removeAll(keepingCapacity: true)
-                    recordCloudConnectionFailure(error)
-                    // The next foreground poll retries. User-triggered actions
-                    // still surface their own actionable network errors.
-                }
-
-                await refreshThreadAttention()
-                if chatPollsUntilContactRefresh == 0 {
-                    await refreshContactRequests()
-                    chatPollsUntilContactRefresh = 2
-                } else {
-                    chatPollsUntilContactRefresh -= 1
-                }
-                if chatPollsUntilPresenceRefresh == 0 {
-                    await refreshContactPresence()
-                    chatPollsUntilPresenceRefresh = 7
-                } else {
-                    chatPollsUntilPresenceRefresh -= 1
-                }
-                try? await Task.sleep(for: Self.cloudSyncRepairInterval)
+            var state = CloudSyncLoopState(nextCursor: cloudSyncCursor, hasUnpersistedChanges: resetCursor)
+            await cloudSyncPasses.runPasses(every: Self.cloudSyncRepairInterval) {
+                await self.cloudSyncPass(&state, token: token, replaysForkLineage: isForkLineageReplay)
             }
         }
     }
 
+    /// Reads the cursor until caught up, applies and persists the events, then
+    /// refreshes thread attention, contact requests and presence on their cadence.
+    private func cloudSyncPass(
+        _ state: inout CloudSyncLoopState,
+        token: String,
+        replaysForkLineage: Bool
+    ) async -> CloudSyncPassOutcome {
+        do {
+            let response = try await api.sync(token: token, cursor: state.nextCursor)
+            guard sessionIdentity.contains(token), !Task.isCancelled else { return .stop }
+            if cloudConnectionState != .connected {
+                cloudConnectionState = .connected
+                if errorMessage == Self.cloudUnavailableMessage {
+                    errorMessage = nil
+                }
+            }
+            if !response.events.isEmpty {
+                state.hasUnpersistedChanges = true
+                state.pendingEvents.append(contentsOf: response.events)
+            }
+            if response.isFullReload {
+                // The server could not use the saved cursor. The bootstrap holds one
+                // message per conversation, so history is loaded again.
+                state.refillsOpenHistory = true
+                hasPendingDirectoryRefresh = true
+                fullyHydratedCanonicalGroupSessionIds = []
+            }
+            state.nextCursor = response.cursor
+            cloudSyncLastStreamSequence = response.lastStreamSequence
+            if response.hasMore { return .more }
+
+            var shouldRefreshProjections = !state.pendingEvents.isEmpty
+            if !state.pendingEvents.isEmpty {
+                let hasProviderAuthenticationChanges = state.pendingEvents.contains {
+                    $0.eventType == "provider-auth.updated"
+                }
+                if hasProviderAuthenticationChanges {
+                    await refreshProviderAuthentication()
+                }
+                guard sessionIdentity.contains(token), !Task.isCancelled else { return .stop }
+                applyCloudSyncEvents(state.pendingEvents)
+                await refreshPersonalAgentsIfNeeded(after: state.pendingEvents)
+                let hasDirectoryChanges = state.pendingEvents.contains {
+                    $0.eventType != "message.upsert"
+                        && $0.eventType != "session.pin.updated"
+                        && $0.eventType != "message.read"
+                        && $0.eventType != "provider-auth.updated"
+                }
+                if hasDirectoryChanges { hasPendingDirectoryRefresh = true }
+                state.pendingEvents.removeAll(keepingCapacity: true)
+            }
+            // A concurrent older refresh cannot satisfy a new directory event.
+            // Coalesce changes and retry on the next poll when busy or failed,
+            // without replaying message, call or device effects.
+            if hasPendingDirectoryRefresh {
+                let refreshed = await refreshWorkspace(showSyncActivity: false)
+                guard sessionIdentity.contains(token), !Task.isCancelled else { return .stop }
+                if refreshed {
+                    hasPendingDirectoryRefresh = false
+                    shouldRefreshProjections = true
+                }
+            }
+            if shouldRefreshProjections {
+                await rebuildConversationCatalog()
+                await refreshLoadedConversationProjections()
+            }
+            guard sessionIdentity.contains(token), !Task.isCancelled else { return .stop }
+            cloudSyncCursor = state.nextCursor
+            cloudSyncHasCurrentSequence = true
+            hasHydratedWireSnapshot = true
+            if replaysForkLineage { hasHydratedForkLineage = true }
+            if messageSyncState != .upToDate { messageSyncState = .upToDate }
+            if state.hasUnpersistedChanges, let accountId = account?.accountId {
+                lastMessageSyncAt = Date()
+                await persistCloudSnapshot(accountId: accountId)
+                state.hasUnpersistedChanges = false
+            }
+            if state.refillsOpenHistory {
+                state.refillsOpenHistory = false
+                await refillOpenConversationHistory()
+            }
+        } catch {
+            if Task.isCancelled { return .stop }
+            // No page has been committed yet. Retry from the last
+            // persisted cursor so a background transition cannot skip
+            // a partially received batch.
+            state.nextCursor = cloudSyncCursor
+            state.pendingEvents.removeAll(keepingCapacity: true)
+            recordCloudConnectionFailure(error)
+            // The next foreground poll retries, after any Retry-After the server
+            // sent. User-triggered actions surface their own network errors.
+            if let delay = CloudRetryAfter.delay(for: error) {
+                do { try await Task.sleep(for: delay) } catch { return .stop }
+            }
+        }
+
+        await refreshThreadAttention()
+        if state.passesUntilContactRefresh == 0 {
+            await refreshContactRequests()
+            state.passesUntilContactRefresh = 2
+        } else {
+            state.passesUntilContactRefresh -= 1
+        }
+        if state.passesUntilPresenceRefresh == 0 {
+            await refreshContactPresence()
+            state.passesUntilPresenceRefresh = 7
+        } else {
+            state.passesUntilPresenceRefresh -= 1
+        }
+        return .idle
+    }
+
+    /// After a full reload the conversations on screen, groups included, load
+    /// their latest history page again.
+    private func refillOpenConversationHistory() async {
+        let openIDs = Set(conversationReadPresentations.values.map(\.conversationID))
+        for conversation in conversations + archivedConversations where openIDs.contains(conversation.id) {
+            await loadConversation(conversation, forceReload: true)
+        }
+    }
+
+    /// One socket at a time, reconnected with backoff and jitter. A reconnect or a
+    /// `resync_required` frame catches up from the saved cursor; only the sync
+    /// endpoint's cursor-expired answer reloads.
     private func startCloudRealtime(token: String) {
         guard cloudRealtimeTask == nil else { return }
+        let link = CloudRealtimeLink()
         cloudRealtimeTask = Task { [weak self] in
-            guard let self else { return }
-            while !Task.isCancelled {
-                if cloudSyncCursor == "0" || !cloudSyncHasCurrentSequence {
-                    try? await Task.sleep(for: .milliseconds(100))
-                    continue
-                }
-                do {
-                    let connection = try await api.chatRealtimeConnection(token: token)
-                    let socket = URLSession.shared.webSocketTask(with: connection.url)
-                    cloudRealtimeLastReceivedSequence = cloudSyncLastStreamSequence
-                    socket.resume()
-                    try await Self.sendRealtimeFrame(
-                        CloudRealtimeConnectFrame(
-                            deviceId: connection.deviceId,
-                            cursor: cloudSyncCursor
-                        ),
-                        over: socket
-                    )
-                    let heartbeat = Task { @MainActor [weak self] in
-                        while !Task.isCancelled {
-                            try? await Task.sleep(for: .seconds(25))
-                            guard let self, !Task.isCancelled else { return }
-                            try? await Self.sendRealtimeFrame(
-                                CloudRealtimeHeartbeatFrame(
-                                    lastAppliedSequence: min(
-                                        cloudSyncLastStreamSequence,
-                                        cloudRealtimeLastReceivedSequence
-                                    )
-                                ),
-                                over: socket
-                            )
-                        }
-                    }
-                    defer {
-                        heartbeat.cancel()
-                        socket.cancel(with: .goingAway, reason: nil)
-                    }
-                    while !Task.isCancelled {
-                        let message = try await socket.receive()
-                        let data: Data
-                        switch message {
-                        case .string(let value): data = Data(value.utf8)
-                        case .data(let value): data = value
-                        @unknown default: continue
-                        }
-                        let frame = try JSONDecoder().decode(CloudRealtimeServerFrame.self, from: data)
-                        if frame.type == "event" {
-                            if let streamSequence = frame.streamSequence {
-                                cloudRealtimeLastReceivedSequence = max(
-                                    cloudRealtimeLastReceivedSequence,
-                                    streamSequence
-                                )
-                            }
-                            if let call = frame.call {
-                                applyCallSnapshot(call)
-                            }
-                            scheduleRealtimeSyncWake()
-                        } else if frame.type == "resync_required" {
-                            startCloudSync(resetCursor: true)
-                            break
-                        }
-                    }
-                } catch {
-                    if Task.isCancelled { return }
-                    try? await Task.sleep(for: .seconds(1))
-                }
-            }
+            await link.run(CloudRealtimeLink.Session(
+                isReady: { [weak self] in
+                    guard let self else { return false }
+                    return self.cloudSyncCursor != "0" && self.cloudSyncHasCurrentSequence
+                },
+                cursor: { [weak self] in self?.cloudSyncCursor ?? "0" },
+                readSequence: { [weak self] in self?.cloudSyncLastStreamSequence ?? 0 },
+                ticket: { [weak self] in
+                    guard let self else { throw CancellationError() }
+                    return try await self.api.chatRealtimeConnection(token: token)
+                },
+                connected: { [weak self] in self?.scheduleRealtimeSyncWake() },
+                event: { [weak self] frame in
+                    if let call = frame.call { self?.applyCallSnapshot(call) }
+                    self?.scheduleRealtimeSyncWake()
+                },
+                resyncRequired: { [weak self] _ in self?.scheduleRealtimeSyncWake() }
+            ))
         }
     }
 
+    /// Wakes the running sync loop, or starts one when none runs.
     private func scheduleRealtimeSyncWake() {
-        guard cloudRealtimeSyncWakeTask == nil else { return }
-        cloudRealtimeSyncWakeTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(50))
-            guard let self, !Task.isCancelled else { return }
-            cloudRealtimeSyncWakeTask = nil
-            startCloudSync(resetCursor: false)
-        }
+        startCloudSync(resetCursor: false)
     }
 
-    private static func sendRealtimeFrame<Frame: Encodable>(
-        _ frame: Frame,
-        over socket: URLSessionWebSocketTask
-    ) async throws {
-        let data = try JSONEncoder().encode(frame)
-        try await socket.send(.string(String(decoding: data, as: UTF8.self)))
+    /// A message push that reached the app catches up from the saved cursor.
+    func catchUpAfterPush() {
+        guard phase == .signedIn, !previewMode, cloudSyncTask != nil else { return }
+        cloudSyncPasses.wake()
     }
 
     private func refreshLoadedConversationProjections() async {
