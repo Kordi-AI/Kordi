@@ -123,6 +123,17 @@ pub fn prompt_section(run: &CloudAgentRun) -> Option<String> {
     Some(section)
 }
 
+/// Guidance for the owner's own request in a run the server marked
+/// `shared`: such a run gets no connector tools, so the model is told where
+/// they work. `None` for any other requester, audience, or a missing one.
+pub fn shared_run_guidance(run: &CloudAgentRun) -> Option<&'static str> {
+    let owner = run.owner_account_id.trim();
+    (run.connectors.audience.as_deref() == Some("shared")
+        && !owner.is_empty()
+        && owner == run.requester_account_id.trim())
+    .then_some(kordi_tools::connector_tools::SHARED_RUN_CONNECTOR_GUIDANCE)
+}
+
 /// Runs a connector tool call, or returns `None` when the lease does not list
 /// `call.name`; such calls continue to the built-in tools, where an unknown
 /// name is refused by the runner tool policy. `Err` carries the text the model

@@ -20,6 +20,11 @@ use crate::{
 pub const CONNECTOR_TOOLS_UNAVAILABLE: &str =
     "Connector tools are not available in this run. Do not guess what the service contains.";
 
+/// Prompt guidance for the owner's own request in a conversation other
+/// people can read. Such a run gets no connector tools (the consent boundary
+/// of issue 1712), so the agent says where they work instead of improvising.
+pub const SHARED_RUN_CONNECTOR_GUIDANCE: &str = "Connected services such as Gmail and Google Calendar are not available in this conversation, because other people can read it. They work only in the owner's private chat with you. If the owner asks you to read or change one of those services here, say so in one short sentence and ask them to continue in that private chat. Do not try to reach those services another way: no browser or desktop automation, no AppleScript, and no asking the owner to change browser or system permissions.";
+
 /// `read` never changes anything at the provider; `act` does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

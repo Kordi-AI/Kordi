@@ -1,5 +1,6 @@
 // Panel states added with the server-backed client: the sample notice, the
 // Kordi Cloud checking and unreachable lines, and canceling a pending connect.
+// A pending connect survives Escape, backdrop clicks, and leaving the panel.
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -94,6 +95,79 @@ test('canceling a pending connect aborts the flow', async () => {
     assert.equal(host.querySelector('[role="alert"]'), null, 'a cancel is not an error');
   } finally {
     await act(async () => root.unmount());
+    installed.restore();
+  }
+});
+
+/** A client whose connect stays pending and records whether it was aborted. */
+function pendingConnectClient() {
+  const preview = createPreviewConnectorsClient({ latencyMs: 0 });
+  const flow = { aborted: false };
+  const client = {
+    ...preview,
+    connect: (_providerId: string, input: { signal?: AbortSignal }) => new Promise<ConnectorState>((_resolve, reject) => {
+      input.signal?.addEventListener('abort', () => {
+        flow.aborted = true;
+        reject(new Error('Connecting Gmail was canceled.'));
+      });
+    }),
+  } as typeof preview;
+  return { client, flow };
+}
+
+test('a pending connect ignores Escape and backdrop clicks until Cancel', async () => {
+  const installed = installDom();
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    const { client, flow } = pendingConnectClient();
+    await act(async () => {
+      root.render(<ConnectorsSettingsPanel accountId="account-1" client={client} isNativeShell />);
+    });
+    await flush();
+    await click(host.querySelector('[data-connector-row="gmail"] button'), installed.dom.window);
+    await click(host.querySelector('[aria-label="Connect Gmail"]'), installed.dom.window);
+    await click(buttonByText(document.body, 'Continue to Google'), installed.dom.window);
+    assert.match(document.body.textContent ?? '', /Finish in your browser\. It can take a few minutes\./);
+
+    const escape = new installed.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    await act(async () => { document.dispatchEvent(escape); });
+    await flush();
+    assert.equal(escape.defaultPrevented, true, 'Escape is consumed so Settings stays open too');
+    const backdrop = document.querySelector('[data-app-dialog-backdrop="true"]');
+    assert.ok(backdrop);
+    await act(async () => { backdrop.dispatchEvent(new installed.dom.window.MouseEvent('mousedown', { bubbles: true })); });
+    await flush();
+    assert.equal(flow.aborted, false);
+    assert.match(document.body.textContent ?? '', /Waiting for Google…/);
+
+    await click(buttonByText(document.body, 'Cancel'), installed.dom.window);
+    assert.equal(flow.aborted, true);
+    assert.doesNotMatch(document.body.textContent ?? '', /Continue to Google/);
+  } finally {
+    await act(async () => root.unmount());
+    installed.restore();
+  }
+});
+
+test('leaving the panel keeps a pending connect running', async () => {
+  const installed = installDom();
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    const { client, flow } = pendingConnectClient();
+    await act(async () => {
+      root.render(<ConnectorsSettingsPanel accountId="account-1" client={client} isNativeShell />);
+    });
+    await flush();
+    await click(host.querySelector('[data-connector-row="gmail"] button'), installed.dom.window);
+    await click(host.querySelector('[aria-label="Connect Gmail"]'), installed.dom.window);
+    await click(buttonByText(document.body, 'Continue to Google'), installed.dom.window);
+    await act(async () => root.unmount());
+    assert.equal(flow.aborted, false, 'the loopback listener stays up for a late redirect');
+  } finally {
     installed.restore();
   }
 });
