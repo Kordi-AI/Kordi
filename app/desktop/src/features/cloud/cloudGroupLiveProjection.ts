@@ -85,14 +85,17 @@ export function withLiveTurn(
 ): CanonicalSessionState['messages'][number] {
   const { hostedRunStatus: _hostedRunStatus, synchronizationOnly: _synchronizationOnly, ...content } = record(message.content);
   const localExecutionStatus = turn.completed || !ADMISSION_STATUSES.has(turn.status) ? turn.status : undefined;
+  // A turn that yields to wait for another agent or person keeps its slot
+  // visible as waiting (#2416), never emptied; its control text never shows.
+  const yielding = agentExchangeTurnIsYielding(turn);
   return {
     ...message,
-    contentText: turn.completed && turn.succeeded ? cloudAgentTurnReplyText(turn) : turn.assistantText,
+    contentText: yielding ? '' : turn.completed && turn.succeeded ? cloudAgentTurnReplyText(turn) : turn.assistantText,
     contentHash: null,
     status: turn.completed ? turn.status === 'cancelled' ? 'cancelled' : turn.succeeded ? 'complete' : 'failed' : 'processing',
     content: {
       ...content,
-      ...(agentExchangeTurnIsYielding(turn) ? { synchronizationOnly: true } : {}),
+      ...(yielding ? { agentExchangeStatus: 'waiting' } : {}),
       deliveryState: turn.completed ? turn.status === 'cancelled' ? 'cancelled' : turn.succeeded ? 'complete' : 'failed' : 'processing',
       localExecutionStatus, localExecutionMessage: turn.message,
       thinkingText: turn.thinkingText, tools: turn.tools,

@@ -28,6 +28,11 @@ export function elapsedLabel(turn: DesktopChatTurnSnapshot, now: number) {
   return formatRunningElapsed(Math.max(0, end - turn.startedAtMs));
 }
 
+function agentExchangeWaitingLabel(turn: DesktopChatTurnSnapshot) {
+  if (turn.agentExchangeWaitingForViewer) return 'Waiting for your reply';
+  return turn.agentExchangeWaitingFor ? `Waiting for ${turn.agentExchangeWaitingFor}` : 'Waiting for reply';
+}
+
 export function turnProgressLabel(turn: DesktopChatTurnSnapshot) {
   // A reply that ended early keeps its text; its footer says how it ended, so
   // the header reports the work done instead of a second status.
@@ -37,7 +42,7 @@ export function turnProgressLabel(turn: DesktopChatTurnSnapshot) {
   if (turn.status === 'retrying') return 'Retrying…';
   if (turn.status === 'compacting') return 'Compressing conversation…';
   if (turn.status === 'failed' || (turn.completed && !turn.succeeded)) return 'Needs attention';
-  if (!turn.completed && turn.agentExchangeStatus) return turn.agentExchangeStatus === 'waiting' ? 'Waiting for reply' : 'Processing reply';
+  if (!turn.completed && turn.agentExchangeStatus) return turn.agentExchangeStatus === 'waiting' ? agentExchangeWaitingLabel(turn) : 'Processing reply';
   if (turn.completed) return elapsedLabel(turn, 0) ? 'Worked for' : 'Finished';
   if (['waiting', 'waiting-approval', 'waiting_approval'].includes(turn.status)) return 'Waiting for approval';
   if (turn.hostedRunStatus === 'leased') return 'Starting…';

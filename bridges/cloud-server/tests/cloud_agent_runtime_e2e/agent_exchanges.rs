@@ -2,19 +2,24 @@
 use super::*;
 use sqlx_core::{query::query, query_as::query_as};
 
-struct Fixture {
-    pool: sqlx_postgres::PgPool,
-    router: axum::Router,
-    people: Vec<TestAccount>,
-    session: String,
-    root: String,
-    claim: uuid::Uuid,
+pub(super) struct Fixture {
+    pub(super) pool: sqlx_postgres::PgPool,
+    pub(super) router: axum::Router,
+    pub(super) people: Vec<TestAccount>,
+    pub(super) session: String,
+    pub(super) root: String,
+    pub(super) claim: uuid::Uuid,
+    pub(super) identity: Value, // The root run's turn identity.
 }
 impl Fixture {
-    async fn new() -> Option<Self> {
+    pub(super) async fn new() -> Option<Self> {
         Self::kind(true).await
     }
-    async fn kind(group: bool) -> Option<Self> {
+    pub(super) async fn kind(group: bool) -> Option<Self> {
+        Self::requested_by(group, 0).await
+    }
+    /// The root run is Alpha's agent working on a request from `requester`.
+    async fn requested_by(group: bool, requester: usize) -> Option<Self> {
         let pool = try_pool().await?;
         let router = test_router(Arc::new(signup_email_fixture::state(pool.clone())));
         let mut people = vec![];
@@ -55,6 +60,7 @@ impl Fixture {
             format!("session:direct-person:{}:{}", ids[0], ids[1])
         };
         let owner = &people[0];
+        let asker = &people[requester];
         let conversation = create_test_conversation(
             &pool,
             &owner.account_id,
@@ -76,10 +82,10 @@ impl Fixture {
             .map(|p| json!({"accountId":p.account_id,"displayName":"Synthetic participant"}))
             .collect();
         let envelope = json!({"kind":"group-message","groupId":session,"createdByAccountId":owner.account_id,"actor":{"accountId":owner.account_id,"displayName":"Synthetic owner"},"participants":participants,
-            "message":{"id":logical,"senderAccountId":owner.account_id,"senderKind":"human","text":"Ask Beta and continue","createdAtMs":chrono::Utc::now().timestamp_millis(),"targetCloudAgentId":format!("cloud-agent:{}",owner.account_id),"targetCloudAgentOwnerAccountId":owner.account_id,"targetCloudAgentName":"Kordi"}});
+            "message":{"id":logical,"senderAccountId":asker.account_id,"senderKind":"human","text":"Ask Beta and continue","createdAtMs":chrono::Utc::now().timestamp_millis(),"targetCloudAgentId":format!("cloud-agent:{}",owner.account_id),"targetCloudAgentOwnerAccountId":owner.account_id,"targetCloudAgentName":"Kordi"}});
         let wire = insert_test_message(
             &pool,
-            &owner.account_id,
+            &asker.account_id,
             conversation,
             &if group {
                 format!(
@@ -93,7 +99,7 @@ impl Fixture {
         .await;
         let logical = if group { logical } else { wire };
         let claim = uuid::Uuid::new_v4();
-        let body = json!({"requestMessageId":logical,"sessionId":session,"ownerAccountId":owner.account_id,"requesterAccountId":owner.account_id,"prompt":"Ask Beta and continue","idempotencyKey":logical,"claimId":claim});
+        let body = json!({"requestMessageId":logical,"sessionId":session,"ownerAccountId":owner.account_id,"requesterAccountId":asker.account_id,"prompt":"Ask Beta and continue","idempotencyKey":logical,"claimId":claim});
         let response = router
             .clone()
             .oneshot(post_json_with_token(
@@ -113,9 +119,10 @@ impl Fixture {
             session,
             root: value["runId"].as_str().unwrap().into(),
             claim,
+            identity: value["turnIdentity"].clone(),
         })
     }
-    async fn post(&self, person: usize, path: &str, body: Value) -> Value {
+    pub(super) async fn post(&self, person: usize, path: &str, body: Value) -> Value {
         let response = self
             .router
             .clone()
@@ -127,10 +134,10 @@ impl Fixture {
         assert_eq!(status, StatusCode::OK, "{body}");
         body
     }
-    async fn send(&self, key: &str, target: usize) -> Value {
+    pub(super) async fn send(&self, key: &str, target: usize) -> Value {
         self.post(0,&format!("/v1/cloud/agent-runs/desktop/{}/agent-exchange",self.root),json!({"claimId":self.claim,"toolCallId":key,"arguments":{"target":format!("cloud-agent:{}",self.people[target].account_id),"message":"Return the synthetic status."}})).await
     }
-    async fn pending(&self, person: usize) -> Vec<Value> {
+    pub(super) async fn pending(&self, person: usize) -> Vec<Value> {
         let response = self
             .router
             .clone()
@@ -145,7 +152,7 @@ impl Fixture {
         assert_eq!(status, StatusCode::OK, "{body}");
         body.as_array().unwrap().clone()
     }
-    async fn claim(&self, person: usize, run: &Value) -> uuid::Uuid {
+    pub(super) async fn claim(&self, person: usize, run: &Value) -> uuid::Uuid {
         let claim = uuid::Uuid::new_v4();
         let body = json!({"claimId":claim,"requestMessageId":run["requestMessageId"],"sessionId":self.session,"ownerAccountId":self.people[person].account_id,"requesterAccountId":run["requesterAccountId"],"prompt":run["prompt"],"idempotencyKey":run["runId"]});
         let claimed = self
@@ -162,7 +169,7 @@ impl Fixture {
         )
         .await;
     }
-    async fn end_parent(&self) {
+    pub(super) async fn end_parent(&self) {
         // Simulates the ordinary chat publisher finishing the first turn.
         query("UPDATE cloud_agent_fallback_runs SET status='completed',completed_at=now()::text WHERE run_id=$1").bind(&self.root).execute(&self.pool).await.unwrap();
     }
@@ -291,21 +298,18 @@ async fn exchange_direct_chat_and_shared_requester_boundaries() {
     let target = f.pending(1).await.remove(0);
     let run = target["runId"].as_str().unwrap();
     let claim = f.claim(1, &target).await;
+    // Another participant's request grants no owner authority: the answering
+    // agent reaches no agent and may ask only its own owner.
     let nested = f
-        .router
-        .clone()
-        .oneshot(post_json_with_token(
+        .post(
+            1,
             &format!("/v1/cloud/agent-runs/desktop/{run}/agent-exchange"),
-            &f.people[1].token,
             json!({"claimId":claim,"action":"capabilities"}),
-        ))
-        .await
-        .unwrap();
-    assert_ne!(
-        nested.status(),
-        StatusCode::OK,
-        "another participant's request cannot acquire owner authority"
-    );
+        )
+        .await;
+    assert_eq!(nested["targets"], json!([]));
+    let people = nested["people"].as_array().unwrap();
+    assert!(people.len() == 1 && people[0]["accountId"] == f.people[1].account_id.as_str());
     f.finish(1, run, claim, "Direct answer").await;
     f.end_parent().await;
     let resume = f.pending(0).await.remove(0);
@@ -483,3 +487,9 @@ async fn overlapping_roots_keep_their_leases_and_downstream_replies_separate() {
     }
     assert!(f.pending(0).await.is_empty());
 }
+
+#[path = "agent_exchange_rounds.rs"]
+mod rounds;
+
+#[path = "agent_exchange_people.rs"]
+mod people;

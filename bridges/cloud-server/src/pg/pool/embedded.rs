@@ -1,9 +1,12 @@
 //! Every embedded Postgres migration, in version order. Versions up to
-//! 65 live here and later ones in `embedded_recent`.
+//! 65 live here, later ones in `embedded_recent` and `embedded_latest`.
 
 use std::sync::LazyLock;
 
-use super::{embedded_recent::RECENT_MIGRATIONS, migration_entry::migration, EmbeddedMigration};
+use super::{
+    embedded_latest::LATEST_MIGRATIONS, embedded_recent::RECENT_MIGRATIONS,
+    migration_entry::migration, EmbeddedMigration,
+};
 
 /// Migrations up to version 65.
 const EARLY_MIGRATIONS: &[EmbeddedMigration] = &[
@@ -261,6 +264,6 @@ const EARLY_MIGRATIONS: &[EmbeddedMigration] = &[
     },
 ];
 
-/// Every migration, early then recent.
+/// Every migration, early, recent, then latest.
 pub(super) static EMBEDDED_MIGRATIONS: LazyLock<Vec<EmbeddedMigration>> =
-    LazyLock::new(|| [EARLY_MIGRATIONS, RECENT_MIGRATIONS].concat());
+    LazyLock::new(|| [EARLY_MIGRATIONS, RECENT_MIGRATIONS, LATEST_MIGRATIONS].concat());

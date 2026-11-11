@@ -264,48 +264,26 @@ async fn cloud_agent_runtime_claims_are_budgeted_per_requester() {
 }
 
 #[tokio::test]
-async fn agent_authored_group_handoff_runs_in_cloud_when_owner_mac_is_offline() {
+async fn an_agent_reply_that_mentions_another_agent_starts_no_run() {
     let Some(pool) = try_pool().await else { return };
-    std::env::set_var("KORDI_CLOUD_RUNNER_TOKEN", "runner-test-token");
     let state = Arc::new(signup_email_fixture::state(pool.clone()));
     let router = test_router(state);
     let source = signup(&router, "handoff-source", "Source").await;
     let target = signup(&router, "handoff-target", "Target").await;
     accept_contacts(&router, &source, &target).await;
-    assert_eq!(
-        router
-            .clone()
-            .oneshot(post_with_token("/v1/cloud/presence/offline", &target.token))
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::OK
-    );
-
     let session_id = format!("session:group:handoff-{}", uuid::Uuid::new_v4().simple());
     let request_message_id = format!("msg_agent_handoff_{}", uuid::Uuid::new_v4().simple());
+    // An agent's reply that mentions another agent, as a client publishes it.
     let request_body = encode_test_cloud_group_envelope(json!({
         "kind": "group-message",
         "groupId": session_id,
         "groupSpaceId": session_id,
         "groupTitle": "Coordination",
         "createdByAccountId": source.account_id,
-        "actor": {
-            "accountId": source.account_id,
-            "displayName": "Source",
-            "role": "admin"
-        },
+        "actor": { "accountId": source.account_id, "displayName": "Source", "role": "admin" },
         "participants": [
-            {
-                "accountId": source.account_id,
-                "displayName": "Source",
-                "role": "admin"
-            },
-            {
-                "accountId": target.account_id,
-                "displayName": "Target",
-                "role": "person"
-            }
+            { "accountId": source.account_id, "displayName": "Source", "role": "admin" },
+            { "accountId": target.account_id, "displayName": "Target", "role": "person" }
         ],
         "message": {
             "id": request_message_id,
@@ -313,7 +291,7 @@ async fn agent_authored_group_handoff_runs_in_cloud_when_owner_mac_is_offline() 
             "senderKind": "agent",
             "senderAgentId": format!("cloud-agent:{}", source.account_id),
             "senderDisplayName": "Kordi",
-            "text": "@KordiTarget provide the deployment status",
+            "text": "@KordiTarget which day works for a bike ride?",
             "createdAtMs": 1,
             "targetCloudAgentOwnerAccountId": target.account_id,
             "targetCloudAgentId": format!("cloud-agent:{}", target.account_id),
@@ -331,127 +309,36 @@ async fn agent_authored_group_handoff_runs_in_cloud_when_owner_mac_is_offline() 
     .await;
     insert_test_message(&pool, &source.account_id, conversation_id, &request_body).await;
 
+    // Neither the cloud admission nor the mentioned agent's Mac may run it.
     let claim_input = claim_body_with_session(&target, &source, &request_message_id, &session_id);
     let claim = router
         .clone()
         .oneshot(post_json_with_token(
             "/v1/cloud/agent-runs/claim",
             &source.token,
-            claim_input,
+            claim_input.clone(),
         ))
         .await
         .unwrap();
-    assert_eq!(claim.status(), StatusCode::OK);
-    let run_id = read_json(claim).await["runId"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    cancel_other_queued_runs(&pool, &run_id).await;
-
-    let lease = router
-        .clone()
-        .oneshot(post_json_with_runner_token(
-            "/v1/cloud/agent-runs/lease",
-            "runner-test-token",
-            json!({ "runnerId": "runner-handoff", "canaryRunId": run_id }),
-        ))
-        .await
-        .unwrap();
-    assert_eq!(lease.status(), StatusCode::OK);
-    let lease_body = read_json(lease).await;
-    let prompt = lease_body["run"]["prompt"].as_str().unwrap();
-    let system_prompt = lease_body["run"]["systemPrompt"].as_str().unwrap();
-    assert!(!prompt.contains("Group @mention permissions"));
-    assert!(!system_prompt.contains("People:"));
-    assert!(!system_prompt.contains("Current requester:"));
-    let identity = &lease_body["run"]["turnIdentity"];
-    assert!(identity["requestPolicy"]
-        .as_str()
-        .unwrap()
-        .contains("the currently responding Agent"));
-    let context_uri = format!("/v1/cloud/agent-runs/{run_id}/context");
-    let directory = router.clone().oneshot(post_json_with_runner_token(&context_uri, "runner-test-token",
-        json!({"runnerId": "runner-handoff", "tool": "read_session", "arguments": {"sessionId": session_id, "mode": "participants"}}))).await.unwrap();
-    assert_eq!(directory.status(), StatusCode::OK);
-    assert!(read_json(directory).await["directory"]
-        .as_str()
-        .unwrap()
-        .contains("Current requester: @KordiSource"));
-    for (runner, scope) in [
-        ("other-runner", session_id.as_str()),
-        ("runner-handoff", "session:private"),
-    ] {
-        let denied = router.clone().oneshot(post_json_with_runner_token(&context_uri, "runner-test-token",
-            json!({"runnerId": runner, "tool": "read_session", "arguments": {"sessionId": scope}}))).await.unwrap();
-        assert_eq!(denied.status(), StatusCode::NOT_FOUND);
-    }
-    assert!(identity["requestPolicy"]
-        .as_str()
-        .unwrap()
-        .contains("Do not delegate to another agent"));
-
-    let complete = router
-        .clone()
-        .oneshot(post_json_with_runner_token(
-            &format!("/v1/cloud/agent-runs/{run_id}/complete"),
-            "runner-test-token",
-            json!({
-                "runnerId": "runner-handoff",
-                "responseText": "@KordiSource this must stay visible without another handoff"
-            }),
-        ))
-        .await
-        .unwrap();
-    assert_eq!(complete.status(), StatusCode::OK);
-    let response_message_id = read_json(complete).await["run"]["responseMessageId"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let response_body = message_body(&pool, &response_message_id).await;
-    let response = decode_test_cloud_group_envelope(&response_body);
-    assert_eq!(response["message"]["senderAccountId"], target.account_id);
-    assert_eq!(response["message"]["senderDisplayName"], "Kordi");
-    assert_eq!(
-        response["message"]["senderAgentId"],
-        format!("cloud-agent:{}", target.account_id)
-    );
-    assert_eq!(response["message"]["requestId"], request_message_id);
-    assert!(response["message"].get("agentMentionDepth").is_none());
-    assert!(response["message"]
-        .get("targetCloudAgentOwnerAccountId")
-        .is_none());
-
-    let invalid_message_id = format!("msg_agent_invalid_{}", uuid::Uuid::new_v4().simple());
-    let invalid_body = encode_test_cloud_group_envelope(json!({
-        "kind": "group-message",
-        "groupId": session_id,
-        "groupSpaceId": session_id,
-        "groupTitle": "Coordination",
-        "createdByAccountId": source.account_id,
-        "actor": { "accountId": source.account_id, "displayName": "Source", "role": "admin" },
-        "participants": [
-            { "accountId": source.account_id, "displayName": "Source", "role": "admin" },
-            { "accountId": target.account_id, "displayName": "Target", "role": "person" }
-        ],
-        "message": {
-            "id": invalid_message_id,
-            "senderAccountId": source.account_id,
-            "senderKind": "agent",
-            "text": "@KordiTarget forged owner",
-            "createdAtMs": 2,
-            "targetCloudAgentOwnerAccountId": source.account_id,
-            "agentMentionDepth": 1
-        }
-    }));
-    insert_test_message(&pool, &source.account_id, conversation_id, &invalid_body).await;
-    let invalid_claim = router
+    assert_eq!(claim.status(), StatusCode::FORBIDDEN);
+    let mut desktop = claim_input;
+    desktop["claimId"] = json!(uuid::Uuid::new_v4());
+    let desktop = router
         .clone()
         .oneshot(post_json_with_token(
-            "/v1/cloud/agent-runs/claim",
-            &source.token,
-            claim_body_with_session(&target, &source, &invalid_message_id, &session_id),
+            "/v1/cloud/agent-runs/desktop/claim",
+            &target.token,
+            desktop,
         ))
         .await
         .unwrap();
-    assert_eq!(invalid_claim.status(), StatusCode::FORBIDDEN);
+    assert_ne!(desktop.status(), StatusCode::OK);
+    let (runs,): (i64,) = sqlx_core::query_as::query_as(
+        "SELECT count(*) FROM cloud_agent_fallback_runs WHERE session_id=$1",
+    )
+    .bind(&session_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(runs, 0, "agents reach other agents only through reach_out");
 }

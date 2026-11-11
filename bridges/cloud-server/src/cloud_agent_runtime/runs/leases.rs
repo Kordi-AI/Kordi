@@ -52,6 +52,9 @@ pub struct RunnerRunEnvelope {
 pub struct RunnerRunResponse {
     #[serde(rename = "agentCommunication")]
     pub agent_communication: bool,
+    /// The run may open and update plan and vote cards (issue #2446).
+    #[serde(rename = "planCards")]
+    pub plan_cards: bool,
     #[serde(rename = "turnIdentity")]
     pub turn_identity: serde_json::Value,
     #[serde(rename = "historyMessages")]
@@ -184,6 +187,9 @@ async fn lease_run(
     let Some(row) = leased? else {
         return Ok(None);
     };
+    if let Err(error) = super::processing_slot::show(pool, &row.0, false).await {
+        eprintln!("[cloud-agent] processing reply for {}: {error}", row.0);
+    }
     runner_response_from_row(pool, row).await.map(Some)
 }
 
@@ -338,8 +344,11 @@ pub(super) async fn runner_response_from_row(
     if let Some(guidance) = communication.as_ref() {
         row.11.push_str(&format!("\n{guidance}"));
     }
+    let plan_cards = matches!(row.1.as_str(), "leased" | "running")
+        && crate::plan_cards::agent::available(pool, &row.0).await;
     Ok(RunnerRunResponse {
         agent_communication: communication.is_some(),
+        plan_cards,
         turn_identity: super::identity::identity_for_run(pool, &row.0).await?,
         history_messages: super::super::subsession_execution::history(pool, &row.0).await?,
         subsession_id: subsession_id.map(|id| id.to_string()),

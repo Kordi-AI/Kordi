@@ -19,6 +19,7 @@ use sqlx_core::query_as::query_as;
 use sqlx_postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 
 mod embedded;
+mod embedded_latest;
 mod embedded_recent;
 mod migrate;
 mod migration_entry;

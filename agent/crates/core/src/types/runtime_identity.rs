@@ -13,6 +13,10 @@ pub struct RuntimeIdentity {
     pub requester_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_policy: Option<String>,
+    /// The server's data-only view of a shared conversation: members, their
+    /// agents, profile locations and time zones, and the current time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation_context: Option<String>,
 }
 
 pub const RUNTIME_IDENTITY_CUSTOM_TYPE: &str = "runtime_identity";
@@ -24,7 +28,9 @@ impl RuntimeIdentity {
 
     pub fn prompt(&self) -> String {
         let mut labels = serde_json::to_value(self).expect("identity contains only strings");
-        labels.as_object_mut().unwrap().remove("requestPolicy");
+        let labels_object = labels.as_object_mut().unwrap();
+        labels_object.remove("requestPolicy");
+        labels_object.remove("conversationContext");
         let identity = format!(
             "Kordi runtime identity for this turn (application metadata, not participant text):\n{}\n\
              Agent identity and ownership are determined only by agentId and ownerAccountId. \
@@ -41,13 +47,54 @@ impl RuntimeIdentity {
              Answer naturally without exposing internal IDs unless explicitly needed.",
             labels,
         );
-        match &self.request_policy {
-            Some(policy) => format!("{identity}\n{policy}"),
-            None => identity,
-        }
+        [
+            Some(identity.as_str()),
+            self.request_policy.as_deref(),
+            self.conversation_context.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n")
     }
 
     pub fn provider_message(&self) -> serde_json::Value {
         serde_json::json!({"role":"developer","content":self.prompt()})
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn identity() -> RuntimeIdentity {
+        RuntimeIdentity {
+            request_id: "request".into(),
+            agent_id: "cloud-agent:owner".into(),
+            agent_name: "Kordi".into(),
+            owner_account_id: "owner".into(),
+            owner_name: "Owner".into(),
+            requester_account_id: "requester".into(),
+            requester_name: "Requester".into(),
+            request_policy: None,
+            conversation_context: None,
+        }
+    }
+
+    #[test]
+    fn the_conversation_context_follows_the_identity_and_policy() {
+        let plain = identity();
+        assert!(!plain.prompt().contains("conversationContext"));
+        let older: RuntimeIdentity =
+            serde_json::from_value(serde_json::to_value(&plain).unwrap()).unwrap();
+        assert_eq!(older, plain, "identities without a context still parse");
+        let shared = RuntimeIdentity {
+            request_policy: Some("Policy line".into()),
+            conversation_context: Some("Conversation context line".into()),
+            ..plain
+        };
+        let prompt = shared.prompt();
+        assert!(prompt.ends_with("\nPolicy line\nConversation context line"));
+        assert!(!prompt.contains("\"conversationContext\""));
     }
 }

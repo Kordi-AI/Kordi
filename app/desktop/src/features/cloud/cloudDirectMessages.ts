@@ -110,3 +110,14 @@ export function cloudDirectMessageTargetsOwnedHostedCloudAgent(body: string, acc
   const targetOwnerAccountId = cloudDirectMessageTargetCloudAgentOwnerAccountId(body);
   return Boolean(targetAgentId && targetOwnerAccountId && targetOwnerAccountId === accountId.trim());
 }
+
+/** The mentions an agent's message names by id, such as an exchange question. */
+export function cloudAgentResponseMentions(body: string): MessageMention[] | undefined {
+  const prefix = 'kordi-cloud-agent-response:';
+  if (!body.startsWith(prefix)) return undefined;
+  try {
+    return normalizedMessageMentions((JSON.parse(decodeBase64UrlUtf8(body.slice(prefix.length))) as { mentions?: unknown }).mentions);
+  } catch {
+    return undefined;
+  }
+}

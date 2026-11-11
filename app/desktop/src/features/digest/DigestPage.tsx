@@ -14,6 +14,7 @@ import { readCalendarSyncBaseline, readCalendarSyncPreferences, writeCalendarSyn
 import { openDesktopExternalUrl } from '@/lib/desktop';
 import { DigestCalendar, DigestAgenda } from './DigestCalendar';
 import { CalendarSyncLine } from './CalendarSyncLine';
+import { CalendarShareAvailabilityRow } from './CalendarShareAvailabilityRow';
 import { calendarErrorMessage, importCalendarEvents, type CalendarImportReport } from './calendarImport';
 import { DigestPeople } from './DigestPeople';
 import { DigestReadStatus, type DigestUnavailableState } from './DigestReadStatus';
@@ -274,6 +275,7 @@ function CalendarSettingsSheet({accountId,calendars,onClose}:{accountId:string;c
     <label className="digest-choice"><input type="checkbox" checked={preferences.outbound} onChange={e=>update({...preferences,outbound:e.target.checked})}/>Add events created in Kordi to my device calendar</label>
     {preferences.outbound&&<label>Add them to<select value={preferences.targetCalendarId??''} onChange={e=>update({...preferences,targetCalendarId:e.target.value||null})}><option value="">System default calendar</option>{writable.map(calendar=><option key={calendar.id} value={calendar.id}>{calendar.title}</option>)}</select></label>}
     <p className="digest-meta">Turning a calendar off removes its events from Kordi. Source calendars are never changed by that choice. No invitations are sent.</p>
+    <CalendarShareAvailabilityRow/>
     <footer><button onClick={onClose}>Done</button></footer>
   </Sheet>;
 }

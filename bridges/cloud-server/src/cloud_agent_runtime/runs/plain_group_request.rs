@@ -6,7 +6,7 @@
 
 use chrono::{DateTime, Utc};
 use sqlx_core::query_as::query_as;
-use sqlx_postgres::PgPool;
+use sqlx_postgres::{PgConnection, PgPool};
 
 use super::envelopes::{
     parse_cloud_group_envelope, CloudGroupEnvelope, CloudGroupMessage, CloudGroupParticipant,
@@ -32,6 +32,27 @@ fn participant(row: MemberRow) -> CloudGroupParticipant {
         agent_avatar_url,
         role: Some("person".to_string()),
     }
+}
+
+/// The active members of a conversation, as group routing sees them.
+pub(super) async fn conversation_participants(
+    conn: &mut PgConnection,
+    conversation_id: uuid::Uuid,
+) -> Result<Vec<CloudGroupParticipant>, sqlx_core::Error> {
+    let members: Vec<MemberRow> = query_as(
+        "SELECT member.account_id, account.display_name, account.avatar_url,
+                profile.display_name, profile.avatar_url
+         FROM cloud_chat_conversation_members member
+         JOIN cloud_accounts account ON account.account_id = member.account_id
+         LEFT JOIN cloud_default_agent_profiles profile
+           ON profile.owner_account_id = member.account_id
+         WHERE member.conversation_id = $1 AND member.membership_state = 'active'
+         ORDER BY member.joined_at ASC, member.account_id ASC",
+    )
+    .bind(conversation_id)
+    .fetch_all(conn)
+    .await?;
+    Ok(members.into_iter().map(participant).collect())
 }
 
 /// The envelope a client would have sent with `request_message_id`, when
@@ -74,20 +95,8 @@ pub(super) async fn plain_group_request_envelope(
     if parse_cloud_group_envelope(&text).is_some() || text.trim().is_empty() {
         return Ok(None);
     }
-    let members: Vec<MemberRow> = query_as(
-        "SELECT member.account_id, account.display_name, account.avatar_url,
-                profile.display_name, profile.avatar_url
-         FROM cloud_chat_conversation_members member
-         JOIN cloud_accounts account ON account.account_id = member.account_id
-         LEFT JOIN cloud_default_agent_profiles profile
-           ON profile.owner_account_id = member.account_id
-         WHERE member.conversation_id = $1 AND member.membership_state = 'active'
-         ORDER BY member.joined_at ASC, member.account_id ASC",
-    )
-    .bind(conversation_id)
-    .fetch_all(pool)
-    .await?;
-    let participants: Vec<CloudGroupParticipant> = members.into_iter().map(participant).collect();
+    let participants =
+        conversation_participants(&mut *pool.acquire().await?, conversation_id).await?;
     let Some(actor) = participants
         .iter()
         .find(|member| member.account_id == sender)

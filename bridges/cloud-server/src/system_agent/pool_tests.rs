@@ -25,7 +25,9 @@ pub(crate) async fn say(pool: &PgPool, sender: &str, conversation_id: Uuid, text
     crate::chat_sync::store::send_message(pool, sender, conversation_id, request)
         .await
         .expect("send message");
-    query("UPDATE cloud_chat_messages SET created_at = now() - interval '5 minutes' WHERE conversation_id = $1")
+    // Older than the System agent's silence window, so plan talk is summed
+    // up on the next pass.
+    query("UPDATE cloud_chat_messages SET created_at = now() - interval '15 minutes' WHERE conversation_id = $1")
         .bind(conversation_id)
         .execute(pool)
         .await

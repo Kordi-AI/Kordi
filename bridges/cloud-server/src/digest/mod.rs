@@ -1,6 +1,7 @@
 mod cadence;
 pub mod changes;
 pub(crate) mod chat_calendar;
+mod chat_calendar_shared;
 pub(crate) mod desktop;
 mod evidence;
 mod fallback;
