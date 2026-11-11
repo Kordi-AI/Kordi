@@ -40,6 +40,32 @@ export type WhatsNewRuntime = {
 };
 
 const CURATED_RELEASE_HIGHLIGHTS: Readonly<Record<string, readonly WhatsNewHighlight[]>> = {
+  '0.0.2-beta.9': [
+    {
+      category: 'Agents',
+      title: 'Agents work things out together',
+      detail: 'They ask people, keep talking until there is a result, and make plan cards.',
+      kind: 'collaboration',
+    },
+    {
+      category: 'Calendar',
+      title: 'Add events with +',
+      detail: 'Click a day or use + to add an event, and RSVP from plan cards.',
+      kind: 'general',
+    },
+    {
+      category: 'Chats',
+      title: 'Seen by',
+      detail: 'See who has read a message, right from the chat.',
+      kind: 'collaboration',
+    },
+    {
+      category: 'Profile',
+      title: 'Location and time zone',
+      detail: 'They update on their own unless you set them yourself.',
+      kind: 'general',
+    },
+  ],
   '0.0.2-beta.8': [
     {
       category: 'Agents',
