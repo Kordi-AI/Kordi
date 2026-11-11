@@ -32,6 +32,28 @@ spec:
         - name: postgres
           image: postgres:16-alpine
           imagePullPolicy: IfNotPresent
+          # Size the buffer cache to the container limit below. The image
+          # default (128MB shared_buffers) left most of the memory unused.
+          args:
+            - "-c"
+            - "shared_buffers=1GB"
+            - "-c"
+            - "effective_cache_size=3GB"
+            - "-c"
+            - "maintenance_work_mem=128MB"
+            # Per-statement counters for performance work. The extension
+            # still has to be created once in the database:
+            # CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+            - "-c"
+            - "shared_preload_libraries=pg_stat_statements"
+            - "-c"
+            - "track_io_timing=on"
+            # Log statements slower than 200 ms without their bind
+            # parameters, which can contain message text.
+            - "-c"
+            - "log_min_duration_statement=200ms"
+            - "-c"
+            - "log_parameter_max_length=0"
           ports:
             - name: postgres
               containerPort: 5432
@@ -65,13 +87,22 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            # Parallel queries use POSIX shared memory; the container
+            # default /dev/shm is only 64Mi.
+            - name: dshm
+              mountPath: /dev/shm
           resources:
             requests:
-              cpu: "100m"
-              memory: "256Mi"
-            limits:
-              cpu: "1"
+              cpu: "250m"
               memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
   volumeClaimTemplates:
     - metadata:
         name: data
