@@ -2,9 +2,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use sqlx_postgres::PgListener;
+use sqlx_core::query::query;
+use sqlx_postgres::{PgListener, PgPoolOptions};
 use tokio::sync::{broadcast, watch};
 
+use crate::auth::session_cache::{HEARTBEAT_INTERVAL, HEARTBEAT_PAYLOAD};
 use crate::auth::session_signals::{SessionSignal, SessionSignalHub, SESSION_SIGNAL_CHANNEL};
 use crate::document_shares::collab::{RoomRegistry, COLLAB_CHANNEL};
 
@@ -109,7 +111,8 @@ impl Drop for ChatSyncWakeSubscription {
 
 /// Starts this replica's single notification listener: chat sync wakes,
 /// session revocation signals, and collaboration room signals share one
-/// PostgreSQL connection. Also starts the room registry's relay tasks.
+/// PostgreSQL connection. Also starts the room registry's relay tasks and
+/// the heartbeat that proves the listener live to the session lookup cache.
 pub(crate) fn spawn_wake_listener(
     database_url: String,
     hub: Arc<ChatSyncWakeHub>,
@@ -117,6 +120,7 @@ pub(crate) fn spawn_wake_listener(
     rooms: Arc<RoomRegistry>,
 ) {
     rooms.start();
+    spawn_session_heartbeat(&database_url);
     tokio::spawn(async move {
         loop {
             let result: Result<(), sqlx_core::Error> = async {
@@ -125,11 +129,16 @@ pub(crate) fn spawn_wake_listener(
                     .listen_all([WAKE_CHANNEL, SESSION_SIGNAL_CHANNEL, COLLAB_CHANNEL])
                     .await?;
                 hub.set_listener_connected(true);
+                sessions.lookup_cache().set_listener_connected(true);
                 rooms.listener_connected();
+                // A first heartbeat on this connection, so the session
+                // lookup cache knows at once that notifications arrive.
+                send_heartbeat(&mut listener).await?;
                 // `try_recv` reports a lost connection instead of silently
                 // reconnecting, so the status (and the catch-up it drives)
                 // follows every gap in which notifications may be lost.
                 while let Some(notification) = listener.try_recv().await? {
+                    sessions.lookup_cache().notification_received();
                     let payload = notification.payload().trim();
                     match notification.channel() {
                         SESSION_SIGNAL_CHANNEL => {
@@ -147,11 +156,54 @@ pub(crate) fn spawn_wake_listener(
             }
             .await;
             hub.set_listener_connected(false);
+            sessions.lookup_cache().set_listener_connected(false);
             match result {
                 Ok(()) => eprintln!("[chat-realtime] notification listener: connection lost"),
                 Err(error) => eprintln!("[chat-realtime] notification listener: {error}"),
             }
             tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
+}
+
+async fn send_heartbeat<'e, E>(executor: E) -> Result<(), sqlx_core::Error>
+where
+    E: sqlx_core::executor::Executor<'e, Database = sqlx_postgres::Postgres>,
+{
+    query("SELECT pg_notify($1, $2)")
+        .bind(SESSION_SIGNAL_CHANNEL)
+        .bind(HEARTBEAT_PAYLOAD)
+        .execute(executor)
+        .await
+        .map(|_| ())
+}
+
+/// Sends a heartbeat notification every [`HEARTBEAT_INTERVAL`] over its own
+/// connection. Every replica's listener receives it; while heartbeats stop
+/// arriving, the session lookup cache is bypassed.
+fn spawn_session_heartbeat(database_url: &str) {
+    let pool = match PgPoolOptions::new()
+        .max_connections(1)
+        .min_connections(0)
+        .acquire_timeout(HEARTBEAT_INTERVAL)
+        .connect_lazy(database_url)
+    {
+        Ok(pool) => pool,
+        Err(error) => {
+            eprintln!("[chat-realtime] session heartbeat: {error}");
+            return;
+        }
+    };
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            match tokio::time::timeout(HEARTBEAT_INTERVAL, send_heartbeat(&pool)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => eprintln!("[chat-realtime] session heartbeat: {error}"),
+                Err(_) => eprintln!("[chat-realtime] session heartbeat: timed out"),
+            }
         }
     });
 }

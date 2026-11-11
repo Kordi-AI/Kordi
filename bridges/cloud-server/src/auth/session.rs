@@ -126,6 +126,41 @@ where
     })
 }
 
+/// Everything one authenticated request needs from its session, read in
+/// one statement: the session row, the facts instance admission checks, and
+/// how long the organization claim stays valid.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionLookup {
+    pub row: CloudSessionRow,
+    /// The browser sign-in that issued this access token, if any.
+    pub app_sign_in_id: Option<String>,
+    /// The account's primary email and whether it is verified; `None` when
+    /// the account row is missing.
+    pub account: Option<(Option<String>, bool)>,
+    /// When the membership behind an active organization claim expires.
+    pub membership_expires_at: Option<DateTime<Utc>>,
+}
+
+impl SessionLookup {
+    /// Whether this answer is still exactly what a fresh lookup at `now`
+    /// would return, as far as time alone is concerned: the session has not
+    /// expired, and neither has the membership its claim depends on.
+    pub(crate) fn valid_at(&self, now: DateTime<Utc>) -> bool {
+        now < self.row.expires_at
+            && !(self.row.organization.claim_active
+                && self
+                    .membership_expires_at
+                    .is_some_and(|expires_at| expires_at <= now))
+    }
+
+    /// The `(email, verified)` facts instance admission checks.
+    pub fn admission_facts(&self) -> Option<(Option<&str>, bool)> {
+        self.account
+            .as_ref()
+            .map(|(email, verified)| (email.as_deref(), *verified))
+    }
+}
+
 /// Look up an active session by its plaintext token. Returns `Ok(None)` for
 /// "token does not match a live session" (expired, revoked, or absent).
 pub async fn lookup_session(
@@ -136,8 +171,21 @@ pub async fn lookup_session(
         return Ok(None);
     }
     let token_hash = hash_session_token(plaintext_token);
-    let now = Utc::now();
+    Ok(lookup_session_by_hash(pool, &token_hash, Utc::now())
+        .await?
+        .map(|lookup| lookup.row))
+}
 
+/// Look up the active session whose token hashes to `token_hash`, as of
+/// `now`. The personal organization, the claimed membership, and the
+/// account's admission facts are joined in, so this is a single statement;
+/// the results match [`SESSION_ORGANIZATION_COLUMNS`] and
+/// `AdmissionPolicy::authorize_account`.
+pub(crate) async fn lookup_session_by_hash(
+    pool: &PgPool,
+    token_hash: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<SessionLookup>, SessionError> {
     type Row = (
         String,
         String,
@@ -146,23 +194,52 @@ pub async fn lookup_session(
         Option<String>,
         Option<String>,
         bool,
+        Option<DateTime<Utc>>,
+        Option<String>,
+        bool,
+        Option<String>,
+        bool,
     );
-    let row: Option<Row> = query_as(&format!(
+    let row: Option<Row> = query_as(
         "SELECT token.token_id, token.account_id, token.device_id, token.expires_at, \
-                {SESSION_ORGANIZATION_COLUMNS} \
+                token.organization_id, personal.organization_id, \
+                member.account_id IS NOT NULL, member.expires_at, token.app_sign_in_id, \
+                account.account_id IS NOT NULL, account.primary_email, \
+                account.primary_email_verified_at IS NOT NULL \
          FROM cloud_refresh_tokens token \
          JOIN cloud_devices device ON device.device_id = token.device_id \
+         LEFT JOIN cloud_organizations personal \
+           ON personal.personal_account_id = token.account_id \
+         LEFT JOIN cloud_organization_members member \
+           ON token.organization_id IS NOT NULL \
+          AND member.organization_id = token.organization_id \
+          AND member.account_id = token.account_id \
+          AND (member.expires_at IS NULL OR member.expires_at > now()) \
+         LEFT JOIN cloud_accounts account ON account.account_id = token.account_id \
          WHERE token.token_hash = $1 AND token.revoked_at IS NULL AND token.expires_at > $2 \
-           AND device.account_id = token.account_id AND device.revoked_at IS NULL"
-    ))
-    .bind(&token_hash)
+           AND device.account_id = token.account_id AND device.revoked_at IS NULL",
+    )
+    .bind(token_hash)
     .bind(now.to_rfc3339())
     .fetch_optional(pool)
     .await?;
 
     Ok(row.map(
-        |(token_id, account_id, device_id, expires_at, claimed, personal, claim_active)| {
-            CloudSessionRow {
+        |(
+            token_id,
+            account_id,
+            device_id,
+            expires_at,
+            claimed,
+            personal,
+            claim_active,
+            membership_expires_at,
+            app_sign_in_id,
+            account_found,
+            email,
+            verified,
+        )| SessionLookup {
+            row: CloudSessionRow {
                 token_id,
                 account_id,
                 device_id,
@@ -172,7 +249,10 @@ pub async fn lookup_session(
                     personal,
                     claim_active,
                 },
-            }
+            },
+            app_sign_in_id,
+            account: account_found.then_some((email, verified)),
+            membership_expires_at,
         },
     ))
 }
@@ -286,5 +366,7 @@ fn parse_rfc3339(value: String) -> DateTime<Utc> {
         .unwrap_or_else(|_| Utc::now())
 }
 
+#[cfg(test)]
+mod statement_count;
 #[cfg(test)]
 mod tests;

@@ -1,4 +1,5 @@
 use super::*;
+use crate::auth::session_cache::LookupSource;
 use crate::organizations::requests::RequestOrganization;
 
 pub async fn cloud_session_middleware(
@@ -30,24 +31,39 @@ pub async fn cloud_session_middleware(
     };
 
     let pool = state.db_pool();
-    match lookup_session(pool, &token).await {
-        Ok(Some(row)) => {
-            if let Err(error) = state
-                .admission()
-                .authorize_account(pool, &row.account_id)
-                .await
-            {
+    let cache = state.session_signals().lookup_cache();
+    match cache.lookup(pool, &token).await {
+        Ok(Some((found, source))) => {
+            if let Err(error) = state.admission().authorize_facts(found.admission_facts()) {
                 return error.response();
             }
-            let _ = bump_expiry(pool, &row.token_id, DEFAULT_SESSION_LIFETIME_DAYS).await;
-            let _ = touch_device_activity(pool, &row.account_id, &row.device_id).await;
+            let row = found.row;
+            // A cached answer was read from the database less than the cache
+            // lifetime ago, and that lookup already did this upkeep. Access
+            // tokens from a browser sign-in keep their fixed expiry.
+            if source == LookupSource::Database {
+                if found.app_sign_in_id.is_none() {
+                    let _ = bump_expiry(pool, &row.token_id, DEFAULT_SESSION_LIFETIME_DAYS).await;
+                }
+                let _ = touch_device_activity(pool, &row.account_id, &row.device_id).await;
+            }
             RequestOrganization::attach(&mut req, &row.account_id, &row.organization, &headers);
+            let changes_state = !req.method().is_safe();
+            let account_id = row.account_id.clone();
             req.extensions_mut().insert(CloudSession {
                 token_id: row.token_id,
                 account_id: row.account_id,
                 device_id: row.device_id,
             });
-            next.run(req).await
+            let response = next.run(req).await;
+            // A request may have signed out, revoked a device, left an
+            // organization, or deleted the account. Database signals reach
+            // every replica's cache, but this one drops the caller's cached
+            // sessions now, so the caller's next request sees the change.
+            if changes_state {
+                cache.evict_account(&account_id);
+            }
+            response
         }
         Ok(None) => err(
             "invalid_session",
