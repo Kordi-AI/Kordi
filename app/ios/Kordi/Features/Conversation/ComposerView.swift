@@ -1182,6 +1182,7 @@ struct ComposerView: View {
         let unavailable = model.routeAccountIsUnavailable(route)
         // No connected account means no usable model: the chip shows a placeholder, not a default model.
         let noProvider = !unavailable && !model.hasConfiguredProviderAuthentication
+            && route.defaultAuthChoice?.nonEmpty == nil
         let chip = AgentModelPresentation.chipLabels(
             model: route.defaultModel ?? "", thinking: route.thinking ?? "default", hasProvider: !noProvider
         )

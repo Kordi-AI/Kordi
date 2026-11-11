@@ -102,7 +102,7 @@ struct AgentModelPicker: View {
     private var routing: CloudModelRouting { model.runtimeRouting(for: conversation) }
     private var canEdit: Bool { model.canChangeRuntimeRouting(for: conversation) }
     private var selectedAccountIsUnavailable: Bool {
-        !selectedAuthChoice.isEmpty && !model.routeAccountCanBeSaved(selectedAuthChoice, provider: selectedProvider)
+        model.routeAccountIsUnavailable(provider: selectedProvider, choice: selectedAuthChoice)
     }
     private var isCustomProvider: Bool {
         ProviderAuthenticationDefinition.canonicalID(selectedProvider) == ProviderAuthenticationDefinition.custom.id
@@ -236,7 +236,7 @@ struct AgentModelPicker: View {
                 accent: chatTheme.accent,
                 onCommit: { save(dismissAfter: false) }
             )
-            .disabled(!canEdit || selectedAccountIsUnavailable || selectedAuthChoice.isEmpty)
+            .disabled(!canEdit || !model.routeAccountCanBeSaved(selectedAuthChoice, provider: selectedProvider))
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: selectedThinking)
     }
@@ -353,8 +353,10 @@ struct AgentModelPicker: View {
                 pickerRow(accountLabel(choice), selected: choice == selectedAuthChoice) { chooseAccount(choice) }
                     .disabled(!canEdit || !model.routeAccountCanBeSaved(choice, provider: selectedProvider))
             }
-            if !accountChoices.contains(where: { account(for: $0) != nil }) {
-                Text("No signed-in account. Connect one in Settings → Authentication.")
+            if !accountChoices.contains(where: { model.routeAccountCanBeSaved($0, provider: selectedProvider) }) {
+                Text(model.hasLoadedProviderAuthentication
+                     ? "No signed-in account. Connect one in Settings → Authentication."
+                     : "Accounts could not be verified yet. Refresh Authentication in Settings.")
                     .font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 12)
             }
 
@@ -389,7 +391,7 @@ struct AgentModelPicker: View {
             selectedProvider = provider
             selectedAuthChoice = ""
             page = .accounts
-        } else if selectedAccountIsUnavailable || selectedAuthChoice.isEmpty {
+        } else if !model.routeAccountCanBeSaved(selectedAuthChoice, provider: selectedProvider) {
             page = .accounts
         } else {
             save()
@@ -485,7 +487,11 @@ struct AgentModelPicker: View {
 
     private func accountLabel(_ choice: String) -> String {
         let accounts = model.authenticationSnapshots(for: selectedProvider)
-        guard let index = accounts.firstIndex(where: { $0.authChoice == choice }) else { return RouteAccountChoice.missingLabel(choice) }
+        guard let index = accounts.firstIndex(where: { $0.authChoice == choice }) else {
+            if RouteAccountChoice.isDeviceManaged(choice) { return "Mac sign-in" }
+            return model.routeAccountIsUnavailable(provider: selectedProvider, choice: choice)
+                ? "Account unavailable" : "Account not verified"
+        }
         if let label = accounts[index].label?.nonEmpty { return label }
         return "\(ProviderAccountMethod.label(for: accounts[index], catalog: model.ompProviderCatalog)) \(index + 1)"
     }
@@ -536,7 +542,8 @@ struct AgentModelPicker: View {
     }
 
     private func save(dismissAfter: Bool = true, confirmAccountChange: Bool = true) {
-        guard canEdit, !isSaving, !selectedAccountIsUnavailable,
+        guard canEdit, !isSaving,
+              model.routeAccountCanBeSaved(selectedAuthChoice, provider: selectedProvider),
               !selectedAuthChoice.isEmpty, !selectedModel.isEmpty else { return }
         let changesAccount = routing.defaultAuthChoice != selectedAuthChoice
             || ProviderAuthenticationDefinition.canonicalID(routing.defaultAuthProvider ?? "") != ProviderAuthenticationDefinition.canonicalID(selectedProvider)
