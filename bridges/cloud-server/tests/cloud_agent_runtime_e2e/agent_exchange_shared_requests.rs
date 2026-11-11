@@ -36,7 +36,7 @@ async fn another_persons_request_may_ask_only_that_person_and_resumes_on_their_r
         json!({"claimId":f.claim,"toolCallId":"agent","arguments":{"target":format!("cloud-agent:{}",f.people[2].account_id),"targetKind":"agent","message":"Check the calendar"}}),
     )).await.unwrap();
     assert_ne!(agent.status(), StatusCode::OK);
-    // The owner's calendar stays out of a shared request.
+    // A shared request sees only the owner's busy/free, never event details.
     let calendar = f
         .router
         .clone()
@@ -47,7 +47,11 @@ async fn another_persons_request_may_ask_only_that_person_and_resumes_on_their_r
         ))
         .await
         .unwrap();
-    assert_ne!(calendar.status(), StatusCode::OK);
+    let status = calendar.status();
+    let calendar = read_json(calendar).await;
+    assert_eq!(status, StatusCode::OK, "{calendar}");
+    assert_eq!(calendar["disclosure"], "availability", "{calendar}");
+    assert!(calendar.get("events").is_none(), "{calendar}");
 
     let receipt = f.ask_ok("ask-requester", 1, "What time on Friday?").await;
     let wire = f.question_wire(&receipt["exchangeId"]).await;

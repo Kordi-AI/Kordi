@@ -318,8 +318,8 @@ async fn people_and_agents_with_the_same_name_are_told_apart_by_id() {
     // Outcomes: "run" (a run for that owner), "refused" (no run, no reply:
     // routed elsewhere or naming nobody), "failed" (names that owner's agent
     // but cannot be routed: a visible failed reply instead of a silent wait).
-    let gamma_mention = json!([{"targetKind":"agent","agentId":format!("cloud-agent:{gamma}"),"humanId":gamma,"label":"Kordijamielin","displayText":"@Kordijamielin","startUtf16":0,"lengthUtf16":13}]);
-    let beta_mention = json!([{"targetKind":"agent","agentId":format!("cloud-agent:{beta}"),"humanId":beta,"label":"KordiJamieLin","displayText":"@Kordijamielin","startUtf16":0,"lengthUtf16":13}]);
+    let gamma_mention = json!([{"targetKind":"agent","agentId":format!("cloud-agent:{gamma}"),"humanId":gamma,"label":"Kordijamielin","displayText":"@Kordijamielin","startUtf16":0,"lengthUtf16":14}]);
+    let beta_mention = json!([{"targetKind":"agent","agentId":format!("cloud-agent:{beta}"),"humanId":beta,"label":"KordiJamieLin","displayText":"@Kordijamielin","startUtf16":0,"lengthUtf16":14}]);
     for (case, mentions, explicit, owner, outcome) in [
         (
             "structured",
