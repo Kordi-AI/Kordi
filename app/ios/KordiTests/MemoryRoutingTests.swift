@@ -88,6 +88,44 @@ final class MemoryRoutingTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(CloudMemory.self, from: Data(Self.legacyJSON.utf8)).profileIds)
     }
 
+    func testMemoryDecodesSeveralCategoriesAndFallsBackToTheSingleOne() throws {
+        // memoryVersion 4: categories in order, the first matching category.
+        let json = Self.routedJSON.trimmingCharacters(in: .whitespacesAndNewlines).dropLast()
+            + #", "categories": ["health_context", "coordination_context"]}"#
+        let several = try JSONDecoder().decode(CloudMemory.self, from: Data(json.utf8))
+        XCTAssertEqual(several.category, "health_context")
+        XCTAssertEqual(several.categories, ["health_context", "coordination_context"])
+        XCTAssertEqual(several.allCategories, ["health_context", "coordination_context"])
+
+        // Older servers send only category.
+        let single = try JSONDecoder().decode(CloudMemory.self, from: Data(Self.routedJSON.utf8))
+        XCTAssertNil(single.categories)
+        XCTAssertEqual(single.allCategories, ["health_context"])
+        XCTAssertEqual(try JSONDecoder().decode(CloudMemory.self, from: Data(Self.legacyJSON.utf8)).allCategories, [])
+
+        // An empty list falls back to category; repeats are dropped.
+        var memory = single
+        memory.categories = []
+        XCTAssertEqual(memory.allCategories, ["health_context"])
+        memory.categories = ["work_context", "work_context", "goals_and_constraints"]
+        XCTAssertEqual(memory.allCategories, ["work_context", "goals_and_constraints"])
+    }
+
+    func testUpdateRequestReplacesEveryCategory() throws {
+        let request = try encoded(CloudMemoryUpdateRequest(categories: ["work_context", "coordination_context"]))
+        XCTAssertEqual(request["categories"] as? [String], ["work_context", "coordination_context"])
+        XCTAssertEqual(request.count, 1)
+        // Older servers get the single category.
+        let single = try encoded(CloudMemoryUpdateRequest(category: "work_context"))
+        XCTAssertEqual(single as? [String: String], ["category": "work_context"])
+    }
+
+    func testSeveralCategoriesNeedMemoryVersionFour() {
+        XCTAssertFalse(MemoryPresentation.hasMultipleCategories(nil))
+        XCTAssertFalse(MemoryPresentation.hasMultipleCategories(CloudAuthCapabilities(memoryVersion: 3)))
+        XCTAssertTrue(MemoryPresentation.hasMultipleCategories(CloudAuthCapabilities(memoryVersion: 4)))
+    }
+
     func testCardChoicesNeedMemoryVersionThree() {
         XCTAssertFalse(MemoryPresentation.hasCardChoices(CloudAuthCapabilities(memoryVersion: 2)))
         XCTAssertTrue(MemoryPresentation.hasCardChoices(CloudAuthCapabilities(memoryVersion: 3)))

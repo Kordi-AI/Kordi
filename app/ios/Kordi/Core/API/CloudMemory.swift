@@ -95,6 +95,9 @@ struct CloudMemory: Codable, Hashable, Identifiable {
     /// `user-declared` or `model-inferred`, `confidence` `low`, `medium` or
     /// `high`, and `profileKind` `work`, `health`, `daily`, `all` or `custom`.
     var category: String? = nil
+    /// Every category of the memory, one to three, the first being `category`
+    /// (`memoryVersion` 4); nil from older servers. Read `allCategories`.
+    var categories: [String]? = nil
     var declarationType: String? = nil
     var confidence: String? = nil
     var profileId: String? = nil
@@ -105,6 +108,14 @@ struct CloudMemory: Codable, Hashable, Identifiable {
     var excludedProfileIds: [String]? = nil
 
     var id: String { memoryId }
+
+    /// The memory's categories in order: `categories` from `memoryVersion` 4,
+    /// otherwise the single `category`; empty when it has none.
+    var allCategories: [String] {
+        var seen = Set<String>()
+        let values = categories.flatMap { $0.isEmpty ? nil : $0 } ?? [category].compactMap { $0 }
+        return values.filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
 }
 
 /// A memory routed to one Grounding profile. `everyProfile` marks a
@@ -154,7 +165,8 @@ struct CloudMemoryForgetResponse: Decodable {
 
 /// `PATCH /v1/cloud/memory/{id}`. Omitted fields keep their value; a
 /// cleared profile is sent as an explicit `"profileId": null`.
-/// `addProfileId` and `removeProfileId` change one card (`memoryVersion` 3).
+/// `addProfileId` and `removeProfileId` change one card (`memoryVersion` 3);
+/// `categories` replaces every category of the memory (`memoryVersion` 4).
 struct CloudMemoryUpdateRequest: Encodable {
     enum Profile: Equatable {
         case keep
@@ -164,16 +176,18 @@ struct CloudMemoryUpdateRequest: Encodable {
 
     var text: String? = nil
     var category: String? = nil
+    var categories: [String]? = nil
     var profile: Profile = .keep
     var addProfileId: String? = nil
     var removeProfileId: String? = nil
 
-    private enum CodingKeys: String, CodingKey { case text, category, profileId, addProfileId, removeProfileId }
+    private enum CodingKeys: String, CodingKey { case text, category, categories, profileId, addProfileId, removeProfileId }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeIfPresent(text, forKey: .text)
         try container.encodeIfPresent(category, forKey: .category)
+        try container.encodeIfPresent(categories, forKey: .categories)
         try container.encodeIfPresent(addProfileId, forKey: .addProfileId)
         try container.encodeIfPresent(removeProfileId, forKey: .removeProfileId)
         switch profile {
@@ -224,7 +238,7 @@ extension CloudAPIClient {
         return response.memory
     }
 
-    /// Changes a memory's category or cards with one `PATCH`.
+    /// Changes a memory's categories or cards with one `PATCH`.
     func changeMemory(token: String, memoryId: String, _ request: CloudMemoryUpdateRequest) async throws -> CloudMemory {
         let segment = memoryId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? memoryId
         let response: CloudMemoryResponse = try await send(

@@ -80,7 +80,7 @@ private struct MemoryRow: View {
     var body: some View {
         Button(action: edit) {
             HStack(spacing: 10) {
-                MemoryRowLabel(text: memory.text, detail: detail, category: memory.category, captions: ownerCaption.map { [$0] } ?? [])
+                MemoryRowLabel(text: memory.text, detail: detail, categories: memory.allCategories, captions: ownerCaption.map { [$0] } ?? [])
                 Spacer(minLength: 0)
                 SettingsChevron()
             }

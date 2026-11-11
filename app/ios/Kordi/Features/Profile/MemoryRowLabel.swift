@@ -16,13 +16,17 @@ struct MemoryCategoryTag: View {
     }
 }
 
-/// A memory's text over its caption ("From a correction · Today") with the
-/// category chip after it, then any extra caption lines.
+/// A memory's text over its caption ("From a correction · Today") with one
+/// chip per category after it, then any extra caption lines. The chips move
+/// under the caption when they do not fit beside it.
 struct MemoryRowLabel: View {
     let text: String
     let detail: String
-    let category: String?
+    /// The memory's categories in order (`CloudMemory.allCategories`).
+    let categories: [String]
     var captions: [String] = []
+
+    private var chips: [String] { categories.compactMap(MemoryPresentation.categoryLabel(for:)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -32,12 +36,14 @@ struct MemoryRowLabel: View {
                 .lineLimit(3)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
-            HStack(spacing: 6) {
-                if !detail.isEmpty {
-                    Text(detail).font(SettingsFont.subtitle).foregroundStyle(.secondary)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    detailText
+                    tags
                 }
-                if let label = MemoryPresentation.categoryLabel(for: category) {
-                    MemoryCategoryTag(label: label)
+                VStack(alignment: .leading, spacing: 4) {
+                    detailText
+                    tags
                 }
             }
             ForEach(captions, id: \.self) { caption in
@@ -45,5 +51,21 @@ struct MemoryRowLabel: View {
             }
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var detailText: some View {
+        if !detail.isEmpty {
+            Text(detail).font(SettingsFont.subtitle).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var tags: some View {
+        if !chips.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(chips, id: \.self) { MemoryCategoryTag(label: $0) }
+            }
+        }
     }
 }

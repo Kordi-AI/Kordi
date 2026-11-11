@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Account › Memory's list: every memory of the account, newest first, with a
 /// search field, label filters, Add memory, and one row per memory showing its
-/// category, cards and origin. Long-press a row to change it.
+/// categories, cards and origin. Long-press a row to change it.
 struct MemoryOrganizerSection: View {
     @ObservedObject var model: MemorySettingsModel
     let memoryEnabled: Bool
@@ -83,24 +83,25 @@ struct MemoryOrganizerSection: View {
         }
         .padding(.vertical, 10)
         .contentShape(Rectangle())
-        .contextMenu { actions(memory, organizer.actions(for: memory)) }
+        .contextMenu { actions(memory, organizer.actions(for: memory), organizer: organizer) }
         .disabled(model.isMutating)
         .accessibilityAction(named: "Delete") { deleteTarget = memory }
         .accessibilityIdentifier("memory-row-\(memory.memoryId)")
     }
 
     @ViewBuilder
-    private func actions(_ memory: CloudMemory, _ actions: MemoryRowActions) -> some View {
+    private func actions(_ memory: CloudMemory, _ actions: MemoryRowActions, organizer: MemoryOrganizer) -> some View {
         if !actions.categories.isEmpty {
-            Menu("Change category", systemImage: "tag") {
+            // Each tap adds or removes one category, up to three; the only one stays.
+            Menu("Categories", systemImage: "tag") {
                 ForEach(actions.categories, id: \.self) { category in
+                    let title = MemoryPresentation.categoryLabel(for: category) ?? category
                     Button {
-                        guard category != memory.category else { return }
-                        Task { await model.setCategory(memory, to: category) }
+                        Task { await model.toggleCategory(memory, category) }
                     } label: {
-                        let title = MemoryPresentation.categoryLabel(for: category) ?? category
-                        if category == memory.category { Label(title, systemImage: "checkmark") } else { Text(title) }
+                        if organizer.isChosen(category, for: memory) { Label(title, systemImage: "checkmark") } else { Text(title) }
                     }
+                    .disabled(!organizer.canToggle(category, for: memory))
                 }
             }
         }
