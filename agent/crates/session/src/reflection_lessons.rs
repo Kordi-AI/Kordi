@@ -86,8 +86,9 @@ pub struct NewReflectionLesson {
     /// The signed-in account the memory was saved for. A pending row uploads
     /// only to this account; `None` uploads to whichever account syncs.
     pub owner_account_id: Option<String>,
-    /// The memory category (#1977); `None` means the default category.
-    pub category: Option<String>,
+    /// The memory categories (#1977), main one first; empty means the
+    /// default category. The `category` column keeps the first.
+    pub categories: Vec<String>,
     /// `user-declared` or `model-inferred`; `None` derives it from the source.
     pub declaration_type: Option<String>,
     /// `low`, `medium` or `high` for an inferred memory.
@@ -110,9 +111,42 @@ pub struct ReflectionLesson {
     pub remote_memory_id: Option<String>,
     pub pending_upload: bool,
     pub owner_account_id: Option<String>,
-    pub category: Option<String>,
+    /// Main category first; empty for rows saved without one.
+    pub categories: Vec<String>,
     pub declaration_type: Option<String>,
     pub confidence: Option<String>,
+}
+
+impl ReflectionLesson {
+    /// The main category, when the row has one.
+    pub fn category(&self) -> Option<&str> {
+        self.categories.first().map(String::as_str)
+    }
+}
+
+/// The `categories` column value: a JSON array, or NULL when empty.
+fn categories_column(categories: &[String]) -> Option<String> {
+    (!categories.is_empty())
+        .then(|| serde_json::to_string(categories).ok())
+        .flatten()
+}
+
+/// Read the `categories` column, falling back to the single `category`
+/// column for rows written before it.
+fn categories_from_columns(categories: Option<String>, category: Option<String>) -> Vec<String> {
+    let listed = categories
+        .and_then(|value| serde_json::from_str::<Vec<String>>(&value).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|value| !value.trim().is_empty())
+        .collect::<Vec<_>>();
+    if !listed.is_empty() {
+        return listed;
+    }
+    category
+        .filter(|value| !value.trim().is_empty())
+        .into_iter()
+        .collect()
 }
 
 /// Generate a local memory id. It fits the account `clientMemoryId` format
@@ -152,8 +186,8 @@ fn insert_reflection_lesson(conn: &Connection, lesson: NewReflectionLesson) -> R
         "INSERT OR REPLACE INTO reflection_lessons (
              lesson_id, scope, scope_id, artifact_path, source, created_at, updated_at, archived_at,
              lesson_text, remote_memory_id, pending_upload, scope_label, owner_account_id,
-             category, declaration_type, confidence
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+             category, declaration_type, confidence, categories
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
             lesson_id,
             lesson.scope.as_str(),
@@ -167,9 +201,10 @@ fn insert_reflection_lesson(conn: &Connection, lesson: NewReflectionLesson) -> R
             lesson.pending_upload,
             lesson.scope_label,
             lesson.owner_account_id,
-            lesson.category,
+            lesson.categories.first(),
             lesson.declaration_type,
             lesson.confidence,
+            categories_column(&lesson.categories),
         ],
     )?;
     Ok(lesson_id)
@@ -177,7 +212,7 @@ fn insert_reflection_lesson(conn: &Connection, lesson: NewReflectionLesson) -> R
 
 const LESSON_COLUMNS: &str = "lesson_id, scope, scope_id, artifact_path, source, created_at, \
      updated_at, archived_at, lesson_text, scope_label, remote_memory_id, pending_upload, \
-     owner_account_id, category, declaration_type, confidence";
+     owner_account_id, category, declaration_type, confidence, categories";
 
 fn query_lessons(
     conn: &Connection,
@@ -203,6 +238,7 @@ fn query_lessons(
             row.get::<_, Option<String>>(13)?,
             row.get::<_, Option<String>>(14)?,
             row.get::<_, Option<String>>(15)?,
+            row.get::<_, Option<String>>(16)?,
         ))
     })?;
 
@@ -225,6 +261,7 @@ fn query_lessons(
             category,
             declaration_type,
             confidence,
+            categories,
         ) = row?;
         lessons.push(ReflectionLesson {
             lesson_id,
@@ -240,7 +277,7 @@ fn query_lessons(
             remote_memory_id,
             pending_upload: pending_upload != 0,
             owner_account_id,
-            category,
+            categories: categories_from_columns(categories, category),
             declaration_type,
             confidence,
         });

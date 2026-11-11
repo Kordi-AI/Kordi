@@ -1,5 +1,7 @@
 use super::*;
 
+#[path = "memory_category_tests.rs"]
+mod category_tests;
 #[path = "memory_global_tests.rs"]
 mod global_tests;
 use crate::client::{
@@ -347,6 +349,7 @@ async fn reflection_call_saves_memory_and_relays_the_server_rejection() {
     let body = serde_json::to_value(memory).unwrap();
     assert_eq!(body["scopeId"], SESSION_ID);
     assert_eq!(body["category"], "general_preferences");
+    assert_eq!(body["categories"], json!(["general_preferences"]));
     assert_eq!(body["confidence"], "high");
     assert!(body.get("scopeLabel").is_none());
     assert!(body.get("declaredBy").is_none());

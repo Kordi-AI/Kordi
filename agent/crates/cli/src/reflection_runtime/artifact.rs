@@ -1,15 +1,16 @@
 //! The scoped lesson files under `reflection-lessons/<scope>/`: a cache the
 //! agent reads, rewritten from the `reflection_lessons` rows.
 //!
-//! Lines are `- <timestamp> [<source>|<category>|<declaration>] <text>`.
-//! Files written before memory categories (#1977) hold `[<source>]` lines,
-//! which still parse.
+//! Lines are `- <timestamp> [<source>|<categories>|<declaration>] <text>`,
+//! where `<categories>` is the main category, then any others joined by `+`
+//! (`values_and_ethics+work_context`). Files written before memory
+//! categories (#1977) hold `[<source>]` lines, which still parse.
 
 use std::path::Path;
 
 use kordi_session::reflection_lessons::{ReflectionLesson, list_all_reflection_lessons};
 use kordi_tools::memory_categories::{
-    DEFAULT_MEMORY_CATEGORY, USER_DECLARED, declaration_for_source, is_memory_category,
+    DEFAULT_MEMORY_CATEGORY, USER_DECLARED, declaration_for_source, stored_memory_categories,
 };
 
 use super::reflection_lesson_artifact_path;
@@ -35,13 +36,18 @@ fn sort_key(lesson: &ReflectionLesson) -> (Option<chrono::DateTime<chrono::Utc>>
     )
 }
 
-/// The category a row is filed under: its own, else the default.
-pub(crate) fn lesson_category(lesson: &ReflectionLesson) -> &str {
-    lesson
-        .category
-        .as_deref()
-        .filter(|category| is_memory_category(category))
-        .unwrap_or(DEFAULT_MEMORY_CATEGORY)
+/// Joins the categories of one cache line.
+const CATEGORY_SEPARATOR: char = '+';
+
+/// The categories a row is filed under, main one first: its own known
+/// ones, else the default.
+pub(crate) fn lesson_categories(lesson: &ReflectionLesson) -> Vec<String> {
+    let categories = stored_memory_categories(&lesson.categories, None);
+    if categories.is_empty() {
+        vec![DEFAULT_MEMORY_CATEGORY.to_string()]
+    } else {
+        categories
+    }
 }
 
 /// The declaration type of a row: its own, else derived from the source.
@@ -87,7 +93,7 @@ pub(crate) fn rewrite_lesson_artifact(
             "- {} [{}|{}|{}] {}\n",
             lesson.created_at.trim(),
             lesson.source.as_str(),
-            lesson_category(lesson),
+            lesson_categories(lesson).join(&CATEGORY_SEPARATOR.to_string()),
             lesson_declaration(lesson),
             text
         ));
@@ -114,16 +120,17 @@ pub(crate) fn rewrite_lesson_artifact(
 pub(crate) struct ParsedLessonLine {
     pub created_at: String,
     pub source: String,
-    /// `None` for lines written before memory categories.
-    pub category: Option<String>,
+    /// Main category first; empty for lines written before memory categories.
+    pub categories: Vec<String>,
     /// `user-declared` or `model-inferred`; derived from the source when the
     /// line does not say.
     pub declaration_type: String,
     pub text: String,
 }
 
-/// Parse `- <timestamp> [<source>|<category>|<declaration>] <text>` lines and
-/// the older `- <timestamp> [<source>] <text>`. Other lines are ignored.
+/// Parse `- <timestamp> [<source>|<categories>|<declaration>] <text>` lines,
+/// whose categories may be joined by `+`, and the older
+/// `- <timestamp> [<source>] <text>`. Other lines are ignored.
 pub(crate) fn parse_lesson_artifact(text: &str) -> Vec<ParsedLessonLine> {
     text.lines()
         .filter_map(|line| {
@@ -138,10 +145,13 @@ pub(crate) fn parse_lesson_artifact(text: &str) -> Vec<ParsedLessonLine> {
             if source.is_empty() || text.is_empty() {
                 return None;
             }
-            let category = fields
+            let listed = fields
                 .next()
-                .filter(|category| is_memory_category(category))
-                .map(str::to_string);
+                .unwrap_or_default()
+                .split(CATEGORY_SEPARATOR)
+                .map(str::to_string)
+                .collect::<Vec<_>>();
+            let categories = stored_memory_categories(&listed, None);
             let declaration_type = fields
                 .next()
                 .filter(|value| is_declaration(value))
@@ -150,7 +160,7 @@ pub(crate) fn parse_lesson_artifact(text: &str) -> Vec<ParsedLessonLine> {
             Some(ParsedLessonLine {
                 created_at: created_at.to_string(),
                 source: source.to_string(),
-                category,
+                categories,
                 declaration_type,
                 text: text.to_string(),
             })

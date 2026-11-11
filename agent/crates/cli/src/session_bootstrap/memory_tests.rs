@@ -88,7 +88,7 @@ fn memory_prompt_inlines_lessons_newest_first_with_artifact_paths() {
     assert!(section.contains(conversation_path.to_str().expect("conversation path")));
     assert!(!section.contains("(more memories omitted)"));
     assert!(section.contains("must not record health"));
-    assert!(section.len() < 2_350, "{}", section.len());
+    assert!(section.len() < 2_400, "{}", section.len());
 
     let relaxed = super::memory::build_reflection_lesson_artifacts_system_prompt_section(
         &tools,
