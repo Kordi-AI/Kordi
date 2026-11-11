@@ -81,3 +81,32 @@ async fn a_lagging_socket_rechecks_instead_of_missing_a_revocation() {
     let verdict = tokio::time::timeout(Duration::from_millis(100), socket.recv()).await;
     assert_eq!(verdict.unwrap(), SignalVerdict::Recheck);
 }
+
+#[test]
+fn refresh_and_heartbeat_payloads_parse() {
+    assert_eq!(
+        SessionSignal::parse(r#"{"a":"acct","d":null,"t":"cs_1","k":"refresh"}"#),
+        Some(signal(None, Some("cs_1"), SignalKind::Refresh))
+    );
+    assert_eq!(
+        SessionSignal::parse(crate::auth::session_cache::HEARTBEAT_PAYLOAD),
+        None,
+        "the heartbeat names no account"
+    );
+}
+
+#[tokio::test]
+async fn refresh_signals_evict_cached_lookups_but_leave_sockets_alone() {
+    let hub = SessionSignalHub::new();
+    let mut socket = hub.subscribe("acct", "dev", Some("cs_1"));
+    hub.publish(signal(None, None, SignalKind::Refresh));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), socket.recv())
+            .await
+            .is_err(),
+        "a socket carries on after a refresh"
+    );
+    hub.publish(signal(None, None, SignalKind::Revoked));
+    let verdict = tokio::time::timeout(Duration::from_millis(100), socket.recv()).await;
+    assert_eq!(verdict.unwrap(), SignalVerdict::Close);
+}

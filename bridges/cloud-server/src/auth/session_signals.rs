@@ -6,12 +6,18 @@
 //! payload and routes it here, and every open socket of the affected account
 //! receives it at once. Sockets therefore only need an occasional backstop
 //! recheck instead of polling PostgreSQL every few seconds.
+//!
+//! Every signal also evicts the account's entries from this replica's
+//! [`SessionLookupCache`], and migration 0197 adds `refresh` signals for the
+//! other facts a cached lookup carries.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use serde::Deserialize;
 use tokio::sync::broadcast;
+
+use super::session_cache::SessionLookupCache;
 
 /// The PostgreSQL notification channel the signals arrive on.
 pub(crate) const SESSION_SIGNAL_CHANNEL: &str = "cloud_session_signals";
@@ -23,6 +29,9 @@ pub(crate) enum SignalKind {
     Revoked,
     /// Something admission depends on changed: matching sockets recheck.
     Recheck,
+    /// Only facts cached session lookups carry changed (organization claim
+    /// or membership): cached lookups are dropped, sockets carry on.
+    Refresh,
 }
 
 /// One signal. A `None` device or token matches every device or session of
@@ -66,15 +75,23 @@ pub(crate) enum SignalVerdict {
 }
 
 /// Routes signals to the sockets of one account, like the chat wake hub.
+/// Also owns this replica's session lookup cache, which the same signals
+/// keep exact.
 pub(crate) struct SessionSignalHub {
     accounts: Mutex<HashMap<String, broadcast::Sender<SessionSignal>>>,
+    lookup_cache: SessionLookupCache,
 }
 
 impl SessionSignalHub {
     pub(crate) fn new() -> Arc<Self> {
         Arc::new(Self {
             accounts: Mutex::new(HashMap::new()),
+            lookup_cache: SessionLookupCache::default(),
         })
+    }
+
+    pub(crate) fn lookup_cache(&self) -> &SessionLookupCache {
+        &self.lookup_cache
     }
 
     /// Subscribe the socket of `account_id` on `device_id`, opened with the
@@ -102,6 +119,10 @@ impl SessionSignalHub {
     }
 
     pub(crate) fn publish(&self, signal: SessionSignal) {
+        self.lookup_cache.evict_account(&signal.account_id);
+        if signal.kind == SignalKind::Refresh {
+            return;
+        }
         let mut accounts = self
             .accounts
             .lock()
@@ -145,10 +166,11 @@ impl SessionSignalSubscription {
         loop {
             match self.receiver.recv().await {
                 Ok(signal) if signal.applies_to(&self.device_id, self.token_id.as_deref()) => {
-                    return match signal.kind {
-                        SignalKind::Revoked => SignalVerdict::Close,
-                        SignalKind::Recheck => SignalVerdict::Recheck,
-                    };
+                    match signal.kind {
+                        SignalKind::Revoked => return SignalVerdict::Close,
+                        SignalKind::Recheck => return SignalVerdict::Recheck,
+                        SignalKind::Refresh => {}
+                    }
                 }
                 Ok(_) => {}
                 Err(broadcast::error::RecvError::Lagged(_)) => return SignalVerdict::Recheck,
