@@ -39,7 +39,7 @@ pub async fn cloud_session_middleware(
             {
                 return error.response();
             }
-            let _ = bump_expiry(pool, &row.token_id, DEFAULT_SESSION_LIFETIME_DAYS).await;
+            let _ = bump_expiry(pool, &row, DEFAULT_SESSION_LIFETIME_DAYS).await;
             let _ = touch_device_activity(pool, &row.account_id, &row.device_id).await;
             RequestOrganization::attach(&mut req, &row.account_id, &row.organization, &headers);
             req.extensions_mut().insert(CloudSession {
