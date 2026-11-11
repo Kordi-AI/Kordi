@@ -46,7 +46,6 @@ impl Tool for ReflectionTool {
                     "items": { "type": "string", "enum": MEMORY_CATEGORIES },
                     "minItems": 1,
                     "maxItems": MAX_MEMORY_CATEGORIES,
-                    "uniqueItems": true,
                     "description": format!("What kind of information the memory is, main one first: {MEMORY_CATEGORY_GUIDE}. Usually one; add a second (rarely a third) only when the memory clearly belongs to both, e.g. \"Won't work for tobacco companies\": values_and_ethics, work_context.")
                 },
                 "category": {
@@ -201,7 +200,10 @@ mod tests {
         assert_eq!(categories["items"]["enum"][9], "hcp-custom:task_lessons");
         assert_eq!(categories["minItems"], 1);
         assert_eq!(categories["maxItems"], 3);
-        assert_eq!(categories["uniqueItems"], true);
+        assert!(
+            categories.get("uniqueItems").is_none(),
+            "the tool drops repeats itself"
+        );
         assert!(tool.description().contains("(usually one)"));
         assert!(
             categories["description"]
