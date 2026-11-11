@@ -69,33 +69,18 @@ export function useCloudMessageSync({
     : null;
   const storesRef = useRef(stores);
   useEffect(() => { storesRef.current = stores; }, [stores]);
-  const {
-    stateRef: messagesRef,
-    setState: setMessages,
-  } = stores.messages;
+  const { stateRef: messagesRef, setState: setMessages } = stores.messages;
   const { stateRef: activityRef, setState: setActivity } = stores.activity;
   const { stateRef: forksRef, setState: setForks } = stores.forks;
   const { stateRef: pinsRef, setState: setPins } = stores.pins;
   const { stateRef: titlesRef, setState: setTitles } = stores.titles;
   const { stateRef: agentsRef, setState: setAgents } = stores.agents;
-  const {
-    stateRef: hiddenSessionIdsRef,
-  } = stores.hiddenSessionIds;
-  const {
-    stateRef: deletedSessionIdsRef,
-  } = stores.deletedSessionIds;
-  const {
-    stateRef: unreadSessionIdsRef,
-  } = stores.unreadSessionIds;
-  const {
-    stateRef: pinnedSessionIdsRef,
-  } = stores.pinnedSessionIds;
-  const {
-    stateRef: mutedSessionIdsRef,
-  } = stores.mutedSessionIds;
-  const {
-    stateRef: pinnedGroupSpaceIdsRef,
-  } = stores.pinnedGroupSpaceIds;
+  const { stateRef: hiddenSessionIdsRef } = stores.hiddenSessionIds;
+  const { stateRef: deletedSessionIdsRef } = stores.deletedSessionIds;
+  const { stateRef: unreadSessionIdsRef } = stores.unreadSessionIds;
+  const { stateRef: pinnedSessionIdsRef } = stores.pinnedSessionIds;
+  const { stateRef: mutedSessionIdsRef } = stores.mutedSessionIds;
+  const { stateRef: pinnedGroupSpaceIdsRef } = stores.pinnedGroupSpaceIds;
   const pendingRequestRef = useRef<PendingCloudSyncRequest | null>(null);
   const startupSnapshotContextRef = useRef<string | null>(null);
   const historyRepairRef = useRef(createCloudHistoryRepair());
@@ -150,74 +135,82 @@ export function useCloudMessageSync({
     let cursorOverride = forceBootstrap ? '0' : null;
     let bootstrapRecoveryAttempted = forceBootstrap;
     const deletedMessageIds = new Set<string>();
+    let catchUpError: Error | null = null;
     // A bootstrap cursor can be many pages behind the server (especially on a
     // fresh install). Keep the accumulated state private until the cursor is
     // exhausted so the sidebar never publishes a succession of partial
     // session catalogs and message counts.
     while (true) {
-      const result = await syncCloudDiffOnce({
-        accountId: account.accountId,
-        messagesByPeer,
-        sessionActivity,
-        sessionForksById,
-        sessionPinsById,
-        sessionTitlesById,
-        cloudAgentsById,
-        hiddenSessionIds,
-        deletedSessionIds,
-        unreadSessionIds,
-        pinnedSessionIds,
-        mutedSessionIds,
-        pinnedGroupSpaceIds,
-        shouldSaveCursor: () => coordinator.isCurrentGeneration(generation),
-        loadCursor: async () => {
-          if (cursorOverride) {
-            const value = cursorOverride;
-            cursorOverride = null;
-            return value;
-          }
-          const local = await loadChatSyncCursor(account.accountId);
-          return local?.cursor ?? '0';
-        },
-        commitResponse: async (response) => {
-          if (!coordinator.isCurrentGeneration(generation)) throw new Error('Chat account changed during sync.');
-          if (!response.chat) {
-            throw new Error('Reliable chat sync returned a legacy response.');
-          }
-          const local = await applyChatSyncLocalBatch({
-            accountId: account.accountId,
-            expectedOrganizationId: session.organizationId ?? null,
-            bootstrap: response.chat.bootstrap,
-            cursor: response.chat.nextCursor,
-            lastStreamSeq: response.chat.lastStreamSeq,
-            conversations: response.chat.conversations,
-            messages: response.chat.messages,
-            events: response.chat.events,
-          });
-          if (!coordinator.isCurrentGeneration(generation)) return;
-          commitCloudVisibility(account.accountId, storesRef.current, response.events);
-          if (response.chat.bootstrap || response.chat.conversations.length > 0
-            || response.chat.messages.length > 0 || response.chat.events.length > 0) historyRepairRef.current.invalidate();
-          publishCloudGroupCatalog(account.accountId, response.chat.conversations);
-          publishCloudDeviceEvents(response.chat.events, account.accountId, session.deviceId, response.events);
-          for (const event of response.events) if (event.eventType === 'message.deleted' && event.messageId) deletedMessageIds.add(event.messageId);
-          directoryBootstrapPending ||= chatEventsRequireDirectoryBootstrap(response.chat.events);
-          if (local) {
-            await Promise.allSettled(local.changedConversationHeads.map((conversation) => (
-              client.acknowledgeChatDelivery(
-                session.token,
-                conversation.conversationId,
-                conversation.latestMessageSequence,
-              )
-            )));
-          }
-        },
-        fetchEvents: (cursor) => client.syncCloudEvents(
-          session.token,
-          cursor,
-          CLOUD_SYNC_EVENT_PAGE_LIMIT,
-        ),
-      });
+      let result: Awaited<ReturnType<typeof syncCloudDiffOnce>>;
+      try {
+        result = await syncCloudDiffOnce({
+          accountId: account.accountId,
+          messagesByPeer,
+          sessionActivity,
+          sessionForksById,
+          sessionPinsById,
+          sessionTitlesById,
+          cloudAgentsById,
+          hiddenSessionIds,
+          deletedSessionIds,
+          unreadSessionIds,
+          pinnedSessionIds,
+          mutedSessionIds,
+          pinnedGroupSpaceIds,
+          shouldSaveCursor: () => coordinator.isCurrentGeneration(generation),
+          loadCursor: async () => {
+            if (cursorOverride) {
+              const value = cursorOverride;
+              cursorOverride = null;
+              return value;
+            }
+            const local = await loadChatSyncCursor(account.accountId);
+            return local?.cursor ?? '0';
+          },
+          commitResponse: async (response) => {
+            if (!coordinator.isCurrentGeneration(generation)) throw new Error('Chat account changed during sync.');
+            if (!response.chat) {
+              throw new Error('Reliable chat sync returned a legacy response.');
+            }
+            const local = await applyChatSyncLocalBatch({
+              accountId: account.accountId,
+              expectedOrganizationId: session.organizationId ?? null,
+              bootstrap: response.chat.bootstrap,
+              cursor: response.chat.nextCursor,
+              lastStreamSeq: response.chat.lastStreamSeq,
+              conversations: response.chat.conversations,
+              messages: response.chat.messages,
+              events: response.chat.events,
+            });
+            if (!coordinator.isCurrentGeneration(generation)) return;
+            commitCloudVisibility(account.accountId, storesRef.current, response.events);
+            if (response.chat.bootstrap || response.chat.conversations.length > 0
+              || response.chat.messages.length > 0 || response.chat.events.length > 0) historyRepairRef.current.invalidate();
+            publishCloudGroupCatalog(account.accountId, response.chat.conversations);
+            publishCloudDeviceEvents(response.chat.events, account.accountId, session.deviceId, response.events);
+            for (const event of response.events) if (event.eventType === 'message.deleted' && event.messageId) deletedMessageIds.add(event.messageId);
+            directoryBootstrapPending ||= chatEventsRequireDirectoryBootstrap(response.chat.events);
+            if (local) {
+              await Promise.allSettled(local.changedConversationHeads.map((conversation) => (
+                client.acknowledgeChatDelivery(
+                  session.token,
+                  conversation.conversationId,
+                  conversation.latestMessageSequence,
+                )
+              )));
+            }
+          },
+          fetchEvents: (cursor) => client.syncCloudEvents(
+            session.token,
+            cursor,
+            CLOUD_SYNC_EVENT_PAGE_LIMIT,
+          ),
+        });
+      } catch (error) {
+        // Publish the pages already committed; the next catch-up resumes after them.
+        catchUpError = error instanceof Error ? error : new Error(String(error));
+        break;
+      }
       if (!coordinator.isCurrentGeneration(generation)) return;
       if (result.fallbackRequired) {
         if (bootstrapRecoveryAttempted) {
@@ -271,6 +264,7 @@ export function useCloudMessageSync({
       JSON.stringify(current) === JSON.stringify(cloudAgentsById) ? current : cloudAgentsById
     ));
     if (deletedMessageIds.size > 0) await onMessagesDeleted?.([...deletedMessageIds]);
+    if (catchUpError) throw catchUpError;
   }, [
     account,
     activityRef,

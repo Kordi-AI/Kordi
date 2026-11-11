@@ -1,4 +1,5 @@
 import type { DesktopCollaborationState } from '@/kordi-app/types';
+import { chatSendQueuedForRetry } from '@/features/cloud/chatSendRetry';
 import {
   isNativeAttachmentUploadAvailable,
   uploadNativeCloudAttachment,
@@ -27,6 +28,9 @@ export function terminalCollaborationRetryFailure({
   conversationId: string;
   messageId: string;
 }) {
+  // Timed out or lost its connection while still queued: the outbox sends it
+  // again and the server returns the stored copy, so it stays "sending".
+  if (chatSendQueuedForRetry(error)) return null;
   const detail = error instanceof Error ? error.message : 'Unable to retry message';
   return {
     detail,

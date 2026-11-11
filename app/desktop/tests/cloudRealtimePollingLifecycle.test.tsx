@@ -22,6 +22,8 @@ test('realtime and repair polling preserve background delivery, account isolatio
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
   let now = 0;
   context.mock.method(Date, 'now', () => now);
+  // Reconnect jitter takes half of each window: the first retry waits 500 ms.
+  context.mock.method(Math, 'random', () => 0.5);
   let nextTimer = 0;
   const intervals = new Map<number, { callback: () => void; ms: number }>();
   const timeouts = new Map<number, { callback: () => void; ms: number }>();
@@ -101,7 +103,7 @@ test('realtime and repair polling preserve background delivery, account isolatio
     await act(async () => socket.close());
     await tick(75_000);
     assert.equal(syncs, startupSyncs + 3, 'closed sockets must restore fallback polling');
-    const reconnect = [...timeouts].find(([, timer]) => timer.ms === 1_000)!;
+    const reconnect = [...timeouts].find(([, timer]) => timer.ms === 500)!;
     timeouts.delete(reconnect[0]);
     await act(async () => reconnect[1].callback());
     await waitForReactCondition(() => Socket.instances.length === 2, 'socket initialization must settle');
