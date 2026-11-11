@@ -9,11 +9,9 @@
   <style>
     :root {
       color-scheme: light dark;
-      --paper: #faf9f7;
-      --ink: #1a1714;
-      --ink-muted: #655e56;
-      --footer-ink: #81786f;
-      --rule: rgba(26, 23, 20, .09);
+      --paper: #fcfaf8;
+      --ink: #191817;
+      --muted: #6d6865;
     }
 
     * { box-sizing: border-box; }
@@ -25,90 +23,64 @@
       background: var(--paper);
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
-      text-rendering: geometricPrecision;
     }
 
-    .page {
-      min-height: 100vh;
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-    }
-    .wrap { width: min(calc(100% - 4.25rem), 520px); margin-inline: auto; }
-    header { min-height: 68px; display: flex; align-items: center; border-bottom: 1px solid var(--rule); }
-    header .wrap { width: min(calc(100% - 4.25rem), 1312px); }
+    .page { min-height: 100vh; display: flex; flex-direction: column; }
+    header { padding: 22px max(16px, calc((100vw - 1200px) / 2)); }
     .brand {
       width: fit-content;
       display: inline-flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       color: var(--ink);
-      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-      font-size: 24px;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -.02em;
       line-height: 1;
     }
-    .brand svg { width: 30px; height: 30px; flex: 0 0 auto; }
-    main { display: flex; align-items: center; padding-block: 3.5rem 4.5rem; }
-    .copy { width: 100%; }
+    .brand svg { width: 22px; height: 22px; flex: 0 0 auto; }
+    main { flex: 1; display: flex; justify-content: center; padding: clamp(56px, 20vh, 200px) 16px 56px; }
+    .copy { width: min(100%, 420px); text-align: center; }
     h1 {
-      max-width: 11ch;
-      margin: 0;
+      margin: 0 0 12px;
       color: var(--ink);
-      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-      font-size: clamp(48px, 8vw, 72px);
-      font-weight: 400;
-      line-height: .98;
-      letter-spacing: -.035em;
+      font-size: clamp(2.125rem, 1.5rem + 1.6vw, 2.75rem);
+      font-weight: 600;
+      line-height: 1.1;
+      letter-spacing: -.045em;
       text-wrap: balance;
     }
     p {
-      max-width: 43ch;
-      margin: 18px 0 0;
-      color: var(--ink-muted);
-      font-size: 15px;
-      line-height: 1.65;
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.0625rem;
+      line-height: 1.6;
       text-wrap: balance;
-    }
-    footer {
-      padding: 16px 34px 18px;
-      border-top: 1px solid var(--rule);
-      color: var(--footer-ink);
-      font-size: 11px;
-      text-align: center;
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
         --paper: #191814;
         --ink: #f2efe9;
-        --ink-muted: #b8b0a7;
-        --footer-ink: #938b82;
-        --rule: rgba(242, 239, 233, .09);
+        --muted: #b8b0a7;
       }
-    }
-    @media (max-width: 520px) {
-      .wrap, header .wrap { width: calc(100% - 3.5rem); }
-      main { align-items: flex-start; padding-block: 5.5rem 3.5rem; }
-      h1 { font-size: clamp(48px, 16vw, 62px); }
     }
   </style>
 </head>
 <body>
   <div class="page">
     <header>
-      <div class="wrap">
-        <div class="brand" aria-label="Kordi">
-          <svg viewBox='64 58 384 384' aria-hidden='true'><mask id='kordi-bird-cut' maskUnits='userSpaceOnUse' x='-100' y='-100' width='712' height='712'><ellipse cx='262' cy='292' rx='150' ry='136' fill='#fff'/><path d='M400,342 C436,322 462,272 470,204 C448,236 420,244 386,218Z' fill='#fff' stroke='#fff' stroke-width='4' stroke-linejoin='round'/><circle cx='194' cy='266' r='17'/><path d='M269.6,333.2 C292,299.6 348,282 397.6,285.2 C381.6,325.2 336.8,357.2 288.8,355.6 C272.8,354 264.8,344.4 269.6,333.2Z'/></mask><g transform='translate(256,250) scale(0.94) translate(-270,-292)'><path d='M120,276 L82,294 L120,312Z' fill='currentColor' stroke='currentColor' stroke-width='12' stroke-linejoin='round'/><rect x='-100' y='-100' width='712' height='712' fill='currentColor' mask='url(#kordi-bird-cut)'/></g></svg>
-          <span>kordi</span>
-        </div>
+      <div class="brand" aria-label="Kordi">
+        <svg viewBox='64 58 384 384' aria-hidden='true'><mask id='kordi-bird-cut' maskUnits='userSpaceOnUse' x='-100' y='-100' width='712' height='712'><ellipse cx='262' cy='292' rx='150' ry='136' fill='#fff'/><path d='M400,342 C436,322 462,272 470,204 C448,236 420,244 386,218Z' fill='#fff' stroke='#fff' stroke-width='4' stroke-linejoin='round'/><circle cx='194' cy='266' r='17'/><path d='M269.6,333.2 C292,299.6 348,282 397.6,285.2 C381.6,325.2 336.8,357.2 288.8,355.6 C272.8,354 264.8,344.4 269.6,333.2Z'/></mask><g transform='translate(256,250) scale(0.94) translate(-270,-292)'><path d='M120,276 L82,294 L120,312Z' fill='currentColor' stroke='currentColor' stroke-width='12' stroke-linejoin='round'/><rect x='-100' y='-100' width='712' height='712' fill='currentColor' mask='url(#kordi-bird-cut)'/></g></svg>
+        <span>kordi</span>
       </div>
     </header>
-    <main class="wrap" role="status">
+    <main role="status">
       <section class="copy">
         <h1>{{heading}}</h1>
         <p>{{description}}</p>
       </section>
     </main>
-    <footer>&copy; Kordi 2026</footer>
   </div>
 </body>
 </html>

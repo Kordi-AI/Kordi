@@ -255,11 +255,14 @@ async fn serve_connection(
 fn callback_page(provider_error: bool) -> String {
     let (heading, description) = if provider_error {
         (
-            "Sign-in wasn’t completed.",
+            "Sign-in wasn’t completed",
             "Return to Kordi to review the result or try again.",
         )
     } else {
-        ("Signed in.", "You can return to Kordi.")
+        (
+            "You’re signed in",
+            "You can close this tab and return to Kordi.",
+        )
     };
     CALLBACK_PAGE_TEMPLATE
         .replace("{{heading}}", heading)
