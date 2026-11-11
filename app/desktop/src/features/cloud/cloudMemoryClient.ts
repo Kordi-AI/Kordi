@@ -18,6 +18,8 @@ export type CloudMemory = {
   /** Routing fields (`memoryVersion` 2); older servers leave them out. */
   /** One of `MEMORY_CATEGORIES`; newer servers may send others, which show no chip. */
   category?: string;
+  /** Every category, main one first (`memoryVersion` 4); `category` repeats the first. */
+  categories?: string[];
   declarationType?: MemoryDeclarationType;
   confidence?: MemoryConfidence | null;
   /** The one card the person added the memory to, when there is exactly one (legacy pin). */
@@ -29,10 +31,14 @@ export type CloudMemory = {
   excludedProfileIds?: string[];
 };
 
-/** A memory change. `addProfileId` and `removeProfileId` need `memoryVersion` 3. */
+/**
+ * A memory change. `addProfileId` and `removeProfileId` need `memoryVersion` 3; `categories`
+ * (one to three, replacing the whole set) needs `memoryVersion` 4.
+ */
 export type CloudMemoryPatch = {
   text?: string;
   category?: string;
+  categories?: string[];
   profileId?: string | null;
   addProfileId?: string;
   removeProfileId?: string;

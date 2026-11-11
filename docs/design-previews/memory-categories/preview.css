@@ -1,0 +1,92 @@
+/* Memory categories design preview. Light and dark follow the system; ?theme=light|dark overrides. */
+:root {
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --ground: #e9e8e4; --frame: #ffffff; --bg: #f2f2f7; --card: #ffffff;
+  --fill: rgba(120,120,128,.12); --line: rgba(60,60,67,.14);
+  --text: #000; --muted: rgba(60,60,67,.62); --tint: #2563eb; --red: #d70015;
+  --m-main: #fbfbfc; --m-panel: #ffffff; --m-line: rgba(0,0,0,.085); --m-fg: #1d1d1f; --m-fg2: rgba(0,0,0,.6);
+  --m-fill: rgba(0,0,0,.06); --m-prim: #16181d; --m-prim-fg: #fafafa; --pop: 0 10px 30px rgba(0,0,0,.14), 0 1px 3px rgba(0,0,0,.08);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #121214; --frame: #1c1c1e; --bg: #000; --card: #1c1c1e;
+    --fill: rgba(118,118,128,.24); --line: rgba(84,84,88,.6);
+    --text: #fff; --muted: rgba(235,235,245,.6); --tint: #60a5fa; --red: #ff6961;
+    --m-main: #17181a; --m-panel: #1f2023; --m-line: rgba(255,255,255,.08); --m-fg: rgba(255,255,255,.92); --m-fg2: rgba(255,255,255,.6);
+    --m-fill: rgba(255,255,255,.07); --m-prim: #f5f5f5; --m-prim-fg: #16181d; --pop: 0 10px 30px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #121214; --frame: #1c1c1e; --bg: #000; --card: #1c1c1e;
+  --fill: rgba(118,118,128,.24); --line: rgba(84,84,88,.6);
+  --text: #fff; --muted: rgba(235,235,245,.6); --tint: #60a5fa; --red: #ff6961;
+  --m-main: #17181a; --m-panel: #1f2023; --m-line: rgba(255,255,255,.08); --m-fg: rgba(255,255,255,.92); --m-fg2: rgba(255,255,255,.6);
+  --m-fill: rgba(255,255,255,.07); --m-prim: #f5f5f5; --m-prim-fg: #16181d; --pop: 0 10px 30px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.4);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--text); font: 13px/1.4 var(--sans); }
+button { font: inherit; color: inherit; }
+.stage { display: flex; flex-direction: column; gap: 40px; max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
+.note { margin: 0 0 12px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.pair { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; }
+.frame-label { margin: 0 0 6px 4px; color: var(--muted); font-size: 11px; }
+.mac-frame { min-width: 0; flex: 1 1 560px; }
+.phone-frame { flex: 0 0 360px; max-width: 100%; }
+.mac-pane { padding: 24px 28px 32px; border: 1px solid var(--m-line); border-radius: 12px; background: var(--m-main); color: var(--m-fg); }
+.phone { min-height: 200px; padding: 16px 16px 28px; border-radius: 28px; background: var(--bg); box-shadow: 0 0 0 8px var(--frame); }
+
+/* Mac organizer rows (mirrors memoryOrganizer.css). */
+.m-list { border-top: .5px solid var(--m-line); }
+.m-mem { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: .5px solid var(--m-line); }
+.m-mem-text { min-width: 0; flex: 1; }
+.m-mem-title { font-size: 13px; line-height: 20px; }
+.m-mem-meta { margin-top: 1px; color: var(--m-fg2); font-size: 12px; line-height: 18px; }
+.m-mem-acts { display: flex; gap: 4px; }
+.qbtn { height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--m-fg2); font-size: 12px; cursor: pointer; }
+.qbtn:hover { background: var(--m-fill); color: var(--m-fg); }
+.mo-labels { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.mo-chip { position: relative; display: inline-flex; height: 18px; align-items: center; border: 0; border-radius: 999px; background: var(--m-fill); color: var(--m-fg2); font-size: 10px; font-weight: 500; line-height: 1; }
+.mo-chip.is-card { border: 1px solid var(--m-line); background: none; }
+.mo-chip.is-add { padding: 0 7px; border: 1px dashed var(--m-line); background: none; cursor: pointer; }
+.mo-chip.is-from { padding: 0 4px; background: none; }
+.mo-part, .mo-icon { display: inline-flex; height: 100%; align-items: center; border: 0; background: none; color: inherit; cursor: pointer; }
+.mo-part { padding: 0 7px; border-radius: 999px; }
+.mo-icon { margin-left: -4px; padding: 0 5px 0 3px; border-radius: 0 999px 999px 0; }
+.mo-icon svg { width: 9px; height: 9px; }
+.mo-part:hover, .mo-icon:hover, .mo-chip.is-add:hover { color: var(--m-fg); }
+.mo-wrap { position: relative; display: inline-flex; }
+.mo-menu { position: absolute; z-index: 30; top: 100%; left: 0; min-width: 196px; margin-top: 4px; padding: 4px; border: .5px solid var(--m-line); border-radius: 10px; background: var(--m-panel); box-shadow: var(--pop); }
+.mo-menu button { display: flex; width: 100%; align-items: center; gap: 8px; padding: 6px 10px; border: 0; border-radius: 6px; background: none; color: var(--m-fg); font-size: 13px; text-align: left; cursor: pointer; }
+.mo-menu button:hover:not(:disabled) { background: var(--m-fill); }
+.mo-menu button:disabled { cursor: default; opacity: .4; }
+.mo-menu .lvl { margin-left: auto; color: var(--m-fg2); font-size: 11px; }
+.mo-menu .grp { padding: 6px 10px 2px; color: var(--m-fg2); font-size: 11px; font-weight: 500; }
+.mo-menu .grp + button { margin-top: 0; }
+.mo-menu hr { margin: 4px 6px; border: 0; border-top: .5px solid var(--m-line); }
+.mo-check { display: inline-grid; width: 14px; flex: none; place-items: center; }
+.mo-check svg { width: 13px; height: 13px; }
+
+/* iPhone organizer rows and the long-press menu. */
+.i-title { margin: 6px 4px 14px; font-size: 22px; font-weight: 700; }
+.i-list { border-top: .5px solid var(--line); }
+.i-row { padding: 10px 4px; border-bottom: .5px solid var(--line); }
+.i-row-title { font-size: 16px; line-height: 21px; }
+.i-row-sub { margin-top: 2px; color: var(--muted); font-size: 13px; }
+.i-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.i-chip { display: inline-flex; height: 20px; align-items: center; padding: 0 7px; border-radius: 8px; background: var(--fill); color: var(--text); opacity: .75; font-size: 11px; font-weight: 500; }
+.i-chip.is-card { border: 1px solid var(--line); background: none; }
+.i-chip.is-from { padding: 0 2px; background: none; color: var(--muted); opacity: 1; }
+.i-menu { width: 250px; margin: 14px 0 0 auto; overflow: hidden; border-radius: 13px; background: var(--card); box-shadow: var(--pop); }
+.i-menu .head { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: .5px solid var(--line); color: var(--muted); font-size: 13px; }
+.i-menu button { display: flex; width: 100%; align-items: center; gap: 10px; padding: 9px 14px; border: 0; background: none; color: var(--text); font-size: 16px; text-align: left; cursor: pointer; }
+.i-menu button + button { border-top: .5px solid var(--line); }
+.i-menu button:disabled { opacity: .35; cursor: default; }
+.i-menu .ck { width: 16px; color: var(--text); }
+.i-menu .txt { display: flex; flex-direction: column; }
+.i-menu .sub { color: var(--muted); font-size: 12px; }
+.i-menu .sec { padding: 7px 14px 3px; border-top: 6px solid var(--fill); color: var(--muted); font-size: 12px; }
+.i-menu .sec:first-of-type { border-top: 0; }
+svg.i { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

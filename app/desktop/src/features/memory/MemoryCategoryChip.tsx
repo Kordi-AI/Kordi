@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-import { memoryCategoryLabel } from './memoryCategory';
+import { memoryCategoriesOf, memoryCategoryLabel, type MemoryCategory } from './memoryCategory';
 
 /** The category after a memory's date caption; nothing for a missing or unknown category. */
 export function MemoryCategoryChip({ category, className }: { category: string | null | undefined; className?: string }) {
@@ -16,5 +16,19 @@ export function MemoryCategoryChip({ category, className }: { category: string |
     >
       {label}
     </span>
+  );
+}
+
+/** One chip per category of a memory, main one first; older servers send only `category`. */
+export function MemoryCategoryChips({ memory, className }: {
+  memory: { categories?: readonly unknown[] | null; category?: string | null };
+  className?: string;
+}) {
+  return (
+    <>
+      {memoryCategoriesOf(memory).map((category: MemoryCategory) => (
+        <MemoryCategoryChip key={category} category={category} className={className} />
+      ))}
+    </>
   );
 }
