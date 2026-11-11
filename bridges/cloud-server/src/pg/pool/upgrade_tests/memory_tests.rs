@@ -187,8 +187,8 @@ type Categories = (String, String, Vec<String>);
 
 #[tokio::test]
 #[ignore = "requires a dedicated PostgreSQL fixture; run scripts/test-cloud-migrations.sh"]
-async fn upgrade_from_192_adds_several_categories_per_memory() {
-    let pool = fixture(192).await;
+async fn upgrade_from_195_adds_several_categories_per_memory() {
+    let pool = fixture(195).await;
     execute(
         &pool,
         "INSERT INTO cloud_account_memories \
