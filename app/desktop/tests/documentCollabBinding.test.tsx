@@ -342,7 +342,9 @@ test('C: a later ticket\'s stale hint brings a save made outside the room in aft
     pair.access.state.stale = true;
     pair.access.state.offline = false;
     await waitForReactCondition(() => /Intro rewritten by the agent\./.test(roomText(pair.memory)), 'the stale hint merges the outside save into the room');
-    assert.match(roomText(pair.memory), /Edited offline by Priya\./, 'the offline room edit stays');
+    // The other editor can bring the outside save in before the writer's offline edit has synced.
+    await waitForReactCondition(() => /Edited offline by Priya\./.test(roomText(pair.memory)), 'the offline room edit stays');
+    assert.match(roomText(pair.memory), /Intro rewritten by the agent\./, 'next to the outside save');
     await waitForReactCondition(() => saves(pair.calls).some((save) => save.baseRevision === outside.revision), 'and the writer snapshots on it');
     assert.equal(pair.writer.room!.staleRevision || pair.other.room!.staleRevision, false, 'the hint was used');
   });

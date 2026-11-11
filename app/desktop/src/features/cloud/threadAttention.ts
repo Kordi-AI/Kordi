@@ -6,7 +6,8 @@ import { parseCloudAgentResponse } from './cloudAgentMessages';
 import { cloudDirectMessageDisplayText, cloudDirectMessageAction } from './cloudDirectMessages';
 import { cloudMessageAttachmentsForPresentation, cloudVoiceMessageToMessageVoice } from './cloudAttachments';
 import type { Conversation, Message } from '@/kordi-app/types';
-import { CHAT_SYNC_LOCAL_STATE_CHANGED_EVENT } from '@/lib/desktopChatSync';
+import { CHAT_SYNC_LOCAL_STATE_CHANGED_EVENT, type ChatSyncLocalStateChangedEvent } from '@/lib/desktopChatSync';
+import { chatSyncBatchMayChangeThreadAttention } from './threadAttentionSyncTrigger';
 
 export type ThreadAttention = { conversation_id: string; session_id: string; unread_count: number; thread_unread_count?: number; thread_count: number; next_root_id: string | null; next_message_id: string | null };
 export type ThreadPage = { root: CloudMessage; messages: CloudMessage[]; firstUnreadMessageId: string | null; nextAfterSequence: number | null; isThread: boolean };
@@ -19,8 +20,9 @@ export function requestThreadNavigation(sessionId: string, messageId?: string) {
 export function useThreadNavigation() {
   return useSyncExternalStore(listener => {listeners.add(listener); return () => {listeners.delete(listener);};}, () => navigation, () => null);
 }
-// Chat sync commits and local reads refresh attention immediately; the poll only
-// repairs counts nothing announced (for example a thread read on another device).
+// Chat sync commits that can change attention and local reads refresh it
+// immediately; the poll only repairs counts nothing announced (for example a
+// thread read on another device).
 export const THREAD_ATTENTION_REFRESH_MS = 15_000;
 export function refreshThreadAttention() { window.dispatchEvent(new Event('kordi-thread-read')); }
 
@@ -51,12 +53,14 @@ export function useThreadAttention(accountId?: string | null) {
     void refresh();
     const timer=setInterval(()=>{if(document.visibilityState!=='hidden')void refresh();},THREAD_ATTENTION_REFRESH_MS);
     const onRead=()=>void refresh();
+    // A commit announced without its batch refreshes as before.
+    const onCommit=(event:ChatSyncLocalStateChangedEvent)=>{const batch=event.detail?.batch;if(!batch||chatSyncBatchMayChangeThreadAttention(batch))void refresh();};
     const onVisible=()=>{if(document.visibilityState==='visible')void refresh();};
     window.addEventListener('kordi-thread-read',onRead);
-    window.addEventListener(CHAT_SYNC_LOCAL_STATE_CHANGED_EVENT,onRead);
+    window.addEventListener(CHAT_SYNC_LOCAL_STATE_CHANGED_EVENT,onCommit);
     window.addEventListener('focus',onRead);
     document.addEventListener('visibilitychange',onVisible);
-    return()=>{cancelled=true;clearInterval(timer);window.removeEventListener('kordi-thread-read',onRead);window.removeEventListener(CHAT_SYNC_LOCAL_STATE_CHANGED_EVENT,onRead);window.removeEventListener('focus',onRead);document.removeEventListener('visibilitychange',onVisible);};
+    return()=>{cancelled=true;clearInterval(timer);window.removeEventListener('kordi-thread-read',onRead);window.removeEventListener(CHAT_SYNC_LOCAL_STATE_CHANGED_EVENT,onCommit);window.removeEventListener('focus',onRead);document.removeEventListener('visibilitychange',onVisible);};
   },[accountId]);
   return state && state.accountId===accountId?state.values:undefined;
 }
