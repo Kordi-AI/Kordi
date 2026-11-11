@@ -5,10 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { Contact, ContactRequest } from '@/kordi-app/types';
 
+import { openCloudEventSocket, type CloudEventSocket } from './cloudEventSocket';
 import {
   CloudAuthClient,
-  cloudRealtimeWebSocketEnabled,
-  cloudWebSocketUrl,
   defaultCloudAuthClient,
   type CloudAccount,
   type CloudContactRequest,
@@ -100,8 +99,7 @@ type CloudContactsStore = {
   refreshAgain: boolean;
   mutationRevision: number;
   pollTimer: ReturnType<typeof window.setInterval> | null;
-  ws: WebSocket | null;
-  wsOpening: boolean;
+  socket: CloudEventSocket | null;
   /** Contacts added here (summary key → expiry), kept until the server lists them. */
   recentlyAdded: Map<string, number>;
   /** People being removed here; refreshes skip them until the delete settles. */
@@ -145,8 +143,7 @@ function cloudContactsStoreFor(accountId: string, fresh = false): CloudContactsS
     refreshAgain: false,
     mutationRevision: 0,
     pollTimer: null,
-    ws: null,
-    wsOpening: false,
+    socket: null,
     recentlyAdded: new Map(),
     removing: new Set(),
   };
@@ -259,54 +256,32 @@ async function refreshCloudContactsStore(store: CloudContactsStore, client: Clou
 }
 
 function ensureCloudContactsWebSocket(store: CloudContactsStore, client: CloudAuthClient) {
-  if (store.ws || store.wsOpening || typeof WebSocket === 'undefined' || !cloudRealtimeWebSocketEnabled()) return;
-  store.wsOpening = true;
-  void loadSession()
-    .then((session) => {
-      if (!session?.token || store.ws) return;
-      const ws = new WebSocket(cloudWebSocketUrl(session.token));
-      store.ws = ws;
-      ws.onmessage = (event) => {
-        try {
-          const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
-          const subject = typeof frame?.subject === 'string' ? frame.subject : '';
-          const addedPeerId = subject.startsWith('kordi.events.contact.added.')
-            ? cloudContactAddedActorAccountId(frame?.payload, store.accountId)
-            : null;
-          if (addedPeerId) {
-            void client.getProfile(session.token, addedPeerId)
-              .then((profile) => {
-                const added: CloudContactSummary = {
-                  accountId: profile.accountId,
-                  displayName: profile.displayName,
-                  avatarUrl: profile.avatarUrl,
-                  nodeId: profile.nodeId,
-                  createdAt: cloudContactAddedOccurredAt(frame?.payload) || new Date().toISOString(),
-                };
-                rememberRecentlyAdded(store, added);
-                applyCloudContactsSnapshot(store, (current) => mergeCloudContactSummarySnapshot(current, added));
-              })
-              .catch(() => undefined)
-              .finally(() => void refreshCloudContactsStore(store, client));
-            return;
-          }
-          if (shouldRefreshCloudContactsForWsSubject(subject)) {
-            void refreshCloudContactsStore(store, client);
-          }
-        } catch (error) {
-          console.warn('[cloud-contacts-ws] frame parse failed', error);
-        }
-      };
-      ws.onclose = () => {
-        if (store.ws === ws) store.ws = null;
-      };
-      ws.onerror = () => {
-        ws.close();
-      };
-    })
-    .finally(() => {
-      store.wsOpening = false;
-    });
+  store.socket ??= openCloudEventSocket({
+    onFrame: ({ subject, payload }, token) => {
+      const addedPeerId = subject.startsWith('kordi.events.contact.added.')
+        ? cloudContactAddedActorAccountId(payload, store.accountId)
+        : null;
+      if (addedPeerId) {
+        void client.getProfile(token, addedPeerId)
+          .then((profile) => {
+            const added: CloudContactSummary = {
+              accountId: profile.accountId,
+              displayName: profile.displayName,
+              avatarUrl: profile.avatarUrl,
+              nodeId: profile.nodeId,
+              createdAt: cloudContactAddedOccurredAt(payload) || new Date().toISOString(),
+            };
+            rememberRecentlyAdded(store, added);
+            applyCloudContactsSnapshot(store, (current) => mergeCloudContactSummarySnapshot(current, added));
+          })
+          .catch(() => undefined)
+          .finally(() => void refreshCloudContactsStore(store, client));
+        return;
+      }
+      if (shouldRefreshCloudContactsForWsSubject(subject)) void refreshCloudContactsStore(store, client);
+    },
+    onFrameError: (error) => console.warn('[cloud-contacts-ws] frame parse failed', error),
+  });
 }
 
 function startCloudContactsStore(store: CloudContactsStore, client: CloudAuthClient) {
@@ -354,8 +329,8 @@ export function useCloudContacts(account: CloudAccount | null): UseCloudContacts
         mountedCloudContactStores.delete(store);
         if (store.pollTimer && typeof window !== 'undefined') window.clearInterval(store.pollTimer);
         store.pollTimer = null;
-        store.ws?.close();
-        store.ws = null;
+        store.socket?.close();
+        store.socket = null;
       }
     };
   }, [account, client, store]);

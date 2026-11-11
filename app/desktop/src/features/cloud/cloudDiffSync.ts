@@ -16,7 +16,7 @@ import {
   cloudSyncEventSessionId,
 } from './cloudDiffSyncMessages';
 import { EMPTY_CLOUD_SESSION_ACTIVITY, mergeCloudSessionActivity, normalizeCloudSessionActivitySnapshot, type CloudSessionActivityStore } from './cloudSessionActivity';
-import { cloudSyncCursorRequiresFallback } from './cloudSyncCursorProgress';
+import { chatSyncCursorExpired, cloudSyncCursorRequiresFallback } from './cloudSyncCursorProgress';
 
 export {
   applyCloudSyncEventsToMessagesByPeer,
@@ -447,7 +447,8 @@ export async function syncCloudDiffOnce(input: SyncCloudDiffOnceInput): Promise<
   const initialPinnedGroupSpaceIds = new Set(input.pinnedGroupSpaceIds ?? []);
   try {
     response = await input.fetchEvents(previousCursor);
-  } catch {
+  } catch (error) {
+    if (!chatSyncCursorExpired(error)) throw error; // Kept cursor: the caller retries the catch-up from it.
     return { messagesByPeer: input.messagesByPeer, sessionActivity: input.sessionActivity ?? EMPTY_CLOUD_SESSION_ACTIVITY, sessionForksById: input.sessionForksById ?? {}, sessionPinsById: input.sessionPinsById ?? {}, sessionTitlesById: input.sessionTitlesById ?? {}, cloudAgentsById: input.cloudAgentsById ?? {}, hiddenSessionIds: initialHiddenSessionIds, deletedSessionIds: initialDeletedSessionIds, unreadSessionIds: initialUnreadSessionIds, pinnedSessionIds: initialPinnedSessionIds, mutedSessionIds: initialMutedSessionIds, pinnedGroupSpaceIds: initialPinnedGroupSpaceIds, cursor: previousCursor, fallbackRequired: true, hasMore: false };
   }
 

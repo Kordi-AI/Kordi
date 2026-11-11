@@ -6,13 +6,18 @@ import type { ChatSyncMessage } from './chatSyncTypes';
 import { isRetryableCloudDeliveryError } from './cloudAuthError';
 import { completeChatSyncOutbox, dueChatSyncOutbox, enqueueChatSyncOutbox, failChatSyncOutbox } from '@/lib/desktopChatSync';
 import { captureChatDeliveryScope, type ChatDeliveryScope } from './chatDeliveryScope';
+import { chatSendRetryAfterMs, chatSendRetryGate, markChatSendQueuedForRetry, type ChatSendRetryGate } from './chatSendRetry';
 
 const durableOutbox = {
   enqueue: enqueueChatSyncOutbox, due: dueChatSyncOutbox, complete: completeChatSyncOutbox, fail: failChatSyncOutbox,
 };
 
 export class ChatSyncMessageDelivery {
-  constructor(private readonly state: ChatSyncState, private readonly outbox = durableOutbox) {}
+  constructor(
+    private readonly state: ChatSyncState,
+    private readonly outbox = durableOutbox,
+    private readonly retryGate: ChatSendRetryGate = chatSendRetryGate,
+  ) {}
 
   async sendMessage(
     token: string,
@@ -124,14 +129,20 @@ export class ChatSyncMessageDelivery {
       );
     } catch (error) {
       deliveryScope.assertCurrent();
+      const retryAfterMs = chatSendRetryAfterMs(error);
+      if (retryAfterMs !== null && accountId) this.retryGate.hold(accountId, retryAfterMs);
       if (durable) {
+        // A transient failure stays pending: the server may have stored the
+        // message, and a repeat with the same client message id returns it.
+        const retryable = isRetryableCloudDeliveryError(error);
         await this.outbox.fail(
           accountId,
           clientMessageId,
           error instanceof Error ? error.message : 'Reliable chat send failed.',
-          isRetryableCloudDeliveryError(error),
+          retryable,
           deliveryScope.expectedOrganizationId,
         ).catch(() => {});
+        if (retryable) markChatSendQueuedForRetry(error);
       }
       throw error;
     }
@@ -140,11 +151,14 @@ export class ChatSyncMessageDelivery {
   async drainChatOutbox(token: string, accountId: string): Promise<CloudMessage[]> {
     const deliveryScope = captureChatDeliveryScope(token, accountId);
     this.state.activeAccountId = accountId.trim() || this.state.activeAccountId;
+    // The server asked for a pause (Retry-After); queued sends wait it out.
+    if (this.retryGate.remainingMs(accountId.trim()) > 0) return [];
     const pending = await this.outbox.due(accountId, deliveryScope.expectedOrganizationId);
     const delivered: CloudMessage[] = [];
     deliveryScope.assertCurrent();
     for (const operation of pending) {
       deliveryScope.assertCurrent();
+      if (this.retryGate.remainingMs(accountId.trim()) > 0) break;
       const payload = operation.payload;
       if (!payload?.peerAccountId || typeof payload.body !== 'string') {
         await this.outbox.fail(
