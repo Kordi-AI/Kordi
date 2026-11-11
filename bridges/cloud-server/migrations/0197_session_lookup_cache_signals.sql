@@ -83,7 +83,7 @@ CREATE TRIGGER cloud_refresh_tokens_signal_refresh
         app_sign_in_id ON cloud_refresh_tokens
     FOR EACH ROW
     WHEN (OLD.organization_id IS DISTINCT FROM NEW.organization_id
-          OR NEW.expires_at < OLD.expires_at
+          OR NEW.expires_at::timestamptz < OLD.expires_at::timestamptz
           OR OLD.account_id IS DISTINCT FROM NEW.account_id
           OR OLD.device_id IS DISTINCT FROM NEW.device_id
           OR OLD.token_hash IS DISTINCT FROM NEW.token_hash

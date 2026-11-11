@@ -38,13 +38,10 @@ pub async fn cloud_session_middleware(
                 return error.response();
             }
             let row = found.row;
-            // A cached answer was read from the database less than the cache
-            // lifetime ago, and that lookup already did this upkeep. Access
-            // tokens from a browser sign-in keep their fixed expiry.
+            // Cache misses perform upkeep; the expiry helper skips fixed
+            // tokens and sliding sessions already inside the hourly window.
             if source == LookupSource::Database {
-                if found.app_sign_in_id.is_none() {
-                    let _ = bump_expiry(pool, &row.token_id, DEFAULT_SESSION_LIFETIME_DAYS).await;
-                }
+                let _ = bump_expiry(pool, &row, DEFAULT_SESSION_LIFETIME_DAYS).await;
                 let _ = touch_device_activity(pool, &row.account_id, &row.device_id).await;
             }
             RequestOrganization::attach(&mut req, &row.account_id, &row.organization, &headers);

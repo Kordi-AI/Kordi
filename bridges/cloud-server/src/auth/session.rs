@@ -17,6 +17,10 @@ use sqlx_postgres::{PgPool, Postgres};
 
 pub const SESSION_TOKEN_PREFIX: &str = "kordi_cs_";
 pub const DEFAULT_SESSION_LIFETIME_DAYS: i64 = 30;
+/// A sliding session expiry is rewritten only once it trails the new target
+/// by more than this many minutes, so steady use writes at most about once
+/// per hour instead of on every request.
+pub const SESSION_EXPIRY_BUMP_GRANULARITY_MINUTES: i64 = 60;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IssuedSession {
@@ -31,6 +35,9 @@ pub struct CloudSessionRow {
     pub account_id: String,
     pub device_id: String,
     pub expires_at: DateTime<Utc>,
+    /// The expiry slides forward with use. Access tokens from a browser
+    /// sign-in keep a fixed expiry instead.
+    pub sliding_expiry: bool,
     pub organization: SessionOrganization,
 }
 
@@ -244,6 +251,7 @@ pub(crate) async fn lookup_session_by_hash(
                 account_id,
                 device_id,
                 expires_at: parse_rfc3339(expires_at),
+                sliding_expiry: app_sign_in_id.is_none(),
                 organization: SessionOrganization {
                     claimed,
                     personal,
@@ -271,27 +279,56 @@ pub async fn revoke_session(pool: &PgPool, token_id: &str) -> Result<(), Session
     Ok(())
 }
 
-/// Slide a session's `expires_at` forward by `lifetime_days`. Access tokens
-/// from a browser sign-in keep their fixed expiry; the app refreshes them.
+/// The expiry a sliding session should move to, or `None` when the stored
+/// expiry `current` is already within [`SESSION_EXPIRY_BUMP_GRANULARITY_MINUTES`]
+/// of the target. Skipping a bump never shortens a session: the stored expiry
+/// stays at least `lifetime_days` minus the granularity in the future.
+pub fn sliding_expiry_target(
+    current: DateTime<Utc>,
+    now: DateTime<Utc>,
+    lifetime_days: i64,
+) -> Option<DateTime<Utc>> {
+    let target = now + Duration::days(lifetime_days.max(1));
+    let threshold = target - Duration::minutes(SESSION_EXPIRY_BUMP_GRANULARITY_MINUTES);
+    (current < threshold).then_some(target)
+}
+
+/// Slide the session `row` forward by `lifetime_days`, at most about once per
+/// [`SESSION_EXPIRY_BUMP_GRANULARITY_MINUTES`]. The decision uses the expiry
+/// the session lookup already loaded, so steady use sends no statement at
+/// all. Access tokens from a browser sign-in keep their fixed expiry; the app
+/// refreshes them. Returns whether the stored expiry moved.
 pub async fn bump_expiry(
     pool: &PgPool,
-    token_id: &str,
+    row: &CloudSessionRow,
     lifetime_days: i64,
-) -> Result<(), SessionError> {
-    let new_expiry = (Utc::now() + Duration::days(lifetime_days.max(1))).to_rfc3339();
-    query(
+) -> Result<bool, SessionError> {
+    if !row.sliding_expiry {
+        return Ok(false);
+    }
+    let now = Utc::now();
+    let Some(new_expiry) = sliding_expiry_target(row.expires_at, now, lifetime_days) else {
+        return Ok(false);
+    };
+    let threshold = new_expiry - Duration::minutes(SESSION_EXPIRY_BUMP_GRANULARITY_MINUTES);
+    // The expiry guard keeps concurrent requests that loaded the same stale
+    // row from writing again. `expires_at` is RFC 3339 text, so compare it as
+    // a timestamp rather than as a string.
+    let result = query(
         "UPDATE cloud_refresh_tokens token SET expires_at = $1 \
          FROM cloud_devices device \
          WHERE token.token_id = $2 AND token.revoked_at IS NULL \
            AND token.app_sign_in_id IS NULL \
+           AND token.expires_at::timestamptz < $3 \
            AND device.device_id = token.device_id AND device.account_id = token.account_id \
            AND device.revoked_at IS NULL",
     )
-    .bind(&new_expiry)
-    .bind(token_id)
+    .bind(new_expiry.to_rfc3339())
+    .bind(&row.token_id)
+    .bind(threshold)
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(result.rows_affected() > 0)
 }
 
 /// Check the PostgreSQL authorization source of truth for a long-lived
