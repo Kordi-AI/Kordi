@@ -398,6 +398,7 @@ pub(super) fn build_turn_config(
             on_output: None,
             web_search: setup.tool_ctx.web_search.clone(),
             reach_out: setup.tool_ctx.reach_out.clone(),
+            plan_card: setup.tool_ctx.plan_card.clone(),
             reflection: setup.tool_ctx.reflection.clone(),
             session_observation: (execution_policy != kordi_tools::ExecutionPolicy::Shared
                 || shared_scope)

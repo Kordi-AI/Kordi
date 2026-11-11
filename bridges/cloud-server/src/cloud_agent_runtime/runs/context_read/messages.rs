@@ -88,11 +88,12 @@ pub(super) async fn read(
             .saturating_add((limit / 2) as i64 + 1);
     }
     let scan_limit = if search { 256 } else { limit as i64 + 1 };
-    // Senders the owner stopped from using the agent stay unread.
+    // Senders the owner stopped from using the agent stay unread, and model
+    // change notices are session settings, not conversation.
     let rows:Vec<(String,String,Value,i64,String)>=query_as(&format!(
         "SELECT message_id::text,sender_account_id,content,conversation_sequence,created_at::text
          FROM cloud_chat_messages m WHERE conversation_id=$1 AND deleted_at IS NULL AND conversation_sequence<$2
-         AND (NOT $3 OR message_id::text=ANY($4))
+         AND m.message_kind<>'agent-model-change' AND (NOT $3 OR message_id::text=ANY($4))
          AND NOT EXISTS(SELECT 1 FROM cloud_chat_message_visibility v WHERE v.message_id=m.message_id AND v.account_id=ANY($5))
          AND NOT EXISTS(SELECT 1 FROM cloud_accounts consent WHERE consent.account_id=m.sender_account_id AND consent.ai_consent_status='declined')
          AND {allowed}

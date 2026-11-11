@@ -11,6 +11,7 @@ use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 use std::sync::Arc;
 
+use super::chat_calendar_shared::{self as shared_scope, Disclosure};
 use crate::{
     auth::routes::CloudSession,
     cloud_agent_runtime::runs::{RunError, RunResult},
@@ -26,8 +27,13 @@ pub(crate) struct CalendarReadInput {
     pub end_at: Option<String>,
     #[serde(default)]
     pub share_in_conversation: bool,
+    /// Requested disclosure level; shared scopes default to availability.
+    pub disclosure: Option<Disclosure>,
     pub session_id: Option<String>,
     pub request_message_id: Option<String>,
+    /// The admitted run's requester; set by the server, never by a client.
+    #[serde(skip)]
+    pub run_requester: Option<String>,
 }
 
 pub(super) async fn route(
@@ -51,26 +57,23 @@ pub(crate) async fn read(
     if input.offset > super::sync_routes::CALENDAR_CAPACITY as usize {
         return Err(RunError::NotFound);
     }
-    let shared = match (&input.session_id, &input.request_message_id) {
-        (None, None) => false,
-        (Some(session), Some(request)) if input.share_in_conversation => {
-            // Resolve transport aliases, then revalidate the canonical human sender,
-            // active membership, message visibility and deletion on every read.
-            let (_, wire) =
-                crate::cloud_agent_runtime::runs::request_identity(pool, session, request)
-                    .await?
-                    .ok_or(RunError::NotFound)?;
-            let sources =
-                super::store::sources(pool, account, Some(std::slice::from_ref(&wire))).await?;
-            if !sources.iter().any(|source| {
-                source.id == wire
-                    && source.session_id == *session
-                    && source.sender_account_id == account
-                    && !source.is_agent
-            }) {
-                return Err(RunError::NotFound);
-            }
-            true
+    let (request_kind, disclosure) = match (&input.session_id, &input.request_message_id) {
+        (None, None) => (None, input.disclosure.unwrap_or(Disclosure::Details)),
+        (Some(session), Some(request)) => {
+            let request = shared_scope::authorize_request(
+                pool,
+                account,
+                session,
+                request,
+                input.run_requester.as_deref(),
+            )
+            .await?;
+            let disclosure = shared_scope::shared_disclosure(
+                input.disclosure,
+                input.share_in_conversation,
+                request,
+            )?;
+            (Some(request), disclosure)
         }
         _ => return Err(RunError::NotFound),
     };
@@ -89,7 +92,16 @@ pub(crate) async fn read(
             .bind(account)
             .fetch_optional(pool)
             .await?;
-    let mut result = page(&events, input.offset, shared, timezone.map(|row| row.0));
+    let mut result = page(
+        &events,
+        input.offset,
+        request_kind.is_some(),
+        disclosure,
+        timezone.map(|row| row.0),
+    );
+    if let (Some(kind), Disclosure::Availability) = (request_kind, disclosure) {
+        result["scope"] = json!(kind.scope());
+    }
     result["startAt"] = json!(input.start_at);
     result["endAt"] = json!(input.end_at);
     Ok(result)
@@ -137,19 +149,37 @@ fn page(
     events: &[super::models::CalendarEvent],
     offset: usize,
     shared: bool,
+    disclosure: Disclosure,
     timezone: Option<String>,
 ) -> Value {
     let has_more = events.len() > offset.saturating_add(50);
-    let summaries: Vec<_> = events.iter().skip(offset).take(50).map(|event| json!({
+    let selected = events.iter().skip(offset).take(50);
+    let mut result = json!({"status":if events.is_empty(){"empty"}else{"ready"},"source":"saved_kordi_calendar",
+        "disclosure":disclosure.as_str(),"timezone":timezone,"retrievedAt":chrono::Utc::now().to_rfc3339(),
+        "hasMore":has_more,"nextOffset":has_more.then_some(offset+50)});
+    if disclosure == Disclosure::Availability {
+        result["scope"] = json!(if shared {
+            "owner_requested_shared_availability"
+        } else {
+            "private_owner_availability"
+        });
+        result["busyWindows"] = json!(shared_scope::availability_windows(selected));
+        result["note"] = json!(shared_scope::AVAILABILITY_NOTE);
+        return result;
+    }
+    let summaries: Vec<_> = selected.map(|event| json!({
         "id": event.id, "title": event.title, "startAt": event.start_at, "endAt": event.end_at,
         "allDay": event.all_day, "timezone": event.timezone, "seriesId": event.series_id,
         "revision": event.revision, "status": "saved"
     })).collect();
-    json!({"status":if events.is_empty(){"empty"}else{"ready"},"source":"saved_kordi_calendar",
-        "scope":if shared{"owner_requested_shared_read"}else{"private_owner_read"},
-        "timezone":timezone,"retrievedAt":chrono::Utc::now().to_rfc3339(),"events":summaries,
-        "hasMore":has_more,"nextOffset":has_more.then_some(offset+50),
-        "note":"Only saved Kordi events are included. Chat arrangements and digest proposals are not saved events. Summarize only the requested dates and details; do not disclose unrelated events."})
+    result["scope"] = json!(if shared {
+        "owner_requested_shared_read"
+    } else {
+        "private_owner_read"
+    });
+    result["events"] = json!(summaries);
+    result["note"] = json!("Only saved Kordi events are included. Chat arrangements and digest proposals are not saved events. Summarize only the requested dates and details; do not disclose unrelated events.");
+    result
 }
 
 #[cfg(test)]
@@ -176,16 +206,36 @@ mod tests {
     #[test]
     fn saved_events_empty_pages_and_private_fields_are_distinct() {
         let event = serde_json::from_value(json!({"id":"saved","title":"Saved meeting","startAt":"2026-09-09T12:00:00Z","description":"Private extra detail","sourceIds":["private-source"]})).unwrap();
-        let response = page(&[event], 0, true, Some("UTC".into()));
+        let response = page(&[event], 0, true, Disclosure::Details, Some("UTC".into()));
         assert_eq!(response["status"], "ready");
         assert_eq!(response["events"][0]["status"], "saved");
         assert!(!response.to_string().contains("Private extra detail"));
         assert!(!response.to_string().contains("private-source"));
-        assert_eq!(page(&[], 0, false, None)["status"], "empty");
+        assert_eq!(
+            page(&[], 0, false, Disclosure::Details, None)["status"],
+            "empty"
+        );
         let event = serde_json::from_value(
             json!({"id":"saved","title":"Saved meeting","startAt":"2026-09-09T12:00:00Z"}),
         )
         .unwrap();
-        assert_eq!(page(&[event], 50, false, None)["status"], "ready");
+        assert_eq!(
+            page(&[event], 50, false, Disclosure::Details, None)["status"],
+            "ready"
+        );
+    }
+    #[test]
+    fn availability_pages_list_busy_windows_without_event_content() {
+        let event = serde_json::from_value(json!({"id":"saved-id","title":"Private dinner","startAt":"2026-09-11T18:00:00Z","endAt":"2026-09-11T20:00:00Z","description":"Private notes"})).unwrap();
+        let response = page(&[event], 0, true, Disclosure::Availability, None);
+        assert_eq!(response["disclosure"], "availability");
+        assert_eq!(response["scope"], "owner_requested_shared_availability");
+        assert_eq!(
+            response["busyWindows"][0]["startAt"],
+            "2026-09-11T18:00:00Z"
+        );
+        assert!(response.get("events").is_none());
+        let text = response.to_string();
+        assert!(!text.contains("saved-id") && !text.contains("Private"));
     }
 }

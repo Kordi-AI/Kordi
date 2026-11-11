@@ -1,8 +1,8 @@
-//! Embedded Postgres migrations from version 66 on, in version order.
+//! Embedded Postgres migrations from version 66 to 192, in version order.
 
 use super::{migration_entry::migration, EmbeddedMigration};
 
-/// Migrations from version 66 on.
+/// Migrations from version 66 to 192.
 pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
     EmbeddedMigration {
         version: 66,

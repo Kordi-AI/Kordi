@@ -123,6 +123,8 @@ async fn personal_leased_preparation_and_search_use_the_owner_catalog() {
         let capabilities = exchange(&listener, json!({"available":false})).await;
         assert!(capabilities
             .starts_with("POST /v1/cloud/agent-runs/desktop/car_synthetic/agent-exchange "));
+        let cards = exchange(&listener, json!({"available":false})).await;
+        assert!(cards.starts_with("POST /v1/cloud/agent-runs/desktop/car_synthetic/plan-card "));
         // Preparation itself preloads current attachment references. The
         // old unconditional lease branch POSTed to a single-session endpoint.
         let first = exchange(&listener, catalog.clone()).await;

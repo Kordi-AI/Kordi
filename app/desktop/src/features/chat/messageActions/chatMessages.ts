@@ -52,7 +52,7 @@ initialCloudAgentSessionTitle,
 noProviderPendingLiveTurn,
 ownedAgentIdentityId,
 } from './agentMessageLifecycle';
-import { cloudAgentMentionIdentity,cloudGroupSendPlan,resolveCloudAgentMentionTargetIds,resolvePreferredAgentMentionTarget,selectedComposerAgentMentionTarget } from './cloudAgentMentionTarget';
+import { cloudAgentMentionIdentity,cloudGroupSendPlan,resolveCloudAgentMentionTargetIds,resolveLeadingAgentMentionTarget,resolvePreferredAgentMentionTarget,selectedComposerAgentMentionTarget,typedAgentMentionIsAmbiguous } from './cloudAgentMentionTarget';
 import { prefetchNativeVideoRetry,terminalCollaborationRetryFailure } from './collaborationRetry';
 import {
 collaborationDirectSessionParticipants,
@@ -834,9 +834,9 @@ export function useChatMessageActions({
     };
     const activeGroupSessionIsGroup = isCollaborationGroupSession(activeGroupSessionScope);
     const localAgentMentioned = mentionsLocalAgent(text, desktopChatState, desktopCollaborationState);
-    const selectedMentionTarget = selectedComposerAgentMentionTarget(text, selectedChatAgentMentionRef.current, desktopCollaborationState); selectedChatAgentMentionRef.current = null;
-    const mentionedTarget = selectedMentionTarget
-      ?? await resolvePreferredAgentMentionTarget(text, desktopChatState, desktopCollaborationState, activeConvMentionScope, sharedCloudAgents, resolveSharedCloudAgentsForMention, isTransientDraftConversation, activeGroupSessionIsGroup || activeConvCollaborationTarget?.runtime === 'person');
+    const selectedMentionTarget = selectedComposerAgentMentionTarget(text, selectedChatAgentMentionRef.current, desktopCollaborationState); selectedChatAgentMentionRef.current = null; if (!selectedMentionTarget && typedAgentMentionIsAmbiguous(text, desktopChatState, desktopCollaborationState, activeConvMentionScope, sharedCloudAgents)) { setDesktopChatError('Pick which agent'); return; } // A typed handle naming several agents never guesses.
+    const mentionedTarget = await resolveLeadingAgentMentionTarget(text, selectedMentionTarget, () => resolvePreferredAgentMentionTarget(
+      text, desktopChatState, desktopCollaborationState, activeConvMentionScope, sharedCloudAgents, resolveSharedCloudAgentsForMention, isTransientDraftConversation, activeGroupSessionIsGroup || activeConvCollaborationTarget?.runtime === 'person'));
     if (!hasConfiguredProviderAuth && retryMessage?.messageAction?.kind !== 'forward' && isOwnedAgentMention(mentionedTarget, text.startsWith('@') && localAgentMentioned)) {
       setDesktopChatError(cloudAgentNoProviderNoticeText());
       if (openAgentAuthentication) openAgentAuthentication(); else await handleLocalSlashCommand('/login');
@@ -922,9 +922,11 @@ export function useChatMessageActions({
             message: {
               id: retryMessageId,
               senderAccountId: '',
-              text,
+              text, mentions: messageMentions,
               createdAtMs: Date.now(),
               messageAction: retryMessage.messageAction ?? null, ...voiceFields,
+              // A retry is the same agent request as the failed send, not plain text.
+              targetCloudAgentId, targetCloudAgentName, targetCloudAgentOwnerAccountId: mentionedCloudSharedAgentOwnerAccountId, targetCloudAgentOwnerName: targetCloudAgentId ? mentionedTarget?.peer.ownerName ?? null : null,
             },
             attachments: retryAttachments,
             retryFailed: true,
@@ -969,20 +971,18 @@ export function useChatMessageActions({
             retryMessageId,
           ));
           const retryDirectHostedAgentTarget = resolveDirectHostedAgentTarget({
-            mentionedAgentId: null,
-            mentionedTarget: null,
+            mentionedAgentId: targetCloudAgentId,
+            mentionedTarget,
             activeTarget: activeConvCollaborationTarget,
             lockedTarget: lockedSupportAgentTarget,
           });
-          const retryAgentVoice = agentVoiceSend(Boolean(retryDirectHostedAgentTarget), retryAttachments);
-          const retryCloudBody = retryDirectHostedAgentTarget
+          const retryAgentVoice = agentVoiceSend(Boolean(retryDirectHostedAgentTarget) || messageMentions.some((mention) => mention.targetKind === 'agent'), retryAttachments);
+          const retryCloudBody = retryDirectHostedAgentTarget || messageMentions.length
             ? encodeCloudDirectMessageEnvelope({
                 schemaVersion: 1,
                 kind: 'message',
-                text,
-                agentRuntimeRoute: resolveChatRuntimeRoute(
-                  activeConvCanonicalSessionId ?? activeConvId,
-                ),
+                text, mentions: messageMentions,
+                ...(retryDirectHostedAgentTarget ? { agentRuntimeRoute: resolveChatRuntimeRoute(activeConvCanonicalSessionId ?? activeConvId) } : {}),
                 ...retryDirectHostedAgentTarget,
               })
             : text;

@@ -95,6 +95,39 @@ struct PlanCardOption: Codable, Hashable, Identifiable {
     }
 }
 
+/// The person's agent that opened a card. System agent and Meet cards have none.
+struct PlanCardPlanner: Codable, Hashable {
+    let agentId: String?
+    let agentName: String
+    let ownerAccountId: String
+    let ownerName: String?
+    let avatarUrl: String?
+
+    init(agentId: String?, agentName: String, ownerAccountId: String, ownerName: String?, avatarUrl: String? = nil) {
+        self.agentId = agentId
+        self.agentName = agentName
+        self.ownerAccountId = ownerAccountId
+        self.ownerName = ownerName
+        self.avatarUrl = avatarUrl
+    }
+
+    enum CodingKeys: String, CodingKey { case agentId, agentName, ownerAccountId, ownerName, avatarUrl }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard let agentName = (try? container.decode(String.self, forKey: .agentName))?.nonEmpty,
+              let ownerAccountId = (try? container.decode(String.self, forKey: .ownerAccountId))?.nonEmpty else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .agentName, in: container, debugDescription: "A planner needs an agent name and an owner.")
+        }
+        self.agentName = agentName
+        self.ownerAccountId = ownerAccountId
+        agentId = (try? container.decodeIfPresent(String.self, forKey: .agentId)) ?? nil
+        ownerName = (try? container.decodeIfPresent(String.self, forKey: .ownerName)) ?? nil
+        avatarUrl = (try? container.decodeIfPresent(String.self, forKey: .avatarUrl)) ?? nil
+    }
+}
+
 /// Snapshot of a shared plan card as carried by a plan agent message. The server
 /// keeps the live card; every action returns the new snapshot.
 struct PlanCard: Codable, Hashable {
@@ -112,9 +145,12 @@ struct PlanCard: Codable, Hashable {
     /// Which card this message shows: "vote" between options, or "event", the
     /// calendar card for the plan itself.
     var view: String?
+    /// The person's agent that opened the card; nil for System agent and Meet cards.
+    let plannedBy: PlanCardPlanner?
 
     enum CodingKeys: String, CodingKey {
         case eventId, revision, state, title, startAt, endAt, location, unresolvedFields, participants, options, view, managerIds
+        case plannedBy
     }
 
     enum CardView { case vote, event }
@@ -157,6 +193,7 @@ struct PlanCard: Codable, Hashable {
             .filter { !KordiSystemIdentity.isServiceAccount($0.participantId) }
         options = (try? container.decodeIfPresent([PlanCardOption].self, forKey: .options)) ?? []
         view = try? container.decodeIfPresent(String.self, forKey: .view)
+        plannedBy = (try? container.decodeIfPresent(PlanCardPlanner.self, forKey: .plannedBy)) ?? nil
     }
 
     /// Voting is open while the card polls between concrete options.

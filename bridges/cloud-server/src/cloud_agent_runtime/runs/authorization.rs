@@ -124,22 +124,17 @@ pub async fn validate_group_agent_claim(pool: &PgPool, input: &ClaimRunRequest) 
     {
         return Ok(false);
     }
-    if message.sender_kind.as_deref() != Some("agent") {
-        return Ok(human_group_target(message, &envelope.participants)
+    // Only a person's message starts an agent's run. An agent reaches another
+    // agent through reach_out, never by mentioning it in its reply text. The
+    // one exception is the System agent pushing a stalled chat forward: its
+    // structured mention starts that agent's run with itself as requester,
+    // which leaves the run a non-owner's restricted authority.
+    if message.sender_kind.as_deref() == Some("agent") {
+        return Ok(system_agent_target(message, &envelope.participants)
             .is_some_and(|target| target.owner_account_id == input.owner_account_id.trim()));
     }
-    // A reach_out call already owns delivery and continuation for this reply.
-    // A textual @mention in its acknowledgement must not start a second task.
-    if let Some(parent_request) = message.request_id.as_deref() {
-        let (sent,):(bool,)=query_as("SELECT EXISTS(SELECT 1 FROM cloud_agent_exchanges e JOIN cloud_agent_fallback_runs r ON r.run_id=e.parent_run_id WHERE r.session_id=$1 AND r.request_message_id=$2 AND r.owner_account_id=$3)")
-            .bind(&input.session_id).bind(parent_request).bind(&message.sender_account_id).fetch_one(pool).await?;
-        if sent {
-            return Ok(false);
-        }
-    }
-    Ok(agent_handoff_target(&envelope).is_some_and(|target| {
-        target.participant.account_id.trim() == input.owner_account_id.trim()
-    }))
+    Ok(human_group_target(message, &envelope.participants)
+        .is_some_and(|target| target.owner_account_id == input.owner_account_id.trim()))
 }
 
 #[derive(Debug, Clone)]
@@ -383,5 +378,79 @@ mod tests {
             "acct_owner",
             "acct_owner"
         ));
+    }
+}
+
+/// The agent a System agent message names by structured mention or target,
+/// resolved as a person's request would be; never by text alone.
+pub(super) fn system_agent_target(
+    message: &super::envelopes::CloudGroupMessage,
+    participants: &[super::envelopes::CloudGroupParticipant],
+) -> Option<super::group_target::GroupAgentTarget> {
+    let sender = message.sender_account_id.trim();
+    if crate::system_agent::service_account_id() != Some(sender) {
+        return None;
+    }
+    let structured = message.target_cloud_agent_id.is_some()
+        || message
+            .mentions
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .any(|m| m["targetKind"] == "agent");
+    if !structured {
+        return None;
+    }
+    let mut as_request = message.clone();
+    as_request.sender_kind = Some("human".into());
+    let mut participants = participants.to_vec();
+    if !participants.iter().any(|p| p.account_id == sender) {
+        participants.push(super::envelopes::CloudGroupParticipant {
+            account_id: sender.into(),
+            display_name: "System agent".into(),
+            avatar_url: None,
+            agent_id: None,
+            agent_display_name: None,
+            agent_avatar_url: None,
+            role: Some("system".into()),
+        });
+    }
+    human_group_target(&as_request, &participants)
+}
+
+#[cfg(test)]
+mod system_agent_mention_tests {
+    use super::super::envelopes::CloudGroupEnvelope;
+
+    fn envelope(sender: &str, structured: bool) -> CloudGroupEnvelope {
+        let mut message = serde_json::json!({"id":"m","senderAccountId":sender,"senderKind":"agent","text":"@KordiOwner please continue","createdAtMs":1});
+        if structured {
+            message["mentions"] = serde_json::json!([{"targetKind":"agent","agentId":"cloud-agent:owner","humanId":"owner","label":"KordiOwner","displayText":"@KordiOwner","startUtf16":0,"lengthUtf16":11}]);
+        }
+        serde_json::from_value(serde_json::json!({"kind":"group-message","groupId":"g","createdByAccountId":"owner","actor":{"accountId":"owner","displayName":"Owner"},
+            "participants":[{"accountId":"owner","displayName":"Owner"},{"accountId":"person","displayName":"Person"}],"message":message})).unwrap()
+    }
+
+    #[test]
+    fn only_the_system_agents_structured_mention_names_an_agent() {
+        let system = crate::system_agent::test_service_account();
+        let pushed = envelope(system, true);
+        let target =
+            super::system_agent_target(pushed.message.as_ref().unwrap(), &pushed.participants)
+                .unwrap();
+        assert_eq!(target.owner_account_id, "owner");
+        assert_eq!(target.agent_id, "cloud-agent:owner");
+        let text_only = envelope(system, false);
+        assert!(super::system_agent_target(
+            text_only.message.as_ref().unwrap(),
+            &text_only.participants
+        )
+        .is_none());
+        let person_agent = envelope("person", true);
+        assert!(super::system_agent_target(
+            person_agent.message.as_ref().unwrap(),
+            &person_agent.participants
+        )
+        .is_none());
     }
 }

@@ -90,6 +90,14 @@ enum MessageAuthorIdentity {
                 seed: CanonicalAvatarSystem.agentID(member.agentId, ownerAccountID: member.accountId)
             )
         }
+        // A card the agent opened names the agent itself.
+        if let planner = message.planCard?.plannedBy {
+            return ConversationAvatarIdentity(
+                name: name,
+                source: planner.avatarUrl?.nonEmpty,
+                seed: CanonicalAvatarSystem.agentID(planner.agentId, ownerAccountID: planner.ownerAccountId)
+            )
+        }
         return ConversationAvatarIdentity(name: name, source: nil, seed: name)
     }
 

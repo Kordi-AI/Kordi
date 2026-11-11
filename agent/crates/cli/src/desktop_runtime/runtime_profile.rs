@@ -88,6 +88,9 @@ pub(super) fn apply_runtime_profile(
         if !enabled.contains("reach_out") {
             setup.tool_ctx.reach_out = None;
         }
+        if !enabled.contains(kordi_tools::plan_card::NAME) {
+            setup.tool_ctx.plan_card = None;
+        }
         if !enabled.contains("search_sessions") && !enabled.contains("read_session") {
             setup.tool_ctx.session_observation = None;
         }

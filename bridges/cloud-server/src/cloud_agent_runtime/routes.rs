@@ -99,6 +99,10 @@ pub fn routes(state: Arc<ServerState>) -> Router {
             post(runner_plan_card),
         )
         .route(
+            "/v1/cloud/agent-runs/:run_id/agent-plan-card",
+            post(crate::plan_cards::agent::runner_route),
+        )
+        .route(
             "/v1/cloud/agent-runs/:run_id/context",
             post(read_runner_context),
         )

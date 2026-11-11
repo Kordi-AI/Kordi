@@ -32,6 +32,7 @@ pub(super) fn test_tool_context() -> kordi_tools::ToolContext {
         on_output: None,
         web_search: None,
         reach_out: None,
+        plan_card: None,
         reflection: None,
         session_observation: None,
         task_operator: None,
