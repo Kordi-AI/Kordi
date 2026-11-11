@@ -266,6 +266,7 @@ struct DigestView: View {
                 Button { changeMonth(-1) } label: { Image(systemName: "chevron.left") }.accessibilityLabel("Previous month")
                 Button("Today") { month = Date(); selectedCalendarDay = month }.font(.caption)
                 Button { changeMonth(1) } label: { Image(systemName: "chevron.right") }.accessibilityLabel("Next month")
+                Button { selectedSheet = .event(DigestDate.newEvent(on: selectedCalendarDay)) } label: { Image(systemName: "plus") }.accessibilityLabel("New event")
             }.buttonStyle(.plain)
             DigestMonthGrid(month: month, events: events, candidates: calendarCandidates, selectedDay: $selectedCalendarDay, onSelect: { selectedSheet = .event($0) }, onReview: reviewCalendarCandidate)
             if events.isEmpty, calendarReadState == .content, !model.digestMutationState.hasPendingRemoval { Text("No saved events.").font(.footnote).foregroundStyle(.secondary) }
@@ -367,7 +368,7 @@ struct DigestView: View {
             selectedSheet = nil
         }
         case .imports: DigestImportView(existing: events) { incoming in let report = try await model.importDigestCalendar(incoming); model.requestDigestCalendarSync(); if let id = model.account?.accountId { await load(accountId: id) }; return report }
-        case .calendarSettings: DigestCalendarSettingsView(sync: model.digestCalendarSync, preferences: model.digestCalendarSyncPreferences()) { model.updateDigestCalendarSyncPreferences($0) }
+        case .calendarSettings: DigestCalendarSettingsView(app: model, sync: model.digestCalendarSync, preferences: model.digestCalendarSyncPreferences()) { model.updateDigestCalendarSyncPreferences($0) }
         case .details: ScrollView { VStack(alignment: .leading, spacing: 16) { Text("Your digest updates after your conversations go quiet. Pull to refresh to update it now."); Text("Open work stays in the digest until later evidence resolves it."); Text("\(sources.count) source messages are currently included. Only accessible sources may be opened.").foregroundStyle(.secondary) }.padding() }.navigationTitle("How Digest updates")
         }
     }

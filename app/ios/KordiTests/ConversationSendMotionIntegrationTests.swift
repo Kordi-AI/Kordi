@@ -289,7 +289,7 @@ final class ConversationLatestIndicatorIntegrationTests: XCTestCase {
             return ChatMessage(id: "latest-fixture-\(index)", conversationId: conversation.id,
                 author: author, authorName: "Fixture peer", text: text,
                 createdAt: Date().addingTimeInterval(Double(index - 40)),
-                deliveryState: .delivered, errorMessage: nil, requestMessageId: nil)
+                deliveryState: .sent, errorMessage: nil, requestMessageId: nil)
         }
         store.saveMessages(messages, conversationId: conversation.id, accountId: accountID, hasEarlier: false)
         model.hydrateCachedMessages(for: conversation)
@@ -662,7 +662,7 @@ final class ConversationHistoryLayoutIntegrationTests: XCTestCase {
                 authorName: isQuestion ? "Fixture person" : "Fixture agent",
                 text: isQuestion ? "@Kordi What is on my calendar?" : response,
                 createdAt: Date().addingTimeInterval(Double(index - 48) * 60),
-                deliveryState: .delivered, errorMessage: nil,
+                deliveryState: .sent, errorMessage: nil,
                 requestMessageId: isQuestion ? nil : "history-layout-\(index - index % 3)")
             messages.append(message)
         }
@@ -820,14 +820,14 @@ final class ConversationIncomingTailTests: XCTestCase {
         let historyOffset = scroll.contentOffset.y
         let question = ChatMessage(id: "incoming-question", conversationId: conversation.id,
             author: .me, authorName: "You", text: "Please check this example.", createdAt: now,
-            deliveryState: .delivered, errorMessage: nil, requestMessageId: nil)
+            deliveryState: .sent, errorMessage: nil, requestMessageId: nil)
         model.upsertPreviewMessage(question)
         try await Task.sleep(for: .milliseconds(300))
         for phase in 0..<6 {
             let reply = ChatMessage(id: "incoming-answer", conversationId: conversation.id,
                 author: .agent, authorName: "Fixture agent",
                 text: String(repeating: "A streamed response with supporting details.\n\n", count: phase == 5 ? 1 : phase * 4),
-                createdAt: now.addingTimeInterval(1), cloudMessageVersion: phase + 1, deliveryState: .delivered,
+                createdAt: now.addingTimeInterval(1), cloudMessageVersion: phase + 1, deliveryState: .sent,
                 errorMessage: nil, requestMessageId: question.id,
                 messageAction: MessageActionMetadata.quote(question.actionSource(sessionId: conversation.sessionId)),
                 agentExecution: AgentExecutionSnapshot(phase: phase >= 4 ? .complete : .usingTool,

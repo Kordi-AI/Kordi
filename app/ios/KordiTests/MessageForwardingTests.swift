@@ -92,7 +92,7 @@ struct MessageForwardingTests {
         let destination = try #require(model.conversations.first { $0.kind == .group })
         let messages = (0..<4).map { index in
             ChatMessage(id: "source-\(index)", conversationId: source.id, author: .person, authorName: "Maya",
-                        text: "Forward \(index)", createdAt: Date(), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil)
+                        text: "Forward \(index)", createdAt: Date(), deliveryState: .sent, errorMessage: nil, requestMessageId: nil)
         }
         let batch = MessageForwardBatch()
         #expect(await model.forward(messages, caption: "Ignored for batches", from: source, to: destination, batch: batch))

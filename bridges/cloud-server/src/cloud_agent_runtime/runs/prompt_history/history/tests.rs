@@ -70,3 +70,53 @@ fn orphan_responses_and_forwarded_context_fail_closed() {
         (Some(2), vec![])
     );
 }
+
+fn group_line(sender: &str, kind: Option<&str>, text: &str) -> CloudFallbackHistoryMessage {
+    let mut message = serde_json::json!({"id":format!("m-{text}"),"senderAccountId":sender,"text":text,"createdAtMs":1});
+    if let Some(kind) = kind {
+        message["senderKind"] = kind.into();
+        message["senderOwnerAccountId"] = sender.into();
+    }
+    let envelope = serde_json::json!({"kind":"group-message","groupId":"session:group:g","createdByAccountId":sender,
+        "actor":{"accountId":sender,"displayName":"Synthetic"},"participants":[],"message":message});
+    CloudFallbackHistoryMessage {
+        from_account_id: sender.to_string(),
+        body: format!(
+            "kordi-cloud-group:{}",
+            URL_SAFE_NO_PAD.encode(envelope.to_string())
+        ),
+    }
+}
+
+#[test]
+fn agent_replies_are_never_labelled_as_their_owner_person() {
+    let history = [
+        group_line("acct_requester", None, "@Kordi what is 2 + 2?"),
+        group_line("acct_requester", Some("agent"), "2 + 2 = 4."),
+        group_line(
+            "acct_owner",
+            Some("agent"),
+            "@KordiRequester owner agent reply",
+        ),
+        group_line("acct_other", Some("agent"), "third agent reply"),
+        CloudFallbackHistoryMessage {
+            from_account_id: "acct_requester".to_string(),
+            body: crate::cloud_agent_runtime::runs::envelopes::encode_cloud_agent_response_body(
+                "request",
+                "direct reply from the requester's agent",
+            ),
+        },
+    ];
+    let prompt = fallback_prompt_with_history("acct_requester", "acct_owner", "next", &history);
+    let lines: Vec<_> = prompt.lines().skip(1).take(5).collect();
+    assert_eq!(
+        lines,
+        [
+            "Requester: what is 2 + 2?",
+            "Requester's agent: 2 + 2 = 4.",
+            "Owner agent: @KordiRequester owner agent reply",
+            "Participant's agent: third agent reply",
+            "Requester's agent: direct reply from the requester's agent",
+        ]
+    );
+}

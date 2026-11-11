@@ -63,6 +63,7 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+/** `collaborating`: the editor is bound to the document's collaboration room (revisioned saves stay off). */
 export function useDocumentReader(source: DocumentReaderSource, api: DocumentShareApi, collaborating = false) {
   const host = useDocumentReaderHost();
   const path = source.path?.trim() || null;
@@ -349,6 +350,7 @@ export function useDocumentReader(source: DocumentReaderSource, api: DocumentSha
     canEdit,
     editorBlocks,
     editorRevision,
+    storeDocument: cloud.storeDocument,
     onEditorChange,
     canEditCloud,
     onCloud,

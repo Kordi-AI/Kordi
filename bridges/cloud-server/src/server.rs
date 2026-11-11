@@ -50,6 +50,7 @@ impl ServerState {
         Self {
             admission: Default::default(),
             organization_admission: Default::default(),
+            document_rooms: crate::document_shares::collab::RoomRegistry::new(pool.clone()),
             pool,
             events,
             chat_sync_wakes: crate::chat_sync::realtime::ChatSyncWakeHub::new(),
@@ -63,7 +64,6 @@ impl ServerState {
             signup_email: None,
             legacy_signup_until: None,
             connectors: crate::connectors::ConnectorRuntime::from_env(),
-            document_rooms: crate::document_shares::collab::RoomRegistry::new(),
         }
     }
 
@@ -140,7 +140,7 @@ impl ServerState {
         &self.connectors
     }
 
-    pub(crate) fn document_rooms(&self) -> &crate::document_shares::collab::RoomRegistry {
+    pub(crate) fn document_rooms(&self) -> &Arc<crate::document_shares::collab::RoomRegistry> {
         &self.document_rooms
     }
 

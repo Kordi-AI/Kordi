@@ -9,6 +9,7 @@ enum CloudDirectMessageProjector {
         let sorted = CloudAgentLifecycleProjector.visibleRows(messages)
         let executionByResponseKey = CloudAgentLifecycleProjector
             .executionByResponseKey(in: messages)
+        let replySlotByMessageId = CloudAgentLifecycleProjector.replySlotSequences(in: messages)
         let cancellations = Dictionary(
             sorted.compactMap { message -> (String, CloudMessageDTO)? in
                 guard let requestId = CloudMessageCodec.agentCancelEnvelope(message.body)?.requestId.nonEmpty else {
@@ -55,6 +56,9 @@ enum CloudDirectMessageProjector {
                 conversation: conversation,
                 ownAccountId: ownAccountId,
                 createdAt: anchoredCreatedAt,
+                timelineSequence: replySlotByMessageId[wire.messageId].flatMap { slot in
+                    slot < (wire.conversationSequence ?? .max) ? slot : nil
+                },
                 ownerExecution: ownerExecution,
                 agentTarget: responseRequestId.flatMap { requestTargetsById[$0] }
             ))
@@ -102,13 +106,15 @@ enum CloudDirectMessageProjector {
         conversation: ConversationSummary,
         ownAccountId: String,
         createdAt: Date? = nil,
+        timelineSequence: Int64? = nil,
         ownerExecution: AgentExecutionSnapshot? = nil,
         agentTarget: CloudMessageCodec.DirectEnvelope? = nil
     ) -> ChatMessage {
         let isAgentResponse = CloudMessageCodec.isAgentResponse(message.body)
         let responseRequestId = isAgentResponse ? CloudMessageCodec.agentResponseRequestId(message.body) : nil
-        let messageKind = CloudMessageCodec.canonicalMessageKind(message)
-        let author: MessageAuthor = isAgentResponse ? .agent : KordiSystemIdentity.author(
+        let cardAgent = KordiSystemIdentity.planCardAgent(message, ownAccountId: ownAccountId)
+        let messageKind = cardAgent == nil ? CloudMessageCodec.canonicalMessageKind(message) : PlanCardAgentSender.messageKind
+        let author: MessageAuthor = isAgentResponse || cardAgent != nil ? .agent : KordiSystemIdentity.author(
             messageKind: messageKind, fromAccountId: message.fromAccountId, ownAccountId: ownAccountId)
         let state = CloudMessageStateProjector.deliveryState(for: message, ownAccountId: ownAccountId)
         let readerIds = message.readByAccountIds.flatMap { $0.isEmpty ? nil : $0 }
@@ -123,6 +129,8 @@ enum CloudDirectMessageProjector {
         switch author {
         case .me:
             authorName = "You"
+        case .agent where cardAgent != nil:
+            authorName = cardAgent?.authorName ?? "Kordi"
         case .agent:
             let name = verifiedTarget?.targetCloudAgentName?.nonEmpty ?? conversation.agentDisplayName?.nonEmpty ?? "Kordi"
             authorName = CanonicalAvatarSystem.agentID(
@@ -146,9 +154,11 @@ enum CloudDirectMessageProjector {
             clientMessageId: message.clientMessageId,
             conversationId: conversation.id,
             conversationSequence: message.conversationSequence,
+            timelineSequence: timelineSequence,
             author: author,
             authorName: authorName,
-            senderOwnerName: author == .agent ? (message.fromAccountId == ownAccountId ? "You" : agentOwnerName) : nil,
+            senderOwnerName: author == .agent
+                ? cardAgent.map(\.ownerName) ?? (message.fromAccountId == ownAccountId ? "You" : agentOwnerName) : nil,
             text: CloudMessageCodec.viewerText(
                 message.body,
                 viewerOwnsAgent: message.fromAccountId == ownAccountId,

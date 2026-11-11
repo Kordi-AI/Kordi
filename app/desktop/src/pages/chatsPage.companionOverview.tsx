@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ErrorLine } from '@/components/ui/ErrorLine';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import DigestPage, { type DigestPanelActions } from '@/features/digest/DigestPage';
 import { DigestRelatedLinks } from '@/features/digest/DigestRelatedLinks';
 import { digestEventLinks, digestSourceLinks } from '@/features/digest/links';
@@ -42,7 +42,7 @@ export function CompanionOverviewContent({ accountId, view, state, onRetry, acti
   const proposals = state.digest?.snapshot?.calendarCandidates.filter(item => calendarProposalAvailable(item, state.events)) ?? [];
   return <CompanionCalendar
     events={state.events} loaded={state.calendarLoaded} error={state.calendarError}
-    onRetry={onRetry} onEvent={actions?.onEvent} sources={sources}
+    onRetry={onRetry} onEvent={actions?.onEvent} onNewEvent={actions?.onNewEvent} sources={sources}
     footer={<>
       {proposals.length > 0 ? <section className="app-companion-proposals" aria-label="Calendar proposals">
         <h3>From your chats</h3>
@@ -110,9 +110,9 @@ function eventDuration(event: CalendarEvent) {
   return hours ? `${hours}h${minutes % 60 ? ` ${minutes % 60}m` : ''}` : `${minutes}m`;
 }
 
-export function CompanionCalendar({ events, loaded, error, onRetry, onEvent, sources = [], footer }: {
+export function CompanionCalendar({ events, loaded, error, onRetry, onEvent, onNewEvent, sources = [], footer }: {
   events: CalendarEvent[]; loaded: boolean; error: string | null; onRetry: () => void;
-  onEvent?: (event: CalendarEvent) => void; sources?: DigestSource[]; footer?: ReactNode;
+  onEvent?: (event: CalendarEvent) => void; onNewEvent?: (day: string) => void; sources?: DigestSource[]; footer?: ReactNode;
 }) {
   const today = dateKey(new Date());
   const [selectedDay, setSelectedDay] = useState(today);
@@ -143,6 +143,7 @@ export function CompanionCalendar({ events, loaded, error, onRetry, onEvent, sou
         <button type="button" aria-label="Previous month" title="Previous month" onClick={() => stepMonth(-1)}><ChevronLeft size={16} aria-hidden="true" /></button>
         <button type="button" onClick={() => selectDay(today)}>Today</button>
         <button type="button" aria-label="Next month" title="Next month" onClick={() => stepMonth(1)}><ChevronRight size={16} aria-hidden="true" /></button>
+        {onNewEvent ? <button type="button" aria-label="New event" title="New event" onClick={() => onNewEvent(selectedDay)}><Plus size={16} aria-hidden="true" /></button> : null}
       </div>
       <div className="app-companion-date-grid" aria-hidden="true">{['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => <span key={i}>{day}</span>)}</div>
       <div className="app-companion-date-grid" ref={grid}>
@@ -150,7 +151,7 @@ export function CompanionCalendar({ events, loaded, error, onRetry, onEvent, sou
           aria-label={new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' })}
           aria-pressed={selectedDay === day} aria-current={day === today ? 'date' : undefined}
           tabIndex={selectedDay === day ? 0 : -1} data-outside={!day.startsWith(month)}
-          onClick={() => selectDay(day)} onKeyDown={event => {
+          onClick={() => selectDay(day)} onDoubleClick={() => onNewEvent?.(day)} onKeyDown={event => {
             const offset = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key];
             if (offset === undefined) return;
             event.preventDefault();

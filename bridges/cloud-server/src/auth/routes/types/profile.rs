@@ -43,6 +43,24 @@ pub struct UpdateProfileRequest {
         deserialize_with = "crate::auth::routes::profile_handlers::double_option"
     )]
     pub birthday: Option<Option<String>>,
+    /// `automatic` or `manual`. Absent keeps the mode, unless the field's
+    /// value changes without one; see `ProfileFieldChanges`.
+    #[serde(rename = "locationMode")]
+    pub location_mode: Option<String>,
+    #[serde(rename = "timeZoneMode")]
+    pub time_zone_mode: Option<String>,
+    /// Owner setting; absent leaves it unchanged.
+    #[serde(rename = "shareCalendarAvailability")]
+    pub share_calendar_availability: Option<bool>,
+}
+
+/// What one of the owner's devices observed, for `POST /me/device-profile`.
+/// Each field is written only while its mode is `automatic`.
+#[derive(Debug, Deserialize)]
+pub struct DeviceProfileRequest {
+    pub location: Option<String>,
+    #[serde(rename = "timeZone")]
+    pub time_zone: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -89,9 +107,22 @@ pub struct AccountResponse {
         skip_serializing_if = "Option::is_none"
     )]
     pub kordi_id_change_available_at: Option<Option<String>>,
+    /// Owner payloads only: whether Location and Time zone follow the
+    /// owner's devices (`automatic`) or keep a value they set (`manual`).
+    #[serde(rename = "locationMode", skip_serializing_if = "Option::is_none")]
+    pub location_mode: Option<String>,
+    #[serde(rename = "timeZoneMode", skip_serializing_if = "Option::is_none")]
+    pub time_zone_mode: Option<String>,
     /// Owner payloads from `/v1/cloud/auth/me` only: the AI consent decision.
     #[serde(rename = "aiConsent", skip_serializing_if = "Option::is_none")]
     pub ai_consent: Option<crate::ai_consent::AiConsent>,
+    /// Owner payloads only: whether people in the owner's chats may ask the
+    /// owner's agent for busy/free times (never event details).
+    #[serde(
+        rename = "shareCalendarAvailability",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub share_calendar_availability: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]

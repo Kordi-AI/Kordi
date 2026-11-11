@@ -54,3 +54,45 @@ test('native commits refresh thread attention immediately and preserve refreshes
     dom.window.close();
   }
 });
+
+test('a commit of cursor moves only does not refresh thread attention; one with a message does', async () => {
+  const dom = new JSDOM('<!doctype html><div id="root"></div>');
+  let requests = 0;
+  const replacement = {
+    window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true,
+    fetch: async () => { requests += 1; return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }); },
+  };
+  const previous = new Map(Object.keys(replacement).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(replacement)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+  __setSessionBackendForTests({
+    load: async () => ({ accountId: 'test-account', token: 'test-token', expiresAt: '2099-01-01T00:00:00Z' }),
+    save: async () => {}, clear: async () => {},
+  });
+  const root = createRoot(document.getElementById('root')!);
+  function Harness() { useThreadAttention('test-account'); return null; }
+  const commit = (type: string, accountId: string) => new dom.window.CustomEvent(CHAT_SYNC_LOCAL_STATE_CHANGED_EVENT, { detail: { batch: {
+    accountId: 'test-account', bootstrap: false,
+    events: [{ stream_seq: 1, event_id: `event-${type}`, protocol_version: 2, type, critical: true, conversation_id: 'conversation',
+      entity_id: 'conversation', entity_version: null, occurred_at: '2026-11-10T10:00:00Z',
+      payload: { cursor: { conversation_id: 'conversation', account_id: accountId, last_delivered_sequence: 3, last_read_sequence: 3 } } }],
+  } } });
+  try {
+    await act(async () => root.render(<Harness />));
+    const afterMount = requests;
+    await act(async () => {
+      window.dispatchEvent(commit('delivery_cursor.updated', 'test-account'));
+      window.dispatchEvent(commit('read_cursor.updated', 'other-account'));
+    });
+    assert.equal(requests, afterMount, 'cursor moves that cannot change attention send no request');
+    await act(async () => window.dispatchEvent(commit('message.created', 'other-account')));
+    assert.equal(requests, afterMount + 1, 'a new message refreshes at once');
+  } finally {
+    await act(async () => root.unmount());
+    __setSessionBackendForTests(null);
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    dom.window.close();
+  }
+});

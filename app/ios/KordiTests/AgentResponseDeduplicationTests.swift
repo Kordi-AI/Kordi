@@ -90,7 +90,7 @@ struct AgentResponseDeduplicationTests {
         let request = wire("request", body: "Hello", second: 0)
         let sent = project([request])
         #expect(sent.count == 1)
-        #expect([MessageDeliveryState.sent, .delivered, .read].contains(try #require(sent.first).deliveryState))
+        #expect([MessageDeliveryState.sent, .read].contains(try #require(sent.first).deliveryState))
         #expect(sent.allSatisfy { $0.agentExecution == nil })
         let progress = try response("progress", text: "", state: "processing")
         let processing = AppModel.mergePartialProjection(project([request, progress]), preserving: sent)
@@ -102,7 +102,7 @@ struct AgentResponseDeduplicationTests {
         #expect(complete.allSatisfy { $0.agentExecution?.completed != false })
     }
 
-    @Test(arguments: [MessageDeliveryState.sending, .sent, .delivered, .read, .failed, .cancelled])
+    @Test(arguments: [MessageDeliveryState.sending, .sent, .read, .failed, .cancelled])
     func processingCannotOvertakeItsRequestsSendState(state: MessageDeliveryState) throws {
         let request = wire("request", body: "Hello", second: 0)
         let progress = try response("progress", text: "", state: "processing")
@@ -111,8 +111,91 @@ struct AgentResponseDeduplicationTests {
         rows[index].deliveryState = state
         for kind: ConversationKind in [.agent, .group, .person] {
             let visible = AgentSessionQueuePresentation.apply(to: rows, kind: kind)
-            #expect(visible.count == ([.sent, .delivered, .read].contains(state) ? 2 : 1))
+            #expect(visible.count == ([.sent, .read].contains(state) ? 2 : 1))
         }
+    }
+
+    // MARK: Reply slot
+
+    private var group: ConversationSummary {
+        ConversationSummary(id: "group:slot", kind: .group, peerAccountId: "acct_owner", agentId: nil,
+            ownerDisplayName: "Group", displayName: "Group", lastMessage: "", lastActivityAt: .distantPast,
+            unreadCount: 0, avatarSource: nil, agentActivity: nil, sessionId: "session:group:slot")
+    }
+
+    private func groupWire(_ id: String, sender: String, agent: Bool, text: String, state: String? = nil,
+                           sequence: Int64, request: String? = nil) throws -> CloudMessageDTO {
+        let participant = CloudGroupParticipant(accountId: sender, displayName: sender, avatarUrl: nil, role: "member")
+        let envelope = CloudGroupControlEnvelope(
+            kind: "group-message", groupId: group.sessionId, groupSpaceId: group.sessionId, groupTitle: "Group",
+            createdByAccountId: "acct_owner", actor: participant, participants: [participant],
+            message: CloudGroupMessagePayload(
+                id: id, senderAccountId: sender, text: text, createdAtMs: Double(sequence) * 1_000,
+                senderKind: agent ? "agent" : "person", senderDisplayName: agent ? "Kordi" : sender,
+                deliveryState: state, replyToMessageId: request, requestId: request
+            )
+        )
+        return CloudMessageDTO(messageId: "wire-\(sequence)", fromAccountId: sender, toAccountId: "acct_viewer",
+            body: try CloudGroupMessageCodec.encode(envelope),
+            createdAt: String(format: "2026-11-08T10:00:%02dZ", sequence), deliveredAt: nil, readAt: nil,
+            direction: "incoming", sessionId: group.sessionId, conversationSequence: sequence)
+    }
+
+    private func projectGroup(_ rows: [CloudMessageDTO]) -> [ChatMessage] {
+        AppModel.mapGroupMessages(rows, conversation: group, ownAccountId: "acct_viewer")
+    }
+
+    @Test func groupReplyTakesOverItsWaitingRowSlot() throws {
+        let request = try groupWire("request", sender: "acct_peer", agent: false, text: "@Kordi share progress", sequence: 17)
+        let waiting = try groupWire("waiting", sender: "acct_owner", agent: true, text: "", state: "processing",
+                                    sequence: 18, request: "request")
+        let unrelated = try groupWire("unrelated", sender: "acct_peer", agent: false, text: "Keep talking", sequence: 19)
+        let reply = try groupWire("reply", sender: "acct_owner", agent: true, text: "Here is the progress.",
+                                  state: "complete", sequence: 20, request: "request")
+
+        #expect(projectGroup([request, waiting, unrelated]).map(\.id) == ["request", "waiting", "unrelated"])
+        // History hydration sees the rows in any order and renders the live order.
+        for rows in [[request, waiting, unrelated, reply], [reply, unrelated, waiting, request]] {
+            let projected = projectGroup(rows)
+            #expect(projected.map(\.id) == ["request", "reply", "unrelated"])
+            let answer = try #require(projected.first { $0.id == "reply" })
+            #expect(answer.conversationSequence == 20, "read state keeps the reply's own sequence")
+            #expect(answer.timelineSequence == 18)
+            let cached = try JSONDecoder().decode(ChatMessage.self, from: JSONEncoder().encode(answer))
+            #expect(cached.timelineSequence == 18)
+            #expect(projected.sorted(by: ChatMessage.timelinePrecedes).map(\.id) == ["request", "reply", "unrelated"])
+        }
+    }
+
+    @Test func groupReplyWithoutWaitingRowKeepsItsPlace() throws {
+        let request = try groupWire("request", sender: "acct_peer", agent: false, text: "@Kordi share progress", sequence: 17)
+        let unrelated = try groupWire("unrelated", sender: "acct_peer", agent: false, text: "Keep talking", sequence: 19)
+        let reply = try groupWire("reply", sender: "acct_owner", agent: true, text: "Here is the progress.",
+                                  state: "complete", sequence: 20, request: "request")
+        let projected = projectGroup([request, unrelated, reply])
+        #expect(projected.map(\.id) == ["request", "unrelated", "reply"])
+        #expect(projected.allSatisfy { $0.timelineSequence == nil })
+    }
+
+    @Test func directReplyTakesOverItsFirstWaitingRowSlot() throws {
+        func sequenced(_ message: CloudMessageDTO, _ sequence: Int64) -> CloudMessageDTO {
+            CloudMessageDTO(messageId: message.messageId, fromAccountId: message.fromAccountId,
+                toAccountId: message.toAccountId, body: message.body, createdAt: message.createdAt,
+                deliveredAt: nil, readAt: nil, direction: message.direction, sessionId: message.sessionId,
+                conversationSequence: sequence)
+        }
+        let request = sequenced(wire("request", body: "Summarize work", second: 0), 1)
+        let firstProgress = sequenced(try response("progress-1", text: "", state: "processing", second: 1), 2)
+        let unrelated = sequenced(wire("unrelated", body: "Also check the logs", second: 2), 3)
+        let laterProgress = sequenced(try response("progress-2", text: "", state: "processing", second: 3), 4)
+        let complete = sequenced(try response("complete", second: 4), 5)
+
+        #expect(project([request, firstProgress, unrelated, laterProgress]).map(\.id)
+            == ["request", "progress-2", "unrelated"])
+        let answered = project([complete, laterProgress, unrelated, firstProgress, request])
+        #expect(answered.map(\.id) == ["request", "complete", "unrelated"])
+        #expect(try #require(answered.first { $0.id == "complete" }).conversationSequence == 5)
+        #expect(project([request, unrelated, complete]).map(\.id) == ["request", "unrelated", "complete"])
     }
 
 }

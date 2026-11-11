@@ -2,6 +2,7 @@ mod authorization;
 mod claims;
 pub(crate) mod completion;
 pub(super) mod context_read;
+pub(crate) mod conversation_context;
 mod delivery;
 mod desktop_takeover;
 mod envelopes;
@@ -14,8 +15,10 @@ pub(crate) mod identity;
 mod leases;
 pub(crate) mod omp_state;
 mod plain_group_request;
+mod processing_slot;
 mod project_unavailable;
 pub(crate) mod prompt_history;
+mod request_language;
 pub(crate) mod route_fill;
 pub mod stop;
 pub(crate) mod subsession_lifecycle;
@@ -56,7 +59,10 @@ pub use leases::{
     lease_canary_run, lease_next_run, mark_run_running, RunnerLeaseResponse, RunnerRunEnvelope,
     RunnerRunRequest, RunnerRunResponse,
 };
-pub use project_unavailable::{fail_unavailable_project_request, PROJECT_UNAVAILABLE_ERROR_CODE};
+pub use project_unavailable::{
+    fail_unavailable_project_request, fail_unreachable_agent_request, fail_unroutable_mention,
+    PROJECT_UNAVAILABLE_ERROR_CODE,
+};
 #[cfg(test)]
 use prompt_history::{fallback_prompt_with_history, CloudFallbackHistoryMessage};
 

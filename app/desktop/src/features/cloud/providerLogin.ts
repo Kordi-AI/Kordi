@@ -72,11 +72,14 @@ export type ProviderLoginStartInput = {
   mode?: 'device';
   /** `api-key` asks OMP for key entry instead of the provider's default sign-in. */
   method?: 'default' | 'api-key';
+  /** A saved hosted sign-in (`cloud-login:<id>`) to renew; the result keeps its choice and name. */
+  renewAuthChoice?: string;
 };
 
 export type ProviderLoginErrorCode =
   | 'login_not_found'
   | 'login_expired'
+  | 'login_account_not_found'
   | 'login_failed'
   | 'login_unsupported'
   | 'invalid_login_input'
@@ -89,7 +92,7 @@ export type ProviderLoginErrorCode =
   | 'unknown';
 
 const knownErrorCodes = new Set<ProviderLoginErrorCode>([
-  'login_not_found', 'login_expired', 'login_failed', 'login_unsupported', 'invalid_login_input',
+  'login_not_found', 'login_expired', 'login_account_not_found', 'login_failed', 'login_unsupported', 'invalid_login_input',
   'rate_limited', 'omp_unavailable', 'provider_auth_not_configured', 'omp_busy', 'not_signed_in', 'network_error',
 ]);
 
@@ -108,6 +111,7 @@ export function providerLoginErrorMessage(code: ProviderLoginErrorCode, reason?:
   switch (code) {
     case 'login_not_found': return 'This sign-in is no longer available. Start again.';
     case 'login_expired': return 'This sign-in expired before it finished. Start again.';
+    case 'login_account_not_found': return 'This account is no longer saved. Add it again.';
     case 'login_failed': return `The provider did not complete sign-in${failureReason(reason)}. Try again.`;
     case 'login_unsupported': return 'OMP cannot add this account from Kordi yet.';
     case 'invalid_login_input': return 'OMP did not accept that value. Check it and try again.';

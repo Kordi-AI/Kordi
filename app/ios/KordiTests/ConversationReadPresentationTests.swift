@@ -686,7 +686,7 @@ final class ConversationReadPresentationTests: XCTestCase {
         XCTAssertEqual(projected.first { $0.id == "request-2" }?.agentQueuePosition, 1)
         XCTAssertEqual(projected.first { $0.id == "request-3" }?.agentQueuePosition, 2)
         XCTAssertEqual(projected.filter { $0.author == .agent }.map(\.requestMessageId), ["request-1"])
-        XCTAssertEqual(messages.first { $0.id == "request-2" }?.deliveryState, .delivered)
+        XCTAssertEqual(messages.first { $0.id == "request-2" }?.deliveryState, .sent)
     }
 
     func testAgentQueueAdvancesAfterSuccessFailureOrCancellation() {
@@ -756,13 +756,13 @@ final class ConversationReadPresentationTests: XCTestCase {
             let request = ChatMessage(
                 id: "request-\(index)", conversationId: "agent-session:test",
                 author: .me, authorName: "You", text: "Message \(index)",
-                createdAt: createdAt, deliveryState: .delivered,
+                createdAt: createdAt, deliveryState: .sent,
                 errorMessage: nil, requestMessageId: nil
             )
             let response = ChatMessage(
                 id: "response-\(index)", conversationId: request.conversationId,
                 author: .agent, authorName: "Kordi", text: "processing...",
-                createdAt: createdAt.addingTimeInterval(0.001), deliveryState: .delivered,
+                createdAt: createdAt.addingTimeInterval(0.001), deliveryState: .sent,
                 errorMessage: nil, requestMessageId: request.id,
                 agentExecution: AgentExecutionSnapshot(
                     phase: index == 1 ? .preparing : .queued,
@@ -1083,7 +1083,7 @@ final class ConversationReadPresentationTests: XCTestCase {
             text: "Updated text",
             createdAt: Date(timeIntervalSince1970: 1),
             editedAt: editedAt,
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil
         )
@@ -1317,12 +1317,12 @@ final class ConversationReadPresentationTests: XCTestCase {
         let older = ChatMessage(
             id: "older-page", conversationId: target.conversationId, author: .person,
             authorName: "Sam", text: "Earlier", createdAt: .distantPast,
-            deliveryState: .delivered, errorMessage: nil, requestMessageId: nil
+            deliveryState: .sent, errorMessage: nil, requestMessageId: nil
         )
         let newer = ChatMessage(
             id: "incoming-message", conversationId: target.conversationId, author: .person,
             authorName: "Sam", text: "New", createdAt: .distantFuture,
-            deliveryState: .delivered, errorMessage: nil, requestMessageId: nil
+            deliveryState: .sent, errorMessage: nil, requestMessageId: nil
         )
         let synced = [older] + messages.filter { $0.id != target.id } + [newer]
         XCTAssertEqual(
@@ -1561,6 +1561,10 @@ final class ConversationReadPresentationTests: XCTestCase {
             contentsOf: conversationDirectory.appendingPathComponent("ConversationView.swift"),
             encoding: .utf8
         )
+        let seenBySource = try String(
+            contentsOf: conversationDirectory.appendingPathComponent("MessageSeenByViews.swift"),
+            encoding: .utf8
+        )
 
         XCTAssertFalse(markdownSource.contains("textView.selectedRange = NSRange("))
         XCTAssertFalse(markdownSource.contains("textView.becomeFirstResponder()"))
@@ -1572,10 +1576,10 @@ final class ConversationReadPresentationTests: XCTestCase {
         XCTAssertTrue(bubbleSource.contains("value: showsSelectionHighlight"))
         XCTAssertTrue(bubbleSource.contains(".accessibilityAddTraits(isSelected ? .isSelected : [])"))
         XCTAssertTrue(overlaySource.contains("MessageActionBackdrop(cutout: cutout, sourceAuthor: message.author,"))
-        XCTAssertTrue(overlaySource.contains("readers: readReceiptReaders"))
-        XCTAssertTrue(overlaySource.contains("readers.prefix(4)"))
-        XCTAssertTrue(overlaySource.contains("size: avatarSize"))
-        XCTAssertTrue(overlaySource.contains("MessageDeliveryGlyph(state: .read"))
+        XCTAssertTrue(overlaySource.contains("MessageSeenByRow(state: seenByState)"))
+        XCTAssertTrue(overlaySource.contains(".task(id: seenByTarget)"))
+        XCTAssertTrue(seenBySource.contains("size: avatarSize"))
+        XCTAssertTrue(seenBySource.contains("MessageDeliveryGlyph(state: .read)"))
         XCTAssertFalse(overlaySource.contains("cornerSize: CGSize(width: 18, height: 18)"))
         XCTAssertTrue(overlaySource.contains("eoFill: true"))
         XCTAssertTrue(overlaySource.contains("performAction(onDismiss)"))
@@ -1600,10 +1604,13 @@ final class ConversationReadPresentationTests: XCTestCase {
         XCTAssertFalse(conversationSource.contains("showsNavigationChrome && messageActionMessage == nil ? .visible : .hidden"))
         XCTAssertTrue(conversationSource.contains("WindowOverlayPresenter("))
         XCTAssertTrue(conversationSource.contains("passthroughFrame:"))
-        XCTAssertTrue(conversationSource.contains("MessageReadReceiptPresentation.label("))
+        XCTAssertTrue(conversationSource.contains("MessageSeenByPresentation.target("))
+        XCTAssertTrue(conversationSource.contains(".sheet(item: $seenByList)"))
     }
 
-    func testDirectReadReceiptProjectsAndNamesThePeer() throws {
+    /// Direct chats keep two ticks and VoiceOver's "Seen", but the menu has
+    /// no Seen by row outside groups (#2455).
+    func testDirectReadReceiptShowsSeenWithoutASeenByRow() throws {
         let directConversation = conversation(id: "direct", kind: .person, unread: 0)
         let projected = CloudDirectMessageProjector.project(
             [CloudMessageDTO(
@@ -1622,19 +1629,10 @@ final class ConversationReadPresentationTests: XCTestCase {
             ownAccountId: "acct_me"
         )
         let message = try XCTUnwrap(projected.first)
-        let readers = MessageReadReceiptPresentation.readers(
-            for: message,
-            in: directConversation
-        )
 
-        XCTAssertEqual(message.readByAccountIds, ["acct_peer"])
-        XCTAssertEqual(message.readByCount, 1)
+        XCTAssertEqual(message.deliveryState, .read)
         XCTAssertEqual(message.deliveryState.label, "Seen")
-        XCTAssertEqual(readers.map(\.displayName), ["Conversation"])
-        XCTAssertEqual(
-            MessageReadReceiptPresentation.label(for: message, readers: readers),
-            "1 Seen"
-        )
+        XCTAssertNil(MessageSeenByPresentation.target(for: message, in: directConversation))
     }
 
     func testMessageActionsDoNotMoveTimelineDuringViewportChange() {
@@ -2005,7 +2003,7 @@ final class ConversationReadPresentationTests: XCTestCase {
             authorName: "Peer",
             text: "Hello",
             createdAt: .now,
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             reactionTargetMessageId: "018f47c2-9f4c-7a5e-b001-000000000001"
@@ -2183,7 +2181,7 @@ final class ConversationReadPresentationTests: XCTestCase {
         func message(_ id: String, sequence: Int64, author: MessageAuthor = .person, mentioned: Bool) -> ChatMessage {
             ChatMessage(id: id, conversationId: conversation.id, conversationSequence: sequence,
                 author: author, authorName: "Sender", text: "Synthetic message", createdAt: Date(),
-                deliveryState: .delivered, errorMessage: nil, requestMessageId: nil,
+                deliveryState: .sent, errorMessage: nil, requestMessageId: nil,
                 mentions: mentioned ? [mention] : [])
         }
         let first = message("first", sequence: 5, mentioned: true)
@@ -2223,7 +2221,7 @@ final class ConversationReadPresentationTests: XCTestCase {
             lastActivityAt: Date(), unreadCount: 1, avatarSource: nil, agentActivity: nil,
             sessionId: "legacy-session", unreadMentionCount: 1, lastReadSequence: 7)
         let message = ChatMessage(id: "legacy", conversationId: conversation.id, author: .person,
-            authorName: "Sender", text: "Legacy mention", createdAt: Date(), deliveryState: .delivered,
+            authorName: "Sender", text: "Legacy mention", createdAt: Date(), deliveryState: .sent,
             errorMessage: nil, requestMessageId: nil, mentions: [
                 MessageMention(label: "Me", targetKind: "person", targetIdentityId: "human:\(accountID)")
             ])

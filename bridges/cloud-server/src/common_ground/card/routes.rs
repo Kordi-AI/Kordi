@@ -21,8 +21,9 @@ use super::{
     clean_list, empty_view, load, next_evidence_id, no_card, CardRow, Evidence, Topics,
     ADDED_BY_YOU, MAX_TOPIC_CHARS, MAX_TYPED_TOPIC_CHARS,
 };
+use crate::common_ground::auto::{apply_settings, SettingsRequest};
 use crate::common_ground::profiles::{self, Profile, ProfileQuery};
-use crate::common_ground::{db_error, people, rooms};
+use crate::common_ground::{db_error, err, people, rooms};
 use crate::{auth::routes::CloudSession, server::ServerState};
 
 /// The owner's view of `profile`'s card, with the profile and the owner's
@@ -38,8 +39,8 @@ pub(in crate::common_ground) async fn owner_view(
     };
     let since = match profile {
         Some(profile) => {
-            let built_at = card.as_ref().and_then(|card| card.built_at);
-            memories_since_build(pool, profile, built_at).await?
+            let caught_up_at = card.as_ref().and_then(|card| card.caught_up_at);
+            memories_since_build(pool, profile, caught_up_at).await?
         }
         None => 0,
     };
@@ -53,15 +54,20 @@ pub(in crate::common_ground) async fn owner_view(
     Ok(view)
 }
 
-/// Memories routed to the profile that changed after its card was built,
-/// or all of them when it never was.
+/// Memories routed to the profile that changed after its card last took in
+/// changes (`card::CAUGHT_UP_SQL`), or all of them when it was never built.
 pub(in crate::common_ground) async fn memories_since_build(
     pool: &PgPool,
     profile: &Profile,
-    built_at: Option<chrono::DateTime<Utc>>,
+    caught_up_at: Option<chrono::DateTime<Utc>>,
 ) -> sqlx_core::Result<i64> {
-    crate::memory_store::count_since(pool, &profile.account_id, profile.memory_target(), built_at)
-        .await
+    crate::memory_store::count_since(
+        pool,
+        &profile.account_id,
+        profile.memory_target(),
+        caught_up_at,
+    )
+    .await
 }
 
 pub(in crate::common_ground) async fn owner_response(
@@ -277,24 +283,25 @@ async fn after_edit(
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(in crate::common_ground) struct SettingsRequest {
-    #[serde(default)]
-    profile_id: Option<String>,
-    sharing: bool,
-}
-
-/// `PUT /v1/cloud/common-ground/settings`: sharing off keeps the profile out
-/// of new rooms and pairings, hides its card from everyone it is linked to
-/// and hides their cards from you through those links. The links stay, so
-/// sharing on restores them. An account without a profile gets its work
-/// profile here.
+/// `PUT /v1/cloud/common-ground/settings` with `sharing` and/or
+/// `autoRebuild`; a field left out keeps its value, and a body with neither
+/// is refused. Sharing off keeps the profile out of new rooms and pairings,
+/// hides its card from everyone it is linked to and hides their cards from
+/// you through those links. The links stay, so sharing on restores them.
+/// `autoRebuild` keeps the card updated with memory and connected accounts
+/// (`auto`). An account without a profile gets its work profile here.
 pub(in crate::common_ground) async fn update_settings(
     State(state): State<Arc<ServerState>>,
     Extension(session): Extension<CloudSession>,
     Json(body): Json<SettingsRequest>,
 ) -> Response {
+    if !body.names_a_setting() {
+        return err(
+            "common_ground_invalid_settings",
+            "Choose a setting to change.",
+            StatusCode::BAD_REQUEST,
+        );
+    }
     let pool = state.db_pool();
     let account = session.account_id.as_str();
     let profile = match profiles::resolve_or_create(pool, account, body.profile_id.as_deref()).await
@@ -302,17 +309,7 @@ pub(in crate::common_ground) async fn update_settings(
         Ok(profile) => profile,
         Err(response) => return *response,
     };
-    let result = query(
-        "INSERT INTO cloud_common_ground_cards (profile_id, account_id, sharing_enabled)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (profile_id) DO UPDATE SET sharing_enabled = EXCLUDED.sharing_enabled,
-             revision = cloud_common_ground_cards.revision + 1, updated_at = now()",
-    )
-    .bind(&profile.profile_id)
-    .bind(account)
-    .bind(body.sharing)
-    .execute(pool)
-    .await;
+    let result = apply_settings(pool, &profile.profile_id, account, &body).await;
     match result {
         Ok(_) => owner_response(pool, account, Some(&profile), StatusCode::OK).await,
         Err(error) => db_error(error),

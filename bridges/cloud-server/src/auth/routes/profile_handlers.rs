@@ -1,11 +1,14 @@
 use super::*;
 
 mod default_agent;
+mod device_profile;
 mod fields;
 mod lookup;
+mod sync;
 use default_agent::*;
+pub(super) use device_profile::update_device_profile;
 pub(super) use fields::double_option;
-use fields::ProfileFieldChanges;
+use fields::{FieldMode, ProfileFieldChanges};
 pub(super) use lookup::get_profile;
 
 pub(super) async fn update_me(
@@ -203,6 +206,8 @@ pub(super) async fn update_me(
         time_zone,
         website,
         birthday,
+        location_mode,
+        time_zone_mode,
     } = field_changes;
     let row: Option<OwnerAccountRecordRow> = match query_as(&format!(
         "UPDATE cloud_accounts SET \
@@ -216,7 +221,15 @@ pub(super) async fn update_me(
             location = CASE WHEN $16::BOOLEAN THEN $17 ELSE location END, \
             time_zone = CASE WHEN $18::BOOLEAN THEN $19 ELSE time_zone END, \
             website = CASE WHEN $20::BOOLEAN THEN $21 ELSE website END, \
-            birthday = CASE WHEN $22::BOOLEAN THEN $23::DATE ELSE birthday END \
+            birthday = CASE WHEN $22::BOOLEAN THEN $23::DATE ELSE birthday END, \
+            location_mode = CASE WHEN $24::TEXT IS NOT NULL THEN $24 \
+                WHEN $16::BOOLEAN AND location IS DISTINCT FROM $17 THEN 'manual' \
+                ELSE location_mode END, \
+            time_zone_mode = CASE WHEN $25::TEXT IS NOT NULL THEN $25 \
+                WHEN $18::BOOLEAN AND time_zone IS DISTINCT FROM $19 \
+                    THEN CASE WHEN $19::TEXT IS NULL THEN 'automatic' ELSE 'manual' END \
+                ELSE time_zone_mode END, \
+            share_calendar_availability = COALESCE($26, share_calendar_availability) \
          WHERE account_id = $10 \
          RETURNING {OWNER_ACCOUNT_RECORD_COLUMNS}",
     ))
@@ -243,6 +256,9 @@ pub(super) async fn update_me(
     .bind(website.flatten())
     .bind(birthday.is_some())
     .bind(birthday.flatten())
+    .bind(location_mode.map(FieldMode::as_str))
+    .bind(time_zone_mode.map(FieldMode::as_str))
+    .bind(req.share_calendar_availability)
     .fetch_optional(&mut *tx)
     .await
     {
@@ -264,73 +280,11 @@ pub(super) async fn update_me(
         );
     };
     let account = owner_account_response_from_rows(row, Some(updated_agent_row));
-    let recipients = match crate::chat_sync::store::identity_sync_recipient_ids(
-        &mut tx,
-        &session.account_id,
-        true,
-    )
-    .await
+    if let Err(response) =
+        sync::publish_profile_change(&state, tx, &session.account_id, &account).await
     {
-        Ok(value) => value,
-        Err(_) => {
-            return err(
-                "server_error",
-                "Could not synchronize profile.",
-                StatusCode::INTERNAL_SERVER_ERROR,
-            )
-        }
-    };
-    let viewer_recipients = recipients
-        .iter()
-        .filter(|account_id| *account_id != &session.account_id)
-        .cloned()
-        .collect::<Vec<_>>();
-    if crate::chat_sync::store::append_user_sync_events_in_transaction(
-        &mut tx,
-        std::slice::from_ref(&session.account_id),
-        "account.profile.updated",
-        None,
-        &serde_json::json!({ "account": account }),
-    )
-    .await
-    .is_err()
-        || crate::chat_sync::store::append_user_sync_events_in_transaction(
-            &mut tx,
-            &viewer_recipients,
-            "account.directory.changed",
-            None,
-            &serde_json::json!({
-                "accountId": account.account_id,
-                "avatarVersion": account.avatar.version,
-                "agentAvatarVersion": account.default_agent.avatar.version,
-            }),
-        )
-        .await
-        .is_err()
-        || tx.commit().await.is_err()
-    {
-        return err(
-            "server_error",
-            "Could not synchronize profile.",
-            StatusCode::INTERNAL_SERVER_ERROR,
-        );
+        return *response;
     }
-
-    let events = state.events().clone();
-    let account_for_event = account.clone();
-    let observer_account_ids = recipients;
-    tokio::spawn(async move {
-        for observer_account_id in observer_account_ids {
-            events
-                .publish_profile_updated(
-                    &account_for_event.account_id,
-                    &observer_account_id,
-                    account_for_event.display_name.as_deref(),
-                    account_for_event.avatar_url.as_deref(),
-                )
-                .await;
-        }
-    });
     Json(account).into_response()
 }
 

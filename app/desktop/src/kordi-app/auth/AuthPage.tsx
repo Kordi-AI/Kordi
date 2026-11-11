@@ -304,7 +304,9 @@ export function AuthPage({
         onStartChat={canStartChat && !chatBlocked && provider ? () => startChat(provider) : undefined}
         onLoginCompleted={(snapshot, loginMethod) => {
           knownLoginMethods.current.set(snapshot.snapshotId, loginMethod);
-          noteAccountAdded(snapshot.authChoice);
+          // A reconnected account was renewed in place, so it is not new.
+          if (!cloudSnapshots.some((item) => item.authChoice === snapshot.authChoice)) noteAccountAdded(snapshot.authChoice);
+          // Replacing the expired copy also updates the composer's hosted accounts.
           snapshotState.complete(snapshotFromLogin(snapshot, loginMethod));
           void refreshCloudSnapshots().catch(() => undefined);
         }}

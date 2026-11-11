@@ -336,6 +336,7 @@ struct ConversationView: View {
     @State private var completedForwardDestination: ConversationSummary?
     @State private var didPresentForwardPreview = false
     @State private var detailsMessage: ChatMessage?
+    @State private var seenByList: MessageSeenByTarget?
     @State private var pinTarget: ChatMessage?
     @State private var unpinTarget: PinnedMessageItem?
     @State private var editTarget: ChatMessage?
@@ -1253,7 +1254,7 @@ struct ConversationView: View {
             presentForwardPreviewIfNeeded()
             if ProcessInfo.processInfo.arguments.contains("--preview-message-details"),
                detailsMessage == nil,
-               let message = messages.last(where: { ($0.readByCount ?? 0) > 0 }) {
+               let message = messages.last(where: { $0.author == .me && $0.deliveryState == .read }) {
                 detailsMessage = message
             }
             if ProcessInfo.processInfo.arguments.contains("--preview-message-edit"),
@@ -1387,15 +1388,8 @@ struct ConversationView: View {
             }
         }
         .conversationSafety(report: $reportTarget)
-        .sheet(item: $detailsMessage) { message in
-            MessageDetailsSheet(
-                message: message,
-                readers: MessageReadReceiptPresentation.readers(
-                    for: message,
-                    in: conversation
-                )
-            )
-        }
+        .sheet(item: $detailsMessage) { MessageDetailsSheet(message: $0) }
+        .sheet(item: $seenByList) { MessageReadersSheet(target: $0, load: model.messageReaders) }
         return conversationPresentations
         .alert(
             "Message action failed",
@@ -1759,7 +1753,6 @@ struct ConversationView: View {
         timeline: [ChatMessage],
         usableFrame: CGRect
     ) -> some View {
-        let readReceiptReaders = MessageReadReceiptPresentation.readers(for: message, in: conversation)
         return
             MessageActionOverlay(
                 message: message,
@@ -1805,8 +1798,9 @@ struct ConversationView: View {
                     : (conversation.kind == .group ? "Delete for everyone" : "Delete for me and \(conversation.displayName)"),
                 isPinned: pinnedMessageIDs.contains(message.id),
                 mediaAttachment: messageActionAttachment,
-                readReceiptLabel: MessageReadReceiptPresentation.label(for: message, readers: readReceiptReaders),
-                readReceiptReaders: readReceiptReaders,
+                seenByTarget: MessageSeenByPresentation.target(for: message, in: conversation, isPreviewMode: model.isPreviewMode),
+                loadSeenBy: model.messageReaders,
+                onShowSeenBy: { target in seenByList = target; dismissMessageActions() },
                 onSheetAction: { action in pendingThreadMessageAction = action },
                 onDismiss: dismissMessageActions,
                 onReviewAttachment: {

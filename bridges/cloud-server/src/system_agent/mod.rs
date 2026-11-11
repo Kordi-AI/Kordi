@@ -9,14 +9,22 @@ mod addressing;
 mod agent;
 pub(crate) mod cards;
 mod config;
+mod conflicts;
 pub(crate) mod context;
 mod input;
 mod limits;
+mod loops;
 pub mod membership;
 mod mentions;
+mod ownership;
+mod ownership_facts;
+mod ownership_store;
+mod post;
 mod prompt;
 mod retry;
 pub mod store;
+mod triggers;
+mod triggers_store;
 mod worker;
 
 pub use agent::bootstrap_system_agent;
@@ -61,6 +69,8 @@ pub(crate) fn test_service_account() -> &'static str {
 }
 
 #[cfg(test)]
+mod agent_answer_sweep_tests;
+#[cfg(test)]
 mod ai_consent_tests;
 #[cfg(test)]
 mod card_update_tests;
@@ -69,8 +79,12 @@ mod context_boundary_tests;
 #[cfg(test)]
 mod membership_tests;
 #[cfg(test)]
+mod ownership_sweep_tests;
+#[cfg(test)]
 pub(crate) mod pool_tests;
 #[cfg(test)]
 mod sweep_tests;
+#[cfg(test)]
+mod triggers_sweep_tests;
 #[cfg(test)]
 mod usage_pause_tests;

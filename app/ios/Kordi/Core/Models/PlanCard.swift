@@ -95,6 +95,39 @@ struct PlanCardOption: Codable, Hashable, Identifiable {
     }
 }
 
+/// The person's agent that opened a card. System agent and Meet cards have none.
+struct PlanCardPlanner: Codable, Hashable {
+    let agentId: String?
+    let agentName: String
+    let ownerAccountId: String
+    let ownerName: String?
+    let avatarUrl: String?
+
+    init(agentId: String?, agentName: String, ownerAccountId: String, ownerName: String?, avatarUrl: String? = nil) {
+        self.agentId = agentId
+        self.agentName = agentName
+        self.ownerAccountId = ownerAccountId
+        self.ownerName = ownerName
+        self.avatarUrl = avatarUrl
+    }
+
+    enum CodingKeys: String, CodingKey { case agentId, agentName, ownerAccountId, ownerName, avatarUrl }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard let agentName = (try? container.decode(String.self, forKey: .agentName))?.nonEmpty,
+              let ownerAccountId = (try? container.decode(String.self, forKey: .ownerAccountId))?.nonEmpty else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .agentName, in: container, debugDescription: "A planner needs an agent name and an owner.")
+        }
+        self.agentName = agentName
+        self.ownerAccountId = ownerAccountId
+        agentId = (try? container.decodeIfPresent(String.self, forKey: .agentId)) ?? nil
+        ownerName = (try? container.decodeIfPresent(String.self, forKey: .ownerName)) ?? nil
+        avatarUrl = (try? container.decodeIfPresent(String.self, forKey: .avatarUrl)) ?? nil
+    }
+}
+
 /// Snapshot of a shared plan card as carried by a plan agent message. The server
 /// keeps the live card; every action returns the new snapshot.
 struct PlanCard: Codable, Hashable {
@@ -112,9 +145,12 @@ struct PlanCard: Codable, Hashable {
     /// Which card this message shows: "vote" between options, or "event", the
     /// calendar card for the plan itself.
     var view: String?
+    /// The person's agent that opened the card; nil for System agent and Meet cards.
+    let plannedBy: PlanCardPlanner?
 
     enum CodingKeys: String, CodingKey {
         case eventId, revision, state, title, startAt, endAt, location, unresolvedFields, participants, options, view, managerIds
+        case plannedBy
     }
 
     enum CardView { case vote, event }
@@ -157,6 +193,7 @@ struct PlanCard: Codable, Hashable {
             .filter { !KordiSystemIdentity.isServiceAccount($0.participantId) }
         options = (try? container.decodeIfPresent([PlanCardOption].self, forKey: .options)) ?? []
         view = try? container.decodeIfPresent(String.self, forKey: .view)
+        plannedBy = (try? container.decodeIfPresent(PlanCardPlanner.self, forKey: .plannedBy)) ?? nil
     }
 
     /// Voting is open while the card polls between concrete options.
@@ -193,6 +230,24 @@ struct PlanCard: Codable, Hashable {
     }
 
     var goingCount: Int { participants.filter { $0.rsvp == .yes }.count }
+
+    /// Everyone on the plan, split by their answer.
+    var attendance: (going: [PlanCardParticipant], declined: [PlanCardParticipant], waiting: [PlanCardParticipant]) {
+        (participants.filter { $0.rsvp == .yes }, participants.filter { $0.rsvp == .no }, participants.filter { $0.rsvp == .pending })
+    }
+
+    /// The card's counts line: "2 going · 1 can't · 1 no reply".
+    static func countsLine(going: Int, declined: Int, waiting: Int) -> String {
+        var parts = ["\(compactCount(going)) going"]
+        if declined > 0 { parts.append("\(compactCount(declined)) can't") }
+        if waiting > 0 { parts.append("\(compactCount(waiting)) no reply") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Short counts for large groups: 1200 reads "1.2k".
+    static func compactCount(_ value: Int) -> String {
+        value >= 1_000 ? String(format: "%.1fk", Double(value) / 1_000).replacingOccurrences(of: ".0k", with: "k") : "\(value)"
+    }
 
     func participant(_ accountId: String?) -> PlanCardParticipant? {
         guard let accountId else { return nil }

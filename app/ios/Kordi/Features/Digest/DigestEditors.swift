@@ -20,6 +20,17 @@ struct DigestEventEditor: View {
     @State private var error: String?
     @State private var busy = false
     @State private var confirmRemove = false
+    // A plan card's event follows the card: title and time change only through the plan, and
+    // leaving it means answering "Can't make it" so the next card change does not bring it back.
+    @State private var plan: PlanCard?
+    @State private var planReads = 0
+    @State private var confirmDecline = false
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
+    private var planId: String? { DigestPlanEvent.cardId(event) }
+    private var declines: Bool { planId != nil && plan?.participant(accountId) != nil && plan?.state != .canceled }
+    // Until the card is read, removing could not answer it, and the next card change would bring the event back.
+    private var removeWaitsForPlan: Bool { planId != nil && plan == nil }
     @State private var recurrence: DigestRecurrence?
     @State private var preview = DigestSeriesPreview()
     @State private var previewRetry = 0
@@ -46,7 +57,7 @@ struct DigestEventEditor: View {
         let draftStart = start ?? Date()
         _title = State(initialValue: event.title); _hasStart = State(initialValue: start != nil); _start = State(initialValue: draftStart)
         _hasEnd = State(initialValue: true); _end = State(initialValue: DigestDate.shiftedEnd(from: draftStart, to: draftStart, end: end, allDay: event.allDay))
-        _reminder = State(initialValue: start.flatMap { start in DigestDate.parse(event.reminderAt).map { max(0, Int(start.timeIntervalSince($0) / 60)) } } ?? (event.revision == 0 && !event.allDay ? 10 : -1))
+        _reminder = State(initialValue: start.flatMap { start in DigestDate.parse(event.reminderAt).map { max(0, Int(start.timeIntervalSince($0) / 60)) } } ?? (event.revision == 0 && !event.allDay && start.map { $0.addingTimeInterval(-600) >= Date() } != false ? 10 : -1))
     }
     private static func date(_ value: String?, allDay: Bool) -> Date? {
         guard let value else { return nil }
@@ -79,19 +90,20 @@ struct DigestEventEditor: View {
                 }
             }
             Section {
-                TextField("Event title", text: $title)
-                if !hasStart { Toggle("Choose a date and time", isOn: $hasStart) }
+                TextField("Event title", text: $title).disabled(planId != nil)
+                if !hasStart { Toggle("Choose a date and time", isOn: $hasStart).disabled(planId != nil) }
                 if hasStart { DatePicker(event.allDay ? "Start date" : "Starts", selection: Binding(get: { start }, set: { next in
                     end = DigestDate.shiftedEnd(from: start, to: next, end: hasEnd ? end : nil, allDay: event.allDay)
                     start = next
-                }), displayedComponents: event.allDay ? [.date] : [.date, .hourAndMinute]) }
-                Toggle("Set an end", isOn: $hasEnd)
-                if hasEnd { DatePicker(event.allDay ? "End date (exclusive)" : "Ends", selection: $end, in: start..., displayedComponents: event.allDay ? [.date] : [.date, .hourAndMinute]) }
+                }), displayedComponents: event.allDay ? [.date] : [.date, .hourAndMinute]).disabled(planId != nil) }
+                Toggle("Set an end", isOn: $hasEnd).disabled(planId != nil)
+                if hasEnd { DatePicker(event.allDay ? "End date (exclusive)" : "Ends", selection: $end, in: start..., displayedComponents: event.allDay ? [.date] : [.date, .hourAndMinute]).disabled(planId != nil) }
                 if !event.allDay { Picker("Remind me", selection: $reminder) { Text("No reminder").tag(-1); Text("At start").tag(0); Text("5 minutes before").tag(5); Text("10 minutes before").tag(10); Text("15 minutes before").tag(15); Text("1 hour before").tag(60) } }
             } footer: {
                 Text("Shown in \(TimeZone.current.identifier) · Personal calendar. No invitations are sent.")
                 if let timezone = event.timezone { Text("Event timezone: \(timezone)") }
             }
+            if let plan { DigestPlanPeopleSection(card: plan, accountId: accountId, busy: busy, onYes: { Task { await answerPlan(plan) } }, onNo: { confirmDecline = true }) }
             }
             if event.revision == 0 && proposal?.calendarAction != "delete" {
                 DigestRepeatEditor(rule: $recurrence, timezone: event.timezone ?? TimeZone.current.identifier)
@@ -127,14 +139,20 @@ struct DigestEventEditor: View {
             if proposal?.calendarAction != "delete" {
                 Button(recurrence != nil && event.revision == 0 ? "Confirm series" : proposal?.calendarAction == "update" ? "Confirm change" : event.revision == 0 ? "Add to calendar" : "Save event") { Task { await submit() } }.disabled(busy || !hasStart || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (needsPreview && !ready))
                 if event.revision > 0 {
-                    Button("Remove event", role: .destructive) { confirmRemove = true }.disabled(busy)
+                    Button("Remove event", role: .destructive) { if declines { confirmDecline = true } else { confirmRemove = true } }.disabled(busy || removeWaitsForPlan)
                         .confirmationDialog("Remove \"\(event.title)\"?", isPresented: $confirmRemove, titleVisibility: .visible) {
                             Button("Remove event", role: .destructive) { Task { await removeReviewedEvent() } }
                             Button("Keep event", role: .cancel) {}
                         } message: { Text(removesFromDevice ? "It is removed from your Kordi calendar and from your device calendar." : "It is removed from your Kordi calendar.") }
                 }
             }
-        }.navigationTitle(event.revision == 0 ? "Review calendar event" : "Edit event").navigationBarTitleDisplayMode(.inline)
+        }.navigationTitle(event.revision != 0 ? "Edit event" : proposal == nil ? "New event" : "Review calendar event").navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog("Can't make it?", isPresented: $confirmDecline, titleVisibility: .visible) {
+                Button("Can't make it", role: .destructive) { declinePlan() }
+                Button("Keep event", role: .cancel) {}
+            } message: { Text("\(event.title) leaves your calendar.") }
+            .task(id: "\(planId ?? "")#\(planReads)") { if let planId { plan = await model.digestPlanCard(planId) } }
+            .onChange(of: scenePhase) { _, phase in if phase == .active && planId != nil { planReads += 1 } }
             .task(id: PreviewID(accountId: accountId, event: request, retry: previewRetry)) {
                 await preview.update(request, accountId: accountId) { event in try await model.previewDigestCalendarSeries(event) }
             }
@@ -144,6 +162,14 @@ struct DigestEventEditor: View {
         guard let uid = event.externalUid, uid.hasPrefix(DigestCalendarSync.devicePrefix),
               let calendarId = DigestCalendarSyncStorage.baseline(accountId: accountId)[uid]?.calendarId else { return false }
         return model.digestCalendarSync.status.calendars.first { $0.id == calendarId }?.allowsModifications == true
+    }
+    private func answerPlan(_ card: PlanCard) async {
+        busy = true; defer { busy = false }
+        do { plan = try await model.answerDigestPlan(card, going: true) } catch { self.error = error.localizedDescription }
+    }
+    private func declinePlan() {
+        guard let plan else { return }
+        do { _ = try model.beginDecliningDigestPlan(event, card: plan); model.requestDigestCalendarSync(); dismiss() } catch { self.error = error.localizedDescription }
     }
     private func removeReviewedEvent() async {
         busy = true; defer { busy = false }

@@ -474,7 +474,7 @@ final class KordiMarkdownParserTests: XCTestCase {
                 authorName: "Person",
                 text: "Message \(index)",
                 createdAt: Date(timeIntervalSince1970: TimeInterval(index)),
-                deliveryState: .delivered,
+                deliveryState: .sent,
                 errorMessage: nil,
                 requestMessageId: nil
             )
@@ -1715,7 +1715,7 @@ final class KordiMarkdownParserTests: XCTestCase {
             authorName: name,
             text: id,
             createdAt: date,
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             messageKind: messageKind

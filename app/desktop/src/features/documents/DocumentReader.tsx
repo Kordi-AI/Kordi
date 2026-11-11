@@ -28,7 +28,7 @@ import { useOutsideDismiss } from './useOutsideDismiss';
 import { UPDATED_ELSEWHERE } from './useCloudDocumentEdits';
 import type { DocumentEditorHandle } from './editor/DocumentEditor';
 import type { DocumentRoomOptions, ProviderFactory } from './editor/documentRoom';
-import { presenceColor, type DocumentCollabState } from './documentPresence';
+import { NO_COLLAB, presenceColor, type DocumentCollabState } from './documentPresence';
 
 // Tiptap loads with the first document, not with the app.
 const DocumentEditor = lazy(() => import('./editor/DocumentEditor'));
@@ -61,8 +61,8 @@ function startsWithLevelOneHeading(source: string | undefined) {
 export function DocumentReader({ api: apiOverride, dateLabel, onOpenSession, initialShareOpen = false, className, onTitle, onRenameAvailable, onReload, onEditor, collabTransport, ...source }: DocumentReaderProps) {
   const api = useMemo(() => apiOverride ?? documentShareApiForEnvironment(), [apiOverride]);
   const host = useDocumentReaderHost();
-  const [collabState, setCollabState] = useState<DocumentCollabState>({ status: 'offline', peers: [] });
-  const reader = useDocumentReader(source, api, collabState.status === 'connected');
+  const [collabState, setCollabState] = useState<DocumentCollabState>(NO_COLLAB);
+  const reader = useDocumentReader(source, api, collabState.bound);
   const { document, mode } = reader;
   const isHtml = reader.format === 'html';
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
@@ -210,6 +210,7 @@ export function DocumentReader({ api: apiOverride, dateLabel, onOpenSession, ini
                 collab={collab}
                 onCollab={setCollabState}
                 onSnapshot={reader.replaceDocument}
+                storeDocument={reader.storeDocument}
                 createProvider={collabTransport?.createProvider}
                 roomTiming={collabTransport?.timing}
                 blocks={reader.editorBlocks}

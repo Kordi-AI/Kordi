@@ -63,7 +63,7 @@ final class ConversationAgentSendIntegrationTests: XCTestCase {
         let stableRowID = model.timelineIdentity(for: progress)
         var remote = ChatMessage(id: "remote-progress", conversationId: conversation.id, author: .agent,
             authorName: "Agent", text: "", createdAt: request.createdAt.addingTimeInterval(0.001),
-            deliveryState: .delivered, errorMessage: nil, requestMessageId: request.id)
+            deliveryState: .sent, errorMessage: nil, requestMessageId: request.id)
         let phases: [AgentExecutionSnapshot.Phase] = [.preparing, .queued, .preparing, .analyzing, .usingTool, .preparing]
         for (index, phase) in phases.enumerated() {
             if index > 0 {
@@ -96,7 +96,7 @@ final class ConversationAgentSendIntegrationTests: XCTestCase {
             XCTAssertGreaterThan(visibleFrames, 10, "Activity must remain visible through phase \(phase.rawValue)")
         }
         remote.text = "Done"
-        remote.deliveryState = .delivered
+        remote.deliveryState = .sent
         remote.agentExecution = AgentExecutionSnapshot(phase: .complete, summary: "Done", steps: [],
             startedAtMs: 1_000, updatedAtMs: 8_000, completed: true)
         model.upsertPreviewMessage(remote)
@@ -143,7 +143,7 @@ final class ConversationAgentSendIntegrationTests: XCTestCase {
                 text: longAgentReply && index == historyCount - 1
                     ? (1...30).map { "### Section \($0)\nA longer reply explaining the previous request and its details.\n" }.joined(separator: "\n")
                     : "Earlier message \(index)", createdAt: Date().addingTimeInterval(Double(index - 10)),
-                deliveryState: .delivered, errorMessage: nil, requestMessageId: nil)
+                deliveryState: .sent, errorMessage: nil, requestMessageId: nil)
         }
         store.saveMessages(seed, conversationId: conversation.id, accountId: accountID, hasEarlier: false)
         let target = try XCTUnwrap(model.mentionTargets(for: groupConversation).first { $0.kind == .agent && $0.accountId == peerID })

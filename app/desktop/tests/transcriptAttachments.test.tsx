@@ -237,10 +237,10 @@ test('image delivery states keep status inside the image', () => {
 
   assert.match(delivering, /data-attachment-image-delivery-status="delivering"/);
   assert.match(delivering, /Delivering…/);
-  assert.match(delivered, /data-attachment-image-delivery-status="delivered"/);
+  assert.match(delivered, /data-attachment-image-delivery-status="sent"/, 'no delivered state: an image the server has is Sent');
   assert.match(
     delivered,
-    /data-attachment-image-delivery-status="delivered" class="app-attachment-image-delivery-overlay app-attachment-image-delivery-adaptive"/,
+    /data-attachment-image-delivery-status="sent" class="app-attachment-image-delivery-overlay app-attachment-image-delivery-adaptive"/,
   );
   assert.match(delivered, />19:45</);
   assert.match(delivered, /lucide-check h-3\.5/);
@@ -323,8 +323,8 @@ test('image delivery status mapping preserves upload, partial, and terminal sema
     label: 'Read',
   });
   assert.deepEqual(attachmentImageDeliveryVisual('delivered'), {
-    kind: 'delivered',
-    label: 'Delivered',
+    kind: 'sent',
+    label: 'Sent',
   });
   assert.deepEqual(attachmentImageDeliveryVisual('processing_failed'), {
     kind: 'failed',

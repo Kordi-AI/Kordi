@@ -5,7 +5,8 @@
 //! The run row then ends `cancelled` or `failed` while every other device still
 //! shows the `processing` reply. This module publishes the terminal reply for
 //! such a run once, through the same delivery paths a Cloud runner failure
-//! uses.
+//! uses. Agent exchange runs are left out: their exchange already publishes
+//! their outcome, and its reconcile sweep recovers their lapsed leases.
 
 use std::time::Duration;
 
@@ -285,7 +286,7 @@ pub(crate) async fn release_lost_desktop_runs(pool: &PgPool) -> RunResult<()> {
         "SELECT run_id, owner_account_id, session_id, request_message_id, created_at \
          FROM cloud_agent_fallback_runs run \
          WHERE execution_backend = 'desktop' AND status IN ('leased', 'running') \
-           AND NOT legacy_duplicate AND subsession_id IS NULL \
+           AND NOT legacy_duplicate AND subsession_id IS NULL AND NOT starts_with(request_message_id, 'agent-exchange:') \
            AND lease_expires_at IS NOT NULL AND lease_expires_at::timestamptz <= now() \
            AND NOT EXISTS(SELECT 1 FROM cloud_agent_subsession_chat chat WHERE chat.run_id = run.run_id) \
          ORDER BY lease_expires_at LIMIT $1",
@@ -318,7 +319,7 @@ pub(crate) async fn release_lost_desktop_runs(pool: &PgPool) -> RunResult<()> {
         "UPDATE cloud_agent_fallback_runs run SET status = 'cancelled', \
            error_code = 'desktop_executor_lost', completed_at = lease_expires_at, updated_at = now()::text \
          WHERE execution_backend = 'desktop' AND status IN ('leased', 'running') \
-           AND NOT legacy_duplicate AND subsession_id IS NULL \
+           AND NOT legacy_duplicate AND subsession_id IS NULL AND NOT starts_with(request_message_id, 'agent-exchange:') \
            AND lease_expires_at IS NOT NULL \
            AND lease_expires_at::timestamptz < now() - make_interval(mins => $1::INT) \
            AND NOT EXISTS(SELECT 1 FROM cloud_agent_subsession_chat chat WHERE chat.run_id = run.run_id)",
@@ -338,7 +339,7 @@ pub async fn backfill_terminal_responses(pool: &PgPool, window_minutes: i64) -> 
     let runs: Vec<(String,)> = query_as(
         "SELECT run_id FROM cloud_agent_fallback_runs \
          WHERE execution_backend = 'desktop' AND status IN ('cancelled', 'failed') \
-           AND NOT legacy_duplicate AND subsession_id IS NULL \
+           AND NOT legacy_duplicate AND subsession_id IS NULL AND NOT starts_with(request_message_id, 'agent-exchange:') \
            AND COALESCE(completed_at, updated_at)::timestamptz > now() - make_interval(mins => $1::INT) \
          ORDER BY COALESCE(completed_at, updated_at) DESC LIMIT $2",
     )

@@ -15,11 +15,10 @@ use crate::auth::rate_limit::{
 use crate::auth::routes::{cloud_session_middleware, CloudSession};
 use crate::chat_sync::cursor::CursorCodec;
 use crate::chat_sync::models::{
-    AddConversationMembersRequest, AdvanceConversationCursorRequest, BootstrapResponse,
-    ConversationPreferencesResponse, ConversationResponse, CreateConversationRequest,
-    CursorResponse, HistoryQuery, MessageResponse, RealtimeTicketResponse, SendMessageRequest,
-    SyncQuery, SyncResponse, UpdateConversationTitleRequest, UpdatePersonalTitleRequest,
-    UpdateReactionRequest,
+    AddConversationMembersRequest, BootstrapResponse, ConversationPreferencesResponse,
+    ConversationResponse, CreateConversationRequest, HistoryQuery, MessageResponse,
+    RealtimeTicketResponse, SendMessageRequest, SyncQuery, SyncResponse,
+    UpdateConversationTitleRequest, UpdatePersonalTitleRequest, UpdateReactionRequest,
 };
 use crate::chat_sync::realtime;
 use crate::chat_sync::store::{self, StoreError};
@@ -32,11 +31,14 @@ const MAX_IMAGE_PIXEL_DIMENSION: u64 = 100_000;
 
 mod attachment_actions;
 mod channels;
+mod empty_message;
 mod group_envelope;
 mod http;
 mod message_mutations;
+mod message_sent;
 mod organization_check;
 mod reaction;
+mod receipts;
 mod thread_reads;
 
 use group_envelope::normalize_legacy_group_envelope;
@@ -100,11 +102,15 @@ fn routes_with_runtime(state: Arc<ServerState>, runtime: ChatSyncRuntime) -> Rou
         )
         .route(
             "/v2/chat/conversations/:conversation_id/delivered",
-            put(advance_delivery_cursor),
+            put(receipts::advance_delivery_cursor),
         )
         .route(
             "/v2/chat/conversations/:conversation_id/read",
-            put(advance_read_cursor),
+            put(receipts::advance_read_cursor),
+        )
+        .route(
+            "/v2/chat/conversations/:conversation_id/messages/:message_id/readers",
+            get(receipts::readers),
         )
         .route("/v2/chat/sync", get(sync))
         .route("/v2/chat/sync/bootstrap", get(bootstrap))
@@ -223,11 +229,7 @@ async fn send_message(
                 Ok(message) => message,
                 Err(error) => return store_error("project message", error),
             };
-            if let Some(notifications) = state.notifications() {
-                notifications
-                    .send_message_attention(state.db_pool(), &outcome.value)
-                    .await;
-            }
+            message_sent::message_sent(&state, &outcome.value).await;
             (
                 if outcome.inserted {
                     StatusCode::CREATED
@@ -329,44 +331,6 @@ async fn history(
     {
         Ok(history) => Json(history).into_response(),
         Err(error) => store_error("load history", error),
-    }
-}
-
-async fn advance_delivery_cursor(
-    State(state): State<Arc<ServerState>>,
-    Extension(session): Extension<CloudSession>,
-    Path(conversation_id): Path<Uuid>,
-    Json(request): Json<AdvanceConversationCursorRequest>,
-) -> Response {
-    match store::advance_delivery_cursor(
-        state.db_pool(),
-        &session.account_id,
-        conversation_id,
-        request,
-    )
-    .await
-    {
-        Ok(cursor) => Json(CursorResponse { cursor }).into_response(),
-        Err(error) => store_error("advance delivery cursor", error),
-    }
-}
-
-async fn advance_read_cursor(
-    State(state): State<Arc<ServerState>>,
-    Extension(session): Extension<CloudSession>,
-    Path(conversation_id): Path<Uuid>,
-    Json(request): Json<AdvanceConversationCursorRequest>,
-) -> Response {
-    match store::advance_read_cursor(
-        state.db_pool(),
-        &session.account_id,
-        conversation_id,
-        request,
-    )
-    .await
-    {
-        Ok(cursor) => Json(CursorResponse { cursor }).into_response(),
-        Err(error) => store_error("advance read cursor", error),
     }
 }
 

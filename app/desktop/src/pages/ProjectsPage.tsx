@@ -6,12 +6,12 @@ import {
 } from 'react';
 import { motion } from 'framer-motion';
 import {
+  ArrowUp,
   FolderOpen,
   Globe,
   Layers3,
   PanelLeftClose,
   PanelLeftOpen,
-  Send,
   Square,
   Users,
 } from 'lucide-react';
@@ -502,7 +502,7 @@ export function ProjectsPage({
                 }}
                 disabled={isDesktopChatSending && desktopLiveTurn?.sessionId === activeProjectSession.id ? !desktopLiveTurn || desktopLiveTurn.completed : !canSubmitProjectMessage}
               >
-                {isDesktopChatSending && desktopLiveTurn?.sessionId === activeProjectSession.id ? <Square className="h-3.5 w-3.5 fill-current" /> : <Send className="h-4 w-4" />}
+                {isDesktopChatSending && desktopLiveTurn?.sessionId === activeProjectSession.id ? <Square className="h-3.5 w-3.5 fill-current" /> : <ArrowUp className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" />}
               </Button>
             </div>
           </div>

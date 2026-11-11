@@ -207,11 +207,11 @@ struct CloudAccount: Codable, Hashable {
     // Profile details; nil when unset or when the server predates them.
     var about: String? = nil
     var location: String? = nil
-    /// IANA identifier, such as "Europe/Lisbon".
-    var timeZone: String? = nil
+    var timeZone: String? = nil // IANA identifier, such as "Europe/Lisbon".
     var website: String? = nil
-    /// "YYYY-MM-DD".
-    var birthday: String? = nil
+    var birthday: String? = nil // "YYYY-MM-DD".
+    var locationMode: String? = nil // "automatic" or "manual"; owner only, nil from older servers.
+    var timeZoneMode: String? = nil
 
     var preferredName: String {
         displayName?.nonEmpty ?? primaryEmail?.nonEmpty ?? "Kordi user"
@@ -1414,6 +1414,8 @@ struct CloudChatMember: Codable, Hashable {
     let lastReadSequence: Int64
     let joinedAt: String
     let leftAt: String?
+    /// The highest own sequence another member has read; decoded in CloudReadReceipts.swift.
+    var readOutboxSequence: Int64 = 0
 
     enum CodingKeys: String, CodingKey {
         case accountId = "account_id"
@@ -1653,20 +1655,6 @@ struct CloudChatMessage: Codable, Hashable {
     }
 }
 
-struct CloudChatCursor: Codable, Hashable {
-    let conversationId: String
-    let accountId: String
-    let lastDeliveredSequence: Int64
-    let lastReadSequence: Int64
-
-    enum CodingKeys: String, CodingKey {
-        case conversationId = "conversation_id"
-        case accountId = "account_id"
-        case lastDeliveredSequence = "last_delivered_sequence"
-        case lastReadSequence = "last_read_sequence"
-    }
-}
-
 struct CloudChatEventPayload: Codable, Hashable {
     var messageIds: [String]? = nil
     var kind: String? = nil
@@ -1684,11 +1672,12 @@ struct CloudChatEventPayload: Codable, Hashable {
     let updatedByAccountId: String?
     let deviceId: String?
     var attachmentId: String? = nil, revision: Int64? = nil, change: String? = nil, title: String? = nil // `document.updated`
+    var readOutboxSnake: CloudChatReadOutbox? = nil, readOutboxCamel: CloudChatReadOutbox? = nil // read via `readOutbox`
 
     enum CodingKeys: String, CodingKey {
         case conversation, message, preferences, cursor, call, pinHistoryEvent, messageIds, kind, targetMessageId
         case sessionId, messageId, scope, updatedAt, updatedByAccountId, attachmentId, revision, change, title
-        case deviceId = "deviceId"
+        case deviceId = "deviceId", readOutboxSnake = "read_outbox", readOutboxCamel = "readOutbox"
     }
 }
 

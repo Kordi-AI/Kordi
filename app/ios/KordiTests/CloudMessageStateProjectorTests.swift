@@ -247,11 +247,11 @@ final class CloudMessageStateProjectorTests: XCTestCase {
         XCTAssertEqual(result.map(\.messageId), ["legacy-route"])
     }
 
-    func testSuccessfulOutgoingMessagesMatchMacDeliveredAndReadStates() {
-        let delivered = wire(id: "delivered", from: "acct_me", to: "acct_peer", deliveredAt: nil, readAt: nil)
+    func testSuccessfulOutgoingMessagesShowSentUntilRead() {
+        let sent = wire(id: "sent", from: "acct_me", to: "acct_peer", deliveredAt: nil, readAt: nil)
         let read = wire(id: "read", from: "acct_me", to: "acct_peer", deliveredAt: nil, readAt: "2026-08-08T10:01:00Z")
 
-        XCTAssertEqual(CloudMessageStateProjector.deliveryState(for: delivered, ownAccountId: "acct_me"), .delivered)
+        XCTAssertEqual(CloudMessageStateProjector.deliveryState(for: sent, ownAccountId: "acct_me"), .sent)
         XCTAssertEqual(CloudMessageStateProjector.deliveryState(for: read, ownAccountId: "acct_me"), .read)
     }
 
@@ -291,6 +291,26 @@ final class CloudMessageStateProjectorTests: XCTestCase {
 
         XCTAssertEqual(summary?.state, .read)
         XCTAssertEqual(summary?.readByAccountIds, ["acct_b"])
+    }
+
+    /// The only reader left the group: no member cursor names them, but the
+    /// read watermark still set readAt on the canonical copy (#2455).
+    func testGroupReceiptStaysReadWhenOnlyTheWatermarkSaysSo() throws {
+        let body = try groupBody(messageId: "group-message")
+        let message = wire(id: "canonical-message", from: "acct_me", to: "acct_a", body: body,
+                           readAt: "2026-08-08T10:01:00Z", readByAccountIds: [])
+        let unread = wire(id: "canonical-unread", from: "acct_me", to: "acct_a", body: body, readByAccountIds: [])
+
+        let summary = CloudMessageStateProjector.groupDeliverySummary(
+            messageId: "group-message", messages: [message], ownAccountId: "acct_me"
+        )
+        let unreadSummary = CloudMessageStateProjector.groupDeliverySummary(
+            messageId: "group-message", messages: [unread], ownAccountId: "acct_me"
+        )
+
+        XCTAssertEqual(summary?.state, .read)
+        XCTAssertEqual(summary?.readByAccountIds, [])
+        XCTAssertEqual(unreadSummary?.state, .sent)
     }
 
     func testLocalReadProjectionOnlyMarksTheOpenedSession() {

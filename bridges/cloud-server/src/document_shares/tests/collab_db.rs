@@ -327,7 +327,10 @@ async fn snapshots_bump_the_revision_only_when_the_markdown_changes() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{bumped}");
-    assert_eq!(bumped["revision"], 2, "snapshots ignore baseRevision");
+    assert_eq!(
+        bumped["revision"], 2,
+        "a snapshot base is only checked against saves from outside the room"
+    );
     let owner_events = events(f.pool.clone(), f.owner.clone()).await;
     assert_eq!(owner_events.len(), 1);
     assert_eq!(owner_events[0].0["change"], "content");

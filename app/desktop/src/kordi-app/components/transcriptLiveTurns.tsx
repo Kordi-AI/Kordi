@@ -15,6 +15,7 @@ import { changedFileRowsFromTurn } from '@/features/chat/artifacts';
 import { useVisibleLiveTurn } from '@/features/chat/useVisibleLiveTurn';
 import { cloudAgentProviderFailureActionLabel, cloudAgentProviderFailureNotice } from '@/features/cloud/cloudAgentFailureNotices';
 import { ErrorLine } from '@/components/ui/ErrorLine';
+import { useModelRecoveryAction } from '@/features/chat/modelRecovery';
 import { cn } from '@/lib/utils';
 import { SourceMessageQuoteRow } from './transcriptReplyAttribution';
 import { MarkdownContent } from './markdown';
@@ -31,6 +32,7 @@ function LiveChatTurnCardView({
   showReasoning = false,
   plainAgentResponse = false,
   stopMessage,
+  mentions,
   onStopCollaborationAgentRequest,
   onStopActiveTurn,
   onNavigateToMessage,
@@ -44,6 +46,8 @@ function LiveChatTurnCardView({
   plainAgentResponse?: boolean;
   /** The reply's message, which decides whether the viewer may stop it. */
   stopMessage?: Pick<Message, 'role' | 'senderOwnerName'>;
+  /** Mentions the reply names by id, so names render as whole mentions. */
+  mentions?: Message['mentions'];
   onStopCollaborationAgentRequest?: StopCollaborationAgentRequestHandler;
   onStopActiveTurn?: StopActiveTurnHandler;
   onNavigateToMessage?: (messageId: string, sourceMessage?: MessageSourceReference) => void;
@@ -100,6 +104,8 @@ function LiveChatTurnCardView({
   const showResponsePanel = hasResponseSurface || Boolean(visibleTurn.error);
   // The owner's link to the provider settings under Authentication.
   const openAuthActionLabel = onOpenAuthSettings && visibleTurn.error ? cloudAgentProviderFailureActionLabel(visibleTurn.error) : null;
+  // The owner's one click out of a model the provider refused for the sign-in.
+  const modelRecoveryAction = useModelRecoveryAction(onOpenAuthSettings && !ending ? visibleTurn : null);
   const showsTurnProgress = showResponsePanel && (showLiveProgress || hasOrderedContent || hasTimelineActivity || hasAssistant);
   // Without a live status line (not yet started, or compressing), Stop keeps a line of its own.
   const standaloneStop = stop && !(showsTurnProgress && !visibleTurn.completed)
@@ -140,7 +146,7 @@ function LiveChatTurnCardView({
             <TurnProgress turn={visibleTurn}
               renderTool={tool => <ToolActivityRow key={tool.id} tool={tool} stateKey={`turn:${visibleTurn.id}:tool:${tool.id}`} onOpenFile={onOpenArtifact} />}
               trailing={stop}
-              legacyAnswer={hasAssistant ? <FoldableAssistantAnswer text={assistantText} foldable={!plainAgentResponse}
+              legacyAnswer={hasAssistant ? <FoldableAssistantAnswer text={assistantText} mentions={mentions} foldable={!plainAgentResponse}
                 tone={visibleTurn.status === 'cancelled' && !ending ? 'cancelled' : 'default'} /> : null}
             />
           ) : null}
@@ -159,7 +165,7 @@ function LiveChatTurnCardView({
             <ErrorLine
               className="app-live-turn-error mt-0 px-0.5"
               role={historical ? 'status' : 'alert'}
-              action={openAuthActionLabel && onOpenAuthSettings ? { label: openAuthActionLabel, onClick: onOpenAuthSettings } : null}
+              action={openAuthActionLabel && onOpenAuthSettings ? { label: openAuthActionLabel, onClick: onOpenAuthSettings } : modelRecoveryAction}
             >
               {displayedError}
             </ErrorLine>
@@ -184,6 +190,7 @@ export const LiveChatTurnCard = memo(
     && previous.hideSourceQuote === next.hideSourceQuote
     && previous.showReasoning === next.showReasoning
     && previous.plainAgentResponse === next.plainAgentResponse
+    && previous.mentions === next.mentions
     && previous.stopMessage?.role === next.stopMessage?.role
     && previous.stopMessage?.senderOwnerName === next.stopMessage?.senderOwnerName
     && previous.onStopCollaborationAgentRequest === next.onStopCollaborationAgentRequest

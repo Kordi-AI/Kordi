@@ -93,7 +93,7 @@ describe('claimed material endpoint', () => {
   test('an api-key claim for mistral carries the Mistral base URL and api kind', async () => {
     const sessions = manager(ompLoginRegistry(async (_provider, apiKey) => ({ apiKey: apiKey.trim() })));
     const sessionId = crypto.randomUUID();
-    const started = await sessions.start({ provider: 'mistral', sessionId });
+    const started = await sessions.start({ provider: 'mistral', sessionId, method: 'api-key' });
     expect(started.step?.type).toBe('api-key');
     sessions.input(sessionId, 'synthetic-mistral-key');
     await until(sessions, sessionId, (snapshot) => snapshot.status === 'completed');

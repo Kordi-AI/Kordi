@@ -88,6 +88,8 @@ async fn only_messages_of_members_who_allowed_ai_reach_the_context() {
         agent_id: "system-agent-consent-test".to_string(),
         name: "System".to_string(),
         subtitle: "Test".to_string(),
+        stall_minutes: super::config::DEFAULT_STALL_MINUTES,
+        silence_minutes: super::config::DEFAULT_SILENCE_MINUTES,
         provider_auth: super::SystemAgentProviderAuth::openai_api_key(
             "synthetic-key",
             "synthetic-model",

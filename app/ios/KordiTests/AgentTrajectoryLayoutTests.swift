@@ -99,7 +99,7 @@ final class AgentTrajectoryLayoutTests: XCTestCase {
             createdAt: Date().addingTimeInterval(-2), deliveryState: .read, errorMessage: nil, requestMessageId: nil)
         let reply = ChatMessage(id: "fixture-reply", conversationId: conversation.id,
             conversationSequence: 2, author: .agent, authorName: "Fixture Agent", text: "The sample is ready to review.",
-            createdAt: Date().addingTimeInterval(-1), deliveryState: .delivered, errorMessage: nil,
+            createdAt: Date().addingTimeInterval(-1), deliveryState: .sent, errorMessage: nil,
             requestMessageId: request.id, agentExecution: execution)
         [request, reply].forEach(model.upsertPreviewMessage)
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)

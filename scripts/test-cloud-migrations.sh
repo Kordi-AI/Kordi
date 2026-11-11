@@ -95,6 +95,8 @@ tests=(
   safety_tests::upgrade_from_180_adds_blocks_and_reports
   contact_permission_tests::upgrade_from_183_adds_contact_permissions
   apple_token_tests::upgrade_from_184_adds_apple_token_revocations
+  profile_mode_tests::upgrade_from_187_adds_profile_field_modes
+  read_outbox_tests::upgrade_from_191_backfills_read_watermarks
 )
 index=0
 for test_name in "${tests[@]}"; do

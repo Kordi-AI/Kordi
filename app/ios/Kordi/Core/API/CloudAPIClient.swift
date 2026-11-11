@@ -250,37 +250,6 @@ actor CloudAPIClient {
         return account
     }
 
-    func updateProfile(
-        token: String,
-        displayName: String,
-        avatarMutation: CanonicalAvatarMutation?,
-        kordiId: String? = nil,
-        details: CloudProfileDetailsUpdate = CloudProfileDetailsUpdate()
-    ) async throws -> CloudAccount {
-        let avatarMutation = try await referenceBackedAvatarMutation(
-            token: token,
-            entityType: "human",
-            entityId: try requireActiveAccountId(),
-            mutation: avatarMutation
-        )
-        return try await send(
-            path: "/v1/cloud/auth/me",
-            method: "PATCH",
-            token: token,
-            body: UpdateProfileRequest(
-                displayName: displayName,
-                avatarMutation: avatarMutation,
-                kordiId: kordiId,
-                about: details.about,
-                location: details.location,
-                timeZone: details.timeZone,
-                website: details.website,
-                birthday: details.birthday
-            ),
-            fallback: "Could not update your profile."
-        )
-    }
-
     func logout(token: String) async throws {
         defer {
             activeAccountId = nil
@@ -711,7 +680,7 @@ actor CloudAPIClient {
         return response.agent
     }
 
-    private func referenceBackedAvatarMutation(
+    func referenceBackedAvatarMutation(
         token: String,
         entityType: String,
         entityId: String,
@@ -1450,14 +1419,14 @@ actor CloudAPIClient {
             )
         } catch let error as CloudAPIError where error.code == "plan_card_revision_conflict" {
             // Refresh without replaying a decision against details the user has not seen.
-            let eventID = action.eventId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? action.eventId
-            return try await send(
-                path: "/v1/cloud/plan_cards/\(eventID)",
-                method: "GET",
-                token: token,
-                fallback: "Could not refresh the plan card. Try again."
-            )
+            return try await planCard(token: token, eventID: action.eventId, fallback: "Could not refresh the plan card. Try again.")
         }
+    }
+
+    /// Reads the live card; the server answers only for active members of its chat.
+    func planCard(token: String, eventID: String, fallback: String = "Could not load the plan.") async throws -> PlanCard {
+        let path = eventID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? eventID
+        return try await send(path: "/v1/cloud/plan_cards/\(path)", method: "GET", token: token, fallback: fallback)
     }
 
     func setReaction(
@@ -2388,7 +2357,7 @@ actor CloudAPIClient {
         throw CloudAPIError(code: "title_sync_failed", message: "Could not synchronize the session title.", statusCode: 0)
     }
 
-    private func requireActiveAccountId() throws -> String {
+    func requireActiveAccountId() throws -> String {
         guard let accountId = activeAccountId?.nonEmpty else {
             throw CloudAPIError(code: "account_missing", message: "Your Kordi account session is unavailable.", statusCode: 401)
         }
@@ -2518,6 +2487,7 @@ actor CloudAPIClient {
 
     private func remember(_ conversation: CloudChatConversation) {
         activateAccount(conversation.preferences.accountId)
+        let conversation = conversation.keepingReadOutbox(from: chatConversationsById[conversation.id])
         let previousSessionId = chatConversationsById[conversation.id]?.legacySessionId?.nonEmpty
         if previousSessionId != conversation.legacySessionId?.nonEmpty,
            let previousSessionId {
@@ -2543,17 +2513,12 @@ actor CloudAPIClient {
         let peerAccountId = message.senderAccountId != viewerAccountId
             ? message.senderAccountId
             : otherMembers.first?.accountId ?? viewerAccountId
-        let delivered = outgoing
-            ? !otherMembers.isEmpty && otherMembers.allSatisfy {
-                $0.lastDeliveredSequence >= message.conversationSequence
-            }
-            : true
         let readByAccountIds = otherMembers
             .filter { $0.lastReadSequence >= message.conversationSequence }
             .map(\.accountId)
             .sorted()
         let read = outgoing
-            ? !readByAccountIds.isEmpty
+            ? CloudReadReceiptRule.isRead(sequence: message.conversationSequence, in: conversation, viewerAccountId: viewerAccountId)
             : conversation.members.contains {
                 $0.accountId == viewerAccountId && $0.lastReadSequence >= message.conversationSequence
             }
@@ -2567,7 +2532,8 @@ actor CloudAPIClient {
             body: message.deletedAt == nil ? message.content.body : "",
             createdAt: createdAt,
             editedAt: message.editedAt,
-            deliveredAt: delivered ? message.createdAt : nil,
+            // The server has every message it returns; there is no delivered state (#2455).
+            deliveredAt: message.createdAt,
             readAt: read ? message.createdAt : nil,
             readByAccountIds: outgoing && conversation.kind == "group" ? readByAccountIds : nil,
             direction: outgoing ? "outgoing" : "incoming",
@@ -2662,13 +2628,15 @@ actor CloudAPIClient {
         }
         if ["delivery_cursor.updated", "read_cursor.updated"].contains(event.eventType),
            let current = conversation,
-           let cursor = event.payload.cursor {
-            let affectedMessages = cloudChatMessagesAffectedByCursor(
-                chatMessagesById.values,
-                conversation: current,
-                cursor: cursor
+           event.payload.cursor != nil || event.payload.readOutbox != nil {
+            let viewer = current.preferences.accountId
+            let updated = current.applyingReceipts(
+                cursor: event.payload.cursor, readOutbox: event.payload.readOutbox, viewerAccountId: viewer
             )
-            let updated = current.withCursor(cursor)
+            let affectedMessages = cloudChatMessagesAffectedByReceipts(
+                chatMessagesById.values, before: current, after: updated,
+                cursor: event.payload.cursor, viewerAccountId: viewer
+            )
             remember(updated)
             conversation = updated
             return affectedMessages
@@ -3179,16 +3147,6 @@ private struct LoginRequest: Encodable {
     let password: String
     let device: CloudDeviceRegistration
 }
-private struct UpdateProfileRequest: Encodable {
-    let displayName: String
-    let avatarMutation: CanonicalAvatarMutation?
-    let kordiId: String?
-    let about: String?
-    let location: String?
-    let timeZone: String?
-    let website: String?
-    let birthday: String?
-}
 private struct SignupRequest: Encodable {
     let email: String
     let password: String
@@ -3513,49 +3471,6 @@ private extension CloudChatConversation {
             updatedAt: updatedAt,
             members: members,
             preferences: value
-        )
-    }
-
-    func withCursor(_ cursor: CloudChatCursor) -> Self {
-        Self(
-            id: id,
-            kind: kind,
-            sharedTitle: sharedTitle,
-            version: version,
-            createdByAccountId: createdByAccountId,
-            legacySessionId: legacySessionId,
-            personalAgent: personalAgent,
-            organization: organization,
-            forkedFromSessionId: forkedFromSessionId,
-            forkedFromMessageId: forkedFromMessageId,
-            latestMessageSequence: latestMessageSequence,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            members: members.map { member in
-                guard member.accountId == cursor.accountId else { return member }
-                return CloudChatMember(
-                    accountId: member.accountId,
-                    displayName: member.displayName,
-                    avatarUrl: member.avatarUrl,
-                    defaultAgentId: member.defaultAgentId,
-                    defaultAgentDisplayName: member.defaultAgentDisplayName,
-                    defaultAgentAvatarUrl: member.defaultAgentAvatarUrl,
-                    role: member.role,
-                    membershipState: member.membershipState,
-                    version: member.version,
-                    lastDeliveredSequence: max(
-                        member.lastDeliveredSequence,
-                        cursor.lastDeliveredSequence
-                    ),
-                    lastReadSequence: max(
-                        member.lastReadSequence,
-                        cursor.lastReadSequence
-                    ),
-                    joinedAt: member.joinedAt,
-                    leftAt: member.leftAt
-                )
-            },
-            preferences: preferences
         )
     }
 }

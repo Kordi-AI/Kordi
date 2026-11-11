@@ -9,9 +9,9 @@ use super::cards::{self, CardEdit, LEGACY_PIN_SQL};
 use super::groups::{authorize_change, Change};
 use super::routing::{self, USER_DECLARED};
 use super::{
-    guard_settings, guard_text, memory_from_row, protected_texts_for_scope, scope_lock_key,
-    settings, MemoryError, MemoryResponse, MemoryResult, MemoryRow, UpdateMemoryRequest,
-    MEMORY_SELECT,
+    guard_settings, guard_text, memory_from_row, note_change, protected_texts_for_scope,
+    scope_lock_key, settings, MemoryError, MemoryResponse, MemoryResult, MemoryRow,
+    UpdateMemoryRequest, MEMORY_SELECT,
 };
 
 fn memory_exists() -> MemoryError {
@@ -117,6 +117,9 @@ pub(crate) async fn update_memory(
     .fetch_optional(&mut *transaction)
     .await?;
     transaction.commit().await?;
+    if row.is_some() {
+        note_change(pool, &owner, &scope).await;
+    }
     row.map(memory_from_row).ok_or_else(MemoryError::not_found)
 }
 
@@ -149,7 +152,7 @@ async fn card_edit(
 
 /// Archives one memory.
 pub(crate) async fn archive(pool: &PgPool, account_id: &str, memory_id: &str) -> MemoryResult<()> {
-    authorize_change(pool, account_id, memory_id, Change::Delete).await?;
+    let (owner, scope, _) = authorize_change(pool, account_id, memory_id, Change::Delete).await?;
     let result = query(
         "UPDATE cloud_account_memories SET archived_at = now(), updated_at = now() \
          WHERE memory_id = $1 AND archived_at IS NULL",
@@ -160,5 +163,6 @@ pub(crate) async fn archive(pool: &PgPool, account_id: &str, memory_id: &str) ->
     if result.rows_affected() == 0 {
         return Err(MemoryError::not_found());
     }
+    note_change(pool, &owner, &scope).await;
     Ok(())
 }

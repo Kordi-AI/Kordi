@@ -1,4 +1,4 @@
-import { withAgentExchangeProgress } from '@/features/cloud/agentExchangePresentation';
+import { agentExchangeWaitsForViewer, withAgentExchangeProgress } from '@/features/cloud/agentExchangePresentation';
 import { canonicalTools } from './toolMapping';
 export { canonicalTools } from './toolMapping';
 import { parseTurnSegments } from '@/features/chat/turnSegments';
@@ -417,6 +417,7 @@ export function mapCanonicalMessage(
   const sourceMessage = canonicalMessageActionSourceReference(messageAction);
   if (role === 'system' && !displayText.trim()) return null;
   const voiceMessage = storedVoiceMessage(content.voiceMessage, isOwnMessage);
+  const planCard = normalizePlanCardSnapshot(content.planCard);
   return withAgentExchangeProgress({
     id: message.id,
     // A message typed in this window keeps its canonical id as its render
@@ -441,7 +442,7 @@ export function mapCanonicalMessage(
     senderProfileImageUrl: identity?.profileImageUrl ?? null,
     senderAvatarSeed: canonicalIdentityAvatarSeed(identity),
     isOwnMessage,
-    showSenderMeta: role === 'person' || role === 'external-agent', ...systemNoticeSender(messageKind, identity),
+    showSenderMeta: role === 'person' || role === 'external-agent', ...systemNoticeSender(messageKind, identity, planCard, isOwnMessage, identityById),
     text: isAgentTurn ? '' : displayText,
     time,
     timestampMs: message.createdAtMs,
@@ -449,7 +450,7 @@ export function mapCanonicalMessage(
     callActivity: canonicalCallActivity(message, content, isOwnMessage),
     messageKind: voiceMessage ? 'voice' : role === 'system' ? stringValue(content.kind) ?? messageKind : undefined,
     voiceMessage,
-    planCard: normalizePlanCardSnapshot(content.planCard), ...messageEventSourcesField(content.sources),
+    planCard, ...messageEventSourcesField(content.sources),
     detail: stringValue(content.detail),
     attachments: withoutVoiceAttachment(canonicalAttachments(content.attachments), voiceMessage),
     mentions,
@@ -483,7 +484,12 @@ export function mapCanonicalMessage(
             ? content.hostedRunStatus : undefined,
         }
       : undefined,
-  }, content.agentExchangeStatus);
+  }, content.agentExchangeStatus, content.agentExchangeWaitingFor, agentExchangeWaitsForViewer(
+    content.agentExchangeWaitingForAccountId,
+    // The viewer's cloud account, from their profile identity.
+    trimmedProfileIdentityId ? identityById.get(trimmedProfileIdentityId)?.humanId?.trim() || null : null,
+    content.agentExchangeWaitingForRequester === true && role === 'owned-agent',
+  ));
 }
 
 export { contentRecord,numberValue,stringValue } from "./messageContent";

@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AGENT_EXCHANGE_WAITING } from '../src/features/cloud/agentExchangeOutcome';
-import { publicAgentExchangeTurn, agentExchangeProgressTurn } from '../src/features/cloud/agentExchangePresentation';
+import { publicAgentExchangeTurn, agentExchangeProgressTurn, agentExchangeWaitsForViewer } from '../src/features/cloud/agentExchangePresentation';
+import { parseCloudAgentResponse } from '../src/features/cloud/cloudAgentMessages';
 import { mergeDesktopTurnSnapshot } from '../src/features/chat/desktopLiveTurns';
 import { liveTurnSnapshotKey } from '../src/features/chat/liveTurnSnapshotKey';
 import { TurnProgress } from '../src/kordi-app/components/TurnProgress';
@@ -39,6 +40,46 @@ test('the question retains waiting and processing feedback until durable complet
     assert.doesNotMatch(html, /agentExchangeStatus|agentExchangeOutcome/);
   }
   for (const status of ['completed', 'failed', 'cancelled']) assert.equal(agentExchangeProgressTurn(status, text, 'question', 'session'), null);
+});
+
+test('a question to a person names who the agent is waiting for', () => {
+  const text = '@Maya Which day works?';
+  const body = `kordi-cloud-agent-response:${Buffer.from(JSON.stringify({ kind: 'agent-response', requestId: 'agent-exchange:id:sent', text, deliveryState: 'complete', agentExchangeStatus: 'waiting', agentExchangeWaitingFor: 'Maya Chen' })).toString('base64url')}`;
+  const parsed = parseCloudAgentResponse(body)!;
+  assert.equal(parsed.agentExchangeWaitingFor, 'Maya Chen');
+  const waiting = agentExchangeProgressTurn(parsed.agentExchangeStatus, text, 'question', 'session', null, parsed.agentExchangeWaitingFor)!;
+  assert.equal(waiting.agentExchangeWaitingFor, 'Maya Chen');
+  const html = renderToStaticMarkup(createElement(TurnProgress, { turn: waiting, renderTool: () => null, legacyAnswer: text }));
+  assert.match(html, /Waiting for Maya Chen/);
+  const processing = agentExchangeProgressTurn('processing', text, 'question', 'session', null, 'Maya Chen')!;
+  assert.match(renderToStaticMarkup(createElement(TurnProgress, { turn: processing, renderTool: () => null, legacyAnswer: text })), /Processing reply/);
+  assert.equal(agentExchangeProgressTurn('waiting', text, 'question', 'session', null, '  ')!.agentExchangeWaitingFor, undefined);
+});
+
+test('a question to the requester reads as waiting for their reply on their own Mac', () => {
+  const text = 'What time are you free?';
+  const body = `kordi-cloud-agent-response:${Buffer.from(JSON.stringify({ kind: 'agent-response', requestId: 'agent-exchange:id:sent', text, deliveryState: 'complete', agentExchangeStatus: 'waiting', agentExchangeWaitingFor: 'Sam Lee', agentExchangeWaitingForRequester: true })).toString('base64url')}`;
+  const parsed = parseCloudAgentResponse(body)!;
+  assert.equal(parsed.agentExchangeWaitingForRequester, true);
+  const label = (forViewer: boolean) => renderToStaticMarkup(createElement(TurnProgress, {
+    turn: agentExchangeProgressTurn(parsed.agentExchangeStatus, text, 'question', 'session', null, parsed.agentExchangeWaitingFor, forViewer)!,
+    renderTool: () => null, legacyAnswer: text,
+  }));
+  assert.match(label(true), /Waiting for your reply/);
+  assert.match(label(false), /Waiting for Sam Lee/);
+});
+
+test('a question waits for the viewer when it names their account', () => {
+  const body = `kordi-cloud-agent-response:${Buffer.from(JSON.stringify({ kind: 'agent-response', requestId: 'agent-exchange:id:sent', text: 'Which city?', agentExchangeStatus: 'waiting', agentExchangeWaitingFor: 'Sam Lee', agentExchangeWaitingForAccountId: ' sam ' })).toString('base64url')}`;
+  const parsed = parseCloudAgentResponse(body)!;
+  assert.equal(parsed.agentExchangeWaitingForAccountId, 'sam');
+  // Another person's request: the requester's Mac says "your reply", the owner's Mac names them.
+  assert.equal(agentExchangeWaitsForViewer(parsed.agentExchangeWaitingForAccountId, 'sam', false), true);
+  assert.equal(agentExchangeWaitsForViewer(parsed.agentExchangeWaitingForAccountId, 'owner', false), false);
+  assert.equal(agentExchangeWaitsForViewer(parsed.agentExchangeWaitingForAccountId, null, false), false);
+  // Older servers only mark the owner's own question to themselves.
+  assert.equal(agentExchangeWaitsForViewer(undefined, 'owner', true), true);
+  assert.equal(agentExchangeWaitsForViewer(undefined, 'owner', false), false);
 });
 
 test('ordinary text, ordered prose, and genuine errors survive presentation filtering', () => {

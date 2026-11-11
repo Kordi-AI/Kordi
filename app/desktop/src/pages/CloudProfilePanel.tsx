@@ -1,5 +1,5 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, X } from 'lucide-react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ErrorLine } from '@/components/ui/ErrorLine';
@@ -22,8 +22,8 @@ import {
   kordiIdLockedUntilLabel,
   localDateString,
   sanitizeKordiHandleInput,
-  timeZoneOptions,
 } from './cloudProfileDraft';
+import { CloudProfileAutoRows } from './CloudProfileAutoRows';
 import { KordiIdChangeConfirmDialog, KordiIdLockedDialog } from './CloudProfileKordiIdDialogs';
 import type { CloudProfileEditor } from './useCloudProfileEditor';
 
@@ -69,7 +69,6 @@ export function CloudProfilePanel({
   const idPrefix = useId();
   const id = (name: string) => `${idPrefix}-${name}`;
   const { fieldDraft, errors } = editor;
-  const zones = useMemo(() => timeZoneOptions(), []);
   const today = localDateString();
   const kordiIdPlaceholder = cloudProfileNumberPlaceholder(account);
   const kordiIdLockedUntil = kordiIdLockedUntilLabel(account);
@@ -96,11 +95,11 @@ export function CloudProfilePanel({
     void editor.save();
   };
 
-  const textField = (field: 'location' | 'website', label: string, placeholder: string) => (
+  const textField = (field: 'website', label: string, placeholder: string) => (
     <CloudProfileFieldRow label={label} htmlFor={id(field)} error={errors[field]} errorId={id(`${field}-error`)} invalid={Boolean(errors[field])}>
       <input
         id={id(field)}
-        inputMode={field === 'website' ? 'url' : undefined}
+        inputMode="url"
         value={fieldDraft[field]}
         maxLength={CLOUD_PROFILE_LIMITS[field]}
         onChange={(event) => editor.setField(field, event.currentTarget.value)}
@@ -172,23 +171,7 @@ export function CloudProfilePanel({
         <CloudProfileFieldRow label="About" htmlFor={id('about')} error={errors.about} errorId={id('about-error')} invalid={Boolean(errors.about)} top>
           <AboutTextarea id={id('about')} value={fieldDraft.about} onChange={(value) => editor.setField('about', value)} />
         </CloudProfileFieldRow>
-        {textField('location', 'Location', 'Add your location')}
-        <CloudProfileFieldRow label="Time zone" htmlFor={id('time-zone')} error={errors.timeZone} errorId={id('time-zone-error')} invalid={Boolean(errors.timeZone)}>
-          <select
-            id={id('time-zone')}
-            value={fieldDraft.timeZone}
-            onChange={(event) => editor.setField('timeZone', event.currentTarget.value)}
-            className="app-cloud-profile-input app-cloud-profile-select"
-            aria-invalid={Boolean(errors.timeZone) || undefined}
-          >
-            <option value="">Automatic</option>
-            {fieldDraft.timeZone && !zones.some((zone) => zone.value === fieldDraft.timeZone)
-              ? <option value={fieldDraft.timeZone}>{fieldDraft.timeZone}</option>
-              : null}
-            {zones.map((zone) => <option key={zone.value} value={zone.value}>{zone.label}</option>)}
-          </select>
-          <ChevronDown aria-hidden="true" className="app-cloud-profile-chevron h-3.5 w-3.5 shrink-0" />
-        </CloudProfileFieldRow>
+        <CloudProfileAutoRows account={account} editor={editor} id={id} />
         {textField('website', 'Website', 'Add your website')}
         <CloudProfileFieldRow label="Birthday" htmlFor={id('birthday')} error={errors.birthday} errorId={id('birthday-error')} invalid={Boolean(errors.birthday)}>
           <input

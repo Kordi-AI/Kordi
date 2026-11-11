@@ -261,7 +261,7 @@ fn upsert_message_in_transaction(
     super::group_reasoning::normalize(conn, Some(&existing_message), &mut request)?;
     let status = validate_status(request.status.clone(), "sent");
     if !can_apply_cloud_agent_turn_transition(&existing_message, &request, &status) {
-        return Ok(existing_message);
+        return adopt_earlier_cloud_group_agent_slot(conn, existing_message, &request);
     }
     let stable_agent_turn =
         existing_message.message_kind == "agent-turn" || request.message_kind == "agent-turn";
@@ -370,6 +370,43 @@ fn upsert_message_in_transaction(
     .map_err(|err| err.to_string())?;
 
     select_message(conn, &id)?.ok_or_else(|| "Unable to update canonical message".to_string())
+}
+
+/// A group agent's waiting row and its reply share one stable slot, and the
+/// reply keeps the waiting row's place in the timeline. History can replay
+/// the reply before the waiting row; the waiting row cannot reopen the reply,
+/// but the reply still moves to the earlier place, so a reload shows the
+/// same order as the live chat.
+fn adopt_earlier_cloud_group_agent_slot(
+    conn: &Connection,
+    existing: CanonicalSessionMessage,
+    request: &AppendCanonicalMessageRequest,
+) -> Result<CanonicalSessionMessage, String> {
+    let same_slot = existing.session_id == request.session_id
+        && existing.sender_identity_id == request.sender_identity_id
+        && existing.message_kind == "agent-turn"
+        && request.message_kind == "agent-turn"
+        && existing.source_transport.as_deref() == Some("cloud-group-agent")
+        && request.source_transport.as_deref() == Some("cloud-group-agent");
+    let Some(created_at_ms) = request
+        .created_at_ms
+        .filter(|value| same_slot && *value < existing.created_at_ms)
+    else {
+        return Ok(existing);
+    };
+    let sequence_num = chat_sync_sequence_num(conn, request)?
+        .map_or(existing.sequence_num, |value| {
+            value.min(existing.sequence_num)
+        });
+    conn.execute(
+        "UPDATE session_messages
+         SET created_at_ms = ?1, sequence_num = ?2, updated_at_ms = ?3
+         WHERE id = ?4",
+        params![created_at_ms, sequence_num, now_ms(), existing.id],
+    )
+    .map_err(|err| err.to_string())?;
+    select_message(conn, &existing.id)?
+        .ok_or_else(|| "Unable to update canonical message".to_string())
 }
 
 pub(crate) fn select_message_by_source(

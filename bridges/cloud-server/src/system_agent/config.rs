@@ -34,6 +34,11 @@ const SYSTEM_AGENT_OPENAI_AUTH_CHOICE: &str = "pip-service-api-key";
 pub const DEFAULT_SYSTEM_AGENT_OPENAI_BASE_URL: &str =
     crate::distribution::development_default("https://api.openai.com/v1");
 const SYSTEM_AGENT_OPENAI_SNAPSHOT_ID: &str = "pip-service-openai";
+/// Minutes a person's agent has to reply before the System agent picks up its
+/// task (`KORDI_SYSTEM_AGENT_STALL_MINUTES`).
+pub const DEFAULT_STALL_MINUTES: u32 = 10;
+/// Quiet minutes before a plan discussion is summed up (`..._SILENCE_MINUTES`).
+pub const DEFAULT_SILENCE_MINUTES: u32 = 10;
 
 #[derive(Clone)]
 pub struct SystemAgentProviderAuth {
@@ -159,6 +164,8 @@ pub struct PendingSystemAgentConfig {
     pub agent_id: String,
     pub name: String,
     pub subtitle: String,
+    pub stall_minutes: u32,
+    pub silence_minutes: u32,
     pub provider_auth: SystemAgentProviderAuth,
     /// The pools that serve System agent and Grounding runs. The default
     /// pool's System agent provider is `provider_auth`.
@@ -174,6 +181,10 @@ pub struct SystemAgentConfig {
     pub agent_id: String,
     pub name: String,
     pub subtitle: String,
+    /// Minutes a person's agent has to reply before the System agent steps in.
+    pub stall_minutes: u32,
+    /// Quiet minutes before the System agent sums up a plan discussion.
+    pub silence_minutes: u32,
     pub(super) provider_auth: SystemAgentProviderAuth,
     pub(crate) resource_pools: ResourcePoolRegistry,
 }
@@ -354,6 +365,17 @@ impl PendingSystemAgentConfig {
                 "KORDI_SYSTEM_AGENT_OWNER_EMAIL must be an email address",
             ));
         }
+        let stall_minutes = minutes(setting(&mut get, "STALL_MINUTES"), DEFAULT_STALL_MINUTES)
+            .ok_or(SystemAgentConfigError::Invalid(
+                "KORDI_SYSTEM_AGENT_STALL_MINUTES must be a whole number from 1 to 1440",
+            ))?;
+        let silence_minutes = minutes(
+            setting(&mut get, "SILENCE_MINUTES"),
+            DEFAULT_SILENCE_MINUTES,
+        )
+        .ok_or(SystemAgentConfigError::Invalid(
+            "KORDI_SYSTEM_AGENT_SILENCE_MINUTES must be a whole number from 1 to 1440",
+        ))?;
         let system_prompt =
             super::prompt::system_prompt(get("KORDI_SYSTEM_AGENT_PERSONA").as_deref())
                 .map_err(SystemAgentConfigError::Invalid)?;
@@ -373,6 +395,8 @@ impl PendingSystemAgentConfig {
                 "AGENT_SUBTITLE",
                 DEFAULT_SYSTEM_AGENT_SUBTITLE,
             ),
+            stall_minutes,
+            silence_minutes,
             provider_auth,
             resource_pools,
         }))
@@ -391,6 +415,8 @@ impl PendingSystemAgentConfig {
             agent_id: self.agent_id,
             name: self.name,
             subtitle: self.subtitle,
+            stall_minutes: self.stall_minutes,
+            silence_minutes: self.silence_minutes,
             provider_auth: self.provider_auth,
             resource_pools: self.resource_pools,
             system_prompt: self.system_prompt,
@@ -401,6 +427,16 @@ impl PendingSystemAgentConfig {
 impl SystemAgentConfig {
     pub fn provider_auth(&self) -> &SystemAgentProviderAuth {
         &self.provider_auth
+    }
+
+    /// How long a person's agent has to reply before the System agent steps in.
+    pub fn stall_window(&self) -> chrono::Duration {
+        chrono::Duration::minutes(i64::from(self.stall_minutes))
+    }
+
+    /// How long a plan discussion sits quiet before the System agent acts.
+    pub fn silence_window(&self) -> chrono::Duration {
+        chrono::Duration::minutes(i64::from(self.silence_minutes))
     }
 
     /// The pool set now. Keep the snapshot for one decision only: pools
@@ -425,6 +461,15 @@ impl SystemAgentConfig {
     }
 }
 
+/// Whole minutes from 1 to 1440, or `default` when unset.
+fn minutes(raw: Option<String>, default: u32) -> Option<u32> {
+    raw.map_or(Some(default), |raw| {
+        raw.parse()
+            .ok()
+            .filter(|minutes| (1..=1440).contains(minutes))
+    })
+}
+
 /// A System agent running as `account_id` with a synthetic key, for database
 /// tests that drive the real sweep.
 #[cfg(test)]
@@ -439,6 +484,8 @@ pub(crate) fn test_config(account_id: &str) -> SystemAgentConfig {
         agent_id: format!("system-agent-{account_id}"),
         name: DEFAULT_SYSTEM_AGENT_NAME.to_string(),
         subtitle: DEFAULT_SYSTEM_AGENT_SUBTITLE.to_string(),
+        stall_minutes: DEFAULT_STALL_MINUTES,
+        silence_minutes: DEFAULT_SILENCE_MINUTES,
         resource_pools: ResourcePoolRegistry::new(ResourcePools::from_system_agent(&provider_auth)),
         provider_auth,
     }

@@ -219,7 +219,7 @@ test('own group read receipts are not shown inline and are available from the me
   assert.match(markup, /data-message-delivery-glyph="double-check"/);
 });
 
-test('message context menu content lists read receipts when available', () => {
+test('message context menu content keeps dense metrics and shows no Seen row outside a group transcript', () => {
   const message: Message = {
     id: 'msg:read-receipts-menu',
     role: 'user',
@@ -249,13 +249,12 @@ test('message context menu content lists read receipts when available', () => {
   assert.match(markup, /Select/);
   assert.doesNotMatch(markup, />Edit</);
   assert.doesNotMatch(markup, />Delete</);
-  assert.match(markup, /data-message-context-menu-seen-row="true"/);
-  assert.match(markup, /2 Seen/);
-  assert.match(markup, /title="Seen by Alice, Bob"/);
+  // Readers load from the server inside a group transcript; a stored summary never draws the row.
+  assert.doesNotMatch(markup, /data-message-context-menu-seen-row/);
+  assert.doesNotMatch(markup, /2 Seen/);
   assert.doesNotMatch(markup, /Readers/);
   assert.doesNotMatch(markup, /data-message-read-receipts-context-content/);
-  // Rows and the seen line take their type from the shared dense menu, not inline sizes.
-  assert.match(markup, /app-message-context-menu-seen app-dense-menu-label/);
+  // Rows take their type from the shared dense menu, not inline sizes.
   assert.doesNotMatch(markup, /style="font-size/);
   assert.doesNotMatch(markup, /h-6 w-6/);
   assert.doesNotMatch(markup, /text-\[9\.5px\]/);

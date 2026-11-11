@@ -1,0 +1,5 @@
+# Lockfile entries name the official npm registry, whatever registry a
+# developer's own npm or Bun settings point at. A mirror in the lockfile makes
+# CI and image builds depend on that mirror being up.
+[install]
+registry = "https://registry.npmjs.org/"

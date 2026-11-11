@@ -51,10 +51,16 @@ fn lens(profile: &Profile) -> String {
     format!("Profile: {} ({kind} profile).{focus}\n{keep}", profile.name)
 }
 
+/// The general rules and the profile's lens, shared by builds and automatic
+/// updates.
+pub(super) fn card_rules(profile: &Profile) -> String {
+    format!("{RULES}\n\n{}", lens(profile))
+}
+
 /// The instructions for building `profile`'s card: the general rules, the
 /// profile's lens, and how to cite evidence.
 pub(super) fn system_prompt(profile: &Profile) -> String {
-    format!("{RULES}\n\n{}\n\n{EVIDENCE_RULES}", lens(profile))
+    format!("{}\n\n{EVIDENCE_RULES}", card_rules(profile))
 }
 
 /// Evidence gathered for a build, before the run cites it. `text` is the
@@ -185,25 +191,27 @@ pub(super) fn parse_reply(
     cited_indexes.dedup();
     let evidence = cited_indexes
         .into_iter()
-        .map(|index| {
-            let item = &gathered[index];
-            let snippet: String = item
-                .text
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ")
-                .chars()
-                .take(SNIPPET_CHARS)
-                .collect();
-            Evidence {
-                id: format!("e{}", index + 1),
-                source: item.source.clone(),
-                title: item.title.clone(),
-                date: item.date.clone(),
-                url: item.url.clone(),
-                snippet,
-            }
-        })
+        .map(|index| reference(format!("e{}", index + 1), &gathered[index]))
         .collect();
     Ok((topics, evidence))
+}
+
+/// A gathered item as the reference `id` the card keeps.
+pub(super) fn reference(id: String, item: &Gathered) -> Evidence {
+    let snippet: String = item
+        .text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(SNIPPET_CHARS)
+        .collect();
+    Evidence {
+        id,
+        source: item.source.clone(),
+        title: item.title.clone(),
+        date: item.date.clone(),
+        url: item.url.clone(),
+        snippet,
+    }
 }

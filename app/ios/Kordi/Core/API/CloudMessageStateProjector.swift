@@ -53,11 +53,10 @@ enum CloudMessageStateProjector {
         if executionState == .failed { return .failed }
         if executionState == .cancelled { return .cancelled }
         if message.readAt != nil { return .read }
-        // Kordi Cloud accepts and durably records the message before returning
-        // it. macOS therefore presents every successful outgoing write as
-        // delivered even if an older payload omitted deliveredAt.
-        if message.fromAccountId == ownAccountId { return .delivered }
-        return message.deliveredAt != nil ? .delivered : .sent
+        // Kordi Cloud records the message before returning it, so a successful
+        // write is sent (one tick) until someone reads it. There is no
+        // delivered state (#2455).
+        return .sent
     }
 
     static func groupDeliverySummary(
@@ -78,8 +77,10 @@ enum CloudMessageStateProjector {
             }
             return wire.readAt == nil ? [] : wire.toAccountId.nonEmpty.map { [$0] } ?? []
         }.filter { $0 != ownAccountId }).sorted()
+        // A canonical copy carries readAt from the read watermark, which stays
+        // set after the only reader leaves the group.
         return CloudGroupDeliverySummary(
-            state: readers.isEmpty ? .delivered : .read,
+            state: readers.isEmpty && copies.allSatisfy({ $0.readAt == nil }) ? .sent : .read,
             readByAccountIds: readers
         )
     }

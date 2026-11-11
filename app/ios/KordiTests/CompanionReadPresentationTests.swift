@@ -20,7 +20,7 @@ struct CompanionReadPresentationTests {
         store.saveMessages([
             ChatMessage(id: "companion-reply", conversationId: agent.id, conversationSequence: 1,
                 author: .agent, authorName: "Assistant", text: "Synthetic agent reply",
-                createdAt: Date(), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil)
+                createdAt: Date(), deliveryState: .sent, errorMessage: nil, requestMessageId: nil)
         ], conversationId: agent.id, accountId: accountID, hasEarlier: false)
         model.hydrateCachedMessages(for: agent)
         return (model, store, agent)
@@ -63,7 +63,7 @@ struct CompanionReadPresentationTests {
         model.upsertPreviewMessage(ChatMessage(
             id: "visible-next-reply", conversationId: agent.id, conversationSequence: 2,
             author: .agent, authorName: "Assistant", text: "A new reply in the open panel",
-            createdAt: Date(), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil))
+            createdAt: Date(), deliveryState: .sent, errorMessage: nil, requestMessageId: nil))
         for _ in 0..<150 {
             host.view.layoutIfNeeded()
             if model.conversations.first(where: { $0.id == agent.id })?.lastReadSequence == 2 { break }
@@ -117,7 +117,7 @@ struct CompanionReadPresentationTests {
         model.upsertPreviewMessage(ChatMessage(
             id: "next-reply", conversationId: agent.id, conversationSequence: 2,
             author: .agent, authorName: "Assistant", text: "Another synthetic reply",
-            createdAt: Date(), deliveryState: .delivered, errorMessage: nil, requestMessageId: nil))
+            createdAt: Date(), deliveryState: .sent, errorMessage: nil, requestMessageId: nil))
         #expect(await model.setConversationUnread(agent, unread: true))
         model.updateConversationReadPresentation(id: id, conversationID: agent.id,
             isPresented: true, isAppForeground: true, isAtLatest: true,

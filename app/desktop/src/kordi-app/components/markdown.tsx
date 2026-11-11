@@ -433,7 +433,7 @@ function MarkdownListView({
       )}
     >
       {list.items.map((item, index) => (
-        <li key={`${depth}-${index}`} className="space-y-1">
+        <li key={`${depth}-${index}`} className="space-y-1" data-markdown-list-item="true">
           <div className="flex items-start gap-2">
             {item.checked !== null ? (
               <span
@@ -445,7 +445,7 @@ function MarkdownListView({
                 {item.checked ? '✓' : ''}
               </span>
             ) : null}
-            <div className="min-w-0 space-y-2">{item.paragraphs.map((paragraph, paragraphIndex) => (
+            <div className="min-w-0 space-y-2" data-markdown-list-text="true">{item.paragraphs.map((paragraph, paragraphIndex) => (
               <div key={`${depth}-${index}-p-${paragraphIndex}`}><MarkdownInlineContent text={paragraph} {...inlineOptions} /></div>
             ))}</div>
           </div>

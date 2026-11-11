@@ -6,26 +6,6 @@ enum MessageAuthor: String, Codable, Hashable {
     case agent
 }
 
-enum MessageDeliveryState: String, Codable, Hashable {
-    case sending
-    case sent
-    case delivered
-    case read
-    case failed
-    case cancelled
-
-    var label: String {
-        switch self {
-        case .sending: "Sending"
-        case .sent: "Sent"
-        case .delivered: "Delivered"
-        case .read: "Seen"
-        case .failed: "Failed to send"
-        case .cancelled: "Canceled"
-        }
-    }
-}
-
 struct AgentExecutionStep: Identifiable, Codable, Hashable {
     enum State: String, Codable, Hashable {
         case pending
@@ -1182,6 +1162,9 @@ struct ChatMessage: Identifiable, Codable, Hashable {
     let conversationSequence: Int64?
     // Local outbox position; an empty anchor means the conversation start.
     var localTimelineAnchorID: String?
+    /// The place an agent reply takes in the timeline: the sequence of the
+    /// waiting row it replaced. Read state keeps using `conversationSequence`.
+    var timelineSequence: Int64?
     let author: MessageAuthor
     let authorName: String
     let senderOwnerName: String?
@@ -1262,8 +1245,8 @@ struct ChatMessage: Identifiable, Codable, Hashable {
     }
 
     static func timelinePrecedes(_ left: ChatMessage, _ right: ChatMessage) -> Bool {
-        let leftSequence = left.conversationSequence.flatMap { $0 > 0 ? $0 : nil }
-        let rightSequence = right.conversationSequence.flatMap { $0 > 0 ? $0 : nil }
+        let leftSequence = (left.timelineSequence ?? left.conversationSequence).flatMap { $0 > 0 ? $0 : nil }
+        let rightSequence = (right.timelineSequence ?? right.conversationSequence).flatMap { $0 > 0 ? $0 : nil }
         if let leftSequence, let rightSequence,
            leftSequence != rightSequence {
             return leftSequence < rightSequence
@@ -1279,6 +1262,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         conversationId: String,
         conversationSequence: Int64? = nil,
         localTimelineAnchorID: String? = nil,
+        timelineSequence: Int64? = nil,
         author: MessageAuthor,
         authorName: String,
         senderOwnerName: String? = nil,
@@ -1312,6 +1296,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         self.conversationId = conversationId
         self.conversationSequence = conversationSequence
         self.localTimelineAnchorID = localTimelineAnchorID
+        self.timelineSequence = timelineSequence
         self.author = author
         self.authorName = authorName
         self.senderOwnerName = senderOwnerName
@@ -1398,7 +1383,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, clientMessageId, conversationId, conversationSequence, author, authorName, senderOwnerName, text, createdAt, editedAt, cloudMessageVersion, deliveryState, errorMessage
-        case localTimelineAnchorID
+        case localTimelineAnchorID, timelineSequence
         case requestMessageId, readByCount, readByAccountIds, attachments, replyToMessageId, reactionTargetMessageId, messageAction
         case messageKind, voiceMessage
         case agentExecution
@@ -1415,6 +1400,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         conversationId = try container.decode(String.self, forKey: .conversationId)
         conversationSequence = try container.decodeIfPresent(Int64.self, forKey: .conversationSequence)
         localTimelineAnchorID = try container.decodeIfPresent(String.self, forKey: .localTimelineAnchorID)
+        timelineSequence = try container.decodeIfPresent(Int64.self, forKey: .timelineSequence)
         author = try container.decode(MessageAuthor.self, forKey: .author)
         authorName = try container.decode(String.self, forKey: .authorName)
         senderOwnerName = try container.decodeIfPresent(String.self, forKey: .senderOwnerName)
@@ -1502,7 +1488,7 @@ enum PinHistoryTimeline {
             guard event.kind == "pinned" || event.kind == "unpinned", let date = event.timestamp else { return nil }
             return ChatMessage(id: "pin-history:\(event.id)", conversationId: conversationID,
                 author: .person, authorName: "", text: label(event), createdAt: date,
-                deliveryState: .delivered, errorMessage: nil, requestMessageId: nil, messageKind: "session_pin_activity")
+                deliveryState: .sent, errorMessage: nil, requestMessageId: nil, messageKind: "session_pin_activity")
         }
         var result: [ChatMessage] = []
         var index = 0

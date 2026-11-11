@@ -7,6 +7,7 @@ import {
   mentionHandleForLabel,
   sharedCloudAgentMentionCandidatesForConversation,
   shouldIncludeLocalAgentMentionForConversation,
+  uniqueAgentMentionCandidates,
   type MentionScopeConversation,
 } from '@/features/chat/messageActions/mentions';
 import { cloudAgentDefinitionToSharedCloudAgentSummary, type CloudAgentDefinition, type SharedCloudAgentSummary } from '@/features/cloud/cloudAgents';
@@ -199,10 +200,18 @@ export function buildCollaborationMentionTargetsByScope({
     }
 
     const collaborationCandidates = filterCollaborationMentionCandidatesForHost(buildCollaborationMentionCandidates(desktopCollaborationState ?? null), activeHost);
-    for (const candidate of filterCollaborationMentionCandidatesForConversation(collaborationCandidates, conversation)) {
+    const activeHostAccountId = activeHost?.humanId?.trim() || activeHost?.nodeId?.trim() || null;
+    // Same-named agents are told apart by their owner row, not by text.
+    const uniqueAgents = uniqueAgentMentionCandidates(
+      filterCollaborationMentionCandidatesForConversation(collaborationCandidates, conversation),
+      sharedCloudAgentMentionCandidatesForConversation(sharedCloudAgents, conversation, activeHostAccountId),
+      options.filter((option) => option.targetKind === 'agent').map((option) => option.value),
+    );
+    for (const candidate of uniqueAgents.collaboration) {
       const display = collaborationMentionCandidateOptionText(candidate);
       pushOption({
-        value: candidate.handle,
+        // People see the friendly handle; the picked option carries the id.
+        value: candidate.baseHandle ?? candidate.handle,
         label: display.label,
         detail: display.detail,
         targetKind: candidate.targetKind,
@@ -223,10 +232,9 @@ export function buildCollaborationMentionTargetsByScope({
       });
     }
 
-    const activeHostAccountId = activeHost?.humanId?.trim() || activeHost?.nodeId?.trim() || null;
-    for (const candidate of sharedCloudAgentMentionCandidatesForConversation(sharedCloudAgents, conversation, activeHostAccountId)) {
+    for (const candidate of uniqueAgents.shared) {
       pushOption({
-        value: candidate.handle,
+        value: candidate.baseHandle ?? candidate.handle,
         label: candidate.displayLabel,
         detail: candidate.detailLabel,
         targetKind: 'agent',

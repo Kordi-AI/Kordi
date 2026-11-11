@@ -36,6 +36,7 @@ PUT  /v2/chat/conversations/:conversationId/messages/:messageId/reactions
 DELETE /v2/chat/conversations/:conversationId/messages/:messageId/reactions
 PUT  /v2/chat/conversations/:conversationId/delivered
 PUT  /v2/chat/conversations/:conversationId/read
+GET  /v2/chat/conversations/:conversationId/messages/:messageId/readers?limit=N
 PUT  /v2/chat/conversations/:conversationId/preferences
 GET  /v2/chat/sync/bootstrap
 GET  /v2/chat/sync?cursor=...
@@ -43,7 +44,7 @@ POST /v2/chat/realtime/ticket
 WS   /v2/chat/realtime
 ```
 
-PostgreSQL is the server source of truth. Every accepted message has one canonical UUID, a conversation sequence, a stable client-generated idempotency UUID, and durable per-user sync events committed in the same transaction. Retrying the same operation returns the original result. Read and delivery cursors are monotonic. Shared titles and account-specific titles are versioned conversation preferences and travel through the same durable stream.
+PostgreSQL is the server source of truth. Every accepted message has one canonical UUID, a conversation sequence, a stable client-generated idempotency UUID, and durable per-user sync events committed in the same transaction. Retrying the same operation returns the original result. Read and delivery cursors are monotonic. A `delivery_cursor.updated` event goes only to the member whose cursor moved. A read move writes a read mark and raises the read watermark of each other active author it passes (the highest of their own messages another member has read, `read_outbox_sequence` in member snapshots); `read_cursor.updated` goes to the mover and to each author whose watermark rose, whose copy adds `read_outbox: { conversation_id, sequence }`. Other members keep an older copy of that member's cursors until bootstrap or a conversation snapshot refreshes it. An author lists who read a message, with read times from marks kept for seven days, through the readers route; it answers 409 `readers_unavailable` above 100 active members. Shared titles and account-specific titles are versioned conversation preferences and travel through the same durable stream.
 
 The UI reads the account-scoped local database. A sync batch applies entity snapshots and advances its opaque cursor in one local transaction. Unknown critical events stop the client before the cursor advances. Cursor expiry requires a new consistent bootstrap.
 

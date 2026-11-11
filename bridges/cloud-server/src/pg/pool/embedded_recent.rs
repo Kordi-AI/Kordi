@@ -1,8 +1,8 @@
-//! Embedded Postgres migrations from version 66 on, in version order.
+//! Embedded Postgres migrations from version 66 to 192, in version order.
 
 use super::{migration_entry::migration, EmbeddedMigration};
 
-/// Migrations from version 66 on.
+/// Migrations from version 66 to 192.
 pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
     EmbeddedMigration {
         version: 66,
@@ -474,4 +474,21 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
         "common ground link errors",
         "0187_common_ground_link_errors.sql"
     ),
+    migration!(
+        188,
+        "common ground auto rebuild",
+        "0188_common_ground_auto_rebuild.sql"
+    ),
+    migration!(
+        189,
+        "document outside room revision",
+        "0189_document_outside_room_revision.sql"
+    ),
+    migration!(
+        190,
+        "provider login renewal",
+        "0190_provider_login_renewal.sql"
+    ),
+    migration!(191, "profile field modes", "0191_profile_field_modes.sql"),
+    migration!(192, "chat read outbox", "0192_chat_read_outbox.sql"),
 ];

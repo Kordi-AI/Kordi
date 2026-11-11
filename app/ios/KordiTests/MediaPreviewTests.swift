@@ -398,7 +398,7 @@ final class MediaPreviewTests: XCTestCase {
             authorName: "Alice",
             text: "",
             createdAt: Date(),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             attachments: [sticker],
@@ -423,7 +423,7 @@ final class MediaPreviewTests: XCTestCase {
             authorName: "Alice",
             text: "",
             createdAt: Date(),
-            deliveryState: .delivered,
+            deliveryState: .sent,
             errorMessage: nil,
             requestMessageId: nil,
             attachments: [legacySticker],
@@ -552,7 +552,6 @@ final class MediaPreviewTests: XCTestCase {
             for state in [
                 MessageDeliveryState.sending,
                 .sent,
-                .delivered,
                 .read,
                 .cancelled,
             ] {

@@ -1,5 +1,5 @@
 export type AttachmentImageDeliveryVisual = {
-  kind: 'uploading' | 'delivering' | 'sent' | 'delivered' | 'read' | 'partial' | 'failed';
+  kind: 'uploading' | 'delivering' | 'sent' | 'read' | 'partial' | 'failed';
   label: string;
 };
 

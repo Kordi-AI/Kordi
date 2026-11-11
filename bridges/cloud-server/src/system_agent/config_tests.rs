@@ -276,3 +276,46 @@ fn service_rejects_unknown_provider() {
         .map(|value| value.to_string()))
     .is_err());
 }
+
+#[test]
+fn stall_minutes_default_to_ten_and_reject_nonsense() {
+    let key = ("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-test");
+    let default = configured(&[key]).unwrap();
+    assert_eq!(default.stall_minutes, super::DEFAULT_STALL_MINUTES);
+    assert_eq!(default.stall_minutes, 10);
+    let custom = configured(&[key, ("KORDI_SYSTEM_AGENT_STALL_MINUTES", "3")]).unwrap();
+    assert_eq!(custom.stall_minutes, 3);
+    assert_eq!(
+        custom.unprovisioned().stall_window(),
+        chrono::Duration::minutes(3)
+    );
+    for bad in ["0", "-1", "soon", "1441"] {
+        let values = HashMap::from([key, ("KORDI_SYSTEM_AGENT_STALL_MINUTES", bad)]);
+        assert!(
+            PendingSystemAgentConfig::from_lookup(|key| values.get(key).map(|v| v.to_string()))
+                .is_err(),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn silence_minutes_default_to_ten_and_reject_nonsense() {
+    let key = ("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-test");
+    let default = configured(&[key]).unwrap();
+    assert_eq!(default.silence_minutes, super::DEFAULT_SILENCE_MINUTES);
+    assert_eq!(default.silence_minutes, 10);
+    let custom = configured(&[key, ("KORDI_SYSTEM_AGENT_SILENCE_MINUTES", "4")]).unwrap();
+    assert_eq!(
+        custom.unprovisioned().silence_window(),
+        chrono::Duration::minutes(4)
+    );
+    for bad in ["0", "later", "1441"] {
+        let values = HashMap::from([key, ("KORDI_SYSTEM_AGENT_SILENCE_MINUTES", bad)]);
+        assert!(
+            PendingSystemAgentConfig::from_lookup(|key| values.get(key).map(|v| v.to_string()))
+                .is_err(),
+            "{bad}"
+        );
+    }
+}

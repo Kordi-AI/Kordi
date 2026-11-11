@@ -52,6 +52,14 @@ extension CloudAPIClient {
         )
     }
 
+    func setCommonGroundAutoRebuild(token: String, autoRebuild: Bool, profileId: String? = nil) async throws -> CommonGroundOwnerView {
+        struct Body: Encodable { let autoRebuild: Bool; let profileId: String? }
+        return try await send(
+            path: cg("settings"), method: "PUT", token: token,
+            body: Body(autoRebuild: autoRebuild, profileId: profileId), fallback: "Could not change automatic rebuilds."
+        )
+    }
+
     // MARK: Profiles
 
     func commonGroundProfiles(token: String) async throws -> CommonGroundProfileList {

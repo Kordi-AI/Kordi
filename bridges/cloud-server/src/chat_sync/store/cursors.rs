@@ -1,3 +1,4 @@
+use super::member_snapshots::member_from_row;
 use super::support::*;
 use super::*;
 use std::collections::HashMap;
@@ -14,168 +15,10 @@ type BootstrapMemberRow = (
     i32,
     i64,
     i64,
+    i64,
     DateTime<Utc>,
     Option<DateTime<Utc>>,
 );
-
-#[derive(Clone, Copy)]
-enum CursorKind {
-    Delivered,
-    Read,
-}
-
-impl CursorKind {
-    fn operation_kind(self) -> &'static str {
-        match self {
-            Self::Delivered => "conversation.delivery.advance",
-            Self::Read => "conversation.read.advance",
-        }
-    }
-
-    fn event_type(self) -> &'static str {
-        match self {
-            Self::Delivered => "delivery_cursor.updated",
-            Self::Read => "read_cursor.updated",
-        }
-    }
-}
-
-async fn advance_conversation_cursor(
-    pool: &PgPool,
-    account_id: &str,
-    conversation_id: Uuid,
-    request: AdvanceConversationCursorRequest,
-    kind: CursorKind,
-) -> Result<ConversationCursorSnapshot, StoreError> {
-    if request.sequence < 0 {
-        return Err(StoreError::InvalidInput(
-            "cursor sequence cannot be negative",
-        ));
-    }
-    let request_fingerprint = fingerprint(&CursorIntent {
-        conversation_id,
-        sequence: request.sequence,
-    })?;
-    let mut transaction = pool.begin().await?;
-    advisory_operation_lock(&mut transaction, account_id, request.client_operation_id).await?;
-    if let Some(existing) = existing_operation::<ConversationCursorSnapshot>(
-        &mut transaction,
-        account_id,
-        request.client_operation_id,
-        kind.operation_kind(),
-        &request_fingerprint,
-    )
-    .await?
-    {
-        transaction.commit().await?;
-        return Ok(existing);
-    }
-
-    let latest: Option<(i64,)> = query_as(
-        "SELECT latest_message_sequence FROM cloud_chat_conversations \
-         WHERE conversation_id = $1",
-    )
-    .bind(conversation_id)
-    .fetch_optional(&mut *transaction)
-    .await?;
-    let latest = latest.ok_or(StoreError::NotFound)?.0;
-    if request.sequence > latest {
-        return Err(StoreError::InvalidInput(
-            "cursor sequence is beyond the conversation head",
-        ));
-    }
-    let current: Option<(i64, i64)> = query_as(
-        "SELECT last_delivered_sequence, last_read_sequence \
-         FROM cloud_chat_conversation_members \
-         WHERE conversation_id = $1 AND account_id = $2 AND membership_state = 'active' \
-         FOR UPDATE",
-    )
-    .bind(conversation_id)
-    .bind(account_id)
-    .fetch_optional(&mut *transaction)
-    .await?;
-    let Some((current_delivered, current_read)) = current else {
-        return Err(StoreError::Forbidden);
-    };
-    let (delivered, read) = match kind {
-        CursorKind::Delivered => (current_delivered.max(request.sequence), current_read),
-        CursorKind::Read => (
-            current_delivered.max(request.sequence),
-            current_read.max(request.sequence),
-        ),
-    };
-    let changed = delivered != current_delivered || read != current_read;
-    if changed {
-        query(
-            "UPDATE cloud_chat_conversation_members \
-             SET last_delivered_sequence = $1, last_read_sequence = $2 \
-             WHERE conversation_id = $3 AND account_id = $4",
-        )
-        .bind(delivered)
-        .bind(read)
-        .bind(conversation_id)
-        .bind(account_id)
-        .execute(&mut *transaction)
-        .await?;
-    }
-    let cursor = ConversationCursorSnapshot {
-        conversation_id,
-        account_id: account_id.to_string(),
-        last_delivered_sequence: delivered,
-        last_read_sequence: read,
-    };
-    record_operation(
-        &mut transaction,
-        account_id,
-        request.client_operation_id,
-        kind.operation_kind(),
-        &request_fingerprint,
-        &cursor,
-    )
-    .await?;
-    if changed {
-        let payload = json!({ "cursor": &cursor });
-        for member in active_member_ids(&mut transaction, conversation_id).await? {
-            insert_sync_event(
-                &mut transaction,
-                &member,
-                kind.event_type(),
-                Some(conversation_id),
-                Some(conversation_id),
-                None,
-                &payload,
-            )
-            .await?;
-        }
-    }
-    transaction.commit().await?;
-    Ok(cursor)
-}
-
-pub async fn advance_delivery_cursor(
-    pool: &PgPool,
-    account_id: &str,
-    conversation_id: Uuid,
-    request: AdvanceConversationCursorRequest,
-) -> Result<ConversationCursorSnapshot, StoreError> {
-    advance_conversation_cursor(
-        pool,
-        account_id,
-        conversation_id,
-        request,
-        CursorKind::Delivered,
-    )
-    .await
-}
-
-pub async fn advance_read_cursor(
-    pool: &PgPool,
-    account_id: &str,
-    conversation_id: Uuid,
-    request: AdvanceConversationCursorRequest,
-) -> Result<ConversationCursorSnapshot, StoreError> {
-    advance_conversation_cursor(pool, account_id, conversation_id, request, CursorKind::Read).await
-}
 
 pub async fn history(
     pool: &PgPool,
@@ -377,10 +220,13 @@ pub async fn bootstrap(pool: &PgPool, account_id: &str) -> Result<BootstrapSnaps
                 account.avatar_url, agent.display_name, agent.avatar_url, \
                 member.role, member.membership_state, member.version, \
                 member.last_delivered_sequence, member.last_read_sequence, \
-                member.joined_at, member.left_at \
+                COALESCE(outbox.sequence, 0), member.joined_at, member.left_at \
          FROM cloud_chat_conversation_members member \
          JOIN cloud_accounts account ON account.account_id = member.account_id \
          JOIN cloud_default_agent_profiles agent ON agent.owner_account_id = member.account_id \
+         LEFT JOIN cloud_chat_read_outbox outbox \
+           ON outbox.conversation_id = member.conversation_id \
+          AND outbox.account_id = member.account_id \
          WHERE member.conversation_id = ANY($1) \
          ORDER BY member.conversation_id ASC, member.account_id ASC",
     )
@@ -394,7 +240,7 @@ pub async fn bootstrap(pool: &PgPool, account_id: &str) -> Result<BootstrapSnaps
             .or_default()
             .push(member_from_row((
                 row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10, row.11,
-                row.12,
+                row.12, row.13,
             )));
     }
     let conversations = conversation_rows

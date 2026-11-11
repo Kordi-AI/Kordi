@@ -2,10 +2,12 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import { cloudApiBaseUrl } from '@/features/cloud/cloudApiEnvironment';
 import { CLOUD_SESSION_CHANGED_EVENT, CLOUD_SESSION_SIGNED_OUT_EVENT } from '@/features/cloud/session';
+import { subscribeCardHints } from './cardHints';
 import { createCommonGroundClient } from './client';
 import { COMMON_GROUND_PAIR_LINK_EVENT, takePendingPairLink } from './pairLink';
 import { localProfileMemory } from './profiles';
 import { CommonGroundStore } from './store';
+import { requestCardRefresh } from './storeAutoRebuild';
 import { redeemPairLink } from './storePairing';
 import { startCommonGroundPolling } from './polling';
 
@@ -32,16 +34,24 @@ export function commonGroundStoreFor(accountId: string, profiles = false): Commo
   return store;
 }
 
-/** Store state, with polling while mounted and the window is visible, and a refetch when it becomes visible again. */
+/**
+ * Store state, with polling while mounted and the window is visible, a refetch when it becomes
+ * visible again, and a refetch of the cards when a card build lands (`common_ground.card.updated`).
+ */
 export function useCommonGround(store: CommonGroundStore) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   useEffect(() => {
     if (!store.getSnapshot().loaded) void store.loadHome();
     else if (store.top().name === 'home') void store.loadRooms();
     if (store.top().name !== 'home') void store.loadScreen();
-    return startCommonGroundPolling(() => store.poll(), {
+    const stopHints = subscribeCardHints(() => { void requestCardRefresh(store); });
+    const stopPolling = startCommonGroundPolling(() => store.poll(), {
       win: window, doc: document, schedule: setTimeout, cancel: clearTimeout,
     });
+    return () => {
+      stopHints();
+      stopPolling();
+    };
   }, [store]);
   return state;
 }

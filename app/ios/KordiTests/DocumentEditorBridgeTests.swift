@@ -133,6 +133,43 @@ final class DocumentEditorBridgeTests: XCTestCase {
         try await waitUntil { scripts.values.contains { $0.hasPrefix("window.kordiNative.socket(\"s1\",\"close\"") && $0.contains("4403") } }
     }
 
+    func testFramesSentJustBeforeSocketCloseReachTheSocketFirst() async throws {
+        let (session, scripts, transport) = makeSession()
+        session.handle(.socketOpen(socket: "s1", path: "/v1/cloud/documents/att_doc/collab?ticket=dct_1"))
+        try await waitUntil { scripts.values.contains(DocumentEditorScript.socket("s1", "open")) }
+        let socket = try XCTUnwrap(transport.sockets.first)
+        for byte in UInt8(0)..<10 { session.handle(.socketSend(socket: "s1", data: Data([byte]))) }
+        session.handle(.socketClose(socket: "s1"))
+        session.handle(.socketSend(socket: "s1", data: Data([99])))
+        try await waitUntil { socket.isClosed }
+        XCTAssertEqual(socket.sentWhenClosed, (UInt8(0)..<10).map { Data([$0]) })
+        XCTAssertFalse(socket.sent.contains(Data([99])))
+    }
+
+    func testCloseWaitsForQueuedFramesBeforeClosingSockets() async throws {
+        let (session, scripts, transport) = makeSession()
+        session.handle(.socketOpen(socket: "s1", path: "/v1/cloud/documents/att_doc/collab?ticket=dct_1"))
+        try await waitUntil { scripts.values.contains(DocumentEditorScript.socket("s1", "open")) }
+        let socket = try XCTUnwrap(transport.sockets.first)
+        for byte in UInt8(0)..<10 { session.handle(.socketSend(socket: "s1", data: Data([byte]))) }
+        await session.close()
+        XCTAssertTrue(socket.isClosed)
+        XCTAssertEqual(socket.sentWhenClosed, (UInt8(0)..<10).map { Data([$0]) })
+    }
+
+    func testASendThatNeverCompletesDoesNotHoldCloseBeyondTheTimeout() async throws {
+        let (session, scripts, transport) = makeSession(closeTimeout: .milliseconds(100))
+        session.handle(.socketOpen(socket: "s1", path: "/v1/cloud/documents/att_doc/collab?ticket=dct_1"))
+        try await waitUntil { scripts.values.contains(DocumentEditorScript.socket("s1", "open")) }
+        let socket = try XCTUnwrap(transport.sockets.first)
+        socket.stallsSends = true
+        session.handle(.socketSend(socket: "s1", data: Data([1])))
+        let started = ContinuousClock.now
+        await session.close()
+        XCTAssertLessThan(ContinuousClock.now - started, .seconds(2))
+        XCTAssertTrue(socket.isClosed)
+    }
+
     func testSocketWithoutATicketClosesAtOnce() {
         let (session, scripts, transport) = makeSession()
         session.handle(.socketOpen(socket: "s1", path: "/v1/cloud/documents/att_doc/collab"))
@@ -180,12 +217,12 @@ final class DocumentEditorBridgeTests: XCTestCase {
 
     private final class Scripts { var values: [String] = [] }
 
-    private func makeSession() -> (DocumentEditorSession, Scripts, StubTransport) {
+    private func makeSession(closeTimeout: Duration = .seconds(2)) -> (DocumentEditorSession, Scripts, StubTransport) {
         let transport = StubTransport()
         let session = DocumentEditorSession(
             attachmentId: attachmentId, title: "Plan",
             user: DocumentEditorUser(name: "Priya", accountId: "acct_priya"),
-            transport: transport
+            transport: transport, closeTimeout: closeTimeout
         )
         let scripts = Scripts()
         session.evaluate = { scripts.values.append($0) }
@@ -237,6 +274,8 @@ private final class StubTransport: DocumentEditorTransport {
 private final class StubSocket: DocumentEditorSocket, @unchecked Sendable {
     private let lock = NSLock()
     private var _sent: [Data] = []
+    private var _sentWhenClosed: [Data]?
+    private var _stalls = false
     private var continuation: AsyncThrowingStream<Data, Error>.Continuation?
     private var iterator: AsyncThrowingStream<Data, Error>.AsyncIterator
     private(set) var closeCode = 1006
@@ -250,7 +289,17 @@ private final class StubSocket: DocumentEditorSocket, @unchecked Sendable {
 
     var sent: [Data] { lock.withLock { _sent } }
 
+    /// Makes sends wait until the socket is closed.
+    var stallsSends: Bool {
+        get { lock.withLock { _stalls } }
+        set { lock.withLock { _stalls = newValue } }
+    }
+    var isClosed: Bool { lock.withLock { _sentWhenClosed != nil } }
+    /// The frames the socket had received when it was closed.
+    var sentWhenClosed: [Data] { lock.withLock { _sentWhenClosed ?? [] } }
+
     func send(_ data: Data) async throws {
+        while stallsSends, !isClosed { try await Task.sleep(for: .milliseconds(5)) }
         // A short, varying delay: frames still have to arrive in order.
         try await Task.sleep(for: .milliseconds(Int.random(in: 0...3)))
         lock.withLock { _sent.append(data) }
@@ -268,5 +317,8 @@ private final class StubSocket: DocumentEditorSocket, @unchecked Sendable {
         continuation?.finish()
     }
 
-    func close() { continuation?.finish() }
+    func close() {
+        lock.withLock { if _sentWhenClosed == nil { _sentWhenClosed = _sent } }
+        continuation?.finish()
+    }
 }

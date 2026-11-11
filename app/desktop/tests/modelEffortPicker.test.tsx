@@ -161,6 +161,18 @@ test('removed accounts are explicit and recovery never silently switches provide
   } finally { await h.cleanup(); }
 });
 
+test('the account row lists every connected account and another provider opens its first model', async () => {
+  const h=await harness();
+  try {
+    await h.click('[aria-label^="Select model,"]'); await h.click('.app-model-picker-account');
+    const text=document.querySelector('[role=dialog]')?.textContent ?? '';
+    for (const label of ['Work','Personal','Claude team']) assert.ok(text.includes(label), label);
+    await h.text('Claude team'); assert.equal(h.saves.length,0); await h.text('Change account');
+    assert.equal(h.saves[0].providerOption?.value,'anthropic::profile:team');
+    assert.equal(h.saves[0].model,'anthropic/claude-fable-5-1');
+  } finally { await h.cleanup(); }
+});
+
 test('effort menu has supported steps, no captions, reset, keyboard commit, and Escape focus restoration', async () => {
   const h=await harness();
   try {

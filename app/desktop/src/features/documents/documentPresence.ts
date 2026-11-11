@@ -10,4 +10,10 @@ export function presenceColor(accountId: string) {
 /** Someone else in the document's collaboration room. */
 export type DocumentPresencePeer = { clientId: number; name: string; color: string; accountId: string | null };
 
-export type DocumentCollabState = { status: 'connecting' | 'connected' | 'offline'; peers: DocumentPresencePeer[] };
+/**
+ * The collaboration room as the reader sees it. `bound`: the editor edits the room's Y document (from binding until
+ * it unmounts, across reconnects); the room then carries every edit and revisioned saves stay off.
+ */
+export type DocumentCollabState = { status: 'connecting' | 'connected' | 'offline'; peers: DocumentPresencePeer[]; bound: boolean };
+
+export const NO_COLLAB: DocumentCollabState = { status: 'offline', peers: [], bound: false };

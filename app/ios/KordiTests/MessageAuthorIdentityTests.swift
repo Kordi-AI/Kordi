@@ -162,7 +162,7 @@ final class MessageAuthorIdentityTests: XCTestCase {
         ChatMessage(
             id: UUID().uuidString, conversationId: "group:random", author: author, authorName: authorName,
             senderOwnerName: ownerName, text: "Test received", createdAt: .distantPast,
-            deliveryState: .delivered, errorMessage: nil, requestMessageId: nil
+            deliveryState: .sent, errorMessage: nil, requestMessageId: nil
         )
     }
 
@@ -191,7 +191,7 @@ final class MessageAuthorIdentityTests: XCTestCase {
     private func message(_ id: String, clientID: String? = nil, author: MessageAuthor = .me) -> ChatMessage {
         ChatMessage(id: id, clientMessageId: clientID, conversationId: "direct-test", author: author,
             authorName: author == .me ? "You" : "Morgan", text: "A synthetic message",
-            createdAt: .distantPast, deliveryState: .delivered, errorMessage: nil, requestMessageId: nil)
+            createdAt: .distantPast, deliveryState: .sent, errorMessage: nil, requestMessageId: nil)
     }
 
     @Test func desktopQuoteResolvesOriginalSenderAvatarAndReplyCount() throws {

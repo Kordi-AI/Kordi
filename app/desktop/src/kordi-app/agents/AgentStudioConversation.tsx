@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LoaderCircle, Send, StopCircle } from 'lucide-react';
+import { LoaderCircle, ArrowUp, StopCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ErrorLine } from '@/components/ui/ErrorLine';
@@ -530,7 +530,7 @@ export function AgentStudioConversation({
                   disabled={opening || !sessionId || (!draft.trim() && attachments.length === 0)}
                   onClick={() => void submit()}
                 >
-                  <Send className="h-4 w-4" />
+                  <ArrowUp className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" />
                 </Button>
               )}
             </div>

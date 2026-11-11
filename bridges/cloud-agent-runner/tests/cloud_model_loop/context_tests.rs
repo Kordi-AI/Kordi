@@ -116,6 +116,7 @@ async fn runtime_identity_is_frozen_across_tool_calls_and_appended_after_history
         requester_account_id: first.requester_account_id.clone(),
         requester_name: "Visitor".into(),
         request_policy: None,
+        conversation_context: None,
     };
     first.turn_identity = Some(identity.clone());
     first.history_messages = vec![

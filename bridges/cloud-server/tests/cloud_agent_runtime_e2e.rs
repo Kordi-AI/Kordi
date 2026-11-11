@@ -405,6 +405,10 @@ mod attachments;
 mod avatar_assets;
 #[path = "cloud_agent_runtime_e2e/calendar.rs"]
 mod calendar;
+#[path = "cloud_agent_runtime_e2e/calendar_availability.rs"]
+mod calendar_availability;
+#[path = "cloud_agent_runtime_e2e/calendar_member_availability.rs"]
+mod calendar_member_availability;
 #[path = "cloud_agent_runtime_e2e/claims.rs"]
 mod claims;
 #[path = "cloud_agent_runtime_e2e/cloud_subsessions.rs"]
@@ -477,3 +481,7 @@ mod signup_email_fixture;
 
 #[path = "cloud_agent_runtime_e2e/agent_exchanges.rs"]
 mod agent_exchanges;
+#[path = "cloud_agent_runtime_e2e/agent_plan_cards.rs"]
+mod agent_plan_cards;
+#[path = "cloud_agent_runtime_e2e/agent_plan_cards_resume.rs"]
+mod agent_plan_cards_resume;

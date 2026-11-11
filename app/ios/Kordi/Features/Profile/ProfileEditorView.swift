@@ -18,6 +18,9 @@ struct ProfileSettingsView: View {
     @State private var isPickingPhoto = false
     @State private var isPickingTimeZone = false
     @State private var isEditingBirthday = false
+    @State private var isLocating = false
+    @State private var locationNote: String?
+    @ObservedObject private var locator = CommonGroundNearbyLocator.shared
 
     private static let labelWidth: CGFloat = 96
     private static let avatarSize: CGFloat = 80
@@ -81,7 +84,13 @@ struct ProfileSettingsView: View {
             }
         }
         .navigationDestination(isPresented: $isPickingTimeZone) {
-            TimeZonePickerView(selection: $draft.timeZone)
+            TimeZonePickerView(selection: Binding(
+                get: { draft.timeZoneMode == ProfileFieldMode.automatic ? "" : draft.timeZone },
+                set: { zone in
+                    draft.timeZoneMode = zone.isEmpty ? ProfileFieldMode.automatic : ProfileFieldMode.manual
+                    draft.timeZone = zone.isEmpty ? TimeZone.current.identifier : zone
+                }
+            ))
         }
         .confirmationDialog("Profile photo", isPresented: $isChoosingAvatar, titleVisibility: .hidden) {
             Button("Upload photo") { isPickingPhoto = true }
@@ -170,11 +179,7 @@ struct ProfileSettingsView: View {
                     .lineLimit(1...4)
                     .foregroundStyle(valueColor(.about))
             }
-            row("Location", field: .location) {
-                TextField("Location", text: capped(\.location, ProfileDraft.locationLimit), prompt: placeholder("Add your location"))
-                    .textContentType(.addressCityAndState)
-                    .foregroundStyle(valueColor(.location))
-            }
+            locationRow
             timeZoneRow
             row("Website", field: .website) {
                 TextField("Website", text: capped(\.website, ProfileDraft.websiteLimit), prompt: placeholder("Add your website"))
@@ -232,16 +237,78 @@ struct ProfileSettingsView: View {
         }
     }
 
+    // MARK: Automatic Location and Time zone (#2439)
+
+    private var locationAutomatic: Bool { draft.locationMode == ProfileFieldMode.automatic }
+
+    private var locationRow: some View {
+        row("Location", field: .location) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    TextField("Location", text: Binding(
+                        // While automatic on both sides, show the device's latest city.
+                        get: { draft.deviceOwnsLocation(saved: savedDraft) ? savedDraft.location : draft.location },
+                        set: { value in
+                            draft.location = ProfileDraft.capped(value, ProfileDraft.locationLimit)
+                            draft.locationMode = ProfileFieldMode.manual
+                            locationNote = nil
+                        }
+                    ), prompt: placeholder(isLocating ? "Locating…" : "Add your location"))
+                    .textContentType(.addressCityAndState)
+                    .foregroundStyle(valueColor(.location))
+                    .disabled(isLocating)
+                    Button { toggleAutomaticLocation() } label: {
+                        Image(systemName: locationAutomatic ? "location.fill" : "location")
+                            .font(.system(size: 15))
+                            .foregroundStyle(locationAutomatic ? KordiTheme.profileAccent : Color(uiColor: .tertiaryLabel))
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isLocating)
+                    .accessibilityLabel("Automatic location")
+                    .accessibilityValue(locationAutomatic ? "On" : "Off")
+                    .accessibilityIdentifier("profile-location-automatic")
+                }
+                if locationAutomatic, locator.access == .denied || locator.access == .restricted {
+                    Button("Allow location in Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    }
+                    .font(SettingsFont.subtitle)
+                    .foregroundStyle(KordiTheme.profileAccent)
+                } else if let locationNote {
+                    Text(locationNote).font(SettingsFont.subtitle).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// Off turns manual and keeps the value. On asks for location the first
+    /// time, then fills the city; denied keeps the field as it is.
+    private func toggleAutomaticLocation() {
+        locationNote = nil
+        guard !locationAutomatic else { return draft.turnOffAutomaticLocation(saved: savedDraft) }
+        isLocating = true
+        Task {
+            locationNote = draft.apply(await ProfileDeviceSync.shared.currentCity(prompt: true))
+            isLocating = false
+        }
+    }
+
     private var timeZoneRow: some View {
         Button { isPickingTimeZone = true } label: {
             row("Time zone", field: .timeZone) {
                 HStack(spacing: 8) {
-                    if let label = ProfileFormatting.timeZoneLabel(draft.timeZone) {
-                        Text(label).foregroundStyle(valueColor(.timeZone))
-                    } else {
-                        Text("Automatic").foregroundStyle(.tertiary)
-                    }
+                    let automatic = draft.timeZoneMode == ProfileFieldMode.automatic
+                    let zone = automatic ? TimeZone.current.identifier : draft.timeZone
+                    Text(ProfileFormatting.timeZoneLabel(zone) ?? zone).foregroundStyle(valueColor(.timeZone))
                     Spacer(minLength: 0)
+                    if automatic {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Automatic")
+                    }
                     SettingsChevron()
                 }
                 .multilineTextAlignment(.leading)
@@ -502,77 +569,5 @@ struct ProfileSettingsView: View {
             expectedVersion: account.avatar.version
         )
         model.errorMessage = nil
-    }
-}
-
-/// Searchable list of time zones; "Automatic" clears the choice.
-private struct TimeZonePickerView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var selection: String
-    @State private var query = ""
-
-    private struct Zone: Identifiable {
-        let id: String
-        let name: String
-        let offset: String
-    }
-
-    private static let zones: [Zone] = TimeZone.knownTimeZoneIdentifiers.compactMap { identifier in
-        guard let zone = TimeZone(identifier: identifier) else { return nil }
-        return Zone(id: identifier, name: ProfileFormatting.timeZoneName(zone), offset: ProfileFormatting.gmtOffset(zone))
-    }
-
-    private var filtered: [Zone] {
-        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return Self.zones }
-        return Self.zones.filter {
-            $0.id.localizedCaseInsensitiveContains(text)
-                || $0.name.localizedCaseInsensitiveContains(text)
-                || $0.offset.localizedCaseInsensitiveContains(text)
-        }
-    }
-
-    var body: some View {
-        List {
-            if query.isEmpty {
-                choice(id: "", selected: selection.isEmpty) {
-                    Text("Automatic")
-                        .font(SettingsFont.rowTitle)
-                }
-            }
-            ForEach(filtered) { zone in
-                choice(id: zone.id, selected: selection == zone.id) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(zone.name), \(zone.offset)")
-                            .font(SettingsFont.rowTitle)
-                        Text(zone.id)
-                            .font(SettingsFont.subtitle)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        .listStyle(.plain)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
-        .navigationTitle("Time zone")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func choice<Label: View>(id: String, selected: Bool, @ViewBuilder label: () -> Label) -> some View {
-        Button {
-            selection = id
-            dismiss()
-        } label: {
-            HStack {
-                label()
-                Spacer(minLength: 8)
-                if selected {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(KordiTheme.profileAccent)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }

@@ -35,6 +35,24 @@ test('three rows start unfolded and more rows start folded', () => {
   assert.equal(five.match(/hidden=""/g)?.length, 5);
 });
 
+test('a single row has no fold chevron and keeps its status glyph on hover', () => {
+  const one = renderToStaticMarkup(<RelatedAgentSessionLinks sessions={[{ sessionId: 'only-child', title: 'Prepare a guide', status: 'stopped' }]} onOpen={() => undefined} />);
+  assert.match(one, /data-related-agent-sessions-folded="false"/);
+  assert.doesNotMatch(one, /aria-label="Fold /);
+  assert.doesNotMatch(one, /data-related-agent-sessions-summary="true"/);
+  // The status glyph never hides and the menu button keeps its slot, so hover swaps nothing.
+  const status = one.match(/<span class="([^"]*)" data-related-agent-session-status="stopped"/)?.[1] ?? '';
+  assert.ok(status);
+  assert.doesNotMatch(status, /hidden/);
+  const menu = one.match(/<button type="button" class="([^"]*)"[^>]*aria-label="More actions for Prepare a guide"/)?.[1] ?? '';
+  assert.ok(menu);
+  assert.doesNotMatch(menu, /(^|\s)hidden(\s|$)/);
+  assert.doesNotMatch(one, /aria-label="Stop background agent session/);
+  // Stopped reads as a circle with a dash, not the circled square of a Stop button.
+  assert.match(one, /<path d="M4.6 7h4.8"/);
+  assert.doesNotMatch(one, /<rect/);
+});
+
 test('the chevron toggles the group and the choice is kept for that message', async () => {
   const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'http://localhost', pretendToBeVisual: true });
   const replacements = { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true };

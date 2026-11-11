@@ -65,7 +65,16 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // One shared error line and the call permission dialog remove 8.2 kB.
 // Leaving a group through the server route on the Mac adds 0.8 kB.
 // Presence text in group Info, Add people and the Chat Info participants adds 0.9 kB, so it moves to 5.82 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_820_000;
+// Plan RSVPs in the event dialog, renewing an expired sign-in and per-sign-in model
+// availability add 9 kB, so it moves to 5.831 MB.
+// Automatic profile location and time zone (device sync and the editor rows) add 5.2 kB,
+// so it moves to 5.838 MB.
+// Adding calendar events with + or by clicking a day or time adds 2 kB, so it moves to 5.84 MB.
+// The Seen by row loaded on demand, its readers list and the read watermark add 8.7 kB, so it moves to 5.849 MB.
+// The pinned OMP catalog at 18.18.6 (82 providers, Claude Fable 5.2) adds 5.6 kB, so it moves to 5.855 MB.
+// Agents asking people, agent-created plan cards and the busy/free sharing setting add 3 kB, so it moves to 5.861 MB.
+// The Beta 9 What's New highlights add up to 2 kB, so it moves to 5.863 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_863_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -84,7 +93,15 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // One shared error line and the call permission dialog remove 8.4 kB there.
 // Leaving a group through the server route adds 0.8 kB there.
 // Presence text in group Info, Add people and the Chat Info participants adds 0.9 kB there, so it moves to 5.837 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_837_000;
+// Plan RSVPs in the event dialog, sign-in renewal and per-sign-in model availability add
+// 8 kB there, plus the cloud-edition build's margin, so it moves to 5.847 MB.
+// Automatic profile location and time zone add 5.4 kB there, so it moves to 5.854 MB.
+// Adding calendar events with + or by clicking a day or time adds 2 kB there, so it moves to 5.856 MB.
+// The Seen by row loaded on demand, its readers list and the read watermark add 8.7 kB there, so it moves to 5.865 MB.
+// The pinned OMP catalog at 18.18.6 adds 5.6 kB there, so it moves to 5.871 MB.
+// Agents asking people, agent-created plan cards and the busy/free sharing setting add 3.2 kB there, so it moves to 5.877 MB.
+// The Beta 9 What's New highlights add up to 2 kB there, so it moves to 5.879 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_879_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

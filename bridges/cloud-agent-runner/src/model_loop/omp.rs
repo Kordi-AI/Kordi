@@ -123,7 +123,7 @@ async fn run_omp_with_config<C: CloudAgentRunClient + Sync>(
             resume: false,
             entry_id: None,
             images: Vec::new(),
-            trailing_messages: Vec::new(),
+            trailing_messages: identity_trailing_messages(run),
         },
         cwd: "/tmp".into(),
         tools,
@@ -295,11 +295,19 @@ fn system_prompt_for_run(run: &CloudAgentRun) -> Result<String, ModelLoopError> 
         system_prompt.push_str("\n\n");
         system_prompt.push_str(&section);
     }
-    if let Some(identity) = &run.turn_identity {
-        system_prompt.push_str("\n\n");
-        system_prompt.push_str(&identity.prompt());
-    }
     Ok(system_prompt)
+}
+
+/// The turn identity, with its runtime note, as a custom message after the
+/// current request. It changes every run, so it stays out of the system
+/// prompt, whose prefix the provider can then reuse across runs.
+pub(super) fn identity_trailing_messages(run: &CloudAgentRun) -> Vec<Value> {
+    run.turn_identity
+        .iter()
+        .map(|identity| {
+            json!({"role":"custom","custom_type":kordi_core::types::RUNTIME_IDENTITY_CUSTOM_TYPE,"content":[{"type":"text","text":identity.prompt()}],"display":false,"timestamp":chrono::Utc::now().timestamp_millis()})
+        })
+        .collect()
 }
 
 fn normalize_omp_context(
