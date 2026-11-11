@@ -1,9 +1,9 @@
 //! Shared document tests. Pure tests always run; database tests live in
 //! `tests/db.rs` and follow the connector tests' `DATABASE_URL` rule.
 
-use super::access::DocumentRecord;
+use super::access::{syncable_avatar_url, DocumentRecord};
 use super::model::{DocumentAuthor, DocumentFormat};
-use super::public_page::{document_page, link_off_page, page_csp, PageInput};
+use super::public_page::{document_page, link_off_page, page_csp, public_avatar_src, PageInput};
 use super::render::*;
 use super::tokens::*;
 use super::validate::*;
@@ -326,7 +326,7 @@ fn public_page_carries_the_csp_nonce_author_and_open_action() {
         "default-src 'none'",
         "style-src 'nonce-nonceABC'",
         "script-src 'nonce-nonceABC'",
-        "img-src https: data:",
+        "img-src 'self' https: data:",
         "font-src 'self'",
         "connect-src 'self'",
         "frame-src 'self'",
@@ -494,4 +494,44 @@ fn people_card_shows_a_chosen_handle_with_an_at_sign() {
     );
     assert!(page.contains(r#"<div class="sub">@AlexMorgan</div>"#));
     assert!(!page.contains("Kordi Ale"));
+}
+
+#[test]
+fn uploaded_avatars_reach_document_people_and_the_public_page() {
+    let marker = crate::avatars::assets::uploaded_avatar_marker(&format!("ava_{}", "a".repeat(32)))
+        .expect("uploaded marker");
+    assert_eq!(
+        syncable_avatar_url(&marker).as_deref(),
+        Some(marker.as_str())
+    );
+    assert_eq!(
+        syncable_avatar_url("kordi-avatar://uploaded/not-an-asset"),
+        None
+    );
+    assert_eq!(syncable_avatar_url("javascript:alert(1)"), None);
+
+    assert_eq!(
+        public_avatar_src(&marker).as_deref(),
+        Some(format!("/v1/avatars/assets/ava_{}/128.jpg", "a".repeat(32)).as_str())
+    );
+    assert_eq!(
+        public_avatar_src("https://example.com/a.png").as_deref(),
+        Some("https://example.com/a.png")
+    );
+    assert_eq!(public_avatar_src("http://example.com/a.png"), None);
+
+    let mut record = sample_record(DocumentFormat::Markdown, "Alex Morgan");
+    record.author.avatar_url = Some(marker);
+    let page = document_page(
+        &PageInput {
+            token: &format!("kordi_ds_{}", "A".repeat(43)),
+            record: &record,
+            source: "Hello",
+        },
+        "nonce",
+    );
+    assert!(page.contains(&format!(
+        r#"<img alt="" src="/v1/avatars/assets/ava_{}/128.jpg">"#,
+        "a".repeat(32)
+    )));
 }
