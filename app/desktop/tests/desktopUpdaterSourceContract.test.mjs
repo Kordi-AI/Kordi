@@ -27,6 +27,8 @@ test('the real updater adapter delegates download and install to the native upda
   const controller = source('../src/features/updates/desktopUpdater.ts');
   const native = source('../src-tauri/src/desktop_update.rs');
   const lifecycle = source('../src-tauri/src/window_lifecycle.rs');
+  const relaunch = source('../src-tauri/src/update_relaunch.rs');
+  const helper = source('../src-tauri/src/update_relaunch.sh');
 
   for (const command of ['desktop_update_check', 'desktop_update_download', 'desktop_update_install', 'desktop_update_reveal_app', 'desktop_relaunch_after_update']) {
     assert.match(controller, new RegExp(`invoke(<[^>]+>)?\\('${command}'`));
@@ -36,8 +38,14 @@ test('the real updater adapter delegates download and install to the native upda
   assert.match(native, /tauri_plugin_updater::/);
   assert.match(native, /fn install_downloaded_update_on_exit/);
   assert.match(native, /fn classify_install_location/);
-  assert.match(lifecycle, /Command::new\("\/usr\/bin\/open"\)/);
-  assert.match(lifecycle, /\.arg\("-n"\)/);
+  // Relaunch waits for this process to exit and opens the app without -n,
+  // so the Dock reuses the pinned tile instead of adding a second Kordi.
+  assert.match(lifecycle, /update_relaunch::command/);
+  assert.match(relaunch, /include_str!\("update_relaunch\.sh"\)/);
+  assert.match(relaunch, /\.process_group\(0\)/);
+  assert.match(helper, /while \/bin\/kill -0 "\$pid"/);
+  assert.match(helper, /"\$launcher" "\$bundle" --args "\$relaunch_arg"/);
+  assert.doesNotMatch(relaunch, /\.arg\("-n"\)/);
   assert.match(lifecycle, /--kordi-update-relaunch/);
   assert.match(lifecycle, /app\.exit\(tauri::RESTART_EXIT_CODE\)/);
   assert.match(controller, /manualUpdateUrlForVersion\(update\.version\)/);
