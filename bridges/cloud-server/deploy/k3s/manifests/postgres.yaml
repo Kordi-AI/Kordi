@@ -41,6 +41,19 @@ spec:
             - "effective_cache_size=3GB"
             - "-c"
             - "maintenance_work_mem=128MB"
+            # Per-statement counters for performance work. The extension
+            # still has to be created once in the database:
+            # CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+            - "-c"
+            - "shared_preload_libraries=pg_stat_statements"
+            - "-c"
+            - "track_io_timing=on"
+            # Log statements slower than 200 ms without their bind
+            # parameters, which can contain message text.
+            - "-c"
+            - "log_min_duration_statement=200ms"
+            - "-c"
+            - "log_parameter_max_length=0"
           ports:
             - name: postgres
               containerPort: 5432
