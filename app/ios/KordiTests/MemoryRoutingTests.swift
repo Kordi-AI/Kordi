@@ -88,6 +88,44 @@ final class MemoryRoutingTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(CloudMemory.self, from: Data(Self.legacyJSON.utf8)).profileIds)
     }
 
+    func testMemoryDecodesSeveralCategoriesAndFallsBackToTheSingleOne() throws {
+        // memoryVersion 4: categories in order, the first matching category.
+        let json = Self.routedJSON.trimmingCharacters(in: .whitespacesAndNewlines).dropLast()
+            + #", "categories": ["health_context", "coordination_context"]}"#
+        let several = try JSONDecoder().decode(CloudMemory.self, from: Data(json.utf8))
+        XCTAssertEqual(several.category, "health_context")
+        XCTAssertEqual(several.categories, ["health_context", "coordination_context"])
+        XCTAssertEqual(several.allCategories, ["health_context", "coordination_context"])
+
+        // Older servers send only category.
+        let single = try JSONDecoder().decode(CloudMemory.self, from: Data(Self.routedJSON.utf8))
+        XCTAssertNil(single.categories)
+        XCTAssertEqual(single.allCategories, ["health_context"])
+        XCTAssertEqual(try JSONDecoder().decode(CloudMemory.self, from: Data(Self.legacyJSON.utf8)).allCategories, [])
+
+        // An empty list falls back to category; repeats are dropped.
+        var memory = single
+        memory.categories = []
+        XCTAssertEqual(memory.allCategories, ["health_context"])
+        memory.categories = ["work_context", "work_context", "goals_and_constraints"]
+        XCTAssertEqual(memory.allCategories, ["work_context", "goals_and_constraints"])
+    }
+
+    func testUpdateRequestReplacesEveryCategory() throws {
+        let request = try encoded(CloudMemoryUpdateRequest(categories: ["work_context", "coordination_context"]))
+        XCTAssertEqual(request["categories"] as? [String], ["work_context", "coordination_context"])
+        XCTAssertEqual(request.count, 1)
+        // Older servers get the single category.
+        let single = try encoded(CloudMemoryUpdateRequest(category: "work_context"))
+        XCTAssertEqual(single as? [String: String], ["category": "work_context"])
+    }
+
+    func testSeveralCategoriesNeedMemoryVersionFour() {
+        XCTAssertFalse(MemoryPresentation.hasMultipleCategories(nil))
+        XCTAssertFalse(MemoryPresentation.hasMultipleCategories(CloudAuthCapabilities(memoryVersion: 3)))
+        XCTAssertTrue(MemoryPresentation.hasMultipleCategories(CloudAuthCapabilities(memoryVersion: 4)))
+    }
+
     func testCardChoicesNeedMemoryVersionThree() {
         XCTAssertFalse(MemoryPresentation.hasCardChoices(CloudAuthCapabilities(memoryVersion: 2)))
         XCTAssertTrue(MemoryPresentation.hasCardChoices(CloudAuthCapabilities(memoryVersion: 3)))
@@ -207,5 +245,42 @@ final class MemoryRoutingTests: XCTestCase {
         let every = CloudProfileMemory(memory: schedule, everyProfile: true)
         XCTAssertEqual(model.addTargets(for: every).map(\.profileId), ["prof_lab"])
         XCTAssertFalse(model.offersRemoveFromCard(every))
+    }
+}
+
+
+extension MemoryRoutingTests {
+    @MainActor
+    func testImportKeepsCategoriesFromExtractionThroughSave() async throws {
+        CommonGroundURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CommonGroundURLProtocol.self]
+        let api = CloudAPIClient(baseURL: URL(string: "http://127.0.0.1:17082")!, session: URLSession(configuration: configuration))
+        let service = CloudMemoryService(api: api, tokenProvider: { "test-session" })
+        let model = MemorySettingsModel(service: service, accountLabel: nil)
+        CommonGroundURLProtocol.stub("POST", "/v1/cloud/memory/import/extract", [(200,
+            #"{"memories":[{"text":"Prioritizes ethical work.","category":"values_and_ethics","categories":["values_and_ethics","work_context","values_and_ethics"],"scope":"global"}]}"#)])
+        let rows = try await model.extractImport([MemoryImportFile(name: "AGENTS.md", text: "Prioritizes ethical work.")])
+        XCTAssertEqual(rows.first?.allCategories, ["values_and_ethics", "work_context"])
+        CommonGroundURLProtocol.stub("POST", "/v1/cloud/memory", [(200, "{\"memory\":\(Self.legacyJSON)}")])
+        CommonGroundURLProtocol.stub("GET", "/v1/cloud/memory", [(200, #"{"memories":[],"settings":{"memoryEnabled":true,"excludeSensitive":true}}"#)])
+        let result = await model.saveImports(rows)
+        XCTAssertEqual(result.saved, 1)
+        XCTAssertNil(result.error)
+        let body = try XCTUnwrap(CommonGroundURLProtocol.requests.dropFirst().first?.body)
+        let request = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(request["category"] as? String, "values_and_ethics")
+        XCTAssertEqual(request["categories"] as? [String], ["values_and_ethics", "work_context"])
+    }
+
+    func testImportFallsBackToLegacyCategoryAndCapsKnownCategories() throws {
+        let legacy = try JSONDecoder().decode(CloudMemoryImportCandidate.self,
+            from: Data(#"{"text":"Prefers short replies.","category":"general_preferences"}"#.utf8))
+        let row = MemoryImportCandidateRow(text: legacy.text, category: legacy.category, fileName: "notes.md", categories: legacy.categories)
+        XCTAssertNil(row.categories)
+        XCTAssertEqual(row.allCategories, ["general_preferences"])
+        let multiple = MemoryImportCandidateRow(text: "Studies sustainable design.", category: "general_preferences", fileName: "notes.md",
+            categories: ["unknown", "education_learner_profile", "work_context", "work_context", "values_and_ethics", "health_context"])
+        XCTAssertEqual(multiple.allCategories, ["education_learner_profile", "work_context", "values_and_ethics"])
     }
 }

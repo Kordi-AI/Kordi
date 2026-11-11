@@ -32,6 +32,11 @@ enum MemoryPresentation {
         (capabilities?.memoryVersion ?? 0) >= 3
     }
 
+    /// A memory may have up to three categories from `memoryVersion` 4.
+    static func hasMultipleCategories(_ capabilities: CloudAuthCapabilities?) -> Bool {
+        (capabilities?.memoryVersion ?? 0) >= 4
+    }
+
     /// Chip labels per category, shared with the Mac.
     static let categoryLabels: [String: String] = [
         "work_context": "Work",

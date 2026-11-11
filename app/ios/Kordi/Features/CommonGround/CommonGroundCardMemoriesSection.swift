@@ -33,7 +33,7 @@ struct CommonGroundCardMemoriesSection: View {
         MemoryRowLabel(
             text: memory.memory.text,
             detail: MemoryPresentation.detail(memory.memory),
-            category: memory.memory.category,
+            categories: memory.memory.allCategories,
             captions: memory.everyProfile ? [MemoryOrganizer.everyCardTitle] : []
         )
         .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)

@@ -12,7 +12,7 @@ protocol MemoryService: AnyObject {
     func updateSettings(memoryEnabled: Bool?, excludeSensitive: Bool?) async throws -> CloudMemorySettings
     /// The cloud ids of the group conversations whose client session id is `sessionId`.
     func cloudGroupConversationIds(sessionId: String) async -> [String]
-    /// Changes a memory's category or cards (`memoryVersion` 3).
+    /// Changes a memory's categories or cards (`memoryVersion` 3 and 4).
     func change(memoryId: String, _ request: CloudMemoryUpdateRequest) async throws -> CloudMemory
     /// The owner's cards, in profile order; empty when they cannot load.
     func cards() async -> [MemoryCard]
@@ -21,7 +21,7 @@ protocol MemoryService: AnyObject {
     /// Reads one chosen file into memories with the server's model; saves nothing.
     func extractImport(fileName: String, text: String, existingMemories: [String]) async throws -> [CloudMemoryImportCandidate]
     /// Saves one imported memory to the account (source `import`).
-    func saveImported(text: String, category: String?) async throws -> CloudMemory
+    func saveImported(text: String, category: String?, categories: [String]?) async throws -> CloudMemory
 }
 
 extension MemoryService {
@@ -34,7 +34,7 @@ extension MemoryService {
     func extractImport(fileName: String, text: String, existingMemories: [String]) async throws -> [CloudMemoryImportCandidate] {
         throw CloudAPIError(code: "memory_import_unavailable", message: "Import is not available right now. Try again later.", statusCode: 503)
     }
-    func saveImported(text: String, category: String?) async throws -> CloudMemory {
+    func saveImported(text: String, category: String?, categories: [String]?) async throws -> CloudMemory {
         throw CloudAPIError(code: "memory_import_unavailable", message: "Import is not available right now. Try again later.", statusCode: 503)
     }
 }
@@ -97,8 +97,8 @@ final class CloudMemoryService: MemoryService {
         try await api.extractMemoryImport(token: token(), fileName: fileName, text: text, existingMemories: existingMemories)
     }
 
-    func saveImported(text: String, category: String?) async throws -> CloudMemory {
-        try await api.saveImportedMemory(token: token(), text: text, category: category)
+    func saveImported(text: String, category: String?, categories: [String]?) async throws -> CloudMemory {
+        try await api.saveImportedMemory(token: token(), text: text, category: category, categories: categories)
     }
 
     func cloudGroupConversationIds(sessionId: String) async -> [String] {
@@ -137,8 +137,9 @@ final class PreviewMemoryService: MemoryService {
             hoursAgo: Double
         ) -> CloudMemory {
             let at = formatter.string(from: now.addingTimeInterval(-hoursAgo * 3_600))
+            let categories = sampleCategories[id]
             return CloudMemory(memoryId: id, scope: scope, scopeId: scopeId, scopeLabel: scopeLabel, source: source, text: text,
-                               createdAt: at, updatedAt: at, category: sampleCategories[id])
+                               createdAt: at, updatedAt: at, category: categories?.first, categories: categories)
         }
         return [
             memory("lesson-1", .conversation, "conv-launch-copy", "Launch copy with Priya", .userCorrection,
@@ -172,11 +173,11 @@ final class PreviewMemoryService: MemoryService {
     }
 
     /// Categories for the samples, so rows show their chips in previews.
-    private static let sampleCategories: [String: String] = [
-        "lesson-1": "general_preferences", "lesson-2": "work_context", "lesson-3": "coordination_context",
-        "lesson-4": "hcp-custom:task_lessons", "lesson-5": "hcp-custom:task_lessons", "lesson-6": "hcp-custom:task_lessons",
-        "lesson-7": "general_preferences", "lesson-8": "general_preferences", "lesson-9": "coordination_context",
-        "lesson-10": "goals_and_constraints",
+    private static let sampleCategories: [String: [String]] = [
+        "lesson-1": ["general_preferences"], "lesson-2": ["work_context"], "lesson-3": ["coordination_context", "work_context"],
+        "lesson-4": ["hcp-custom:task_lessons"], "lesson-5": ["hcp-custom:task_lessons"], "lesson-6": ["hcp-custom:task_lessons"],
+        "lesson-7": ["general_preferences"], "lesson-8": ["general_preferences"], "lesson-9": ["coordination_context", "general_preferences"],
+        "lesson-10": ["goals_and_constraints"],
     ]
 
     private func wait() async throws {
@@ -225,7 +226,17 @@ final class PreviewMemoryService: MemoryService {
         guard let index = memories.firstIndex(where: { $0.memoryId == memoryId }) else {
             throw CloudAPIError(code: "memory_not_found", message: "This memory no longer exists.", statusCode: 404)
         }
-        if let category = request.category { memories[index].category = category }
+        if let category = request.category {
+            memories[index].category = category
+            memories[index].categories = [category]
+        }
+        if let categories = request.categories {
+            guard (1...MemoryOrganizer.maxCategories).contains(categories.count) else {
+                throw CloudAPIError(code: "invalid_update", message: "A memory has one to three categories.", statusCode: 400)
+            }
+            memories[index].category = categories[0]
+            memories[index].categories = categories
+        }
         try previewCards.apply(request, to: memories[index])
         return previewCards.filled(memories[index])
     }
@@ -256,19 +267,19 @@ final class PreviewMemoryService: MemoryService {
     func extractImport(fileName: String, text: String, existingMemories: [String]) async throws -> [CloudMemoryImportCandidate] {
         try await wait()
         return [
-            .init(text: "Run the unit tests before opening a pull request.", category: "hcp-custom:task_lessons", scope: "global"),
+            .init(text: "Run the unit tests before opening a pull request.", category: "hcp-custom:task_lessons", categories: ["hcp-custom:task_lessons", "work_context"], scope: "global"),
             .init(text: "Prefer short commit messages that say what changed and why.", category: "general_preferences", scope: "global"),
             .init(text: "Keep the release checklist in docs/release.md up to date.", category: "work_context", scope: "global"),
         ]
     }
 
-    func saveImported(text: String, category: String?) async throws -> CloudMemory {
+    func saveImported(text: String, category: String?, categories: [String]?) async throws -> CloudMemory {
         try await wait()
         addedCount += 1
         let at = ISO8601DateFormatter().string(from: Date())
         let created = CloudMemory(
             memoryId: "lesson-imported-\(addedCount)", scope: .global, scopeId: "account",
-            scopeLabel: "Global", source: .other("import"), text: text, createdAt: at, updatedAt: at, category: category
+            scopeLabel: "Global", source: .other("import"), text: text, createdAt: at, updatedAt: at, category: category, categories: categories
         )
         memories.append(created)
         return previewCards.filled(created)
@@ -293,21 +304,27 @@ final class MemorySettingsModel: ObservableObject {
     let viewerAccountId: String?
     /// `memoryVersion` 3 with profiles: card labels and card actions.
     let cardsEnabled: Bool
+    /// `memoryVersion` 4: up to three categories per memory.
+    let multipleCategoriesEnabled: Bool
     private let conversations: [ConversationSummary]
     private let service: any MemoryService
 
     init(service: any MemoryService, accountLabel: String?, viewerAccountId: String? = nil,
-         cardsEnabled: Bool = false, conversations: [ConversationSummary] = []) {
+         cardsEnabled: Bool = false, multipleCategoriesEnabled: Bool = false, conversations: [ConversationSummary] = []) {
         self.service = service
         self.accountLabel = accountLabel
         self.viewerAccountId = viewerAccountId
         self.cardsEnabled = cardsEnabled
+        self.multipleCategoriesEnabled = multipleCategoriesEnabled
         self.conversations = conversations
         originNames = MemoryOriginNames(conversations: conversations)
     }
 
     var organizer: MemoryOrganizer {
-        MemoryOrganizer(memories: memories, cards: cards, cardsEnabled: cardsEnabled, viewerAccountId: viewerAccountId, origins: originNames)
+        MemoryOrganizer(
+            memories: memories, cards: cards, cardsEnabled: cardsEnabled, multipleCategoriesEnabled: multipleCategoriesEnabled,
+            viewerAccountId: viewerAccountId, origins: originNames
+        )
     }
 
     var hasLoaded: Bool { settings != nil }
@@ -352,7 +369,7 @@ final class MemorySettingsModel: ObservableObject {
             for candidate in candidates {
                 let text = candidate.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty, seen.insert(MemoryImportFile.key(text)).inserted else { continue }
-                rows.append(MemoryImportCandidateRow(text: text, category: candidate.category, fileName: file.name))
+                rows.append(MemoryImportCandidateRow(text: text, category: candidate.category, fileName: file.name, categories: candidate.categories))
             }
         }
         return rows
@@ -365,7 +382,7 @@ final class MemorySettingsModel: ObservableObject {
         var firstError: String?
         for row in rows {
             do {
-                _ = try await service.saveImported(text: row.text, category: row.category)
+                _ = try await service.saveImported(text: row.text, category: row.allCategories.first, categories: row.categories == nil ? nil : row.allCategories)
                 saved += 1
             } catch {
                 firstError = firstError ?? ((error as? CloudAPIError)?.message.nonEmpty ?? "Could not save some memories.")
@@ -394,6 +411,22 @@ final class MemorySettingsModel: ObservableObject {
 
     func setCategory(_ memory: CloudMemory, to category: String) async {
         await change(memory, CloudMemoryUpdateRequest(category: category), fallback: "Could not change the category. Try again.")
+    }
+
+    /// Replaces every category of the memory (`memoryVersion` 4); the first is its main one.
+    func setCategories(_ memory: CloudMemory, to categories: [String]) async {
+        await change(memory, CloudMemoryUpdateRequest(categories: categories), fallback: "Could not change the categories. Try again.")
+    }
+
+    /// A tap on a Categories menu item: adds or removes the category from
+    /// `memoryVersion` 4, otherwise makes it the memory's only category.
+    func toggleCategory(_ memory: CloudMemory, _ category: String) async {
+        guard let next = organizer.categories(afterToggling: category, for: memory) else { return }
+        if multipleCategoriesEnabled {
+            await setCategories(memory, to: next)
+        } else {
+            await setCategory(memory, to: category)
+        }
     }
 
     func addToCard(_ memory: CloudMemory, card: MemoryCard) async {
@@ -556,4 +589,13 @@ struct MemoryImportCandidateRow: Identifiable, Hashable {
     let text: String
     let category: String?
     let fileName: String
+    var categories: [String]? = nil
+
+    var allCategories: [String] {
+        let values = categories.flatMap { $0.isEmpty ? nil : $0 } ?? [category].compactMap { $0 }
+        var seen = Set<String>()
+        let known = values.filter { MemoryPresentation.categoryLabel(for: $0) != nil && seen.insert($0).inserted }
+        if !known.isEmpty { return Array(known.prefix(3)) }
+        return [category].compactMap { $0 }.filter { MemoryPresentation.categoryLabel(for: $0) != nil }
+    }
 }

@@ -81,6 +81,7 @@ struct MemoryFilterGroup: Equatable, Identifiable {
 
 /// What a row's long-press menu offers. Empty lists hide their item.
 struct MemoryRowActions: Equatable {
+    /// The Categories menu, in menu order.
     var categories: [String] = []
     var addCards: [MemoryCard] = []
     var removeCards: [MemoryCard] = []
@@ -89,6 +90,8 @@ struct MemoryRowActions: Equatable {
 /// Account › Memory: every memory of the account in one list, newest first,
 /// labelled by category, cards and origin. Pure rules, shared by the view and tests.
 struct MemoryOrganizer {
+    /// A memory has one to three categories (`memoryVersion` 4).
+    static let maxCategories = 3
     static let everyCardValue = "every"
     static let everyCardTitle = "Every card"
     static let scheduleCategory = "coordination_context"
@@ -106,6 +109,8 @@ struct MemoryOrganizer {
     var cards: [MemoryCard] = []
     /// `memoryVersion` 3: card labels and card actions; older servers hide them.
     var cardsEnabled = false
+    /// `memoryVersion` 4: the Categories menu chooses up to three; older servers choose one.
+    var multipleCategoriesEnabled = false
     var viewerAccountId: String?
     var origins = MemoryOriginNames()
 
@@ -126,14 +131,16 @@ struct MemoryOrganizer {
         return true
     }
 
-    /// The row's labels in order: the category, the cards, then the origin.
+    /// The row's labels in order: the categories, the cards, then the origin.
     func labels(for memory: CloudMemory) -> [MemoryLabel] {
-        [categoryLabel(for: memory)].compactMap { $0 } + cardLabels(for: memory) + [originLabel(for: memory)]
+        categoryLabels(for: memory) + cardLabels(for: memory) + [originLabel(for: memory)]
     }
 
-    func categoryLabel(for memory: CloudMemory) -> MemoryLabel? {
-        guard let category = memory.category, let title = MemoryPresentation.categoryLabel(for: category) else { return nil }
-        return MemoryLabel(layer: .category, value: category, title: title)
+    /// One label per category, in the memory's order; unknown categories have none.
+    func categoryLabels(for memory: CloudMemory) -> [MemoryLabel] {
+        memory.allCategories.compactMap { category in
+            MemoryPresentation.categoryLabel(for: category).map { MemoryLabel(layer: .category, value: category, title: $0) }
+        }
     }
 
     func originLabel(for memory: CloudMemory) -> MemoryLabel {
@@ -142,7 +149,7 @@ struct MemoryOrganizer {
 
     /// A schedule memory nobody removed from a card is shown through its category as "Every card".
     func showsEveryCard(_ memory: CloudMemory) -> Bool {
-        memory.category == Self.scheduleCategory && (memory.excludedProfileIds ?? []).isEmpty && cards.contains(where: \.isFixed)
+        memory.allCategories.contains(Self.scheduleCategory) && (memory.excludedProfileIds ?? []).isEmpty && cards.contains(where: \.isFixed)
     }
 
     /// The cards the memory is on, in profile order. Group memories have none.
@@ -174,6 +181,34 @@ struct MemoryOrganizer {
         // "Every card" comes from the Schedule category, so its cards are not removed one by one.
         actions.removeCards = showsEveryCard(memory) ? on.filter { !$0.isFixed } : on
         return actions
+    }
+
+    /// Whether the Categories menu shows a checkmark on this category.
+    func isChosen(_ category: String, for memory: CloudMemory) -> Bool {
+        memory.allCategories.contains(category)
+    }
+
+    /// The categories after tapping one in the Categories menu, or nil when the
+    /// tap changes nothing. With several categories a tap adds or removes one:
+    /// the only category cannot be removed and a fourth cannot be added. Older
+    /// servers keep one category, so a tap replaces it.
+    func categories(afterToggling category: String, for memory: CloudMemory) -> [String]? {
+        let current = memory.allCategories
+        guard multipleCategoriesEnabled else {
+            return current == [category] ? nil : [category]
+        }
+        if current.contains(category) {
+            guard current.count > 1 else { return nil }
+            return current.filter { $0 != category }
+        }
+        guard current.count < Self.maxCategories else { return nil }
+        return current + [category]
+    }
+
+    /// Whether a Categories menu item can be tapped. Older servers leave every item enabled.
+    func canToggle(_ category: String, for memory: CloudMemory) -> Bool {
+        guard multipleCategoriesEnabled else { return true }
+        return categories(afterToggling: category, for: memory) != nil
     }
 
     /// The filter row: each layer's labels with how many memories carry them.

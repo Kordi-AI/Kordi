@@ -17,15 +17,16 @@ struct MemorySettingsView: View {
     private var noteConsentRequired: @MainActor (Error) -> Bool = { _ in false }
 
     init(service: any MemoryService, accountLabel: String?, viewerAccountId: String? = nil,
-         cardsEnabled: Bool = false, conversations: [ConversationSummary] = []) {
+         cardsEnabled: Bool = false, multipleCategoriesEnabled: Bool = false, conversations: [ConversationSummary] = []) {
         _model = StateObject(wrappedValue: MemorySettingsModel(
             service: service, accountLabel: accountLabel, viewerAccountId: viewerAccountId,
-            cardsEnabled: cardsEnabled, conversations: conversations
+            cardsEnabled: cardsEnabled, multipleCategoriesEnabled: multipleCategoriesEnabled, conversations: conversations
         ))
     }
 
     /// Account › Memory for the signed-in account. Card labels need
-    /// `memoryVersion` 3 and profiles (`commonGroundVersion` 2).
+    /// `memoryVersion` 3 and profiles (`commonGroundVersion` 2); several
+    /// categories per memory need `memoryVersion` 4.
     init(appModel: AppModel) {
         let capabilities = appModel.memoryCapabilities
         self.init(
@@ -34,6 +35,7 @@ struct MemorySettingsView: View {
             viewerAccountId: appModel.account?.accountId,
             cardsEnabled: MemoryPresentation.hasCardChoices(capabilities)
                 && (CommonGroundAvailability.hasProfiles(capabilities: capabilities) || appModel.isPreviewMode),
+            multipleCategoriesEnabled: MemoryPresentation.hasMultipleCategories(capabilities),
             conversations: appModel.conversations
         )
         allowsAI = { [weak appModel] in appModel?.requireAIConsent() ?? true }
@@ -257,7 +259,7 @@ private struct MemoryImportReviewSheet: View {
                                         .font(.body)
                                         .foregroundStyle(.primary)
                                         .fixedSize(horizontal: false, vertical: true)
-                                    Text([MemoryPresentation.categoryLabel(for: row.category), row.fileName].compactMap { $0 }.joined(separator: " · "))
+                                    Text((row.allCategories.compactMap(MemoryPresentation.categoryLabel(for:)) + [row.fileName]).joined(separator: " · "))
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
                                 }
