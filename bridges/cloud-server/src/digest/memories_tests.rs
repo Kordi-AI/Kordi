@@ -27,6 +27,7 @@ fn memory(scope: &str, session: Option<&str>, ids: &[&str]) -> DigestMemory {
     DigestMemory {
         text: "Prefers short replies".into(),
         category: "general_preferences".into(),
+        categories: Vec::new(),
         confidence: "high".into(),
         scope: scope.into(),
         session_id: session.map(Into::into),
@@ -156,6 +157,28 @@ fn targets_follow_the_scope_and_source_rules() {
     let mut health = memory("global", None, &["own"]);
     health.category = "health_context".into();
     assert_eq!(refused(health), "category_not_allowed");
+    // Health among several categories is still a health memory.
+    let mut mixed = memory("global", None, &["own"]);
+    mixed.categories = vec!["work_context".into(), "health_context".into()];
+    assert_eq!(refused(mixed), "category_not_allowed");
+    let mut too_many = memory("global", None, &["own"]);
+    too_many.categories = [
+        "work_context",
+        "goals_and_constraints",
+        "location_context",
+        "general_preferences",
+    ]
+    .map(String::from)
+    .to_vec();
+    assert_eq!(refused(too_many), "invalid_category");
+    let mut several = memory("global", None, &["own"]);
+    several.category = "diary".into();
+    several.categories = vec!["work_context".into(), "location_context".into()];
+    assert_eq!(
+        target(&several, OWNER, &sources).unwrap().categories,
+        ["work_context", "location_context"],
+        "categories win over category"
+    );
     let mut sure = memory("global", None, &["own"]);
     sure.confidence = "certain".into();
     assert_eq!(refused(sure), "invalid_confidence");
@@ -175,6 +198,9 @@ fn targets_follow_the_scope_and_source_rules() {
     let mut personal = memory("group", Some(&session), &["in-group"]);
     personal.category = "location_context".into();
     assert_eq!(refused(personal), "category_not_shared");
+    let mut partly_personal = memory("group", Some(&session), &["in-group"]);
+    partly_personal.categories = vec!["work_context".into(), "location_context".into()];
+    assert_eq!(refused(partly_personal), "category_not_shared");
     assert_eq!(
         refused(memory("group", Some("s1"), &["own"])),
         "not_a_group_session"

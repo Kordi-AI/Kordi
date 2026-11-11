@@ -18,7 +18,7 @@ use serde_json::Value;
 use sqlx_postgres::PgPool;
 use uuid::Uuid;
 
-use crate::memory_store::{DEFAULT_CATEGORY, MEMORY_CATEGORIES};
+use crate::memory_store::{DEFAULT_CATEGORY, MAX_CATEGORIES, MEMORY_CATEGORIES};
 use crate::resource_pools::usage::{self, Admission, Settlement};
 use crate::resource_pools::{Feature, PoolProvider, ResourcePools};
 
@@ -48,7 +48,10 @@ pub struct ExtractRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExtractedMemory {
     pub text: String,
+    /// The primary category: the first of `categories`.
     pub category: String,
+    /// One to three categories, primary first.
+    pub categories: Vec<String>,
     /// `project` or `global`, as the prompt asks the model to say.
     pub scope: String,
 }
@@ -203,7 +206,9 @@ fn json_object_of(reply: &str) -> Option<Value> {
 
 /// The memories in a model reply, which may wrap the JSON in a fence or a
 /// sentence. Entries without text, or longer than a memory may be, are
-/// dropped; an unknown category falls back by scope; at most
+/// dropped. An optional `categories` array (known values, repeats dropped,
+/// at most three, primary first) wins over `category`; an unknown category
+/// with no known `categories` falls back by scope; at most
 /// [`MAX_MEMORIES_PER_FILE`] are kept. `None` when the reply has no list.
 pub fn parse_reply(reply: &str) -> Option<Vec<ExtractedMemory>> {
     let parsed = json_object_of(reply)?;
@@ -225,20 +230,38 @@ pub fn parse_reply(reply: &str) -> Option<Vec<ExtractedMemory>> {
         } else {
             "project"
         };
-        let category = entry
-            .get("category")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .and_then(|value| MEMORY_CATEGORIES.iter().find(|known| **known == value))
-            .copied()
-            .unwrap_or(if scope == "global" {
-                DEFAULT_CATEGORY
-            } else {
-                "hcp-custom:task_lessons"
-            });
+        let known = |value: &Value| {
+            value
+                .as_str()
+                .map(str::trim)
+                .and_then(|value| MEMORY_CATEGORIES.iter().find(|known| **known == value))
+                .copied()
+        };
+        let mut categories: Vec<&str> = Vec::new();
+        for category in entry
+            .get("categories")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(known)
+        {
+            if !categories.contains(&category) && categories.len() < MAX_CATEGORIES {
+                categories.push(category);
+            }
+        }
+        if categories.is_empty() {
+            categories.push(entry.get("category").and_then(known).unwrap_or(
+                if scope == "global" {
+                    DEFAULT_CATEGORY
+                } else {
+                    "hcp-custom:task_lessons"
+                },
+            ));
+        }
         memories.push(ExtractedMemory {
             text,
-            category: category.to_string(),
+            category: categories[0].to_string(),
+            categories: categories.into_iter().map(str::to_owned).collect(),
             scope: scope.to_string(),
         });
     }

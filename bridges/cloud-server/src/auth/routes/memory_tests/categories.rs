@@ -252,3 +252,5 @@ async fn runner_saves_are_always_inferred() {
     );
     fx.cleanup().await;
 }
+
+mod multi;

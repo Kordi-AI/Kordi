@@ -26,6 +26,7 @@ const SOURCE: &str = "digest";
 const FIELDS: &[&str] = &[
     "text",
     "category",
+    "categories",
     "confidence",
     "scope",
     "sessionId",
@@ -37,7 +38,12 @@ const FIELDS: &[&str] = &[
 #[serde(rename_all = "camelCase")]
 pub struct DigestMemory {
     pub text: String,
+    /// The single category; ignored when `categories` is given.
+    #[serde(default)]
     pub category: String,
+    /// One to three categories, primary first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<String>,
     pub confidence: String,
     /// `conversation`, `group` or `global`.
     pub scope: String,
@@ -118,6 +124,7 @@ struct Target {
     scope: &'static str,
     scope_id: String,
     scope_label: Option<String>,
+    categories: Vec<&'static str>,
 }
 
 /// The checks that need no database: fields, sources and scope.
@@ -130,9 +137,14 @@ fn target(
     if text.is_empty() || text.chars().count() > MAX_TEXT_CHARS {
         return Err("invalid_text");
     }
-    let category = memory_store::check_category(Some(&memory.category), false)
-        .map_err(|_| "invalid_category")?;
-    if category == "health_context" {
+    let categories = if memory.categories.is_empty() {
+        memory_store::check_category(Some(&memory.category), false).map(|category| vec![category])
+    } else {
+        memory_store::check_categories(&memory.categories)
+    }
+    .map_err(|_| "invalid_category")?;
+    // A memory with health among its categories is a health memory.
+    if memory_store::is_health(&categories) {
         return Err("category_not_allowed");
     }
     if !memory_store::MEMORY_CONFIDENCES.contains(&memory.confidence.trim()) {
@@ -180,11 +192,13 @@ fn target(
             scope,
             scope_id: GLOBAL_SCOPE_ID.to_owned(),
             scope_label: None,
+            categories,
         }),
         "conversation" => Ok(Target {
             scope,
             scope_id: session.unwrap_or_default().to_owned(),
             scope_label: label,
+            categories,
         }),
         _ => {
             // A group memory's scope id is the group conversation id. The
@@ -199,13 +213,14 @@ fn target(
                 return Err("source_outside_session");
             }
             let group = uuid::Uuid::parse_str(conversation).map_err(|_| "not_a_group_session")?;
-            if !memory_store::category_allowed_in_group(category) {
+            if !memory_store::categories_allowed_in_group(&categories) {
                 return Err("category_not_shared");
             }
             Ok(Target {
                 scope,
                 scope_id: group.to_string(),
                 scope_label: label,
+                categories,
             })
         }
     }
@@ -245,6 +260,7 @@ async fn skipped(pool: &PgPool, account: &str, run: &str, memory: &DigestMemory,
             "reason": reason,
             "scope": memory.scope,
             "category": memory.category,
+            "categories": memory.categories,
         }),
     )
     .await;
@@ -311,7 +327,8 @@ pub(super) async fn save_all(
             source: SOURCE.to_owned(),
             text: text.to_owned(),
             client_memory_id: None,
-            category: Some(memory.category.trim().to_owned()),
+            category: None,
+            categories: Some(target.categories.iter().map(|c| (*c).to_owned()).collect()),
             confidence: Some(memory.confidence.trim().to_owned()),
             declared_by: Some("agent".to_owned()),
         };
@@ -330,6 +347,7 @@ pub(super) async fn save_all(
                         "scope": created.scope,
                         "source": created.source,
                         "category": created.category,
+                        "categories": created.categories,
                         "declarationType": created.declaration_type,
                         "runId": run,
                         "via": "digest",

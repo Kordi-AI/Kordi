@@ -97,6 +97,7 @@ tests=(
   apple_token_tests::upgrade_from_184_adds_apple_token_revocations
   profile_mode_tests::upgrade_from_187_adds_profile_field_modes
   read_outbox_tests::upgrade_from_191_backfills_read_watermarks
+  memory_tests::upgrade_from_195_adds_several_categories_per_memory
 )
 index=0
 for test_name in "${tests[@]}"; do

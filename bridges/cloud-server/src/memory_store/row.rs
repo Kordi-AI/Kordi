@@ -1,9 +1,9 @@
 //! The memory row every memory route returns, and the SQL that selects it.
 //!
-//! A memory's cards (#2035) are the owner's profiles its category routes to,
-//! minus the cards the person removed it from, plus the cards the person
-//! added it to (`cloud_account_memory_card_overrides`). Group memories have
-//! no cards.
+//! A memory's cards (#2035) are the owner's profiles any of its categories
+//! routes to, minus the cards the person removed it from, plus the cards the
+//! person added it to (`cloud_account_memory_card_overrides`). Group
+//! memories have no cards.
 
 use std::fmt;
 use std::sync::LazyLock;
@@ -28,6 +28,7 @@ pub(super) struct MemoryRow {
     owner_account_id: String,
     owner_name: Option<String>,
     category: String,
+    categories: Vec<String>,
     declaration_type: String,
     confidence: Option<String>,
     pin_id: Option<String>,
@@ -50,6 +51,7 @@ impl<'row> FromRow<'row, PgRow> for MemoryRow {
             owner_account_id: row.try_get("owner_account_id")?,
             owner_name: row.try_get("owner_name")?,
             category: row.try_get("category")?,
+            categories: row.try_get("categories")?,
             declaration_type: row.try_get("declaration_type")?,
             confidence: row.try_get("confidence")?,
             pin_id: row.try_get("pin_id")?,
@@ -69,12 +71,12 @@ pub(super) struct MemorySelect;
 pub(super) static MEMORY_SELECT: MemorySelect = MemorySelect;
 
 static MEMORY_SELECT_SQL: LazyLock<String> = LazyLock::new(|| {
-    let routed = routed_card_sql("m.category", "p.kind");
+    let routed = routed_card_sql("m.categories", "p.kind");
     format!(
         "SELECT m.memory_id, m.scope, m.scope_id, m.scope_label, m.source, \
          m.text, m.created_at, m.updated_at, m.owner_account_id, \
          NULLIF(btrim(owner.display_name), '') AS owner_name, \
-         m.category, m.declaration_type, m.confidence, \
+         m.category, m.categories, m.declaration_type, m.confidence, \
          pin.profile_id AS pin_id, profile.kind AS pin_kind, \
          cards.profile_ids, cards.excluded_profile_ids \
          FROM m LEFT JOIN cloud_accounts owner ON owner.account_id = m.owner_account_id \
@@ -102,7 +104,10 @@ impl fmt::Display for MemorySelect {
 }
 
 pub(super) fn memory_from_row(row: MemoryRow) -> MemoryResponse {
+    // The legacy single kind follows the primary category, as older clients
+    // expect; `profile_ids` carries every card the categories reach.
     let profile_kind = routing::effective_profile_kind(&row.scope, &row.category, row.pin_kind);
+    let sensitivity = routing::memory_sensitivity(&row.categories);
     MemoryResponse {
         memory_id: row.memory_id,
         scope: row.scope,
@@ -115,6 +120,8 @@ pub(super) fn memory_from_row(row: MemoryRow) -> MemoryResponse {
         owner_account_id: row.owner_account_id,
         owner_name: row.owner_name,
         category: row.category,
+        categories: row.categories,
+        sensitivity,
         declaration_type: row.declaration_type,
         confidence: row.confidence,
         profile_id: row.pin_id,

@@ -20,7 +20,7 @@ async fn upgrade_from_149_adds_memory_categories() {
             'Run the smoke test first', '2026-01-05T00:00:00Z', '2026-01-06T00:00:00Z')",
     )
     .await;
-    let rows = "SELECT memory_id, to_jsonb(m) - ARRAY['category','declaration_type','confidence','profile_id'] \
+    let rows = "SELECT memory_id, to_jsonb(m) - ARRAY['category','declaration_type','confidence','profile_id','categories'] \
         FROM cloud_account_memories m ORDER BY memory_id";
     let before: Vec<(String, Value)> = query_as(rows).fetch_all(&pool).await.unwrap();
     let (a, b) = tokio::join!(apply_migrations(&pool), apply_migrations(&pool));
@@ -124,7 +124,8 @@ async fn upgrade_from_150_adds_memory_card_overrides() {
             'Leads the Atlas pipeline', 'work_context', NULL)",
     )
     .await;
-    let rows = "SELECT memory_id, to_jsonb(m) FROM cloud_account_memories m ORDER BY memory_id";
+    let rows = "SELECT memory_id, to_jsonb(m) - 'categories' FROM cloud_account_memories m \
+        ORDER BY memory_id";
     let before: Vec<(String, Value)> = query_as(rows).fetch_all(&pool).await.unwrap();
     let (a, b) = tokio::join!(apply_migrations(&pool), apply_migrations(&pool));
     a.unwrap();
@@ -179,4 +180,143 @@ async fn upgrade_from_150_adds_memory_card_overrides() {
         .is_err(),
         "the card must exist"
     );
+}
+
+/// Memory id, primary category and categories.
+type Categories = (String, String, Vec<String>);
+
+#[tokio::test]
+#[ignore = "requires a dedicated PostgreSQL fixture; run scripts/test-cloud-migrations.sh"]
+async fn upgrade_from_195_adds_several_categories_per_memory() {
+    let pool = fixture(195).await;
+    execute(
+        &pool,
+        "INSERT INTO cloud_account_memories \
+           (memory_id, owner_account_id, scope, scope_id, source, text, category, archived_at) VALUES \
+           ('mem_work', 'fixture-owner', 'global', 'account', 'manual', \
+            'Leads the Atlas pipeline', 'work_context', NULL), \
+           ('mem_lesson', 'fixture-owner', 'project', 'project-1', 'outcome', \
+            'Run the smoke test first', 'hcp-custom:task_lessons', NULL), \
+           ('mem_archived', 'fixture-owner', 'global', 'account', 'manual', \
+            'Trains on weekends', 'health_context', '2026-01-02T00:00:00Z')",
+    )
+    .await;
+    let rows = "SELECT memory_id, to_jsonb(m) - 'categories' FROM cloud_account_memories m \
+        ORDER BY memory_id";
+    let before: Vec<(String, Value)> = query_as(rows).fetch_all(&pool).await.unwrap();
+    let (a, b) = tokio::join!(apply_migrations(&pool), apply_migrations(&pool));
+    a.unwrap();
+    b.unwrap();
+    latest_version(&pool).await;
+    let after: Vec<(String, Value)> = query_as(rows).fetch_all(&pool).await.unwrap();
+    assert_eq!(
+        before, after,
+        "text, categories and timestamps are untouched"
+    );
+
+    let categories = "SELECT memory_id, category, categories FROM cloud_account_memories \
+        ORDER BY memory_id";
+    let row = |id: &str, primary: &str, all: &[&str]| -> Categories {
+        (
+            id.to_string(),
+            primary.to_string(),
+            all.iter().map(|c| c.to_string()).collect(),
+        )
+    };
+    let backfill: Vec<Categories> = query_as(categories).fetch_all(&pool).await.unwrap();
+    assert_eq!(
+        backfill,
+        vec![
+            row("mem_archived", "health_context", &["health_context"]),
+            row(
+                "mem_lesson",
+                "hcp-custom:task_lessons",
+                &["hcp-custom:task_lessons"]
+            ),
+            row("mem_work", "work_context", &["work_context"]),
+        ]
+    );
+
+    for invalid in [
+        "UPDATE cloud_account_memories SET categories = '{}' WHERE memory_id = 'mem_work'",
+        "UPDATE cloud_account_memories SET categories = ARRAY['work_context', 'health_context', \
+           'location_context', 'general_preferences'] WHERE memory_id = 'mem_work'",
+        "UPDATE cloud_account_memories SET categories = ARRAY['work_context', 'diary'] \
+           WHERE memory_id = 'mem_work'",
+        "UPDATE cloud_account_memories SET categories = ARRAY['work_context', 'work_context'] \
+           WHERE memory_id = 'mem_work'",
+        "UPDATE cloud_account_memories SET categories = ARRAY['work_context', 'health_context', \
+           'health_context'] WHERE memory_id = 'mem_work'",
+        "UPDATE cloud_account_memories SET categories = ARRAY['work_context', NULL] \
+           WHERE memory_id = 'mem_work'",
+        "UPDATE cloud_account_memories SET categories = '[0:1]={work_context,health_context}' \
+           WHERE memory_id = 'mem_work'",
+        "UPDATE cloud_account_memories SET categories = ARRAY['health_context', 'work_context'] \
+           WHERE memory_id = 'mem_work'",
+        "UPDATE cloud_account_memories SET categories = NULL WHERE memory_id = 'mem_work'",
+    ] {
+        assert!(
+            sqlx_core::raw_sql::raw_sql(invalid)
+                .execute(&pool)
+                .await
+                .is_err(),
+            "{invalid}"
+        );
+    }
+
+    // The current server writes both columns together.
+    execute(
+        &pool,
+        "UPDATE cloud_account_memories SET category = 'work_context', \
+           categories = ARRAY['work_context', 'health_context', 'location_context'] \
+         WHERE memory_id = 'mem_work'",
+    )
+    .await;
+    // An older server writes only the category: an insert gets that one
+    // category, and a category change replaces only the primary.
+    execute(
+        &pool,
+        "INSERT INTO cloud_account_memories \
+           (memory_id, owner_account_id, scope, scope_id, source, text, category) VALUES \
+           ('mem_old_insert', 'fixture-owner', 'global', 'account', 'manual', \
+            'Prefers short replies', 'general_preferences'); \
+         UPDATE cloud_account_memories SET category = 'coordination_context' \
+           WHERE memory_id = 'mem_work'",
+    )
+    .await;
+    let synced: Vec<Categories> = query_as(
+        "SELECT memory_id, category, categories FROM cloud_account_memories \
+         WHERE memory_id IN ('mem_work', 'mem_old_insert') ORDER BY memory_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        synced,
+        vec![
+            row(
+                "mem_old_insert",
+                "general_preferences",
+                &["general_preferences"]
+            ),
+            row(
+                "mem_work",
+                "coordination_context",
+                &["coordination_context", "health_context", "location_context"]
+            ),
+        ]
+    );
+    // An older server moving the primary to one of the others keeps it once.
+    execute(
+        &pool,
+        "UPDATE cloud_account_memories SET category = 'location_context' \
+         WHERE memory_id = 'mem_work'",
+    )
+    .await;
+    let (moved,): (Vec<String>,) =
+        query_as("SELECT categories FROM cloud_account_memories WHERE memory_id = 'mem_work'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(moved, ["location_context", "health_context"]);
 }

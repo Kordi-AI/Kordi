@@ -21,6 +21,7 @@ const LATE: &str = "Learning to review database migrations";
 const ADDED: &str = "Keeps a reading list of systems papers";
 const REMOVED: &str = "Mentors two interns";
 const GROUP: &str = "The crew likes Friday demos";
+const GOAL_AND_HEALTH: &str = "Aims to sleep eight hours before deadlines";
 
 /// Starts a memory-only build of `profile` and returns the run id, its
 /// prompts and the ids it offered.
@@ -95,6 +96,10 @@ async fn builds_relate_offered_memories_to_the_card() {
 
     let work_memory = save(&app, &token, own(WORK, "work_context")).await;
     save(&app, &token, own(HEALTH, "health_context")).await;
+    // Health among several categories is a health memory: never offered.
+    let mut goal_and_health = own(GOAL_AND_HEALTH, "goals_and_constraints");
+    goal_and_health["categories"] = json!(["goals_and_constraints", "health_context"]);
+    save(&app, &token, goal_and_health).await;
     let preference = save(&app, &token, own(PREFERENCE, "general_preferences")).await;
     let goal = save(&app, &token, own(GOAL, "goals_and_constraints")).await;
     let late = save(&app, &token, own(LATE, "general_preferences")).await;
@@ -150,7 +155,7 @@ async fn builds_relate_offered_memories_to_the_card() {
         )),
         "{prompt}"
     );
-    for absent in [WORK, HEALTH, ADDED, REMOVED, GROUP] {
+    for absent in [WORK, HEALTH, GOAL_AND_HEALTH, ADDED, REMOVED, GROUP] {
         let block = prompt.split("Other memories:").nth(1).unwrap();
         assert!(!block.contains(absent), "{absent} offered: {prompt}");
     }

@@ -53,6 +53,10 @@ fn a_reply_keeps_twelve_checked_memories_and_falls_back_by_scope() {
             {"text": ""},
             {"text": "x".repeat(MEMORY_MAX_CHARS + 1)},
             {"category": "work_context"},
+            {"text": "Works from the Thuwal lab.", "category": "general_preferences",
+             "categories": ["location_context", "made_up", " work_context ", "location_context",
+                            "goals_and_constraints", "values_and_ethics"], "scope": "global"},
+            {"text": "Ship on Fridays.", "category": "work_context", "categories": ["made_up"]},
         ]})
     );
     assert_eq!(
@@ -61,17 +65,36 @@ fn a_reply_keeps_twelve_checked_memories_and_falls_back_by_scope() {
             ExtractedMemory {
                 text: "Answer in British English.".into(),
                 category: "general_preferences".into(),
+                categories: vec!["general_preferences".into()],
                 scope: "global".into()
             },
             ExtractedMemory {
                 text: "Use pnpm.".into(),
                 category: "hcp-custom:task_lessons".into(),
+                categories: vec!["hcp-custom:task_lessons".into()],
                 scope: "project".into()
             },
             ExtractedMemory {
                 text: "Prefer metric units.".into(),
                 category: "general_preferences".into(),
+                categories: vec!["general_preferences".into()],
                 scope: "global".into()
+            },
+            ExtractedMemory {
+                text: "Works from the Thuwal lab.".into(),
+                category: "location_context".into(),
+                categories: vec![
+                    "location_context".into(),
+                    "work_context".into(),
+                    "goals_and_constraints".into()
+                ],
+                scope: "global".into()
+            },
+            ExtractedMemory {
+                text: "Ship on Fridays.".into(),
+                category: "work_context".into(),
+                categories: vec!["work_context".into()],
+                scope: "project".into()
             },
         ]
     );
@@ -290,7 +313,8 @@ async fn extraction_needs_allowed_ai_and_never_reaches_the_model_otherwise() {
     );
     assert_eq!(
         memories[0],
-        json!({"text": "Synthetic rule 0.", "category": "hcp-custom:task_lessons", "scope": "project"})
+        json!({"text": "Synthetic rule 0.", "category": "hcp-custom:task_lessons",
+               "categories": ["hcp-custom:task_lessons"], "scope": "project"})
     );
     let seen = fixture.model.seen.lock().unwrap().clone();
     assert_eq!(seen.len(), 1);

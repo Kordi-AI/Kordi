@@ -15,4 +15,9 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "0194_calendar_share_availability.sql"
     ),
     migration!(195, "agent plan cards", "0195_agent_plan_cards.sql"),
+    migration!(
+        196,
+        "memory categories multi",
+        "0196_memory_categories_multi.sql"
+    ),
 ];

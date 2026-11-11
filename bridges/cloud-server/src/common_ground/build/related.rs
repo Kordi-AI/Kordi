@@ -26,7 +26,8 @@ pub(super) const SYSTEM_BLOCK: &str = "You also get the person's other saved mem
 pub(in crate::common_ground) struct Candidate {
     pub id: String,
     pub text: String,
-    pub category: String,
+    /// One to three categories, primary first.
+    pub categories: Vec<String>,
 }
 
 /// The memories the build of `target` offers. Only builds that read
@@ -54,11 +55,11 @@ pub(super) async fn candidates(
             |CandidateMemory {
                  memory_id,
                  text,
-                 category,
+                 categories,
              }| Candidate {
                 id: memory_id,
                 text: squeeze(&redact(&text), MAX_CANDIDATE_CHARS),
-                category,
+                categories,
             },
         )
         .filter(|candidate| !candidate.text.is_empty())
@@ -71,7 +72,9 @@ pub(in crate::common_ground) fn user_block(candidates: &[Candidate]) -> String {
     for candidate in candidates {
         out.push_str(&format!(
             "[{}] {} · {}\n",
-            candidate.id, candidate.category, candidate.text
+            candidate.id,
+            candidate.categories.join(", "),
+            candidate.text
         ));
     }
     out
