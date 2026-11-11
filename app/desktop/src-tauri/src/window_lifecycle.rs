@@ -1,7 +1,5 @@
 #[cfg(any(target_os = "macos", test))]
 use std::path::{Path, PathBuf};
-#[cfg(target_os = "macos")]
-use std::process::{Command, Stdio};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -137,17 +135,9 @@ pub(crate) fn desktop_relaunch_after_update(app: tauri::AppHandle) -> Result<(),
             .map_err(|_| UPDATE_RELAUNCH_RECOVERY.to_string())?;
         let bundle = macos_app_bundle_path(&executable)
             .ok_or_else(|| UPDATE_RELAUNCH_RECOVERY.to_string())?;
-        super::run_external_command(
-            Command::new("/usr/bin/open")
-                .arg("-n")
-                .arg(bundle)
-                .arg("--args")
-                .arg(UPDATE_RELAUNCH_ARG)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null()),
-        )
-        .map_err(|_| UPDATE_RELAUNCH_RECOVERY.to_string())?;
+        super::update_relaunch::command(std::process::id(), &bundle, UPDATE_RELAUNCH_ARG)
+            .spawn()
+            .map_err(|_| UPDATE_RELAUNCH_RECOVERY.to_string())?;
         // LaunchServices owns the replacement; the restart code only makes
         // shutdown non-cancelable and skips the presence-offline hook.
         app.exit(tauri::RESTART_EXIT_CODE);
