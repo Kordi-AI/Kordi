@@ -178,6 +178,10 @@ DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
 DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
   cargo test -p kordi-cloud-server --lib chat_sync::realtime::tests::realtime_revalidates_instance_admission_for_session_and_legacy_tickets -- --ignored --exact
 
+# Run payload retention clears old finished runs in place and keeps the rows.
+DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
+  cargo test -p kordi-cloud-server --lib cloud_agent_runtime::runs::retention:: -- --ignored --test-threads=1
+
 # Plan-card regressions need PostgreSQL, including rejected replacements,
 # stale-context protection, and per-attendee calendar projections.
 migration_create_database kordi_migration_test_plan_cards
@@ -192,3 +196,11 @@ KORDI_DIGEST_TEST_DATABASE_URL="$(migration_database_url kordi_migration_test_pl
 migration_create_database kordi_migration_test_system_agent_eval
 KORDI_SYSTEM_AGENT_EVAL_DATABASE_URL="$(migration_database_url kordi_migration_test_system_agent_eval)" \
   cargo test -p kordi-system-agent-eval --locked -- --include-ignored --test-threads=1
+
+# Authentication cache and expiry regressions must exercise real PostgreSQL.
+DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
+  cargo test -p kordi-cloud-server --lib -- auth::session::tests auth::session_cache:: auth::session_signals:: \
+    --test-threads=1
+# Timezone cache validation must also run, including fallback behavior.
+KORDI_DIGEST_TEST_DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
+  cargo test -p kordi-cloud-server --lib digest::timezones:: -- --include-ignored --test-threads=1

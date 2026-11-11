@@ -21,6 +21,7 @@ pub(crate) mod store;
 mod sync_routes;
 pub(crate) mod system_agent_guard;
 mod task_routes;
+mod timezones;
 pub(crate) mod urgent;
 pub(crate) mod worker;
 pub use routes::routes;
