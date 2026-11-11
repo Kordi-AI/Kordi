@@ -48,9 +48,11 @@ struct DigestCalendarSyncLine: View {
 
 /// Optional exclusions and the outbound target. Nothing here is required for sync to run.
 struct DigestCalendarSettingsView: View {
+    let app: AppModel
     @ObservedObject var sync: DigestCalendarSyncCoordinator
     @State var preferences: DigestCalendarSyncPreferences
     let save: (DigestCalendarSyncPreferences) -> Void
+    @StateObject private var share = CalendarShareAvailabilityModel()
 
     var body: some View {
         Form {
@@ -80,7 +82,74 @@ struct DigestCalendarSettingsView: View {
                     }
                 }
             } footer: { Text("No invitations are sent.") }
+            if let enabled = share.enabled {
+                Section {
+                    Toggle(CalendarShareAvailabilityModel.label, isOn: Binding(get: { enabled }, set: { next in Task { await share.set(next, app: app) } }))
+                } footer: { Text(share.error ?? CalendarShareAvailabilityModel.caption) }
+            }
         }
         .navigationTitle("Calendar settings").navigationBarTitleDisplayMode(.inline)
+        .task { await share.load(app) }
+    }
+}
+
+// MARK: Share busy/free
+
+private struct CalendarShareAccount: Decodable { let shareCalendarAvailability: Bool? }
+private struct CalendarShareUpdate: Encodable { let shareCalendarAvailability: Bool }
+
+extension CloudAPIClient {
+    /// `shareCalendarAvailability` on `GET /v1/cloud/auth/me`; nil on servers without the setting.
+    func calendarShareAvailability(token: String) async throws -> Bool? {
+        let account: CalendarShareAccount = try await send(path: "/v1/cloud/auth/me", method: "GET", token: token, fallback: "Could not load this setting.")
+        return account.shareCalendarAvailability
+    }
+
+    func updateCalendarShareAvailability(token: String, enabled: Bool) async throws -> Bool? {
+        let account: CalendarShareAccount = try await send(
+            path: "/v1/cloud/auth/me", method: "PATCH", token: token,
+            body: CalendarShareUpdate(shareCalendarAvailability: enabled), fallback: CalendarShareAvailabilityModel.saveError
+        )
+        return account.shareCalendarAvailability
+    }
+}
+
+/// Whether people in the owner's chats may ask the owner's agent for busy/free
+/// times. Optimistic: a failed save restores the previous value. Hidden on
+/// servers without the setting.
+@MainActor
+final class CalendarShareAvailabilityModel: ObservableObject {
+    static let label = "Share busy/free with people in my chats"
+    static let caption = "Their agents can ask yours when you're free. Event details stay private."
+    static let saveError = "Could not save this setting."
+
+    @Published private(set) var enabled: Bool?
+    @Published private(set) var error: String?
+    private var attempt = 0
+
+    func load(_ app: AppModel) async {
+        if app.isPreviewMode { enabled = enabled ?? true; return }
+        guard let (api, token, accountId) = try? app.projectContext(),
+              let value = try? await api.calendarShareAvailability(token: token),
+              app.account?.accountId == accountId else { return }
+        enabled = value
+    }
+
+    func set(_ next: Bool, app: AppModel) async {
+        guard let previous = enabled, previous != next else { return }
+        attempt += 1
+        let current = attempt
+        enabled = next
+        error = nil
+        if app.isPreviewMode { return }
+        do {
+            guard let (api, token, _) = try? app.projectContext() else { throw CloudAPIError(code: "signed_out", message: Self.saveError, statusCode: 0) }
+            let saved = try await api.updateCalendarShareAvailability(token: token, enabled: next)
+            if saved != next { throw CloudAPIError(code: "unsupported", message: Self.saveError, statusCode: 0) }
+        } catch {
+            guard current == attempt else { return }
+            enabled = previous
+            self.error = Self.saveError
+        }
     }
 }

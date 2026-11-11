@@ -1,4 +1,5 @@
-//! Run history never carries messages from people who declined AI.
+//! Run history never carries messages from people who declined AI, nor
+//! model-change notices.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde_json::json;
@@ -63,6 +64,20 @@ async fn history_leaves_out_messages_from_people_who_declined_ai() {
             URL_SAFE_NO_PAD.encode(serde_json::to_vec(&envelope).unwrap())
         )
     };
+    // A model change is a session setting, not something anyone said.
+    query(
+        "INSERT INTO cloud_chat_messages (message_id, conversation_id, conversation_sequence, \
+         sender_account_id, client_message_id, request_fingerprint, message_kind, content) \
+         VALUES ($1, $2, 1, $3, $4, 'test', 'agent-model-change', $5)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(conversation)
+    .bind(&owner)
+    .bind(Uuid::new_v4())
+    .bind(json!({"blocks": [{"type": "text", "text": "Model: synthetic/model · Thinking effort: Medium"}]}))
+    .execute(&pool)
+    .await
+    .unwrap();
     let mut request = String::new();
     for (sequence, (sender, text)) in [
         (&undecided, "Friday works for me"),
@@ -85,7 +100,7 @@ async fn history_leaves_out_messages_from_people_who_declined_ai() {
         )
         .bind(id)
         .bind(conversation)
-        .bind(sequence as i64 + 1)
+        .bind(sequence as i64 + 2)
         .bind(sender)
         .bind(Uuid::new_v4())
         .bind(json!({"blocks": [{"type": "text", "text": body}]}))
@@ -112,4 +127,5 @@ async fn history_leaves_out_messages_from_people_who_declined_ai() {
     let everything = format!("{}\n{}", prompt.user_prompt, prompt.omp_input);
     assert!(everything.contains("Friday works for me"), "{everything}");
     assert!(!everything.contains("My private reply"), "{everything}");
+    assert!(!everything.contains("Thinking effort"), "{everything}");
 }

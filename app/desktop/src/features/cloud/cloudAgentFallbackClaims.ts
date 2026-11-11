@@ -30,7 +30,6 @@ import {
   cloudMessageActionAllowsAgentContext,
   cloudMessageActionAllowsAgentTrigger,
 } from './cloudAgentTriggerPolicy';
-import { cloudGroupAgentHandoffTarget } from './cloudGroupMentions';
 import { cloudGroupHumanAgentTarget } from './cloudGroupAgentTarget';
 import type { CloudGroupControlEnvelope } from './cloudGroupMessages';
 import {
@@ -287,8 +286,9 @@ export function cloudFallbackRunClaimsForMessages({
       || !cloudMessageActionAllowsAgentTrigger(groupMessage.messageAction)) continue;
     if (recentSinceMs !== undefined && (!Number.isFinite(groupMessage.createdAtMs)
       || groupMessage.createdAtMs < recentSinceMs)) continue;
+    // An agent's message never starts another agent's run.
     const ownerAccountId = groupMessage.senderKind === 'agent'
-      ? cloudGroupAgentHandoffTarget(envelope)?.accountId
+      ? undefined
       : cloudGroupHumanAgentTarget(groupMessage, envelope.participants)?.ownerAccountId;
     // The sender claims for every target, its own agent included: the server
     // holds the run for a ready owner Mac and the cloud answers if none does.

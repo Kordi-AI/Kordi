@@ -15,18 +15,32 @@ use sqlx_postgres::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
+mod answering;
+mod decision;
 mod lifecycle;
+mod main_row;
 mod outcome;
+mod person;
+mod person_replies;
 mod progress;
+mod publish;
+mod rounds;
+mod slots;
 pub(crate) use outcome::{
     control_safe_body, is_control_progress, is_control_response, parent_completion,
     parent_completion_body, separate_control_outcome,
 };
+pub(crate) use person_replies::match_replies as match_person_replies;
 mod store;
 pub(crate) use lifecycle::{finish, reconcile};
-use store::{authorize, directory, send};
+pub(crate) use main_row::{show_waiting, yield_in_place};
+pub(crate) use outcome::WAITING;
+pub(crate) use store::authorize;
+use store::{directory, send};
 
 pub(crate) const PREFIX: &str = "agent-exchange:";
+/// Collaboration requests one task (its root run) may send in all.
+pub(crate) const REQUEST_LIMIT: i64 = rounds::LIMIT;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -97,12 +111,16 @@ async fn execute(
     input: Input,
 ) -> RunResult<Value> {
     let parent = authorize(pool, run, Some((executor, account))).await?;
-    // Another person's agent cannot use this tool to acquire owner authority.
-    if parent.owner != parent.requester {
+    // Another person's request cannot use this tool to acquire owner
+    // authority: it may only ask that person back (see `Parent`).
+    if !parent.may_reach_out() {
         return Err(RunError::NotFound);
     }
     if input.action == "capabilities" {
-        return Ok(json!({"available":true,"targets":directory(pool, &parent).await?}));
+        let people = person::directory(pool, &parent).await?;
+        return Ok(
+            json!({"available":true,"targets":directory(pool, &parent).await?,"people":people}),
+        );
     }
     if input.tool_call_id.trim().is_empty() || input.tool_call_id.len() > 256 {
         return Err(RunError::NotFound);
@@ -242,24 +260,34 @@ async fn desktop_finish(
     }.await)
 }
 
-/// A lease advertises the tool only when its authorization and directory exist.
-pub(crate) async fn guidance(pool: &PgPool, run: &str) -> RunResult<Option<String>> {
+/// Whom this run can reach for its request, for the tail runtime note:
+/// agents and people with their exact ids and handles. `None` when the run
+/// cannot reach out or nobody is reachable.
+pub(crate) async fn reachable(pool: &PgPool, run: &str) -> RunResult<Option<Value>> {
     let parent = match authorize(pool, run, None).await {
         Ok(p) => p,
         Err(RunError::NotFound) => return Ok(None),
         Err(e) => return Err(e),
     };
-    if parent.owner != parent.requester {
+    if !parent.may_reach_out() {
         return Ok(None);
     }
     let targets = directory(pool, &parent).await?;
-    if targets.is_empty() {
+    let people = person::directory(pool, &parent).await?;
+    if targets.is_empty() && people.is_empty() {
         return Ok(None);
     }
-    Ok(Some(format!(
-        "Use reach_out to contact another agent in this conversation by exact agentId or unique @handle. Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Do not resend or poll. Participant agent directory: {}",
-        json!(targets)
-    )))
+    Ok(Some(json!({"agents":targets,"people":people})))
+}
+
+/// A lease advertises the tool only when its authorization and directory
+/// exist. The text is the same for every run of an agent, so the system
+/// prompt prefix stays stable; whom this run can reach is in the runtime
+/// note at the tail of its context.
+pub(crate) async fn guidance(pool: &PgPool, run: &str) -> RunResult<Option<String>> {
+    Ok(reachable(pool, run)
+        .await?
+        .map(|_| kordi_tools::reach_out::GUIDANCE.to_owned()))
 }
 
 async fn is_authorized(pool: &PgPool, run: &str) -> RunResult<bool> {
@@ -267,5 +295,18 @@ async fn is_authorized(pool: &PgPool, run: &str) -> RunResult<bool> {
         Ok(_) => Ok(true),
         Err(RunError::NotFound) => Ok(false),
         Err(e) => Err(e),
+    }
+}
+
+#[cfg(test)]
+mod guidance_tests {
+    #[test]
+    fn the_guidance_is_stable_and_works_with_other_participants() {
+        let text = kordi_tools::reach_out::GUIDANCE;
+        assert!(text.contains("other participant's agent (preferred)"));
+        assert!(text.contains("never end with a list of open questions"));
+        assert!(text.contains("may only ask that requester"));
+        assert!(text.contains("reach_out to that agent at least once before you finalize"));
+        assert!(!text.contains('{'), "no per-run data in the stable prefix");
     }
 }

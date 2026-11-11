@@ -18,10 +18,14 @@ pub(super) fn outcome(text: &str) -> Option<&'static str> {
 
 /// Notifications and unread accounting must not expose protocol completions.
 pub(crate) fn is_control_response(value: &Value) -> bool {
+    // A slot that waits or processes is progress, not speech to notify about.
+    let pending = |meta: &Value| meta["agentExchangeStatus"].is_string();
     value["deliveryState"] == "complete"
         && (value["text"].as_str().and_then(outcome).is_some()
             || value["synchronizationOnly"] == true
-            || value["structuredContent"]["synchronizationOnly"] == true)
+            || value["structuredContent"]["synchronizationOnly"] == true
+            || pending(value)
+            || pending(&value["structuredContent"]))
 }
 
 fn control_prefix(text: &str) -> bool {
@@ -100,7 +104,50 @@ pub(crate) async fn parent_completion_body(
     };
     reply["text"] =
         json!(parent_completion(pool, run, reply["text"].as_str().unwrap_or_default()).await?);
+    // A yield keeps the slot visible (#2416): it names whom the task waits for.
+    if reply["text"] == WAITING {
+        if let Some((name, account)) = waiting_target(pool, run).await? {
+            super::main_row::apply(
+                &mut wire,
+                group,
+                &super::main_row::Change::Waiting { name, account },
+            );
+            return Ok(format!(
+                "{}:{}",
+                if group {
+                    "kordi-cloud-group"
+                } else {
+                    "kordi-cloud-agent-response"
+                },
+                URL_SAFE_NO_PAD.encode(wire.to_string())
+            ));
+        }
+    }
     Ok(control_safe_body(wire, group))
+}
+
+/// Whom `run`'s newest open question waits for, and that account: a
+/// person, or the other agent (named by its owner).
+pub(super) async fn waiting_target(
+    pool: &PgPool,
+    run: &str,
+) -> RunResult<Option<(String, String)>> {
+    Ok(query_as(
+        "SELECT CASE WHEN e.target_kind='person' THEN COALESCE(NULLIF(btrim(p.display_name),''),'Participant')
+                     ELSE (SELECT CASE WHEN lower(btrim(n))='kordi'
+                                       THEN COALESCE(NULLIF(btrim(o.display_name),''),'Participant')||'''s Kordi' ELSE btrim(n) END
+                           FROM (SELECT COALESCE((SELECT NULLIF(btrim(d.name),'') FROM cloud_agent_definitions d WHERE d.agent_id=e.target_agent_id AND d.owner_account_id=e.target_owner_id),
+                                                 (SELECT NULLIF(btrim(f.display_name),'') FROM cloud_default_agent_profiles f WHERE f.owner_account_id=e.target_owner_id),'Kordi') AS n) agent) END,
+                -- Only a person waits for their own reply; an agent has no account here.
+                COALESCE(e.target_person_id,'')
+         FROM cloud_agent_exchanges e
+         LEFT JOIN cloud_accounts p ON p.account_id=e.target_person_id
+         LEFT JOIN cloud_accounts o ON o.account_id=e.target_owner_id
+         WHERE e.parent_run_id=$1 AND e.status='pending' ORDER BY e.created_at DESC LIMIT 1",
+    )
+    .bind(run)
+    .fetch_optional(pool)
+    .await?)
 }
 
 pub(crate) fn control_safe_body(mut wire: Value, group: bool) -> String {

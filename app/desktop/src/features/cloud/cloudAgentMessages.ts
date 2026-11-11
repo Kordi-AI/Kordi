@@ -1,4 +1,4 @@
-import { agentExchangeStatus, type AgentExchangeStatus } from './agentExchangePresentation';
+import { agentExchangeStatus, agentExchangeWaitingFor, type AgentExchangeStatus } from './agentExchangePresentation';
 import { decodeBase64UrlUtf8, encodeBase64UrlUtf8 } from './cloudBase64Url';
 import { cloudAgentReplyEnding, type CloudAgentReplyEnding } from './cloudAgentReplyEnding';
 export { cloudAgentReplyEnding, type CloudAgentReplyEnding } from './cloudAgentReplyEnding';
@@ -40,6 +40,9 @@ export type CloudAgentResponseEnvelope = {
   failureCode?: CloudAgentFailureCode;
   synchronizationOnly?: boolean;
   agentExchangeStatus?: AgentExchangeStatus;
+  agentExchangeWaitingFor?: string;
+  agentExchangeWaitingForRequester?: boolean;
+  agentExchangeWaitingForAccountId?: string; // The account the question waits for.
   ending?: CloudAgentReplyEnding;
   execution?: CloudAgentExecutionSnapshot;
   backgroundSessions?: CloudAgentBackgroundSession[];
@@ -223,7 +226,7 @@ export function parseCloudAgentResponse(body: string): CloudAgentResponseEnvelop
       || parsed.deliveryState === 'cancelled'
       ? parsed.deliveryState
       : undefined;
-    const exchangeStatus = agentExchangeStatus(parsed.agentExchangeStatus);
+    const exchangeStatus = agentExchangeStatus(parsed.agentExchangeStatus), waitingFor = agentExchangeWaitingFor(parsed.agentExchangeWaitingFor);
     const ending = cloudAgentReplyEnding(parsed.ending);
     const execution = parseCloudAgentExecutionSnapshot(parsed.execution);
     const backgroundSessions = parseCloudAgentBackgroundSessions(parsed.backgroundSessions);
@@ -236,7 +239,8 @@ export function parseCloudAgentResponse(body: string): CloudAgentResponseEnvelop
       kind: 'agent-response',
       requestId: parsed.requestId,
       text: parsed.text,
-      ...(exchangeStatus ? { agentExchangeStatus: exchangeStatus } : {}),
+      ...(exchangeStatus ? { agentExchangeStatus: exchangeStatus } : {}), ...(waitingFor ? { agentExchangeWaitingFor: waitingFor } : {}), ...(waitingFor && parsed.agentExchangeWaitingForRequester === true ? { agentExchangeWaitingForRequester: true } : {}),
+      ...(waitingFor && typeof parsed.agentExchangeWaitingForAccountId === 'string' && parsed.agentExchangeWaitingForAccountId.trim() ? { agentExchangeWaitingForAccountId: parsed.agentExchangeWaitingForAccountId.trim().slice(0, 200) } : {}),
       ...(parsed.synchronizationOnly === true ? { synchronizationOnly: true } : {}),
       ...(deliveryState ? { deliveryState } : {}),
       ...(deliveryState === 'failed' ? cloudAgentFailureCodeField(parsed.failureCode) : {}),
@@ -372,9 +376,10 @@ export function cloudMessageMentionsNamedAgent(text: string, ownerOrAgentName: s
 
 export function promptTextForCloudAgentMention(text: string, voice?: (Omit<CloudVoiceMessage, 'mediaId'> & { mediaId?: string | null }) | null): string {
   if (voice) return voiceAgentText({ ...voice, transcript: promptTextForCloudAgentMention(voice.transcript) });
-  // Match complete handles, never the prefix of a path or an email address.
+  // Strip only the leading address, a complete handle (never a path or an
+  // email). Later mentions name discussion partners and stay in the request.
   const withoutMentions = text.replace(
-    /(^|[\s([{])@([\p{L}\p{N}._'-]+)(?=\s|$)/gu,
+    /^(\s*)@([\p{L}\p{N}._'-]+)(?=\s|$)/u,
     (match, prefix: string, handle: string) => (
       handle.includes('.') || handle.startsWith("'") ? match : prefix
     ),

@@ -21,7 +21,7 @@ fn default_context_policy() -> String {
 pub struct ReachOutInput {
     /// Bridge person/agent display name, owner name, node id, human id, or agent id.
     pub target: String,
-    /// Optional target kind: bridge-agent or bridge-person.
+    /// Optional target kind: agent or person (bridge-agent and bridge-person are aliases).
     pub target_kind: Option<String>,
     /// The question or request to send.
     pub message: String,
@@ -40,6 +40,11 @@ pub struct ReachOutInput {
     pub timeout_seconds: Option<u64>,
 }
 
+/// Stable reach_out guidance for the system prompt of a run in a shared
+/// conversation. Whom a run can reach is in the runtime note at the tail of
+/// its context, so this text is the same for every run of an agent.
+pub const GUIDANCE: &str = "Use reach_out to contact another agent or ask a person in this conversation; target them by agentId or accountId, never by display name, since names can repeat. The runtime note at the end of your context lists whom you can reach for this request, with their exact agentId or accountId and @handle. For a person, set targetKind to person; their next message here, or their reply to your question, is the answer. A request from someone other than your owner may only ask that requester or reach the requester's own agents, and while answering another agent you may only ask your own owner. When the request names another agent (an @mention or \"with/ask\" that agent), reach_out to that agent at least once before you finalize, unless its reply already arrived in this task's rounds; never answer for it from earlier chat. When the task involves other participants (plans, times, availability, preferences), first reach_out to each other participant's agent (preferred) or to the person for what only they know, and ask the requester with reach_out for what only the requester knows; never end with a list of open questions. If you need information or a decision from the person who asked before you can finish, ask them with reach_out instead of ending your turn with a question; their reply continues the task. Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task, which you own until it has a result. Do not resend or poll.";
+
 pub struct ReachOutTool;
 
 #[async_trait]
@@ -48,13 +53,21 @@ impl Tool for ReachOutTool {
         "reach_out"
     }
 
+    /// A request from someone other than the owner may still ask: the
+    /// runtime exists only under a server lease, and the server limits such a
+    /// run to its requester, or to its own owner while answering another agent.
+    fn allows_shared_requests(&self) -> bool {
+        true
+    }
+
     fn description(&self) -> &str {
-        "Send an explicit request to another agent in the current conversation. Use an exact agent ID or unique @handle from the participant directory. A successful request is durable and returns a receipt. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Never resend or poll while waiting."
+        "Send an explicit request to another agent, or ask a person, in the current conversation. Use an exact agent ID, person account ID, or unique @handle from the participant directory, and set targetKind to person when asking a person. A person's next message in the conversation, or their reply to the question, is the answer. In a shared conversation, ask the person who made the request this way, instead of ending the turn with a question, when you need their input to finish; for a request from someone other than your owner, you can ask only them or their own agents. For a task that involves other participants, reach their agent (preferred) or them for their availability or preferences, and the requester for what only they know; never end with a list of open questions. A successful request is durable and returns a receipt. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Never resend or poll while waiting."
     }
 
     fn parameters_schema(&self) -> Value {
         json!({"type":"object","properties":{
-            "target":{"type":"string","description":"Exact agent ID or unique @handle from this conversation's directory."},
+            "target":{"type":"string","description":"Exact agent ID, person account ID, or unique @handle from this conversation's directory."},
+            "targetKind":{"type":"string","enum":["agent","person"],"description":"Whether the target is an agent or a person in this conversation. Defaults to whichever one the target names."},
             "message":{"type":"string","description":"The explicit request to share with all conversation members. Never include private files, credentials, or hidden context."}
         },"required":["target","message"],"additionalProperties":false})
     }
@@ -83,10 +96,7 @@ impl Tool for ReachOutTool {
         let request = ReachOutRequest {
             tool_call_id: ctx.invocation_id.clone(),
             target: input.target.trim().to_string(),
-            target_kind: input
-                .target_kind
-                .as_ref()
-                .map(|value| value.trim().to_ascii_lowercase()),
+            target_kind: input.target_kind.as_deref().and_then(normalize_target_kind),
             message: input.message.trim().to_string(),
             context,
             context_policy: normalize_context_policy(&input.context_policy)?,
@@ -161,15 +171,24 @@ fn validate_input(input: &ReachOutInput) -> KordiResult<()> {
         ));
     }
     let _ = normalize_context_policy(&input.context_policy)?;
-    if let Some(kind) = input.target_kind.as_deref() {
-        let normalized = kind.trim().to_ascii_lowercase();
-        if normalized != "bridge-agent" && normalized != "bridge-person" {
-            return Err(KordiError::Tool(
-                "reach_out targetKind must be bridge-agent or bridge-person".to_string(),
-            ));
-        }
+    if let Some(kind) = input.target_kind.as_deref()
+        && !kind.trim().is_empty()
+        && normalize_target_kind(kind).is_none()
+    {
+        return Err(KordiError::Tool(
+            "reach_out targetKind must be agent or person".to_string(),
+        ));
     }
     Ok(())
+}
+
+/// The runtime kind for a requested target kind: `agent` or `person`.
+pub fn normalize_target_kind(value: &str) -> Option<String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "agent" | "bridge-agent" => Some("agent".to_string()),
+        "person" | "bridge-person" => Some("person".to_string()),
+        _ => None,
+    }
 }
 
 fn normalize_context_policy(value: &str) -> KordiResult<String> {
@@ -253,4 +272,84 @@ fn build_project_context(ctx: &ToolContext) -> Option<String> {
         }
     }
     (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_non_owner_shared_request_may_use_reach_out() {
+        let ctx = ToolContext {
+            cwd: std::env::temp_dir(),
+            artifacts_dir: std::env::temp_dir(),
+            model: None,
+            execution_policy: crate::ExecutionPolicy::Shared,
+            invocation_id: None,
+            on_output: None,
+            web_search: None,
+            reach_out: None,
+            plan_card: None,
+            reflection: None,
+            session_observation: None,
+            task_operator: None,
+            schedule_task: None,
+            mac_local: None,
+            execution_mode: crate::ToolExecutionMode::Interactive,
+            connector_tools: None,
+            request_approval: None,
+        };
+        assert!(ReachOutTool.allows_shared_requests());
+        assert!(crate::ensure_tool_allowed(&ReachOutTool, &ctx).is_ok());
+    }
+
+    fn input(kind: Option<&str>) -> ReachOutInput {
+        serde_json::from_value(
+            json!({"target":"@MayaChen","message":"Which day?","targetKind":kind}),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn schema_offers_people_and_agents() {
+        let schema = ReachOutTool.parameters_schema();
+        assert_eq!(
+            schema["properties"]["targetKind"]["enum"],
+            json!(["agent", "person"])
+        );
+        assert_eq!(schema["required"], json!(["target", "message"]));
+        assert!(ReachOutTool.description().contains("ask a person"));
+        assert!(
+            ReachOutTool
+                .description()
+                .contains("ask the person who made the request")
+        );
+        assert!(GUIDANCE.contains("reach_out to that agent at least once before you finalize"));
+        assert!(
+            ReachOutTool
+                .description()
+                .contains("you can ask only them or their own agents")
+        );
+        assert!(
+            ReachOutTool
+                .description()
+                .contains("never end with a list of open questions")
+        );
+    }
+
+    #[test]
+    fn target_kinds_accept_tool_and_bridge_spellings() {
+        for (kind, expected) in [
+            ("person", Some("person")),
+            ("Bridge-Person", Some("person")),
+            ("agent", Some("agent")),
+            ("bridge-agent", Some("agent")),
+            ("group", None),
+        ] {
+            assert_eq!(normalize_target_kind(kind).as_deref(), expected);
+        }
+        assert!(validate_input(&input(Some("person"))).is_ok());
+        assert!(validate_input(&input(None)).is_ok());
+        assert!(validate_input(&input(Some("group"))).is_err());
+    }
 }

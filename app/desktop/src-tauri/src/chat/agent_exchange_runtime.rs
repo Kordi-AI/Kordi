@@ -27,13 +27,15 @@ impl Transport {
     }
 }
 
+/// The server decides who this run may reach: everyone for the owner's own
+/// request, only the requester for anyone else's, and nobody on an older
+/// server, whose capability check refuses requests from other people.
+/// `listed_in_identity`: the turn identity's runtime note already lists whom
+/// this run can reach (newer servers), so the guidance is the stable text.
 pub(super) async fn build(
     lease: Option<&DesktopCloudExecutionLease>,
-    owner_request: bool,
+    listed_in_identity: bool,
 ) -> Option<(ReachOutRuntime, String)> {
-    if !owner_request {
-        return None;
-    }
     let lease = lease?.clone();
     let base = crate::cloud_api_base_url_from_env().ok()?;
     let transport = Arc::new(Transport {
@@ -51,32 +53,24 @@ pub(super) async fn build(
     });
     // A missing capability on an older backend leaves the tool hidden.
     let capabilities = transport.call("capabilities", "", json!({})).await.ok()?;
-    if capabilities["available"] != true || capabilities["targets"].as_array()?.is_empty() {
-        return None;
-    }
-    let guidance = format!(
-        "Use reach_out to contact another agent in this conversation. Send only the explicit question, never private context or files. Use an exact agentId or an unambiguous @handle from this directory: {}. A successful call queues the request. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Do not poll or resend.",
-        capabilities["targets"]
-    );
+    let guidance = if listed_in_identity {
+        (capabilities["available"] == true).then(|| kordi_tools::reach_out::GUIDANCE.to_owned())?
+    } else {
+        guidance(&capabilities)?
+    };
     Some((
         ReachOutRuntime {
             reach_out: Arc::new(move |request: ReachOutRequest| {
                 let transport = transport.clone();
                 Box::pin(async move {
                     let id = request.tool_call_id.as_deref().ok_or_else(unavailable)?;
-                    let response = transport
-                        .call(
-                            "send",
-                            id,
-                            json!({"target":request.target,"message":request.message}),
-                        )
-                        .await?;
+                    let response = transport.call("send", id, send_arguments(&request)).await?;
                     Ok(ReachOutResponse {
                         conversation_id: response["exchangeId"]
                             .as_str()
                             .ok_or_else(unavailable)?
                             .into(),
-                        target_kind: "agent".into(),
+                        target_kind: response["targetKind"].as_str().unwrap_or("agent").into(),
                         target_display_name: response["target"]["name"]
                             .as_str()
                             .unwrap_or("Agent")
@@ -93,4 +87,116 @@ pub(super) async fn build(
         },
         guidance,
     ))
+}
+
+fn listed(value: &Value) -> bool {
+    value.as_array().is_some_and(|items| !items.is_empty())
+}
+
+/// The directory the agent sees from a server whose turn identity carries no
+/// runtime note: other agents, and people it may ask. Older backends list no
+/// people, so only agents are offered there.
+fn guidance(capabilities: &Value) -> Option<String> {
+    let agents = listed(&capabilities["targets"]);
+    let people = listed(&capabilities["people"]);
+    if capabilities["available"] != true || !(agents || people) {
+        return None;
+    }
+    let only_requester = !agents
+        && capabilities["people"]
+            .as_array()
+            .is_some_and(|people| people.iter().all(|p| p["requester"] == true));
+    if only_requester {
+        return Some(format!(
+            "If you need information or a decision from the person who asked before you can finish, ask them with reach_out (targetKind person, their accountId) instead of ending your turn with a question; their next message in this conversation, or their reply to your question, continues the task. They are the only one you can ask for this request: do not contact other agents or people. Ask only for what is actually missing, in one message, and never share private context or files; never end with a list of open questions. Follow the receipt to end this turn. Do not poll or resend. Person you can ask: {}.",
+            capabilities["people"]
+        ));
+    }
+    let mut text = String::from("Use reach_out to contact another agent or ask a person in this conversation. Send only the explicit question, never private context or files.");
+    if agents {
+        text.push_str(&format!(
+            " Agents: use an exact agentId or an unambiguous @handle from this directory: {}.",
+            capabilities["targets"]
+        ));
+    }
+    if people {
+        text.push_str(&format!(
+            " People: set targetKind to person and use an exact accountId or an unambiguous @handle from this directory: {}. Their next message in this conversation, or their reply to your question, is the answer.",
+            capabilities["people"]
+        ));
+    }
+    let requester = capabilities["people"]
+        .as_array()
+        .is_some_and(|people| people.iter().any(|p| p["requester"] == true));
+    if requester {
+        text.push_str(" If you need information or a decision from the person who asked (marked requester) before you can finish, ask them with reach_out instead of ending your turn with a question; their reply continues the task.");
+    }
+    text.push_str(" When the task involves other participants (plans, times, availability, preferences), first reach_out to each other participant's agent (preferred) or to the person for what only they know, and ask the requester with reach_out for what only the requester knows; never end with a list of open questions.");
+    text.push_str(" A successful call queues the request. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Do not poll or resend.");
+    Some(text)
+}
+
+fn send_arguments(request: &ReachOutRequest) -> Value {
+    let mut arguments = json!({"target":request.target,"message":request.message});
+    if let Some(kind) = request.target_kind.as_deref() {
+        arguments["targetKind"] = json!(kind);
+    }
+    arguments
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn people_are_listed_as_reachable_targets() {
+        let both = json!({"available":true,"targets":[{"agentId":"cloud-agent:a","handle":"KordiAlex"}],"people":[{"accountId":"p","name":"Maya","handle":"Maya"}]});
+        let text = guidance(&both).unwrap();
+        assert!(text.contains("KordiAlex") && text.contains("targetKind to person"));
+        assert!(text.contains("\"accountId\":\"p\""));
+        let people_only = json!({"available":true,"targets":[],"people":[{"accountId":"p"}]});
+        assert!(guidance(&people_only).unwrap().contains("People:"));
+        assert!(!text.contains("marked requester"));
+        let owner_request = json!({"available":true,"targets":[],"people":[{"accountId":"o","requester":true},{"accountId":"p"}]});
+        assert!(guidance(&owner_request)
+            .unwrap()
+            .contains("ask them with reach_out instead of ending your turn with a question"));
+        let shared =
+            json!({"available":true,"targets":[],"people":[{"accountId":"o","requester":true}]});
+        let requester_only = guidance(&shared).unwrap();
+        assert!(requester_only.contains("They are the only one you can ask"));
+        assert!(!requester_only.contains("contact another agent"));
+        assert!(requester_only.contains("never end with a list of open questions"));
+        assert!(text.contains("each other participant's agent (preferred)"));
+        let older = json!({"available":true,"targets":[{"agentId":"cloud-agent:a"}]});
+        assert!(!guidance(&older).unwrap().contains("People:"));
+        assert!(guidance(&json!({"available":true,"targets":[],"people":[]})).is_none());
+        assert!(guidance(&json!({"available":false,"people":[{"accountId":"p"}]})).is_none());
+    }
+
+    #[test]
+    fn the_target_kind_is_passed_through() {
+        let mut request = ReachOutRequest {
+            tool_call_id: Some("call".into()),
+            target: "@Maya".into(),
+            target_kind: Some("person".into()),
+            message: "Which day?".into(),
+            context: None,
+            context_policy: "recent-window".into(),
+            include_project_context: false,
+            wait_for_response: true,
+            timeout_seconds: None,
+            parent_session_id: None,
+            parent_turn_id: None,
+            parent_message_id: None,
+            project_id: None,
+            project_name: None,
+        };
+        assert_eq!(
+            send_arguments(&request),
+            json!({"target":"@Maya","targetKind":"person","message":"Which day?"})
+        );
+        request.target_kind = None;
+        assert!(send_arguments(&request).get("targetKind").is_none());
+    }
 }

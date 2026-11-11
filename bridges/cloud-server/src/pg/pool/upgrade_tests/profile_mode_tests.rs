@@ -11,7 +11,7 @@ async fn upgrade_from_187_adds_profile_field_modes() {
          WHERE account_id = 'fixture-owner'",
     )
     .await;
-    let accounts = "SELECT to_jsonb(a) - ARRAY['location_mode','time_zone_mode'] \
+    let accounts = "SELECT to_jsonb(a) - ARRAY['location_mode','time_zone_mode','share_calendar_availability'] \
         FROM cloud_accounts a ORDER BY account_id";
     let before: Vec<(Value,)> = query_as(accounts).fetch_all(&pool).await.unwrap();
     let (a, b) = tokio::join!(apply_migrations(&pool), apply_migrations(&pool));

@@ -119,6 +119,7 @@ async fn identity_memory_runtime(
         requester_account_id: "visitor".into(),
         requester_name: "Visitor".into(),
         request_policy: None,
+        conversation_context: None,
     };
     runtime.sync_shared_context_messages(&[DesktopChatContextMessage {
         execution_lease: None,

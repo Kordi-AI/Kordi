@@ -99,10 +99,10 @@ async fn refused_by(
 }
 
 /// Drops a pass the pool would not admit, without a message or a backlog:
-/// the cursor moves past the new messages, offered reminders count as fired
-/// and the open card as seen, as if the pass had run and stayed silent. The
-/// first refusal of the window by a limit is recorded for Settings; `None`
-/// (a disabled organization) records nothing.
+/// the cursor moves past the new messages, offered reminders and the trigger
+/// count as fired and the open card as seen, as if the pass had run and
+/// stayed silent. The first refusal of the window by a limit is recorded for
+/// Settings; `None` (a disabled organization) records nothing.
 pub(super) async fn stay_silent(
     pool: &PgPool,
     candidate: &Candidate,
@@ -122,7 +122,7 @@ pub(super) async fn stay_silent(
     )
     .bind(candidate.conversation_id)
     .bind(candidate.latest_sequence)
-    .bind(super::store::offered_reminders(input))
+    .bind(super::triggers::finish_marks(input))
     .execute(&mut *tx)
     .await?;
     if changed.rows_affected() > 0 {

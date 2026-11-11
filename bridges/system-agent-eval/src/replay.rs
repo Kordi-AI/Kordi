@@ -213,6 +213,7 @@ pub async fn conversation(
     for turn in &fixture.turns {
         let before = seed::latest_sequence(pool, seeded.conversation_id).await?;
         let (earlier_messages, _) = seed::system_messages(pool, &seeded, 0).await?;
+        seed::age_cards(pool, &seeded).await?;
         for message in &turn.messages {
             seed::post(pool, &seeded, message).await?;
         }

@@ -9,6 +9,7 @@ import {
 import { useSupportReportSubmission } from '@/features/support/supportReportSubmission';
 import { cn } from '@/lib/utils';
 import { MarkdownContent } from './markdown';
+import type { MessageMention } from '../types';
 
 const ASSISTANT_ANSWER_FOLDED_VISIBLE_LINES = 6;
 
@@ -69,10 +70,12 @@ export function SupportContactTypingIndicator() {
 
 export function FoldableAssistantAnswer({
   text,
+  mentions,
   foldable = true,
   tone = 'default',
 }: {
   text: string;
+  mentions?: MessageMention[];
   foldable?: boolean;
   tone?: 'default' | 'cancelled';
 }) {
@@ -91,6 +94,7 @@ export function FoldableAssistantAnswer({
       <div className={cn('app-live-assistant-answer-content', folded && 'app-live-assistant-answer-folded')}>
         <MarkdownContent
           text={visibleText}
+          mentions={mentions}
           showLinkIcons
           copySurface="message"
           className={cn(

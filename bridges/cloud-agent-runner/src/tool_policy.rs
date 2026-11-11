@@ -65,7 +65,7 @@ pub fn decide_runner_tool(request: &RunnerToolRequest<'_>) -> RunnerToolDecision
         // Memories go through the run-scoped server route, which holds the
         // guards and the account setting; the tool touches no paths or URLs.
         "reflection" => RunnerToolDecision::AllowSandbox,
-        "reach_out" | "update_plan" | "task_operator" => {
+        "reach_out" | "plan_card" | "update_plan" | "task_operator" => {
             RunnerToolDecision::Block(RunnerToolBlockReason::UnsupportedTool)
         }
         // Connector tools (`gmail_search`, ...): only names the lease lists

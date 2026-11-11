@@ -204,6 +204,7 @@ pub(super) fn validate_message_request(
     if message_kind == "voice" {
         validate_voice_message(content, &request.attachment_ids)?;
     }
+    super::empty_message::reject_empty_text(message_kind, content, &request.attachment_ids)?;
     validate_attachment_metadata(content, &request.attachment_ids)?;
     Ok(())
 }

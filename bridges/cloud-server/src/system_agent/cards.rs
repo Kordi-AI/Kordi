@@ -81,7 +81,7 @@ fn block_view(block: &Value) -> &'static str {
 
 /// A `plan_card` message block for one card view, built from the stored card.
 pub(crate) fn card_block_from_row(row: &PlanCardRow, view: &str) -> Value {
-    json!({
+    let mut block = json!({
         "type": "plan_card",
         "view": view,
         "eventId": row.event_id,
@@ -101,7 +101,18 @@ pub(crate) fn card_block_from_row(row: &PlanCardRow, view: &str) -> Value {
             "rsvp": participant.rsvp.as_db_str(),
             "avatarUrl": participant.avatar_url,
         })).collect::<Vec<_>>(),
-    })
+    });
+    // A card a person's agent opened shows as that agent's message.
+    if let Some(agent) = row.agent.as_ref() {
+        block["plannedBy"] = json!({
+            "agentId": agent.agent_id,
+            "agentName": agent.agent_name(),
+            "ownerAccountId": agent.owner_account_id,
+            "ownerName": agent.owner_name,
+            "avatarUrl": agent.avatar_url,
+        });
+    }
+    block
 }
 
 fn card_blocks<'a>(content: &'a Value, event_id: &'a str) -> impl Iterator<Item = &'a Value> {
@@ -150,7 +161,10 @@ fn refreshed_card_content(mut content: Value, row: &PlanCardRow) -> Option<Value
         let shows_card = block.get("type").and_then(Value::as_str) == Some("plan_card")
             && block.get("eventId").and_then(Value::as_str) == Some(row.event_id.as_str());
         let stored_revision = block.get("revision").and_then(Value::as_i64).unwrap_or(0);
-        let needs_backfill = shows_card && block_needs_avatar_backfill(block);
+        // Blocks written before cards named their agent learn it in place.
+        let needs_backfill = shows_card
+            && (block_needs_avatar_backfill(block)
+                || (row.agent.is_some() && block.get("plannedBy").is_none()));
         if shows_card && (stored_revision < row.revision || needs_backfill) {
             *block = card_block_from_row(row, block_view(block));
             changed = true;
@@ -208,17 +222,41 @@ pub(crate) async fn refresh_card_carriers(
 /// needs a view no message shows yet (the vote card when a poll opens, the
 /// calendar card when a poll resolves), the System agent posts it as a new
 /// card-only message and its sequence is returned.
+///
+/// A card a person's agent opened travels in its owner's messages instead
+/// (issue #2446): the System agent may keep its answers, but never posts a
+/// copy of it.
 pub(crate) async fn sync_card_messages(
     pool: &PgPool,
     system_agent_account_id: &str,
+    row: &PlanCardRow,
+) -> Result<Option<i64>, sqlx_core::Error> {
+    if let Some(agent) = row.agent.as_ref() {
+        refresh_card_carriers(pool, system_agent_account_id, row).await?;
+        return sync_card_messages_as(
+            pool,
+            &agent.owner_account_id,
+            crate::common_ground::SYSTEM_NOTICE_KIND,
+            row,
+        )
+        .await;
+    }
+    sync_card_messages_as(pool, system_agent_account_id, "text", row).await
+}
+
+/// Brings `sender`'s card messages for a plan up to date, posting the view no
+/// message shows yet as a new card-only message of `kind`.
+pub(crate) async fn sync_card_messages_as(
+    pool: &PgPool,
+    sender: &str,
+    kind: &str,
     row: &PlanCardRow,
 ) -> Result<Option<i64>, sqlx_core::Error> {
     let Ok(conversation_id) = Uuid::parse_str(&row.conversation_id) else {
         return Ok(None);
     };
     let wanted = card_view(row);
-    let (has_carrier, shows_wanted) =
-        refresh_card_carriers(pool, system_agent_account_id, row).await?;
+    let (has_carrier, shows_wanted) = refresh_card_carriers(pool, sender, row).await?;
     // A canceled plan updates the cards it already has; it never adds one.
     if shows_wanted || (row.state == PlanCardState::Canceled && has_carrier) {
         return Ok(None);
@@ -228,7 +266,7 @@ pub(crate) async fn sync_card_messages(
             &Uuid::NAMESPACE_OID,
             format!("{}:{}", row.event_id, wanted).as_bytes(),
         ),
-        kind: "text".to_string(),
+        kind: kind.to_string(),
         content: json!({
             "schema": 1,
             "blocks": [card_block_from_row(row, wanted)],
@@ -239,14 +277,9 @@ pub(crate) async fn sync_card_messages(
     };
     // The System agent's own messages never wake the sweep, so the cursor stays
     // put and members' messages posted meanwhile are still read.
-    let outcome = crate::chat_sync::store::send_message(
-        pool,
-        system_agent_account_id,
-        conversation_id,
-        request,
-    )
-    .await
-    .map_err(|error| sqlx_core::Error::Protocol(error.to_string()))?;
+    let outcome = crate::chat_sync::store::send_message(pool, sender, conversation_id, request)
+        .await
+        .map_err(|error| sqlx_core::Error::Protocol(error.to_string()))?;
     Ok(Some(outcome.value.conversation_sequence))
 }
 
@@ -271,6 +304,7 @@ mod tests {
             manager_ids: Vec::new(),
             options: Vec::new(),
             note: None,
+            agent: None,
         }
     }
 
@@ -342,5 +376,29 @@ mod tests {
             "https://cdn.example/a.png"
         );
         assert!(block["participants"][1]["avatarUrl"].is_null());
+    }
+
+    #[test]
+    fn an_agent_card_names_its_agent_and_a_system_card_does_not() {
+        let system = card_block_from_row(&row(1), "event");
+        assert!(system.get("plannedBy").is_none());
+        let mut card = row(1);
+        card.agent = Some(crate::plan_cards::models::PlanCardAgent {
+            agent_id: "cloud-agent:acct_a".to_string(),
+            owner_account_id: "acct_a".to_string(),
+            name: "Kordi".to_string(),
+            owner_name: "Ada".to_string(),
+            avatar_url: None,
+        });
+        let block = card_block_from_row(&card, "event");
+        assert_eq!(block["plannedBy"]["agentId"], "cloud-agent:acct_a");
+        assert_eq!(block["plannedBy"]["agentName"], "Kordi");
+        assert_eq!(block["plannedBy"]["ownerAccountId"], "acct_a");
+        assert_eq!(block["plannedBy"]["ownerName"], "Ada");
+        // A block from before cards named their agent learns it in place.
+        let older = json!({"blocks": [system]});
+        let refreshed = refreshed_card_content(older, &card).expect("backfilled");
+        assert_eq!(refreshed["blocks"][0]["plannedBy"]["agentName"], "Kordi");
+        assert!(refreshed_card_content(refreshed, &card).is_none());
     }
 }

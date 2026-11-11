@@ -15,6 +15,7 @@ fn context(cwd: &Path, id: &str, chunks: Arc<AtomicUsize>) -> ToolContext {
         })),
         web_search: None,
         reach_out: None,
+        plan_card: None,
         reflection: None,
         session_observation: None,
         task_operator: None,
