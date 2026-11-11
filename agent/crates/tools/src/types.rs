@@ -174,12 +174,31 @@ pub struct ReflectionLessonRequest {
     pub scope_id: String,
     pub source: String,
     pub lesson: String,
-    /// The memory category; `None` from an old cached prompt, which the
-    /// server files as `general_preferences`.
+    /// The memory categories, 1 to 3, the first being the main one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub categories: Option<Vec<String>>,
+    /// A single category from old prompts, used when `categories` is absent.
+    /// `None` for both comes from an old cached prompt, which the server
+    /// files as `general_preferences`.
     #[serde(default)]
     pub category: Option<String>,
     #[serde(default)]
     pub confidence: Option<String>,
+}
+
+impl ReflectionLessonRequest {
+    /// The categories this save asks for, main one first: `categories` when
+    /// it names any, else the legacy `category`. Trimmed and deduplicated;
+    /// the `reflection` tool has already refused unknown values.
+    pub fn memory_categories(&self) -> Vec<String> {
+        let listed = crate::memory_categories::dedupe_memory_categories(
+            self.categories.iter().flatten().map(String::as_str),
+        );
+        if !listed.is_empty() {
+            return listed;
+        }
+        crate::memory_categories::dedupe_memory_categories(self.category.as_deref())
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

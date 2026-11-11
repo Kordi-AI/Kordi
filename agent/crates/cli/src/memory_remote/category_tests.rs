@@ -13,8 +13,16 @@ fn request(
         scope_id: "/work/acme-app".to_string(),
         source: "user_correction".to_string(),
         lesson: lesson.to_string(),
+        categories: None,
         category: category.map(str::to_string),
         confidence: confidence.map(str::to_string),
+    }
+}
+
+fn multi_request(lesson: &str, categories: &[&str]) -> ReflectionLessonRequest {
+    ReflectionLessonRequest {
+        categories: Some(categories.iter().map(|value| value.to_string()).collect()),
+        ..request(lesson, None, None)
     }
 }
 
@@ -32,6 +40,7 @@ async fn agent_save_sends_category_confidence_and_agent_declaration() {
 
     let sent = harness.remote.saves.lock().unwrap()[0].clone();
     assert_eq!(sent.category.as_deref(), Some("work_context"));
+    assert_eq!(sent.categories, vec!["work_context"]);
     assert_eq!(sent.confidence.as_deref(), Some("high"));
     assert_eq!(sent.declared_by.as_deref(), Some("agent"));
     let body = serde_json::to_value(&sent).unwrap();
@@ -39,7 +48,7 @@ async fn agent_save_sends_category_confidence_and_agent_declaration() {
     assert_eq!(body["category"], "work_context");
 
     let rows = harness.rows().await;
-    assert_eq!(rows[0].category.as_deref(), Some("work_context"));
+    assert_eq!(rows[0].category(), Some("work_context"));
     assert_eq!(rows[0].declaration_type.as_deref(), Some("model-inferred"));
     assert_eq!(rows[0].confidence.as_deref(), Some("high"));
     let text = std::fs::read_to_string(harness.artifact()).unwrap();
@@ -62,6 +71,7 @@ async fn save_without_category_leaves_it_to_the_server() {
     let sent = harness.remote.saves.lock().unwrap()[0].clone();
     let body = serde_json::to_value(&sent).unwrap();
     assert!(body.get("category").is_none(), "{body}");
+    assert!(body.get("categories").is_none(), "{body}");
     assert!(body.get("confidence").is_none(), "{body}");
     let text = std::fs::read_to_string(harness.artifact()).unwrap();
     assert!(
@@ -76,16 +86,13 @@ fn parser_reads_old_and_new_lines() {
     let lines = crate::reflection_runtime::parse_lesson_artifact(text);
     assert_eq!(lines.len(), 3);
     assert_eq!(lines[0].source, "manual");
-    assert_eq!(lines[0].category, None);
+    assert!(lines[0].categories.is_empty());
     assert_eq!(lines[0].declaration_type, "user-declared");
     assert_eq!(lines[1].source, "outcome");
-    assert_eq!(
-        lines[1].category.as_deref(),
-        Some("hcp-custom:task_lessons")
-    );
+    assert_eq!(lines[1].categories, vec!["hcp-custom:task_lessons"]);
     assert_eq!(lines[1].declaration_type, "model-inferred");
     assert_eq!(lines[1].text, "Run tests serially.");
-    assert_eq!(lines[2].category, None);
+    assert!(lines[2].categories.is_empty());
     assert_eq!(lines[2].declaration_type, "user-declared");
 }
 
@@ -124,11 +131,11 @@ async fn sync_carries_category_and_defaults_missing_values() {
         .iter()
         .find(|row| row.lesson_id == "mem_health")
         .unwrap();
-    assert_eq!(health.category.as_deref(), Some("health_context"));
+    assert_eq!(health.categories, vec!["health_context"]);
     assert_eq!(health.declaration_type.as_deref(), Some("model-inferred"));
     assert_eq!(health.confidence.as_deref(), Some("medium"));
     let old = rows.iter().find(|row| row.lesson_id == "mem_old").unwrap();
-    assert_eq!(old.category.as_deref(), Some("general_preferences"));
+    assert_eq!(old.categories, vec!["general_preferences"]);
     assert_eq!(old.declaration_type.as_deref(), Some("user-declared"));
     assert_eq!(old.confidence, None);
 }
@@ -159,12 +166,14 @@ async fn pending_uploads_keep_category_and_declaration() {
     let manual = saves.iter().find(|save| save.text == "Use pnpm.").unwrap();
     assert_eq!(manual.declared_by.as_deref(), Some("user"));
     assert_eq!(manual.category, None);
+    assert!(manual.categories.is_empty());
     let agent = saves
         .iter()
         .find(|save| save.text == "Free on Friday afternoons.")
         .unwrap();
     assert_eq!(agent.declared_by.as_deref(), Some("agent"));
     assert_eq!(agent.category.as_deref(), Some("coordination_context"));
+    assert_eq!(agent.categories, vec!["coordination_context"]);
     assert_eq!(agent.confidence.as_deref(), Some("low"));
 }
 
@@ -186,7 +195,137 @@ fn remote_memory_reads_routing_fields() {
     }))
     .unwrap();
     assert_eq!(memory.category.as_deref(), Some("work_context"));
+    // An older server sends no `categories`.
+    assert!(memory.categories.is_empty());
+    assert_eq!(memory.memory_categories(), vec!["work_context"]);
     assert_eq!(memory.declaration_type.as_deref(), Some("user-declared"));
     assert_eq!(memory.profile_id.as_deref(), Some("prof_work"));
     assert_eq!(memory.profile_kind.as_deref(), Some("work"));
+}
+
+#[tokio::test]
+async fn agent_save_with_several_categories_sends_both_fields_and_caches_them() {
+    let harness = Harness::new();
+    harness.connect();
+    (harness.runtime().save_lesson)(multi_request(
+        "Won't work for tobacco companies.",
+        &["values_and_ethics", "work_context"],
+    ))
+    .await
+    .expect("save");
+
+    let sent = harness.remote.saves.lock().unwrap()[0].clone();
+    let body = serde_json::to_value(&sent).unwrap();
+    assert_eq!(
+        body["categories"],
+        serde_json::json!(["values_and_ethics", "work_context"])
+    );
+    assert_eq!(body["category"], "values_and_ethics");
+
+    let rows = harness.rows().await;
+    assert_eq!(
+        rows[0].categories,
+        vec!["values_and_ethics", "work_context"]
+    );
+    let text = std::fs::read_to_string(harness.artifact()).unwrap();
+    assert!(
+        text.contains(
+            "[user_correction|values_and_ethics+work_context|model-inferred] Won't work for tobacco companies."
+        ),
+        "{text}"
+    );
+    // The line reads back with both categories.
+    let lines = crate::reflection_runtime::parse_lesson_artifact(&text);
+    assert_eq!(
+        lines[0].categories,
+        vec!["values_and_ethics", "work_context"]
+    );
+}
+
+#[test]
+fn parser_splits_joined_categories_and_drops_unknown_ones() {
+    let text = "- 2026-10-01T09:00:00Z [outcome|values_and_ethics+work_context|model-inferred] Won't work for tobacco companies.\n- 2026-10-01T09:00:01Z [outcome|work_context+not_a_category+work_context|model-inferred] Builds the billing service.\n- 2026-10-01T09:00:02Z [manual|not_a_category+nope|user-declared] Short answers.\n";
+    let lines = crate::reflection_runtime::parse_lesson_artifact(text);
+    assert_eq!(lines.len(), 3);
+    assert_eq!(
+        lines[0].categories,
+        vec!["values_and_ethics", "work_context"]
+    );
+    assert_eq!(lines[0].text, "Won't work for tobacco companies.");
+    assert_eq!(lines[1].categories, vec!["work_context"]);
+    assert!(lines[2].categories.is_empty());
+}
+
+#[tokio::test]
+async fn sync_reads_categories_and_falls_back_to_the_single_category() {
+    let harness = Harness::new();
+    let base = RemoteMemory {
+        scope: "project".to_string(),
+        scope_id: "/work/acme-app".to_string(),
+        source: "user_correction".to_string(),
+        created_at: "2026-10-07T09:00:00+00:00".to_string(),
+        updated_at: "2026-10-07T09:00:00+00:00".to_string(),
+        ..RemoteMemory::default()
+    };
+    harness.remote.memories.lock().unwrap().extend([
+        RemoteMemory {
+            memory_id: "mem_multi".to_string(),
+            text: "Won't work for tobacco companies.".to_string(),
+            category: Some("values_and_ethics".to_string()),
+            categories: vec!["values_and_ethics".to_string(), "work_context".to_string()],
+            sensitivity: Some("medium".to_string()),
+            ..base.clone()
+        },
+        RemoteMemory {
+            memory_id: "mem_single".to_string(),
+            text: "Works on the billing service.".to_string(),
+            category: Some("work_context".to_string()),
+            ..base
+        },
+    ]);
+    harness.sync().await;
+
+    let rows = harness.rows().await;
+    let multi = rows
+        .iter()
+        .find(|row| row.lesson_id == "mem_multi")
+        .unwrap();
+    assert_eq!(multi.categories, vec!["values_and_ethics", "work_context"]);
+    let single = rows
+        .iter()
+        .find(|row| row.lesson_id == "mem_single")
+        .unwrap();
+    assert_eq!(single.categories, vec!["work_context"]);
+    let text = std::fs::read_to_string(harness.artifact()).unwrap();
+    assert!(
+        text.contains("[user_correction|values_and_ethics+work_context|model-inferred]"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "[user_correction|work_context|model-inferred] Works on the billing service."
+        ),
+        "{text}"
+    );
+}
+
+#[tokio::test]
+async fn pending_upload_keeps_several_categories() {
+    let harness = Harness::new();
+    (harness.runtime().save_lesson)(multi_request(
+        "Won't work for tobacco companies.",
+        &["values_and_ethics", "work_context"],
+    ))
+    .await
+    .expect("save while signed out");
+    harness.connect();
+    harness.sync().await;
+
+    let saves = harness.remote.saves.lock().unwrap().clone();
+    assert_eq!(saves.len(), 1);
+    assert_eq!(
+        saves[0].categories,
+        vec!["values_and_ethics", "work_context"]
+    );
+    assert_eq!(saves[0].category.as_deref(), Some("values_and_ethics"));
 }

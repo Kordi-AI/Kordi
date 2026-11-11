@@ -167,13 +167,13 @@ fn v13_migration_reads_old_reflection_rows_without_categories() {
     .unwrap();
 
     init_schema(&conn).unwrap();
-    assert_eq!(get_version(&conn), 13);
+    assert_eq!(get_version(&conn), CURRENT_VERSION);
 
     let rows = crate::reflection_lessons::list_all_reflection_lessons(&conn).unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].lesson_text.as_deref(), Some("Run tests first."));
     assert_eq!(rows[0].owner_account_id.as_deref(), Some("acct_1"));
-    assert_eq!(rows[0].category, None);
+    assert!(rows[0].categories.is_empty());
     assert_eq!(rows[0].declaration_type, None);
     assert_eq!(rows[0].confidence, None);
 }
@@ -246,4 +246,58 @@ fn v10_migration_preserves_substantive_legacy_names_and_clears_weak_titles() {
     );
     assert_eq!(weak, (None, "placeholder".to_string()));
     assert_eq!(raw_id, (None, "placeholder".to_string()));
+}
+
+#[test]
+fn v14_migration_backfills_categories_from_the_single_category() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(SCHEMA_V1).unwrap();
+    for (version, migration) in [
+        (2, MIGRATION_V2),
+        (3, MIGRATION_V3),
+        (4, MIGRATION_V4),
+        (5, MIGRATION_V5),
+        (6, ""),
+        (7, MIGRATION_V7),
+        (8, MIGRATION_V8),
+        (9, MIGRATION_V9),
+        (10, MIGRATION_V10),
+        (11, MIGRATION_V11),
+        (12, MIGRATION_V12),
+        (13, MIGRATION_V13),
+    ] {
+        conn.execute_batch(migration).unwrap();
+        set_version(&conn, version).unwrap();
+    }
+    for (id, category) in [
+        ("with", "'work_context'"),
+        ("blank", "' '"),
+        ("none", "NULL"),
+    ] {
+        conn.execute(
+            &format!(
+                "INSERT INTO reflection_lessons (lesson_id, scope, scope_id, artifact_path, source, created_at, updated_at, lesson_text, category) VALUES ('{id}', 'conversation', 's-1', '/tmp/a.md', 'outcome', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'Memory {id}.', {category})"
+            ),
+            [],
+        )
+        .unwrap();
+    }
+
+    init_schema(&conn).unwrap();
+    assert_eq!(get_version(&conn), 14);
+
+    let stored = |id: &str| -> Option<String> {
+        conn.query_row(
+            "SELECT categories FROM reflection_lessons WHERE lesson_id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(stored("with").as_deref(), Some(r#"["work_context"]"#));
+    assert_eq!(stored("blank"), None);
+    assert_eq!(stored("none"), None);
+    let rows = crate::reflection_lessons::list_all_reflection_lessons(&conn).unwrap();
+    let with = rows.iter().find(|row| row.lesson_id == "with").unwrap();
+    assert_eq!(with.categories, vec!["work_context"]);
 }

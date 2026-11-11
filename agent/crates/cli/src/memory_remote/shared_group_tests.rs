@@ -30,6 +30,7 @@ fn group_request(lesson: &str) -> ReflectionLessonRequest {
         scope_id: GROUP_ID.to_string(),
         source: "user_correction".to_string(),
         lesson: lesson.to_string(),
+        categories: None,
         category: None,
         confidence: None,
     }

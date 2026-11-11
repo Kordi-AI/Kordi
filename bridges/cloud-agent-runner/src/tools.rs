@@ -224,6 +224,7 @@ async fn save_lesson_as_memory<C: CloudAgentRunClient + Sync>(
         .check_save(owner_request, &request.scope, &request.scope_id)
         .map_err(KordiError::Tool)?;
     let client_memory_id = format!("mem_{}", uuid::Uuid::new_v4().simple());
+    let categories = request.memory_categories();
     let memory = NewRunnerMemory {
         scope: request.scope.trim().to_string(),
         scope_id: request.scope_id.trim().to_string(),
@@ -231,7 +232,8 @@ async fn save_lesson_as_memory<C: CloudAgentRunClient + Sync>(
         source: request.source.trim().to_string(),
         text: request.lesson.trim().to_string(),
         client_memory_id: Some(client_memory_id.clone()),
-        category: request.category.clone(),
+        category: categories.first().cloned(),
+        categories,
         confidence: request.confidence.clone(),
     };
     match client.save_memory(&run.run_id, memory).await {

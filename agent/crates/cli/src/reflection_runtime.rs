@@ -112,6 +112,7 @@ pub(crate) fn build_reflection_runtime(
             check_memory_scope(&target.session_id, &target.cwd, &scope, &scope_id)
                 .map_err(tool_error)?;
             let scope_label = scope_label_for(&scope, &scope_id);
+            let categories = request.memory_categories();
             let artifact_path =
                 reflection_lesson_artifact_path(artifacts_dir, &request.scope, &scope_id);
             let artifact_path_text = artifact_path.display().to_string();
@@ -152,17 +153,20 @@ pub(crate) fn build_reflection_runtime(
             let owner_account_id = remote.as_ref().map(|remote| remote.account_id());
             if let Some(remote) = remote {
                 match remote
-                    .save(NewRemoteMemory {
-                        scope: request.scope.clone(),
-                        scope_id: scope_id.clone(),
-                        scope_label: scope_label.clone(),
-                        source: request.source.clone(),
-                        text: lesson_text.clone(),
-                        client_memory_id: Some(lesson_id.clone()),
-                        category: request.category.clone(),
-                        confidence: request.confidence.clone(),
-                        declared_by: Some("agent".to_string()),
-                    })
+                    .save(
+                        NewRemoteMemory {
+                            scope: request.scope.clone(),
+                            scope_id: scope_id.clone(),
+                            scope_label: scope_label.clone(),
+                            source: request.source.clone(),
+                            text: lesson_text.clone(),
+                            client_memory_id: Some(lesson_id.clone()),
+                            confidence: request.confidence.clone(),
+                            declared_by: Some("agent".to_string()),
+                            ..NewRemoteMemory::default()
+                        }
+                        .with_categories(categories.clone()),
+                    )
                     .await
                 {
                     Ok(memory) => {
@@ -212,7 +216,7 @@ pub(crate) fn build_reflection_runtime(
                         created_at,
                         updated_at,
                         owner_account_id,
-                        category: request.category.clone(),
+                        categories,
                         declaration_type: Some(MODEL_INFERRED.to_string()),
                         confidence: request.confidence.clone(),
                     },

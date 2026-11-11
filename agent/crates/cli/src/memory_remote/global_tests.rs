@@ -9,6 +9,7 @@ fn global_request(lesson: &str) -> ReflectionLessonRequest {
         scope_id: "account".to_string(),
         source: "user_correction".to_string(),
         lesson: lesson.to_string(),
+        categories: None,
         category: None,
         confidence: None,
     }

@@ -30,8 +30,16 @@ pub struct RunnerMemory {
     pub owner_account_id: Option<String>,
     #[serde(default)]
     pub owner_name: Option<String>,
+    /// The main category; equals `categories[0]` on servers that send both.
     #[serde(default)]
     pub category: Option<String>,
+    /// 1 to 3 categories, main one first. Older servers send only
+    /// `category`; read both through [`RunnerMemory::memory_categories`].
+    #[serde(default)]
+    pub categories: Vec<String>,
+    /// `low`, `medium` or `high`, derived by the server from the categories.
+    #[serde(default)]
+    pub sensitivity: Option<String>,
     #[serde(default)]
     pub declaration_type: Option<String>,
     #[serde(default)]
@@ -68,8 +76,13 @@ pub struct NewRunnerMemory {
     pub text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_memory_id: Option<String>,
+    /// The main category, sent next to `categories` so an older server that
+    /// reads only this field still files the memory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
+    /// 1 to 3 categories, main one first; wins over `category`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<String>,
 }
@@ -231,6 +244,15 @@ pub fn run_memory_scopes(run: &CloudAgentRun) -> RunMemoryScopes {
 }
 
 impl RunnerMemory {
+    /// The known categories, main one first: `categories`, else the single
+    /// `category` an older server sends.
+    pub fn memory_categories(&self) -> Vec<String> {
+        kordi_tools::memory_categories::stored_memory_categories(
+            &self.categories,
+            self.category.as_deref(),
+        )
+    }
+
     /// The fields the shared memory section reads.
     pub fn prompt_memory(&self) -> PromptMemory<'_> {
         PromptMemory {

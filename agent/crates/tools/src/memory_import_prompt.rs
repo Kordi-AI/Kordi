@@ -19,6 +19,7 @@ Rules:
 - Repository conventions, workflow rules, and tool and command habits: category \"hcp-custom:task_lessons\", scope \"project\" (the file's project).
 - Personal preferences that apply everywhere, such as language, tone, units, or formatting the person always wants: category \"general_preferences\", scope \"global\".
 - Facts about the person's work, such as role, projects, or skills: category \"work_context\", scope \"project\".
+- \"category\" is the main category. Only when a memory clearly belongs to more than one, also give \"categories\": up to three, the main one first, for example \"categories\":[\"values_and_ethics\",\"work_context\"].
 - Skip anything that is not durable, anything about other people, credentials, secrets, paths, hostnames, or infrastructure identifiers.
 - Skip anything already present in the existing memories, even when worded differently.
 - Claude Code memory files start with a frontmatter block (name, description, type user, feedback, project, or reference): a user entry is about the person (a global preference or a work fact), a feedback entry is a working rule (a task lesson in the project, or global when it is not about one project), project entries stay in the project, and reference entries, such as links or tickets, are skipped.
@@ -97,5 +98,7 @@ mod tests {
                 .contains("reference entries, such as links or tickets, are skipped")
         );
         assert!(MEMORY_IMPORT_SYSTEM_PROMPT.contains("At most 12 memories per file."));
+        assert!(MEMORY_IMPORT_SYSTEM_PROMPT.contains("up to three, the main one first"));
+        assert!(MEMORY_IMPORT_SYSTEM_PROMPT.contains("\"category\":\"...\""));
     }
 }
