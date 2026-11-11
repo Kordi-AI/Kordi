@@ -7,8 +7,8 @@ import { SettingsSection } from '@/kordi-app/components/settingsLayout';
 
 import { MemoryLabels } from './MemoryLabelMenus';
 import { MemoryList } from './MemoryList';
-import { MEMORY_CATEGORIES, memoryCategoryLabel, type MemoryCategory } from './memoryCategory';
-import { memoryCardsAvailable, memoryCategoriesEditable, type MemoryClient } from './memoryClient';
+import { MEMORY_CATEGORIES, memoryCategoryLabel, memoryCategoryListLabel, type MemoryCategory } from './memoryCategory';
+import { memoryCardsAvailable, memoryCategoriesEditable, memoryCategoriesMultiEditable, type MemoryClient } from './memoryClient';
 import type { MemoryAddTarget, MemoryLesson } from './memoryModel';
 import { memoryOrigin, type MemoryOrigin, type MemoryOriginSources } from './memoryOrigin';
 import {
@@ -33,7 +33,7 @@ export type MemoryOrganizerProps = {
   lessons: MemoryLesson[];
   onLessonsChange: (update: (current: MemoryLesson[]) => MemoryLesson[]) => void;
   viewerAccountId: string | null;
-  /** The server's `memoryVersion`: 2 changes categories, 3 shows cards. */
+  /** The server's `memoryVersion`: 2 changes categories, 3 shows cards, 4 allows up to three categories. */
   memoryVersion: number | null;
   cards: readonly MemoryCard[];
   originSources: MemoryOriginSources;
@@ -97,6 +97,7 @@ export function MemoryOrganizer({
   const [statusMessage, setStatusMessage] = useState('');
   const cardsEnabled = memoryCardsAvailable(memoryVersion) && 'addMemoryToCard' in client && 'removeMemoryFromCard' in client;
   const categoriesEditable = memoryCategoriesEditable(memoryVersion) && 'updateMemoryCategory' in client;
+  const multiCategory = memoryCategoriesMultiEditable(memoryVersion) && 'updateMemoryCategories' in client;
 
   const rows = useMemo(() => lessons.map((lesson) => {
     const origin = memoryOrigin(lesson, originSources);
@@ -146,11 +147,16 @@ export function MemoryOrganizer({
       cards={cards}
       origin={originOf.get(lesson.lessonId) ?? memoryOrigin(lesson, originSources)}
       onToggleFilter={onToggle}
-      categoryEditable={categoriesEditable && canChangeCategory(lesson, viewerAccountId)}
+      categoryEditable={(categoriesEditable || multiCategory) && canChangeCategory(lesson, viewerAccountId)}
+      multiCategory={multiCategory}
       cardsEnabled={cardsEnabled}
       busy={busy.has(lesson.lessonId)}
       onChangeCategory={(category: MemoryCategory) => {
         void change(lesson, () => client.updateMemoryCategory?.(lesson.lessonId, category), `Category set to ${memoryCategoryLabel(category)}.`);
+      }}
+      onChangeCategories={(categories: MemoryCategory[]) => {
+        const done = `${categories.length === 1 ? 'Category' : 'Categories'} set to ${memoryCategoryListLabel(categories)}.`;
+        void change(lesson, () => client.updateMemoryCategories?.(lesson.lessonId, categories), done);
       }}
       onAddCard={(profileId) => {
         void change(lesson, () => client.addMemoryToCard?.(lesson.lessonId, profileId), `Added to ${nameOf(profileId)}.`);

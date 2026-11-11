@@ -19,7 +19,7 @@ import {
 } from '@/lib/desktopMemory';
 import { isNativeDesktopShell } from '@/lib/desktop';
 
-import { isMemoryCategory } from './memoryCategory';
+import { normalizeMemoryCategories } from './memoryCategory';
 import type { MemoryClient } from './memoryClient';
 import { loadMemoryOriginSources, type MemoryOriginSources } from './memoryOrigin';
 import type { MemoryCard } from './memoryOrganizerModel';
@@ -93,7 +93,7 @@ const nativeDesktop: AccountMemoryDesktop = {
 
 type RoutingFields = Pick<
   CloudMemory,
-  'category' | 'declarationType' | 'confidence' | 'profileId' | 'profileKind' | 'profileIds' | 'excludedProfileIds'
+  'category' | 'categories' | 'declarationType' | 'confidence' | 'profileId' | 'profileKind' | 'profileIds' | 'excludedProfileIds'
 >;
 
 function idList(value: unknown): string[] | undefined {
@@ -103,7 +103,11 @@ function idList(value: unknown): string[] | undefined {
 
 /** Copies the routing fields a server sent; an unknown category is dropped so the row shows no chip. */
 function withRouting(lesson: MemoryLesson, entry: RoutingFields): MemoryLesson {
-  if (isMemoryCategory(entry.category)) lesson.category = entry.category;
+  const categories = normalizeMemoryCategories(entry.categories, entry.category);
+  if (categories.length > 0) {
+    lesson.category = categories[0];
+    if (Array.isArray(entry.categories) && entry.categories.length > 0) lesson.categories = categories;
+  }
   if (entry.declarationType) lesson.declarationType = entry.declarationType;
   if (entry.confidence !== undefined) lesson.confidence = entry.confidence;
   if (entry.profileId !== undefined) lesson.profileId = entry.profileId;
@@ -341,6 +345,9 @@ export function createAccountMemoryClient(options: AccountMemoryClientOptions = 
     },
     updateMemoryCategory(lessonId, category) {
       return patchLesson(lessonId, { category });
+    },
+    updateMemoryCategories(lessonId, categories) {
+      return patchLesson(lessonId, { categories: [...categories] });
     },
     addMemoryToCard(lessonId, profileId) {
       return patchLesson(lessonId, { addProfileId: profileId });

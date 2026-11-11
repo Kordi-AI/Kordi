@@ -18,6 +18,8 @@ export type CloudMemory = {
   /** Routing fields (`memoryVersion` 2); older servers leave them out. */
   /** One of `MEMORY_CATEGORIES`; newer servers may send others, which show no chip. */
   category?: string;
+  /** Every category, main one first (`memoryVersion` 4); `category` repeats the first. */
+  categories?: string[];
   declarationType?: MemoryDeclarationType;
   confidence?: MemoryConfidence | null;
   /** The one card the person added the memory to, when there is exactly one (legacy pin). */
@@ -29,10 +31,14 @@ export type CloudMemory = {
   excludedProfileIds?: string[];
 };
 
-/** A memory change. `addProfileId` and `removeProfileId` need `memoryVersion` 3. */
+/**
+ * A memory change. `addProfileId` and `removeProfileId` need `memoryVersion` 3; `categories`
+ * (one to three, replacing the whole set) needs `memoryVersion` 4.
+ */
 export type CloudMemoryPatch = {
   text?: string;
   category?: string;
+  categories?: string[];
   profileId?: string | null;
   addProfileId?: string;
   removeProfileId?: string;
@@ -50,6 +56,7 @@ export type CloudMemoryCreate = {
   text: string;
   /** One of `MEMORY_CATEGORIES`; imported memories name theirs. */
   category?: string;
+  categories?: string[];
 };
 
 export type CloudMemoryListResponse = { memories: CloudMemory[]; settings: CloudMemorySettings };
@@ -57,7 +64,7 @@ export type CloudMemoryListResponse = { memories: CloudMemory[]; settings: Cloud
 /** One chosen file for the server's import model (`POST /v1/cloud/memory/import/extract`). */
 export type CloudMemoryImportExtract = { fileName: string; text: string; existingMemories: string[] };
 /** The memories the model read from the file; nothing is saved yet. */
-export type CloudMemoryImportExtraction = { memories: Array<{ text: string; category: string; scope: 'project' | 'global' }> };
+export type CloudMemoryImportExtraction = { memories: Array<{ text: string; category: string; categories?: string[]; scope: 'project' | 'global' }> };
 
 type CloudMemoryRequest = <TResponse>(
   path: string,

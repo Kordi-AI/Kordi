@@ -17,6 +17,8 @@ export type MemoryLesson = {
   ownerName?: string | null;
   /** Routing fields from servers with categories; absent for memories read from this Mac. */
   category?: MemoryCategory;
+  /** Every category of the memory, main one first (`memoryVersion` 4); read it with `memoryCategoriesOf`. */
+  categories?: MemoryCategory[];
   declarationType?: MemoryDeclarationType;
   confidence?: MemoryConfidence | null;
   profileId?: string | null;

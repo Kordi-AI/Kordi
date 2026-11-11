@@ -13,3 +13,8 @@ export function memoryRoutingAvailable(capabilities: { memoryVersion?: number } 
 export function memoryCardsSupported(capabilities: { memoryVersion?: number } | null | undefined): boolean {
   return (memoryVersionFromCapabilities(capabilities) ?? 0) >= 3;
 }
+
+/** Version 4 lets a memory have up to three categories; the category menu becomes a checklist. */
+export function memoryCategoriesMultiSupported(capabilities: { memoryVersion?: number } | null | undefined): boolean {
+  return (memoryVersionFromCapabilities(capabilities) ?? 0) >= 4;
+}

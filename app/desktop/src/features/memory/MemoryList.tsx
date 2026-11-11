@@ -12,7 +12,7 @@ import {
 import { SettingsRow } from '@/kordi-app/components/settingsLayout';
 import { cn } from '@/lib/utils';
 
-import { MemoryCategoryChip } from './MemoryCategoryChip';
+import { MemoryCategoryChips } from './MemoryCategoryChip';
 import type { MemoryClient } from './memoryClient';
 import {
   LESSON_MAX_CHARS,
@@ -47,7 +47,7 @@ export type MemoryListProps = {
   viewerAccountId?: string | null;
   /** Where a memory added from this list is saved. Without it the list has no Add memory row. */
   addTarget?: MemoryAddTarget | null;
-  /** Labels under a row's caption; they replace the category chip. */
+  /** Labels under a row's caption; they replace the category chips. */
   renderLabels?: (lesson: MemoryLesson) => ReactNode;
   /** Shown at the start of the Add memory row while the list has memories, such as the sync status. */
   header?: ReactNode;
@@ -220,7 +220,7 @@ export function MemoryList({
           description={(
             <>
               {meta}
-              {renderLabels ? null : <MemoryCategoryChip category={lesson.category} />}
+              {renderLabels ? null : <MemoryCategoryChips memory={lesson} />}
               {owner ? <span data-memory-owner="" className="block">{owner}</span> : null}
               {renderLabels?.(lesson)}
             </>
