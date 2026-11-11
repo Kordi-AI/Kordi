@@ -34,6 +34,8 @@ mod system_proxy;
 #[cfg(test)]
 mod test_support;
 mod transcript_trace;
+#[cfg(any(target_os = "macos", all(test, unix)))]
+mod update_relaunch;
 mod voice_message;
 mod window_backdrop;
 mod window_lifecycle;
