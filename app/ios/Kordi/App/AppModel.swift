@@ -261,6 +261,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var isRefreshingFactory = false
     @Published private(set) var providerAuthenticationErrorMessage: String?
     @Published private(set) var sessionRuntimeRouteRevision = 0
+    @Published private(set) var hasLoadedProviderAuthentication = false
+    var appliedRouteAccountFallbacks = Set<String>()
     @Published private(set) var devices: [CloudDeviceAuthorization] = []
     @Published private(set) var isRefreshingDevices = false
     @Published private(set) var deviceErrorMessage: String?
@@ -771,9 +773,10 @@ final class AppModel: ObservableObject {
         sessionActivityByID = [:]
         sessionPinsByID = [:]
         pendingSessionPinActions = [:]
-        providerAuthSnapshot = nil
-        providerAuthSnapshots = [:]
-        providerAuthProfiles = []
+        applyProviderAuthProfiles([], loaded: false)
+        appliedRouteAccountFallbacks.removeAll()
+        isRefreshingProviderAuthentication = false
+        providerAuthenticationErrorMessage = nil
         ompProviderCatalog = OMPProviderCatalog.pinned
         hasLiveOMPProviderCatalog = false
         ompBackendUnavailable = false
@@ -909,7 +912,11 @@ final class AppModel: ObservableObject {
                 )
             }
             hasObservedOwnedAgentRouting = true
-            if let authProfiles { applyProviderAuthProfiles(authProfiles) }
+            if let authProfiles {
+                applyProviderAuthProfiles(authProfiles, loaded: true)
+            } else {
+                hasLoadedProviderAuthentication = false
+            }
             if let deviceList {
                 devices = deviceList
                 currentDeviceId = deviceList.first(where: \.currentDevice)?.deviceId
@@ -1301,18 +1308,23 @@ final class AppModel: ObservableObject {
         guard let token, !previewMode, !isRefreshingProviderAuthentication else { return }
         isRefreshingProviderAuthentication = true
         providerAuthenticationErrorMessage = nil
-        defer { isRefreshingProviderAuthentication = false }
+        defer {
+            if sessionIdentity.contains(token) { isRefreshingProviderAuthentication = false }
+        }
 
         do {
             let profiles = try await api.listProviderAuthSnapshots(token: token)
+            guard sessionIdentity.contains(token), !Task.isCancelled else { return }
             let authenticationChanged = providerAuthProfiles != profiles
-            applyProviderAuthProfiles(profiles)
+            applyProviderAuthProfiles(profiles, loaded: true)
             reconcilePendingProviderAuthentication()
             if authenticationChanged {
                 sessionRuntimeRouteRevision &+= 1
             }
             providerAuthenticationErrorMessage = nil
         } catch {
+            guard sessionIdentity.contains(token), !Task.isCancelled else { return }
+            hasLoadedProviderAuthentication = false
             providerAuthenticationErrorMessage = authenticationUserFacing(
                 error,
                 fallback: "Authentication could not be refreshed. Your saved access is unchanged."
@@ -1528,7 +1540,8 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func applyProviderAuthProfiles(_ profiles: [CloudProviderAuthSnapshot]) {
+    private func applyProviderAuthProfiles(_ profiles: [CloudProviderAuthSnapshot], loaded: Bool? = nil) {
+        if let loaded { hasLoadedProviderAuthentication = loaded }
         let ordered = profiles.sorted {
             $0.createdAt == $1.createdAt
                 ? $0.snapshotId > $1.snapshotId
@@ -5415,6 +5428,7 @@ final class AppModel: ObservableObject {
 
         var routing = runtimeRouting(for: conversation)
         let previousRouting = routing
+        let routingAccountID = account?.accountId
         let selectedProvider = provider?.nonEmpty
             ?? model.firstIndex(of: "/").map { String(model[..<$0]) }
             ?? routing.defaultAuthProvider?.nonEmpty
@@ -5423,9 +5437,7 @@ final class AppModel: ObservableObject {
         if let selectedProvider {
             routing.defaultAuthProvider = selectedProvider
             if let authChoice {
-                guard authenticationSnapshots(for: selectedProvider).contains(where: {
-                    $0.authChoice == authChoice
-                }) else { return false }
+                guard routeAccountCanBeSaved(authChoice, provider: selectedProvider) else { return false }
                 routing.defaultAuthChoice = authChoice
             } else if let auth = authenticationSnapshot(for: selectedProvider) {
                 routing.defaultAuthChoice = auth.authChoice
@@ -5449,6 +5461,9 @@ final class AppModel: ObservableObject {
                  conversation: conversation,
                  routing: routing
                ) == false {
+                // A late failure must not roll back another account or a newer pick.
+                guard account?.accountId == routingAccountID,
+                      runtimeRoutesMatch(runtimeRouting(for: conversation), routing) else { return false }
                 saveSessionRuntimeRoute(
                     previousRouting,
                     sessionId: conversation.sessionId
@@ -8021,7 +8036,8 @@ final class AppModel: ObservableObject {
         var previewRouting = CloudModelRouting.empty
         previewRouting.defaultModel = "codex/gpt-5.6-sol"
         previewRouting.defaultAuthProvider = "codex"
-        previewRouting.defaultAuthChoice = "ios-codex:preview-work"
+        previewRouting.defaultAuthChoice = ProcessInfo.processInfo.arguments.contains("--preview-mac-account")
+            ? "profile:preview-mac" : "ios-codex:preview-work"
         previewRouting.thinking = "medium"
         let previewAgentAvatar: (String) -> CanonicalAvatarDescriptor = { agentId in
             CanonicalAvatarDescriptor(
@@ -8150,16 +8166,18 @@ final class AppModel: ObservableObject {
             revokedAt: nil
         )
         // `--preview-account-unavailable` models a session whose routed Work
-        // account was removed: the route stays attached to the missing account.
+        // account was removed: recovery can select the compatible Personal account.
         // `--preview-provider-unavailable` removes every OpenAI account and keeps one Anthropic account.
         let arguments = ProcessInfo.processInfo.arguments
+        let unverifiedAccounts = arguments.contains("--preview-accounts-not-loaded")
         applyProviderAuthProfiles(
-            arguments.contains("--preview-provider-unavailable") ? [CloudProviderAuthSnapshot(
+            arguments.contains("--preview-mac-account") || unverifiedAccounts ? []
+            : arguments.contains("--preview-provider-unavailable") ? [CloudProviderAuthSnapshot(
                 snapshotId: "provider_auth_preview_team", provider: "anthropic", authChoice: "cloud-login:preview-team",
                 label: "Team", createdAt: timestamp.string(from: now), revokedAt: nil
             )]
             : arguments.contains("--preview-account-unavailable") ? [personalCodexAccount]
-            : [personalCodexAccount, workCodexAccount]
+            : [personalCodexAccount, workCodexAccount], loaded: !unverifiedAccounts
         )
         if ProcessInfo.processInfo.arguments.contains("--preview-agent-model"),
            let researchSession = conversations.first(where: { $0.id == "agent:research" }) {
