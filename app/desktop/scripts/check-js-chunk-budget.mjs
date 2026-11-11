@@ -73,7 +73,8 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // The Seen by row loaded on demand, its readers list and the read watermark add 8.7 kB, so it moves to 5.849 MB.
 // The pinned OMP catalog at 18.18.6 (82 providers, Claude Fable 5.2) adds 5.6 kB, so it moves to 5.855 MB.
 // Agents asking people, agent-created plan cards and the busy/free sharing setting add 3 kB, so it moves to 5.861 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_861_000;
+// The Beta 9 What's New highlights add up to 2 kB, so it moves to 5.863 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_863_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -99,7 +100,8 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The Seen by row loaded on demand, its readers list and the read watermark add 8.7 kB there, so it moves to 5.865 MB.
 // The pinned OMP catalog at 18.18.6 adds 5.6 kB there, so it moves to 5.871 MB.
 // Agents asking people, agent-created plan cards and the busy/free sharing setting add 3.2 kB there, so it moves to 5.877 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_877_000;
+// The Beta 9 What's New highlights add up to 2 kB there, so it moves to 5.879 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_879_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
