@@ -142,6 +142,8 @@ final class MessageSendOutbox {
         entry.timer?.cancel()
         entry.timer = Task { @MainActor [weak self, sleep] in
             do { try await sleep(delay) } catch { return }
+            // `retryNow` or `reset` cancelled this timer after its sleep ended.
+            guard !Task.isCancelled else { return }
             await self?.fire(id)
         }
         entries[id] = entry
@@ -149,7 +151,9 @@ final class MessageSendOutbox {
 
     private func fire(_ id: String) async {
         guard var entry = entries[id], !entry.isSending else { return }
-        entry.timer?.cancel()
+        // Never cancel the timer here. When it fired, it is the task running this
+        // resend, and a cancelled task fails the request before it is sent.
+        // `retryNow` cancels a waiting timer itself before it calls this.
         entry.timer = nil
         entry.isSending = true
         entry.keptAgain = false
