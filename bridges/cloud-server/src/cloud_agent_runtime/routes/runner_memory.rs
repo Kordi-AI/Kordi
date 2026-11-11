@@ -108,6 +108,7 @@ pub(super) async fn save(
                 "scope": memory.scope,
                 "source": memory.source,
                 "category": memory.category,
+                "categories": memory.categories,
                 "declarationType": memory.declaration_type,
                 "runId": run_id,
                 "via": "runner",

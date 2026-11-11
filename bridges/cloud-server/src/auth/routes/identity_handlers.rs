@@ -54,7 +54,7 @@ pub(super) async fn auth_capabilities(
             .cipher
             .is_some()
             .then_some(crate::connectors::CONNECTORS_VERSION),
-        memory_version: 3,
+        memory_version: 4,
         common_ground: crate::common_ground::capabilities(&state),
         contact_profile_version: CONTACT_PROFILE_VERSION,
         contact_permissions_version: crate::contact_permissions::CONTACT_PERMISSIONS_VERSION,

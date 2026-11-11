@@ -33,8 +33,8 @@ pub(crate) use profile_routing::{
     build_memories, build_memories_since, count_since, left_since, profile_memories, ProfileTarget,
 };
 pub(crate) use routing::{
-    category_allowed_in_group, check_category, DEFAULT_CATEGORY, MEMORY_CATEGORIES,
-    MEMORY_CONFIDENCES,
+    categories_allowed_in_group, check_categories, check_category, is_health, DEFAULT_CATEGORY,
+    MAX_CATEGORIES, MEMORY_CATEGORIES, MEMORY_CONFIDENCES,
 };
 pub(crate) use runs::{
     clear_omp_state, leased_run, omp_state_count, write_memory_audit, LeasedRun,
@@ -314,7 +314,8 @@ pub(crate) async fn save(
         .await?;
     // The same text in the same scope is the same memory: touch it, fill a
     // missing label, and return it instead of saving a second row. In a group
-    // this matches the memory whichever member saved it.
+    // this matches the memory whichever member saved it. Its categories stay
+    // as they are: only the person adds categories, by editing.
     let duplicate: Option<MemoryRow> = query_as(&format!(
         "WITH m AS (UPDATE cloud_account_memories \
          SET updated_at = now(), scope_label = COALESCE(scope_label, $5) \
@@ -345,8 +346,8 @@ pub(crate) async fn save(
     let inserted: Option<MemoryRow> = query_as(&format!(
         "WITH m AS (INSERT INTO cloud_account_memories \
          (memory_id, owner_account_id, scope, scope_id, scope_label, source, text, \
-          category, declaration_type, confidence) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) \
+          category, categories, declaration_type, confidence) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, ($8::text[])[1], $8::text[], $9, $10) \
          ON CONFLICT (memory_id) DO NOTHING \
          RETURNING *) {MEMORY_SELECT}"
     ))
@@ -357,7 +358,7 @@ pub(crate) async fn save(
     .bind(scope_label)
     .bind(source)
     .bind(&text)
-    .bind(fields.category)
+    .bind(&fields.categories)
     .bind(fields.declaration_type)
     .bind(fields.confidence)
     .fetch_optional(&mut *transaction)

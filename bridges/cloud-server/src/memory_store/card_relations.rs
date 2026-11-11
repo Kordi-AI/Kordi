@@ -19,23 +19,25 @@ type Transaction<'a> = sqlx_core::transaction::Transaction<'a, Postgres>;
 pub(crate) struct CandidateMemory {
     pub memory_id: String,
     pub text: String,
-    pub category: String,
+    /// One to three categories; the first is the primary.
+    pub categories: Vec<String>,
 }
 
 /// The owner's live memories outside groups that are not on the card and
-/// were never removed from it, newest first. Health memories are never
-/// offered.
+/// were never removed from it, newest first. Health memories (any memory
+/// with the health category among its categories) are never offered.
 pub(crate) async fn card_candidates(
     pool: &PgPool,
     account_id: &str,
     target: ProfileTarget<'_>,
     limit: i64,
 ) -> sqlx_core::Result<Vec<CandidateMemory>> {
-    let rows: Vec<(String, String, String)> = query_as(
-        "SELECT mem.memory_id, mem.text, mem.category FROM cloud_account_memories mem \
+    let rows: Vec<(String, String, Vec<String>)> = query_as(
+        "SELECT mem.memory_id, mem.text, mem.categories FROM cloud_account_memories mem \
          WHERE mem.archived_at IS NULL AND mem.owner_account_id = $1 \
            AND mem.scope IN ('global', 'conversation', 'project') \
-           AND mem.category <> 'health_context' AND NOT (mem.category = ANY($3)) \
+           AND NOT ('health_context' = ANY(mem.categories)) \
+           AND NOT (mem.categories && $3::text[]) \
            AND NOT EXISTS (SELECT 1 FROM cloud_account_memory_card_overrides o \
              WHERE o.memory_id = mem.memory_id AND o.profile_id = $2) \
          ORDER BY mem.updated_at DESC, mem.memory_id LIMIT $4",
@@ -48,17 +50,17 @@ pub(crate) async fn card_candidates(
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(memory_id, text, category)| CandidateMemory {
+        .map(|(memory_id, text, categories)| CandidateMemory {
             memory_id,
             text,
-            category,
+            categories,
         })
         .collect())
 }
 
 /// Adds each memory in `memory_ids` to the owner's card `profile_id` when it
 /// is still a live memory of the owner outside groups with no choice for
-/// this card and not already on it through its category. Each addition
+/// this card and not already on it through its categories. Each addition
 /// touches the memory's `updated_at` and keeps the legacy `profile_id`
 /// column, as an edit does. Returns how many memories were added.
 pub(crate) async fn relate_to_card(
@@ -81,8 +83,8 @@ pub(crate) async fn relate_to_card(
     };
     let mut added = 0;
     for memory_id in memory_ids {
-        let row: Option<(String, bool)> = query_as(
-            "SELECT mem.category, EXISTS (SELECT 1 FROM cloud_account_memory_card_overrides o \
+        let row: Option<(Vec<String>, bool)> = query_as(
+            "SELECT mem.categories, EXISTS (SELECT 1 FROM cloud_account_memory_card_overrides o \
                WHERE o.memory_id = mem.memory_id AND o.profile_id = $3) \
              FROM cloud_account_memories mem \
              WHERE mem.memory_id = $1 AND mem.owner_account_id = $2 \
@@ -93,17 +95,17 @@ pub(crate) async fn relate_to_card(
         .bind(&card.profile_id)
         .fetch_optional(&mut **tx)
         .await?;
-        let Some((category, has_choice)) = row else {
+        let Some((categories, has_choice)) = row else {
             continue;
         };
-        if has_choice || routed_to_kind(&category, &card.kind) {
+        if has_choice || routed_to_kind(&categories, &card.kind) {
             continue;
         }
         let edit = CardEdit {
             add: Some(card.clone()),
             ..CardEdit::default()
         };
-        cards::apply(tx, owner, memory_id, &category, &edit).await?;
+        cards::apply(tx, owner, memory_id, &categories, &edit).await?;
         query(&format!(
             "UPDATE cloud_account_memories SET profile_id = {LEGACY_PIN_SQL}, updated_at = now() \
              WHERE memory_id = $1"

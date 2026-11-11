@@ -491,4 +491,9 @@ pub(super) const RECENT_MIGRATIONS: &[EmbeddedMigration] = &[
     ),
     migration!(191, "profile field modes", "0191_profile_field_modes.sql"),
     migration!(192, "chat read outbox", "0192_chat_read_outbox.sql"),
+    migration!(
+        193,
+        "memory categories multi",
+        "0193_memory_categories_multi.sql"
+    ),
 ];

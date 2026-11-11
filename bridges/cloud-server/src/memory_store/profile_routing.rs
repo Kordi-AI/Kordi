@@ -2,8 +2,9 @@
 //!
 //! A memory of the owner reaches a profile when it is active, not a group
 //! memory, and either added to that card
-//! (`cloud_account_memory_card_overrides.included`) or routed there by its
-//! category (the profile's fixed kind or `all`) and not removed from it.
+//! (`cloud_account_memory_card_overrides.included`) or routed there by any
+//! of its categories (the profile's fixed kind or `all`) and not removed
+//! from it.
 //! Custom profiles get added memories only. Card builds of a custom profile
 //! also read every memory not added to any card and not removed from this
 //! one, until per-card sources land (#1971).
@@ -14,7 +15,9 @@ use sqlx_core::query_as::query_as;
 use sqlx_core::query_scalar::query_scalar;
 use sqlx_postgres::PgPool;
 
-use super::routing::{profile_kind_for, FIXED_PROFILE_KINDS, MEMORY_CATEGORIES};
+use super::routing::{
+    profile_kind_for, routes_to_every_kind, FIXED_PROFILE_KINDS, MEMORY_CATEGORIES,
+};
 use super::{memory_from_row, MemoryResponse, MemoryRow, MEMORY_SELECT};
 
 /// The most memories the profile route returns.
@@ -34,8 +37,8 @@ pub(crate) struct ProfileTarget<'a> {
 pub(crate) struct ProfileMemory {
     #[serde(flatten)]
     pub memory: MemoryResponse,
-    /// Cross-profile and shown through its category: listed under every
-    /// fixed-kind profile.
+    /// Cross-profile and shown through one of its categories: listed under
+    /// every fixed-kind profile.
     pub every_profile: bool,
 }
 
@@ -54,7 +57,8 @@ pub(super) fn routed_categories(kind: &str) -> Vec<String> {
 
 /// Rows `mem` of the owner's memories, live or archived, that the routing
 /// rules send to a profile: `$1` owner, `$2` profile id, `$3` categories
-/// received by default, `$4` whether every memory not added to any card
+/// received by default (a memory reaches the profile when any of its
+/// categories is one of them), `$4` whether every memory not added to any card
 /// counts.
 macro_rules! routed_rules {
     () => {
@@ -62,7 +66,7 @@ macro_rules! routed_rules {
      AND mem.scope <> 'group' AND ( \
        EXISTS (SELECT 1 FROM cloud_account_memory_card_overrides o \
          WHERE o.memory_id = mem.memory_id AND o.profile_id = $2 AND o.included) \
-       OR (mem.category = ANY($3) AND NOT EXISTS (SELECT 1 FROM cloud_account_memory_card_overrides o \
+       OR (mem.categories && $3::text[] AND NOT EXISTS (SELECT 1 FROM cloud_account_memory_card_overrides o \
          WHERE o.memory_id = mem.memory_id AND o.profile_id = $2 AND NOT o.included)) \
        OR ($4 AND NOT EXISTS (SELECT 1 FROM cloud_account_memory_card_overrides o \
          WHERE o.memory_id = mem.memory_id AND (o.included OR o.profile_id = $2))))"
@@ -78,8 +82,8 @@ const ROUTED_WHERE: &str = concat!(
 );
 
 /// The owner's rows outside groups that changed after `$5` and no longer
-/// reach the profile: archived, taken off its card, or moved to another
-/// category.
+/// reach the profile: archived, taken off its card, or moved to other
+/// categories.
 const LEFT_WHERE: &str = concat!(
     "mem.owner_account_id = $1 AND mem.scope <> 'group' AND mem.updated_at > $5 \
      AND NOT (mem.archived_at IS NULL AND ",
@@ -134,7 +138,7 @@ pub(crate) async fn profile_memories(
         .into_iter()
         .map(|memory| ProfileMemory {
             every_profile: fixed
-                && profile_kind_for(&memory.category) == Some("all")
+                && routes_to_every_kind(&memory.categories)
                 && !added.contains(&memory.memory_id),
             memory,
         })

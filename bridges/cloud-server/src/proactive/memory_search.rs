@@ -103,7 +103,8 @@ pub(crate) struct SearchMemory<'a> {
     pub scope: &'a str,
     pub scope_id: &'a str,
     pub text: &'a str,
-    pub category: &'a str,
+    /// One to three categories, primary first.
+    pub categories: &'a [String],
     pub created_at: &'a str,
     pub updated_at: &'a str,
 }
@@ -174,7 +175,7 @@ pub(crate) fn search<'a>(
         .filter(|memory| scopes.applies(memory.scope, memory.scope_id))
         .filter(|memory| !(settings.exclude_sensitive && sensitive(memory.text)))
         .map(|memory| {
-            let own = words(&format!("{} {}", memory.text, memory.category));
+            let own = words(&format!("{} {}", memory.text, memory.categories.join(" ")));
             let score = query_words
                 .iter()
                 .filter(|wanted| own.iter().any(|word| same_word(wanted, word)))
@@ -300,7 +301,7 @@ async fn answer(state: &ServerState, run_id: &str, args: &Value) -> Result<Value
             scope: &memory.scope,
             scope_id: &memory.scope_id,
             text: &memory.text,
-            category: &memory.category,
+            categories: &memory.categories,
             created_at: &memory.created_at,
             updated_at: &memory.updated_at,
         })
@@ -320,7 +321,8 @@ async fn answer(state: &ServerState, run_id: &str, args: &Value) -> Result<Value
             json!({
                 "text": memory.text,
                 "scope": memory.scope,
-                "category": memory.category,
+                "category": memory.categories.first(),
+                "categories": memory.categories,
                 "updatedAt": memory.updated_at,
             })
         })

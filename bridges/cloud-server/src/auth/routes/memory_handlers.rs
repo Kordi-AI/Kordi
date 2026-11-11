@@ -53,6 +53,7 @@ pub(super) async fn save_memory(
                 "scope": memory.scope,
                 "source": memory.source,
                 "category": memory.category,
+                "categories": memory.categories,
                 "declarationType": memory.declaration_type,
             }),
         )
@@ -78,6 +79,7 @@ pub(super) async fn update_memory(
                 serde_json::json!({
                     "memoryId": memory.memory_id,
                     "category": memory.category,
+                    "categories": memory.categories,
                     "declarationType": memory.declaration_type,
                 }),
             )
