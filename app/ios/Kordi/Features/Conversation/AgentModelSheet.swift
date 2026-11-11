@@ -102,7 +102,7 @@ struct AgentModelPicker: View {
     private var routing: CloudModelRouting { model.runtimeRouting(for: conversation) }
     private var canEdit: Bool { model.canChangeRuntimeRouting(for: conversation) }
     private var selectedAccountIsUnavailable: Bool {
-        !selectedAuthChoice.isEmpty && account(for: selectedAuthChoice) == nil
+        !selectedAuthChoice.isEmpty && !model.routeAccountCanBeSaved(selectedAuthChoice, provider: selectedProvider)
     }
     private var isCustomProvider: Bool {
         ProviderAuthenticationDefinition.canonicalID(selectedProvider) == ProviderAuthenticationDefinition.custom.id
@@ -351,7 +351,7 @@ struct AgentModelPicker: View {
             .font(.subheadline).padding(.horizontal, 12).frame(minHeight: 44).disabled(!canEdit)
             ForEach(accountChoices, id: \.self) { choice in
                 pickerRow(accountLabel(choice), selected: choice == selectedAuthChoice) { chooseAccount(choice) }
-                    .disabled(!canEdit || account(for: choice) == nil)
+                    .disabled(!canEdit || !model.routeAccountCanBeSaved(choice, provider: selectedProvider))
             }
             if !accountChoices.contains(where: { account(for: $0) != nil }) {
                 Text("No signed-in account. Connect one in Settings → Authentication.")
@@ -485,7 +485,7 @@ struct AgentModelPicker: View {
 
     private func accountLabel(_ choice: String) -> String {
         let accounts = model.authenticationSnapshots(for: selectedProvider)
-        guard let index = accounts.firstIndex(where: { $0.authChoice == choice }) else { return "Account unavailable" }
+        guard let index = accounts.firstIndex(where: { $0.authChoice == choice }) else { return RouteAccountChoice.missingLabel(choice) }
         if let label = accounts[index].label?.nonEmpty { return label }
         return "\(ProviderAccountMethod.label(for: accounts[index], catalog: model.ompProviderCatalog)) \(index + 1)"
     }

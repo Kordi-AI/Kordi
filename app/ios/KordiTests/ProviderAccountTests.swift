@@ -226,4 +226,87 @@ final class ProviderAccountTests: XCTestCase {
         XCTAssertEqual(controller.state.phase, .failed)
         XCTAssertEqual(controller.state.failure, "OMP did not accept that value. Check it and start again.")
     }
+
+    // MARK: Route accounts the iPhone cannot see
+
+    @MainActor
+    private func routedModel(choice: String?) throws -> (AppModel, ConversationSummary) {
+        let suiteName = "ProviderRouteAccountTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        let store = SessionRuntimeRouteStore(defaults: defaults)
+        let model = AppModel(cache: try LocalMessageStore(inMemory: true), sessionRuntimeRouteStore: store, previewMode: true)
+        let chat = try XCTUnwrap(model.conversations.first { model.canChangeRuntimeRouting(for: $0) })
+        var route = CloudModelRouting.empty
+        route.defaultModel = "openai-codex/gpt-6.1-sol"
+        route.defaultAuthProvider = "openai-codex"
+        route.defaultAuthChoice = choice
+        route.thinking = "high"
+        store.save(route, accountId: model.account?.accountId, sessionId: chat.sessionId)
+        return (model, chat)
+    }
+
+    /// A route set on the Mac to its active sign-in runs on the Mac, so the
+    /// iPhone never shows it as unavailable and keeps it when the model changes.
+    @MainActor
+    func testTheMacActiveSignInIsNeverUnavailableOnThePhone() async throws {
+        let (model, chat) = try routedModel(choice: "local-active-oauth")
+        XCTAssertFalse(model.routeAccountIsUnavailable(model.runtimeRouting(for: chat)))
+        XCTAssertNil(model.routeAccountFallbackKey(for: chat))
+        let saved = await model.updateRuntimeRouting(
+            for: chat, provider: "openai-codex", authChoice: "local-active-oauth", model: "gpt-6.1-sol", thinking: "low"
+        )
+        XCTAssertTrue(saved)
+        XCTAssertEqual(model.runtimeRouting(for: chat).defaultAuthChoice, "local-active-oauth")
+        XCTAssertEqual(RouteAccountChoice.missingLabel("local-active-oauth"), "Mac sign-in")
+        XCTAssertFalse(model.routeAccountIsUnavailable(provider: "openai-codex", choice: nil))
+    }
+
+    @MainActor
+    func testARemovedAccountIsUnavailableOnlyAfterTheAccountListLoads() throws {
+        let model = AppModel(cache: try LocalMessageStore(inMemory: true), previewMode: false)
+        XCTAssertFalse(model.hasLoadedProviderAuthentication)
+        XCTAssertFalse(model.routeAccountIsUnavailable(provider: "openai-codex", choice: "cloud-login:removed"))
+
+        let (loaded, chat) = try routedModel(choice: "cloud-login:removed")
+        XCTAssertTrue(loaded.hasLoadedProviderAuthentication)
+        XCTAssertTrue(loaded.routeAccountIsUnavailable(loaded.runtimeRouting(for: chat)))
+    }
+
+    /// Like the Mac, a route on a removed account moves once to the active
+    /// account of the same provider and keeps its model and thinking level.
+    @MainActor
+    func testARemovedAccountMovesOnceToTheActiveAccountOfTheSameProvider() async throws {
+        let (model, chat) = try routedModel(choice: "cloud-login:removed")
+        XCTAssertNotNil(model.routeAccountFallbackKey(for: chat))
+        let moved = await model.moveRouteOffRemovedAccount(in: chat, settle: .zero)
+        XCTAssertTrue(moved)
+        let route = model.runtimeRouting(for: chat)
+        XCTAssertEqual(route.defaultAuthChoice, model.activeAccount(for: "openai")?.authChoice)
+        XCTAssertEqual(route.defaultModel, "openai-codex/gpt-6.1-sol")
+        XCTAssertEqual(route.thinking, "high")
+        XCTAssertFalse(model.routeAccountIsUnavailable(route))
+        XCTAssertNil(model.routeAccountFallbackKey(for: chat))
+        let again = await model.moveRouteOffRemovedAccount(in: chat, settle: .zero)
+        XCTAssertFalse(again)
+    }
+
+    /// A missing Mac sign-in may still be on the Mac, and another provider is
+    /// never chosen automatically: both stay until the owner picks.
+    @MainActor
+    func testMacSignInsAndOtherProvidersNeverMoveAutomatically() async throws {
+        let (model, chat) = try routedModel(choice: "profile:mac-work")
+        XCTAssertTrue(model.routeAccountIsUnavailable(model.runtimeRouting(for: chat)))
+        XCTAssertNil(model.routeAccountFallbackKey(for: chat))
+        let moved = await model.moveRouteOffRemovedAccount(in: chat, settle: .zero)
+        XCTAssertFalse(moved)
+        XCTAssertEqual(model.runtimeRouting(for: chat).defaultAuthChoice, "profile:mac-work")
+
+        var route = model.runtimeRouting(for: chat)
+        route.defaultAuthProvider = "cerebras"
+        route.defaultModel = "cerebras/m"
+        route.defaultAuthChoice = "ios-api-key:removed"
+        XCTAssertTrue(model.routeAccountIsUnavailable(route))
+        XCTAssertNil(model.routeAccountReplacement(for: route))
+    }
 }

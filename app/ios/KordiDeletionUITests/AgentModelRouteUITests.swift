@@ -141,14 +141,15 @@ final class AgentModelRouteUITests: ProviderUITestCase {
         app.terminate()
     }
 
-    func testRemovedAccountRequiresExplicitReplacement() {
+    /// As on the Mac, a route on a removed account moves to the active account
+    /// of the same provider and keeps its model.
+    func testRemovedAccountMovesToTheSameProviderAccount() {
         let app = launch("--preview-agent-model", "--preview-account-unavailable")
-        let unavailable = element("agent-model-account-unavailable", in: app)
-        XCTAssertTrue(unavailable.waitForExistence(timeout: 15))
-        XCTAssertEqual(app.buttons["composer-model-picker"].value as? String, "Account unavailable")
-        app.buttons["agent-model-account"].tap()
-        app.buttons["Personal"].tap()
-        XCTAssertEqual(app.buttons["composer-model-picker"].value as? String, "GPT-5.6 Sol")
+        let picker = app.buttons["composer-model-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 15))
+        let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "GPT-5.6 Sol"), object: picker)
+        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 10), .completed)
+        XCTAssertFalse(element("agent-model-account-unavailable", in: app).exists)
         app.terminate()
     }
 

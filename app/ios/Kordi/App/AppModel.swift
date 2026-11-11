@@ -303,6 +303,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var isRefreshingFactory = false
     @Published private(set) var providerAuthenticationErrorMessage: String?
     @Published private(set) var sessionRuntimeRouteRevision = 0
+    @Published private(set) var hasLoadedProviderAuthentication = false
+    var appliedRouteAccountFallbacks = Set<String>()
     @Published private(set) var devices: [CloudDeviceAuthorization] = []
     @Published private(set) var isRefreshingDevices = false
     @Published private(set) var deviceErrorMessage: String?
@@ -814,9 +816,7 @@ final class AppModel: ObservableObject {
         sessionActivityByID = [:]
         sessionPinsByID = [:]
         pendingSessionPinActions = [:]
-        providerAuthSnapshot = nil
-        providerAuthSnapshots = [:]
-        providerAuthProfiles = []
+        applyProviderAuthProfiles([], loaded: false)
         ompProviderCatalog = OMPProviderCatalog.pinned
         hasLiveOMPProviderCatalog = false
         ompBackendUnavailable = false
@@ -952,7 +952,7 @@ final class AppModel: ObservableObject {
                 )
             }
             hasObservedOwnedAgentRouting = true
-            if let authProfiles { applyProviderAuthProfiles(authProfiles) }
+            if let authProfiles { applyProviderAuthProfiles(authProfiles, loaded: true) }
             if let deviceList {
                 devices = deviceList
                 currentDeviceId = deviceList.first(where: \.currentDevice)?.deviceId
@@ -1349,7 +1349,7 @@ final class AppModel: ObservableObject {
         do {
             let profiles = try await api.listProviderAuthSnapshots(token: token)
             let authenticationChanged = providerAuthProfiles != profiles
-            applyProviderAuthProfiles(profiles)
+            applyProviderAuthProfiles(profiles, loaded: true)
             reconcilePendingProviderAuthentication()
             if authenticationChanged {
                 sessionRuntimeRouteRevision &+= 1
@@ -1571,7 +1571,8 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func applyProviderAuthProfiles(_ profiles: [CloudProviderAuthSnapshot]) {
+    private func applyProviderAuthProfiles(_ profiles: [CloudProviderAuthSnapshot], loaded: Bool? = nil) {
+        if let loaded { hasLoadedProviderAuthentication = loaded }
         let ordered = profiles.sorted {
             $0.createdAt == $1.createdAt
                 ? $0.snapshotId > $1.snapshotId
@@ -5447,9 +5448,7 @@ final class AppModel: ObservableObject {
         if let selectedProvider {
             routing.defaultAuthProvider = selectedProvider
             if let authChoice {
-                guard authenticationSnapshots(for: selectedProvider).contains(where: {
-                    $0.authChoice == authChoice
-                }) else { return false }
+                guard routeAccountCanBeSaved(authChoice, provider: selectedProvider) else { return false }
                 routing.defaultAuthChoice = authChoice
             } else if let auth = authenticationSnapshot(for: selectedProvider) {
                 routing.defaultAuthChoice = auth.authChoice
@@ -8199,7 +8198,7 @@ final class AppModel: ObservableObject {
                 label: "Team", createdAt: timestamp.string(from: now), revokedAt: nil
             )]
             : arguments.contains("--preview-account-unavailable") ? [personalCodexAccount]
-            : [personalCodexAccount, workCodexAccount]
+            : [personalCodexAccount, workCodexAccount], loaded: true
         )
         if ProcessInfo.processInfo.arguments.contains("--preview-agent-model"),
            let researchSession = conversations.first(where: { $0.id == "agent:research" }) {

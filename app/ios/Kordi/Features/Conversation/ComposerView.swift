@@ -248,6 +248,7 @@ struct ComposerView: View {
             }
             .padding(.vertical, 9)
             .background { ComposerBackdropBand() }
+            .task(id: model.routeAccountFallbackKey(for: conversation)) { await model.moveRouteOffRemovedAccount(in: conversation) }
             .animation(.snappy(duration: 0.2), value: attachments.count)
             .animation(.snappy(duration: 0.2), value: replySource?.sourceMessageId)
             .animation(.snappy(duration: 0.2), value: editingMessage?.id)
@@ -1178,9 +1179,7 @@ struct ComposerView: View {
 
     private var modelEffortPill: some View {
         let route = model.runtimeRouting(for: conversation)
-        let unavailable = route.defaultAuthChoice?.nonEmpty.map { choice in
-            !model.authenticationSnapshots(for: route.defaultAuthProvider ?? "").contains { $0.authChoice == choice }
-        } ?? false
+        let unavailable = model.routeAccountIsUnavailable(route)
         // No connected account means no usable model: the chip shows a placeholder, not a default model.
         let noProvider = !unavailable && !model.hasConfiguredProviderAuthentication
         let chip = AgentModelPresentation.chipLabels(
