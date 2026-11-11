@@ -23,7 +23,8 @@ final class MemoryCategoriesUITests: ProviderUITestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.15)).tap()
         XCTAssertTrue(reveal(row, in: app))
         capture("Memory with three categories", app: app)
-        let learning = row.buttons["Learning"].firstMatch
+        // SwiftUI exposes chips as siblings of the row text button.
+        let learning = app.buttons["Learning"].firstMatch
         XCTAssertTrue(learning.waitForExistence(timeout: 5))
         learning.tap()
         XCTAssertTrue(element("memory-filter-clear", in: app).waitForExistence(timeout: 5))
