@@ -3,7 +3,8 @@
 //! Revocation reaches a socket through the session signal hub at once. The
 //! socket also rechecks PostgreSQL every ~30 s as a backstop, closes when its
 //! session's known expiry passes, and keeps running through short database
-//! outages instead of turning them into a reconnect storm.
+//! outages instead of turning them into a reconnect storm. A long outage
+//! closes sockets over a spread window rather than at one instant.
 
 use std::time::Duration;
 
@@ -12,7 +13,8 @@ use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 use tokio::time::Instant;
 
-use super::retry::{jittered, spread, Backoff, FAILURE_GRACE};
+use super::close::CloseReason;
+use super::retry::{jittered, socket_failure_grace, spread, Backoff};
 use super::ticket::ConsumedRealtimeTicket;
 use crate::auth::admission::AdmissionPolicy;
 
@@ -96,7 +98,7 @@ pub(super) async fn check_connection(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum GuardStep {
     Continue,
-    Close,
+    Close(CloseReason),
 }
 
 /// When an open socket rechecks its session, and whether a result closes it.
@@ -106,6 +108,8 @@ pub(super) struct SessionGuard {
     expires_at: Option<Instant>,
     legacy_deadline: Option<Instant>,
     failing_since: Option<Instant>,
+    /// How long checks may keep failing before this socket closes.
+    failure_grace: Duration,
     backoff: Backoff,
 }
 
@@ -121,6 +125,7 @@ impl SessionGuard {
             expires_at: expires_at.map(|expiry| instant_at(now, expiry)),
             legacy_deadline,
             failing_since: None,
+            failure_grace: socket_failure_grace(),
             backoff: Backoff::default(),
         }
     }
@@ -155,18 +160,18 @@ impl SessionGuard {
                 self.next_check = now + jittered(SESSION_RECHECK_INTERVAL);
                 GuardStep::Continue
             }
-            SessionCheck::Inactive => GuardStep::Close,
+            SessionCheck::Inactive => GuardStep::Close(CloseReason::SessionEnded),
             SessionCheck::Unavailable => {
                 // Past its known expiry a session cannot be confirmed as
                 // extended, so the socket fails closed.
                 if self.expires_at.is_some_and(|expiry| now >= expiry) {
-                    return GuardStep::Close;
+                    return GuardStep::Close(CloseReason::SessionEnded);
                 }
-                let failing_since = *self.failing_since.get_or_insert(now);
-                if now.duration_since(failing_since) >= FAILURE_GRACE {
-                    return GuardStep::Close;
+                let give_up_at = *self.failing_since.get_or_insert(now) + self.failure_grace;
+                if now >= give_up_at {
+                    return GuardStep::Close(CloseReason::DatabaseUnavailable);
                 }
-                self.next_check = now + self.backoff.next_delay();
+                self.next_check = (now + self.backoff.next_delay()).min(give_up_at);
                 GuardStep::Continue
             }
         }

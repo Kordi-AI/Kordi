@@ -131,22 +131,18 @@ pub(super) async fn signup(
         };
     }
 
-    let password_hash = match tokio::task::spawn_blocking({
-        let plaintext = req.password.clone();
-        let config = *hasher_config.as_ref();
-        move || hash_password(&plaintext, config)
-    })
-    .await
-    {
-        Ok(Ok(hash)) => hash,
-        _ => {
-            return err(
-                "server_error",
-                "Could not hash password.",
-                StatusCode::INTERNAL_SERVER_ERROR,
-            );
-        }
-    };
+    let password_hash =
+        match hash_password_queued(req.password.clone(), *hasher_config.as_ref()).await {
+            Ok(hash) => hash,
+            Err(PasswordWorkError::Busy) => return password_busy_response(),
+            Err(PasswordWorkError::Failed) => {
+                return err(
+                    "server_error",
+                    "Could not hash password.",
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                );
+            }
+        };
 
     let now = Utc::now().to_rfc3339();
     let account_id = format!("acct_{}", uuid::Uuid::new_v4().simple());

@@ -170,7 +170,8 @@ async fn restricted_password_routes_reject_legacy_signup_and_recheck_approval() 
     .await
     .unwrap();
     let password = "Synthetic-password-123";
-    let hash = hash_password(password, PasswordHasherConfig::for_tests()).unwrap();
+    let hash =
+        crate::auth::password::hash_password(password, PasswordHasherConfig::for_tests()).unwrap();
     query("UPDATE cloud_accounts SET password_hash = $1, password_algorithm = $2 WHERE account_id = $3")
         .bind(hash).bind(PASSWORD_ALGORITHM_ID).bind(&account.account.account_id).execute(&pool).await.unwrap();
     let denied =
