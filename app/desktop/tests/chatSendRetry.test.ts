@@ -117,6 +117,40 @@ test('a direct send that timed out after the server stored it ends as sent exact
   assert.equal(server.posts(), 2);
 });
 
+test('catch-up does not resend an outbox entry whose original send is still in flight', async () => {
+  const server = fakeChatServer([]);
+  const queue = fakeOutbox();
+  let release!: () => void;
+  let started!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const sending = new Promise<void>((resolve) => { started = resolve; });
+  let lookups = 0;
+  server.state.ensureConversation = async () => {
+    if (++lookups === 1) {
+      started();
+      await held;
+    }
+    return conversation;
+  };
+  // Conversation clients create separate delivery wrappers for send and drain.
+  const initial = new ChatSyncMessageDelivery(server.state, queue.outbox).sendMessage(
+    'synthetic-token', 'acct_a', 'hello', {
+      accountId: 'acct_b', clientMessageId: '0b9b7a52-2f0e-4c7a-9a55-7d7d2f3c1a04',
+    },
+  );
+  await sending;
+  try {
+    const catchUp = new ChatSyncMessageDelivery(server.state, queue.outbox);
+    assert.deepEqual(await catchUp.drainChatOutbox('synthetic-token', 'acct_b'), []);
+    assert.equal(server.posts(), 0, 'the original send still owns this pending entry');
+  } finally {
+    release();
+    await initial;
+  }
+  assert.equal(server.posts(), 1);
+  assert.equal(queue.completed.length, 1);
+});
+
 test('a refused send is not left looking queued', async () => {
   const server = fakeChatServer([() => new CloudAuthError('unknown', "You can't message this person.", 403)]);
   const queue = fakeOutbox();
@@ -127,6 +161,46 @@ test('a refused send is not left looking queued', async () => {
   assert.equal(chatSendQueuedForRetry(error), false);
   assert.ok(terminalCollaborationRetryFailure({ error, conversationId: 'c', messageId: clientMessageId }));
   assert.equal(queue.operations.get(clientMessageId)?.status, 'failed');
+});
+
+test('a delayed outbox read does not replay a send completed after its pending snapshot', async () => {
+  const server = fakeChatServer([]);
+  const queue = fakeOutbox();
+  let releaseSend!: () => void;
+  let started!: () => void;
+  const heldSend = new Promise<void>((resolve) => { releaseSend = resolve; });
+  const sending = new Promise<void>((resolve) => { started = resolve; });
+  server.state.ensureConversation = async () => { started(); await heldSend; return conversation; };
+  const initial = new ChatSyncMessageDelivery(server.state, queue.outbox).sendMessage(
+    'synthetic-token', 'acct_a', 'hello', {
+      accountId: 'acct_b', clientMessageId: '0b9b7a52-2f0e-4c7a-9a55-7d7d2f3c1a05',
+    },
+  );
+  await sending;
+  let releaseRead!: () => void;
+  let snapshotTaken!: () => void;
+  const heldRead = new Promise<void>((resolve) => { releaseRead = resolve; });
+  const reading = new Promise<void>((resolve) => { snapshotTaken = resolve; });
+  const outbox = queue.outbox!;
+  const catchUp = new ChatSyncMessageDelivery(server.state, {
+    ...outbox,
+    due: async (...args) => {
+      const snapshot = await outbox.due(...args);
+      snapshotTaken();
+      await heldRead;
+      return snapshot;
+    },
+  }).drainChatOutbox('synthetic-token', 'acct_b');
+  await reading;
+  releaseSend();
+  try {
+    await initial;
+  } finally {
+    releaseRead();
+  }
+  assert.deepEqual(await catchUp, []);
+  assert.equal(server.posts(), 1);
+  assert.equal(queue.completed.length, 1);
 });
 
 test('queued direct sends wait out a Retry-After before trying again', async () => {
