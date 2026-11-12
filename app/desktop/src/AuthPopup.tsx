@@ -3,6 +3,7 @@ import { Copy, ExternalLink, LoaderCircle, LogIn, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorLine } from '@/components/ui/ErrorLine';
 import { broadcastDesktopAuthUpdated, type DesktopAuthUpdateReason } from '@/features/auth/desktopAuthSync';
+import { StandaloneAuthWindow } from '@/features/auth/StandaloneAuthWindow';
 import { AuthFlowSteps, type AuthFlowStep } from '@/kordi-app/auth/AuthFlowSteps';
 import type { DesktopAuthAttemptSnapshot, DesktopAuthProvider, DesktopAuthState } from '@/kordi-app/types';
 import {
@@ -330,17 +331,17 @@ export default function AuthPopup({
     <div className={embedded ? 'mx-auto w-full max-w-[440px]' : 'mx-auto flex h-full min-h-0 w-full max-w-[520px] items-start'}>
       <div className={embedded ? 'app-transient-surface app-auth-popup-panel app-modal-panel overflow-hidden rounded-[20px] border' : 'app-transient-surface app-auth-popup-panel app-modal-panel flex max-h-[calc(100dvh-4rem)] w-full flex-col overflow-hidden rounded-[24px] border'}>
         {embedded ? (
-          <div className="app-auth-popup-header border-b border-white/8 px-4 py-2.5 sm:px-4.5">
+          <div className="app-auth-popup-header border-b border-[color:var(--app-divider)] px-4 py-2.5 sm:px-4.5">
             <div className="flex items-start justify-between gap-3.5">
           <div>
-            <div className={embedded ? 'text-[20px] font-semibold tracking-[-0.025em] text-white' : 'text-[24px] font-semibold tracking-[-0.03em] text-white'}>
+            <div className={embedded ? 'text-[20px] font-semibold tracking-[-0.025em] text-[color:var(--utility-foreground)]' : 'text-[24px] font-semibold tracking-[-0.03em] text-[color:var(--utility-foreground)]'}>
               {authPopupTitle(provider, providerId, mode)}
             </div>
-            <div className={embedded ? 'mt-1.5 max-w-[42ch] text-[12px] leading-6 text-slate-400' : 'mt-1.5 max-w-[44ch] text-[12px] leading-6 text-slate-400'}>
+            <div className={embedded ? 'mt-1.5 max-w-[42ch] text-[12px] leading-6 text-[color:var(--utility-muted-text)]' : 'mt-1.5 max-w-[44ch] text-[12px] leading-6 text-[color:var(--utility-muted-text)]'}>
               {authPopupDescription(providerId, mode)}
             </div>
           </div>
-          <button type="button" onClick={() => void handleClose()} className="app-icon-button rounded-full p-2 text-slate-300 transition hover:text-white">
+          <button type="button" onClick={() => void handleClose()} className="app-icon-button rounded-full p-2 text-[color:var(--utility-muted-text)] transition hover:text-[color:var(--utility-foreground)]">
             <X className="h-4 w-4" />
           </button>
             </div>
@@ -351,21 +352,21 @@ export default function AuthPopup({
         {!embedded && (
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <div className={embedded ? 'text-[20px] font-semibold tracking-[-0.025em] text-white' : 'text-[24px] font-semibold tracking-[-0.03em] text-white'}>
+              <div className={embedded ? 'text-[20px] font-semibold tracking-[-0.025em] text-[color:var(--utility-foreground)]' : 'text-[24px] font-semibold tracking-[-0.03em] text-[color:var(--utility-foreground)]'}>
                 {authPopupTitle(provider, providerId, mode)}
               </div>
-              <div className={embedded ? 'mt-1.5 max-w-[42ch] text-[12px] leading-6 text-slate-400' : 'mt-1.5 max-w-[44ch] text-[12px] leading-6 text-slate-400'}>
+              <div className={embedded ? 'mt-1.5 max-w-[42ch] text-[12px] leading-6 text-[color:var(--utility-muted-text)]' : 'mt-1.5 max-w-[44ch] text-[12px] leading-6 text-[color:var(--utility-muted-text)]'}>
                 {authPopupDescription(providerId, mode)}
               </div>
             </div>
-            <button type="button" onClick={() => void handleClose()} className="app-icon-button rounded-full p-2 text-slate-300 transition hover:text-white">
+            <button type="button" onClick={() => void handleClose()} className="app-icon-button rounded-full p-2 text-[color:var(--utility-muted-text)] transition hover:text-[color:var(--utility-foreground)]">
               <X className="h-4 w-4" />
             </button>
           </div>
         )}
 
         {isLoading ? (
-          <div className="app-surface-muted flex items-center gap-3 rounded-[24px] px-4 py-4 text-sm text-slate-300">
+          <div className="app-surface-muted flex items-center gap-3 rounded-[24px] px-4 py-4 text-sm text-[color:var(--utility-muted-text)]">
             <LoaderCircle className="h-4 w-4 animate-spin" />
             Loading auth state…
           </div>
@@ -381,19 +382,19 @@ export default function AuthPopup({
 
             {mode === 'api-key' ? (
               <>
-                <div className="rounded-[20px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-3.5 py-3 text-[12px] leading-5 text-slate-400">
+                <div className="rounded-[20px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-3.5 py-3 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">
                   {providerId === 'anthropic'
                     ? 'Existing Anthropic keys stay available in Settings. Use this panel when you want to add another billed API key.'
                     : 'Saved keys stay available in Settings. Use this panel when you want to add another key without leaving the current flow.'}
                 </div>
                 <div className="app-input-shell rounded-[20px] px-3.5 py-3">
-                  <div className="mb-1.5 text-[11px] font-medium tracking-[-0.01em] text-slate-500">{provider.envVar || 'API key'}</div>
+                  <div className="mb-1.5 text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">{provider.envVar || 'API key'}</div>
                   <input
                     type="password"
                     value={apiKeyDraft}
                     onChange={(event) => setApiKeyDraft(event.target.value)}
                     placeholder={`Paste your ${provider.label} key`}
-                    className="w-full bg-transparent text-[13px] text-slate-100 outline-none placeholder:text-slate-500"
+                    className="w-full bg-transparent text-[13px] text-[color:var(--utility-foreground)] outline-none placeholder:text-[color:var(--utility-meta-text)]"
                   />
                 </div>
                 <div className="flex justify-end gap-2">
@@ -418,21 +419,21 @@ export default function AuthPopup({
 
                 {provider.id === 'github-copilot' && (requireAuthority || provider.authority) && (
                   <div className="rounded-[24px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-4 py-4">
-                    <div className="mb-1.5 text-[11px] font-medium tracking-[-0.01em] text-slate-500">GitHub host</div>
+                    <div className="mb-1.5 text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">GitHub host</div>
                     <input
                       value={authorityDraft}
                       onChange={(event) => setAuthorityDraft(event.target.value)}
                       placeholder="github.com or github.example.com"
-                      className="w-full bg-transparent text-[13px] text-slate-100 outline-none placeholder:text-slate-500"
+                      className="w-full bg-transparent text-[13px] text-[color:var(--utility-foreground)] outline-none placeholder:text-[color:var(--utility-meta-text)]"
                     />
-                    <div className="mt-2 text-[12px] leading-5 text-slate-400">
+                    <div className="mt-2 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">
                       Use github.com or the GitHub Enterprise domain your team signs in through.
                     </div>
                   </div>
                 )}
 
-                <div className="app-auth-popup-info-card rounded-[20px] border border-white/8 bg-[linear-gradient(155deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] px-3.5 py-3">
-                  <div className="text-[13px] font-medium text-white">
+                <div className="app-auth-popup-info-card rounded-[20px] border border-[color:var(--app-divider)] px-3.5 py-3">
+                  <div className="text-[13px] font-medium text-[color:var(--utility-foreground)]">
                     {authAttempt?.message ?? (providerId === 'anthropic'
                       ? 'Open Claude sign-in and Kordi will keep this panel updated while you finish the subscription login.'
                       : 'Open the provider sign-in page and Kordi will keep this panel updated while you authenticate.')}
@@ -440,8 +441,8 @@ export default function AuthPopup({
 
                   {showInteractiveOAuthDetails && authAttempt?.authUrl && (
                     <div className="mt-2.5 rounded-[18px] bg-[color:var(--app-control-bg)] px-3 py-2.5">
-                      <div className="mb-1 text-[11px] font-medium tracking-[-0.01em] text-slate-500">Sign-in URL</div>
-                      <div className="break-all text-[11px] leading-5 text-slate-300">{authAttempt.authUrl}</div>
+                      <div className="mb-1 text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">Sign-in URL</div>
+                      <div className="break-all text-[11px] leading-5 text-[color:var(--utility-muted-text)]">{authAttempt.authUrl}</div>
                       <div className="mt-3 flex justify-end">
                         <Button type="button" variant="quiet" className="rounded-xl" onClick={() => void copyText(authAttempt.authUrl!, setCopyFeedback)}>
                           <Copy className="mr-2 h-3.5 w-3.5" />
@@ -453,11 +454,11 @@ export default function AuthPopup({
 
                   {showInteractiveOAuthDetails && authAttempt?.userCode && (
                     <div className="mt-2.5 rounded-[18px] bg-[color:var(--app-control-bg)] px-3 py-2.5">
-                      <div className="text-[11px] font-medium tracking-[-0.01em] text-slate-500">Device code</div>
-                      <div className="mt-1 text-[17px] font-semibold tracking-[0.04em] text-white">{authAttempt.userCode}</div>
+                      <div className="text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">Device code</div>
+                      <div className="mt-1 text-[17px] font-semibold tracking-[0.04em] text-[color:var(--utility-foreground)]">{authAttempt.userCode}</div>
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         {authAttempt.verificationUrl ? (
-                          <a href={authAttempt.verificationUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm text-slate-300 transition hover:text-white">
+                          <a href={authAttempt.verificationUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm text-[color:var(--utility-muted-text)] transition hover:text-[color:var(--utility-foreground)]">
                             Open page
                             <ExternalLink className="h-3.5 w-3.5" />
                           </a>
@@ -472,23 +473,23 @@ export default function AuthPopup({
 
                   {showInteractiveOAuthDetails && authAttempt?.canPasteCallback && (
                     <div className="mt-4">
-                      <div className="mb-1.5 text-[11px] font-medium tracking-[-0.01em] text-slate-500">Paste a callback manually</div>
+                      <div className="mb-1.5 text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">Paste a callback manually</div>
                       <div className="app-input-shell rounded-[20px] px-3 py-3">
                         <textarea
                           value={manualCallbackDraft}
                           onChange={(event) => setManualCallbackDraft(event.target.value)}
                           placeholder="Paste the redirect URL or authorization code if the browser does not return to Kordi automatically."
-                          className="min-h-[112px] w-full resize-none bg-transparent text-sm leading-6 text-slate-100 outline-none placeholder:text-slate-500"
+                          className="min-h-[112px] w-full resize-none bg-transparent text-sm leading-6 text-[color:var(--utility-foreground)] outline-none placeholder:text-[color:var(--utility-meta-text)]"
                         />
                       </div>
                     </div>
                   )}
 
-                  {showInteractiveOAuthDetails && copyFeedback && <div className="mt-3 text-[12px] text-slate-400">{copyFeedback}</div>}
+                  {showInteractiveOAuthDetails && copyFeedback && <div className="mt-3 text-[12px] text-[color:var(--utility-muted-text)]">{copyFeedback}</div>}
                 </div>
 
                 {!authAttempt?.succeeded && (
-                  <div className="app-auth-popup-note rounded-[20px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-3.5 py-2.5 text-[11px] leading-5 text-slate-400">
+                  <div className="app-auth-popup-note rounded-[20px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-3.5 py-2.5 text-[11px] leading-5 text-[color:var(--utility-muted-text)]">
                     This uses the same shared sign-in flow as the terminal app, including a manual callback fallback if the browser does not return automatically.
                   </div>
                 )}
@@ -529,8 +530,8 @@ export default function AuthPopup({
         )}
         </div>
         {embedded && (
-          <div className="app-auth-popup-footer flex items-center justify-between gap-3 border-t border-white/8 px-4 py-2.5 sm:px-4.5">
-            <div className="text-[11px] text-slate-500">Esc to close</div>
+          <div className="app-auth-popup-footer flex items-center justify-between gap-3 border-t border-[color:var(--app-divider)] px-4 py-2.5 sm:px-4.5">
+            <div className="text-[11px] text-[color:var(--utility-meta-text)]">Esc to close</div>
             <Button type="button" variant="quiet" className="rounded-xl" onClick={() => void handleClose()}>
               {authAttempt?.succeeded ? 'Done' : authAttempt?.completed ? 'Close' : authAttempt ? 'Cancel' : 'Close'}
             </Button>
@@ -556,9 +557,5 @@ export default function AuthPopup({
     );
   }
 
-  return (
-    <div className="kordi-app theme-dark flex h-[100dvh] w-full overflow-hidden bg-[radial-gradient(circle_at_top,rgba(58,56,46,0.28),rgba(17,17,15,0.96)_45%,rgba(10,10,11,1))] px-6 py-8 text-white">
-      {shell}
-    </div>
-  );
+  return <StandaloneAuthWindow>{shell}</StandaloneAuthWindow>;
 }

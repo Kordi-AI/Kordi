@@ -82,7 +82,7 @@ export function AuthRouteTest({ provider, onTestRoute, disabledReason = null }: 
     <SettingsSection title="Test route" className="app-auth-detail-section min-w-0">
       <div className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 py-3.5 sm:grid-cols-2">
         <label className="grid min-w-0 gap-1.5">
-          <span className="text-[12px] font-medium text-slate-400">Provider</span>
+          <span className="text-[12px] font-medium text-[color:var(--utility-muted-text)]">Provider</span>
           <SettingsSelect
             label="Provider"
             className="app-input-shell app-flat-input h-9 w-full max-w-none rounded-lg"
@@ -92,7 +92,7 @@ export function AuthRouteTest({ provider, onTestRoute, disabledReason = null }: 
           />
         </label>
         <label className="grid min-w-0 gap-1.5">
-          <span className="text-[12px] font-medium text-slate-400">Account</span>
+          <span className="text-[12px] font-medium text-[color:var(--utility-muted-text)]">Account</span>
           <SettingsSelect
             label="Account"
             className="app-input-shell app-flat-input h-9 w-full max-w-none rounded-lg"
@@ -102,7 +102,7 @@ export function AuthRouteTest({ provider, onTestRoute, disabledReason = null }: 
           />
         </label>
         <label className="grid min-w-0 gap-1.5">
-          <span className="text-[12px] font-medium text-slate-400">Model</span>
+          <span className="text-[12px] font-medium text-[color:var(--utility-muted-text)]">Model</span>
           {account.modelIds.length ? (
             <SettingsSelect
               label="Model"
@@ -115,14 +115,14 @@ export function AuthRouteTest({ provider, onTestRoute, disabledReason = null }: 
             <input
               aria-label="Model ID"
               placeholder="Model ID from your endpoint"
-              className="app-input-shell app-flat-input h-9 w-full min-w-0 rounded-lg px-3 text-[13px] text-white outline-none"
+              className="app-input-shell app-flat-input h-9 w-full min-w-0 rounded-lg px-3 text-[13px] text-[color:var(--utility-foreground)] outline-none"
               value={routeModel}
               onChange={(event) => { setModelOverride(event.target.value); clearResult(); }}
             />
           )}
         </label>
         <label className="grid min-w-0 gap-1.5">
-          <span className="text-[12px] font-medium text-slate-400">Thinking</span>
+          <span className="text-[12px] font-medium text-[color:var(--utility-muted-text)]">Thinking</span>
           <SettingsSelect
             label="Thinking"
             className="app-input-shell app-flat-input h-9 w-full max-w-none rounded-lg"
@@ -133,16 +133,16 @@ export function AuthRouteTest({ provider, onTestRoute, disabledReason = null }: 
         </label>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[color:var(--app-divider)] py-3.5">
-        <p className="m-0 text-[12px] leading-5 text-slate-400">Sends one short request and may use provider quota.</p>
+        <p className="m-0 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">Sends one short request and may use provider quota.</p>
         <AuthActionButton type="button" className={authButtonPrimaryClass} title={disabledReason ?? undefined} disabled={Boolean(disabledReason) || routeTesting || !routeModel.trim()} onClick={() => { void runRouteTest(); }}>
           {routeTesting ? 'Testing…' : 'Run test'}
         </AuthActionButton>
       </div>
-      {disabledReason ? <p className="m-0 pb-3.5 text-[12px] leading-5 text-slate-400">{disabledReason}</p> : null}
+      {disabledReason ? <p className="m-0 pb-3.5 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">{disabledReason}</p> : null}
       {routeResult ? (
         <div role="status" className="py-3.5">
-          <div className="text-[13px] font-medium text-white">Confirmed · {routeResult.accountLabel} · {routeResult.model}</div>
-          <div className="mt-0.5 text-[12px] leading-5 text-slate-400">{routeResult.response}</div>
+          <div className="text-[13px] font-medium text-[color:var(--utility-foreground)]">Confirmed · {routeResult.accountLabel} · {routeResult.model}</div>
+          <div className="mt-0.5 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">{routeResult.response}</div>
         </div>
       ) : null}
       {routeError && routeError !== disabledReason ? <ErrorLine align="end" className="mt-0 pb-3.5">{routeError}</ErrorLine> : null}
