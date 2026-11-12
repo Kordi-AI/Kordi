@@ -9,6 +9,8 @@ use kordi_cloud_server::chat_sync::models::ConversationCursorSnapshot;
 mod read_watermark;
 #[path = "readers.rs"]
 mod readers;
+#[path = "receipt_lock_order.rs"]
+mod receipt_lock_order;
 
 /// One cursor event as a recipient stores it: (event type, whose cursor,
 /// delivered, read, the recipient's new read watermark when it carries one).

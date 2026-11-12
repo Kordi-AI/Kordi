@@ -100,10 +100,29 @@ async fn successful_chat_mutations_preserve_sessions_but_errors_and_other_mutati
     for token in [&token, &peer_token] {
         cached_on_both(&pool, &replicas, token).await;
     }
-    for (_, app) in &replicas {
+    for (state, app) in &replicas {
         let (status, sent) =
             request(app, &token, "POST", &format!("{path}/messages"), message()).await;
         assert_eq!(status, StatusCode::CREATED);
+        let snapshot = state.session_signals().lookup_cache().metrics().snapshot();
+        for stage in [
+            "handler",
+            "store",
+            "pool_wait",
+            "begin",
+            "operation_lock",
+            "writer_authorization",
+            "sequence_allocation",
+            "fanout",
+            "commit",
+            "projection",
+            "reply_matching",
+            "mention_routing",
+        ] {
+            assert_eq!(snapshot["chat_send"][stage]["count"], 1, "{stage}");
+            assert_eq!(snapshot["chat_send"][stage]["abandoned"], 0, "{stage}");
+        }
+        assert_eq!(snapshot["chat_send"]["notifications"]["count"], 0);
         assert_cached_everywhere(&pool, &replicas, &[&token, &peer_token]).await;
         for receipt in ["delivered", "read"] {
             let (status, _) = request(app, &peer_token, "PUT", &format!("{path}/{receipt}"), json!({"client_operation_id":Uuid::now_v7(),"sequence":sent["message"]["conversation_sequence"]})).await;

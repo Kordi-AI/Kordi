@@ -92,25 +92,17 @@ test('inline auth popup uses direct handoff copy without authentication status c
   assert.match(authPopup, /Finish sign-in/);
 });
 
-test('inline auth popup uses cool chat-aligned light cards instead of warm gray', () => {
+test('both provider popup variants use the shared transient surface and palette', () => {
   const authPopup = readFileSync(new URL('../src/AuthPopup.tsx', import.meta.url), 'utf8');
   const authFlowSteps = readAuthSource('AuthFlowSteps.tsx');
-  const themeOverrides = readDesktopShellCss();
+  const css = readDesktopShellCss();
 
-  assert.match(authPopup, /app-auth-popup-panel/);
+  assert.match(authPopup, /app-transient-surface app-auth-popup-panel app-modal-panel/);
   assert.match(authPopup, /app-auth-popup-info-card/);
   assert.match(authPopup, /app-auth-popup-note/);
   assert.match(authFlowSteps, /app-auth-flow-steps/);
-
-  const popupPaletteBlock = themeOverrides.slice(
-    themeOverrides.indexOf('.kordi-app.theme-light .app-auth-popup-panel'),
-    themeOverrides.indexOf('.kordi-app.theme-light .app-agent-shell'),
-  );
-
-  assert.match(popupPaletteBlock, /\.app-auth-popup-panel\s*\{[^}]*background:\s*var\(--app-transient-surface-bg\)[^}]*box-shadow:\s*var\(--app-transient-shadow\)/s);
-  assert.match(popupPaletteBlock, /\.app-auth-popup-header,[^}]*background:\s*var\(--app-transient-raised-bg\)/s);
-  assert.match(popupPaletteBlock, /\.app-auth-popup-info-card,[^}]*border-color:\s*var\(--app-transient-border\)[^}]*background:\s*var\(--app-transient-raised-bg\)/s);
-  assert.doesNotMatch(popupPaletteBlock, /rgba\(126,\s*111,\s*64|rgba\(147,\s*128,\s*109|rgba\(138,\s*118,\s*98|rgb\(245 241 232\)|rgba\(255, 252, 244|warm|amber|orange/i);
+  assert.match(css, /\.app-auth-popup-header,[^}]*border-color:\s*var\(--app-transient-divider\)/s);
+  assert.match(css, /\.app-auth-popup-info-card,[^}]*border-color:\s*var\(--app-transient-border\)[^}]*background:\s*var\(--app-transient-raised-bg\)/s);
 });
 
 test('provider detail view keeps a persistent back control without nesting settings scroll areas', () => {
