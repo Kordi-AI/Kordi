@@ -325,3 +325,5 @@ async fn earlier_expiry_with_a_later_text_value_evicts_every_replica() {
         assert_eq!(found.row.expires_at, earlier);
     }
 }
+
+mod chat_mutations;
