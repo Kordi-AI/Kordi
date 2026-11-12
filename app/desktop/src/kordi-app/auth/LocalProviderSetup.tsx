@@ -8,6 +8,7 @@ import {
   AuthActionButton,
   DetailRow,
   authButtonNeutralClass,
+  authButtonPrimaryClass,
   nonDragStyle,
 } from './AuthDetailPrimitives';
 import { LmStudioModelControlCenter } from './LmStudioModelControlCenter';
@@ -187,7 +188,7 @@ export function LocalProviderSetup({
           <div className="space-y-2">
             <div>{localServer.installDetail}</div>
             {localServer.installCommand ? (
-              <div className="rounded-[14px] border border-white/8 bg-black/15 px-3 py-2 font-mono text-[11px] text-slate-200">
+              <div className="rounded-[14px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] px-3 py-2 font-mono text-[11px] text-[color:var(--utility-foreground)]">
                 {localServer.installCommand}
               </div>
             ) : null}
@@ -197,7 +198,7 @@ export function LocalProviderSetup({
           <>
             <AuthActionButton
               type="button"
-              className={provider.id === 'lm-studio' ? 'border border-emerald-300/24 bg-[linear-gradient(180deg,rgba(52,211,153,0.18),rgba(20,184,166,0.11))] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_24px_rgba(0,0,0,0.16)] hover:border-emerald-200/32 hover:bg-[linear-gradient(180deg,rgba(52,211,153,0.24),rgba(20,184,166,0.15))]' : authButtonNeutralClass}
+              className={provider.id === 'lm-studio' ? authButtonPrimaryClass : authButtonNeutralClass}
               onClick={() => openLocalProviderHelp(localServer.installUrl)}
             >
               {provider.id === 'lm-studio' ? 'Download page' : 'Open install help'}
@@ -225,7 +226,7 @@ export function LocalProviderSetup({
         title="Server port"
         detail={
           <div className="space-y-1">
-            <div>Kordi will connect to this local provider at <span className="font-mono text-slate-300">http://localhost:{localPortDraft || localServer.port}/v1</span>.</div>
+            <div>Kordi will connect to this local provider at <span className="font-mono text-[color:var(--utility-muted-text)]">http://localhost:{localPortDraft || localServer.port}/v1</span>.</div>
             {localPortError ? <ErrorLine className="mt-0">{localPortError}</ErrorLine> : null}
           </div>
         }
@@ -238,7 +239,7 @@ export function LocalProviderSetup({
               aria-label={`${provider.label} local server port`}
               aria-invalid={localPortError ? true : undefined}
               onChange={(event) => setLocalPortDraft(event.target.value.replace(/\D/g, '').slice(0, 5))}
-              className="app-input-shell h-8.5 w-24 rounded-full px-3 text-right text-[12px] text-white outline-none"
+              className="app-input-shell h-8.5 w-24 rounded-full px-3 text-right text-[12px] text-[color:var(--utility-foreground)] outline-none"
               style={nonDragStyle}
             />
             <AuthActionButton

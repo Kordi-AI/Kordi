@@ -165,9 +165,7 @@ export function AuthPreview({
   return (
     <div
       className={`kordi-app theme-${theme} min-h-screen`}
-      style={theme === 'dark'
-        ? { background: '#101824', color: 'rgb(255 255 255)' }
-        : { background: 'var(--app-main-bg)', color: 'rgb(15 23 42)' }}
+      style={{ background: 'var(--app-main-bg)', color: 'var(--utility-foreground)' }}
     >
       <div className="flex min-h-screen flex-col">
         <header className="flex items-center justify-between border-b border-white/10 px-6 py-3 text-sm">

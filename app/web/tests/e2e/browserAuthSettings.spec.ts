@@ -32,6 +32,10 @@ test('browser Authentication refreshes hosted accounts and saves a Custom API ac
     }
     return route.fulfill({ status: 404, json: { errorCode: 'fixture_route_unavailable' } });
   });
+  await page.addInitScript(() => {
+    localStorage.setItem('kordi.themeMode.v1', 'light');
+    localStorage.setItem('kordi.chatTheme.v2', 'ocean');
+  });
   await page.goto('/app/chats');
   await page.getByRole('button', { name: 'Open profile', exact: true }).click();
   await page.getByRole('button', { name: 'Open account settings', exact: true }).click();
@@ -48,7 +52,9 @@ test('browser Authentication refreshes hosted accounts and saves a Custom API ac
   await page.getByRole('textbox', { name: 'API base URL', exact: true }).fill('https://fixture.example/v1');
   await page.getByRole('textbox', { name: 'Model ID', exact: true }).fill('fixture-model');
   await page.getByLabel('API key', { exact: true }).fill('synthetic-test-key');
-  await page.getByRole('button', { name: 'Save key', exact: true }).click();
+  const saveKey = page.getByRole('button', { name: 'Save key', exact: true });
+  await expect(saveKey).toHaveCSS('background-color', 'rgb(36, 103, 117)');
+  await saveKey.click();
   await expect.poll(() => saved).toBe(true);
   await expect(page.getByRole('group', { name: 'Browser fixture account', exact: true })).toBeVisible();
   expect(errors).toEqual([]);

@@ -2,6 +2,7 @@
 
 ## Global constraints
 
+- Name pull requests using `component/description`, with the actual component and a concise description of the change (for example, `composer/compact-glass-input`). Never use AI-tool names such as Codex or Claude Code as PR title prefixes.
 - Never install, invoke, or use the Superpowers skill/plugin or any skill sourced from `obra/superpowers`.
 - Keep committed source, documentation, configuration, tests, and commit messages in English. Before every commit and push, stage the intended files and run `pnpm check:english`.
 - Never commit credentials, account sessions, production data, private hostnames, private project or instance names, public IP addresses, or private infrastructure paths.

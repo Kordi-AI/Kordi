@@ -29,12 +29,14 @@ test('self-contained OAuth pages embed the same Kordi bird favicon and mark', as
   const { inlineMarkDataUrl } = await import('../../../scripts/kordi-app-icons/icons.mjs');
   const desktopCallback = readDesktopSource('src-tauri/src/cloud_oauth_loopback.rs');
   const cliCallback = readRepositorySource('agent/crates/cli/src/oauth/callback_server.rs');
-  const capturePage = readDesktopSource('src-tauri/src/auth/login_callback_capture/callback_page.html');
+  const captureListener = readDesktopSource('src-tauri/src/auth/login_callback_capture.rs');
+  const providerPage = readRepositorySource('agent/crates/cli/src/oauth/provider_callback.html');
 
   assert.equal(faviconDataUrl(desktopCallback), inlineMarkDataUrl());
-  assert.equal(faviconDataUrl(cliCallback), inlineMarkDataUrl());
-  assert.ok(capturePage.includes(`href="${inlineMarkDataUrl()}"`));
-  for (const page of [desktopCallback, cliCallback, capturePage]) {
+  assert.match(cliCallback, /include_str!\("provider_callback\.html"\)/);
+  assert.match(captureListener, /kordi_cli::oauth::callback_server::render_auth_response_page/);
+  assert.ok(providerPage.includes(`href="${inlineMarkDataUrl()}"`));
+  for (const page of [desktopCallback, providerPage]) {
     assert.match(page, /mask='url\(#kordi-bird-cut\)'/);
     assert.doesNotMatch(page, /circle cx=.18. cy=.10/);
   }

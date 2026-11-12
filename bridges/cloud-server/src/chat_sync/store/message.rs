@@ -4,11 +4,13 @@ use super::subtyped_attachment_validation::{
 };
 use super::support::*;
 use super::*;
+use crate::auth::session_metrics::send::{measure, SendStage, SendTimings};
 
 mod fanout;
 mod group_avatar;
 mod group_identity;
 mod mutations;
+mod send;
 mod server_refresh;
 mod server_replace;
 mod voice;
@@ -19,6 +21,8 @@ use group_identity::{
     normalize_group_envelope,
 };
 pub use mutations::{delete_message, edit_message};
+pub use send::send_message;
+pub(crate) use send::{send_message_in_transaction, send_message_measured};
 pub use server_refresh::refresh_server_message_content;
 pub(crate) use server_replace::replace_server_message_in_transaction;
 pub use voice::{update_voice_transcript, UpdateVoiceTranscriptRequest};
@@ -33,24 +37,12 @@ pub async fn load_message_snapshot(
     Ok(message)
 }
 
-pub async fn send_message(
-    pool: &PgPool,
-    account_id: &str,
-    conversation_id: Uuid,
-    request: SendMessageRequest,
-) -> Result<InsertOutcome<MessageSnapshot>, StoreError> {
-    let mut transaction = pool.begin().await?;
-    let outcome =
-        send_message_in_transaction(&mut transaction, account_id, conversation_id, request).await?;
-    transaction.commit().await?;
-    Ok(outcome)
-}
-
-pub(crate) async fn send_message_in_transaction(
+async fn send_message_in_transaction_measured(
     transaction: &mut Transaction<'_, Postgres>,
     account_id: &str,
     conversation_id: Uuid,
     mut request: SendMessageRequest,
+    metrics: Option<&SendTimings>,
 ) -> Result<InsertOutcome<MessageSnapshot>, StoreError> {
     prepare_agent_reply(transaction, account_id, conversation_id, &mut request).await?;
     let message_kind = request.kind.trim();
@@ -66,8 +58,12 @@ pub(crate) async fn send_message_in_transaction(
         }
         attachment_ids.push(attachment_id.to_string());
     }
-    let group_projection =
-        normalize_group_envelope(transaction, conversation_id, &mut request.content).await?;
+    let group_projection = measure(
+        metrics,
+        SendStage::GroupNormalization,
+        normalize_group_envelope(transaction, conversation_id, &mut request.content),
+    )
+    .await?;
     let subtyped_attachments = subtyped_attachment_metadata(&request.content, &attachment_ids)?;
     let live_resources = live_photo_resources(&request.content, &attachment_ids)?;
     let request_fingerprint = fingerprint(&MessageIntent {
@@ -78,7 +74,12 @@ pub(crate) async fn send_message_in_transaction(
         attachment_ids: &attachment_ids,
     })?;
 
-    advisory_operation_lock(transaction, account_id, request.client_message_id).await?;
+    measure(
+        metrics,
+        SendStage::OperationLock,
+        advisory_operation_lock(transaction, account_id, request.client_message_id),
+    )
+    .await?;
     if group_projection.is_some() {
         lock_group_message_fingerprint(
             transaction,
@@ -122,13 +123,22 @@ pub(crate) async fn send_message_in_transaction(
         }
     }
 
-    require_active_writer(transaction, conversation_id, account_id).await?;
+    measure(
+        metrics,
+        SendStage::WriterAuthorization,
+        require_active_writer(transaction, conversation_id, account_id),
+    )
+    .await?;
     if let Some(projection) = &group_projection {
         // Serialize group projections before taking any sibling conversation lock.
-        query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-            .bind(format!("group-projection:{}", projection.group_space_id))
-            .execute(&mut **transaction)
-            .await?;
+        measure(
+            metrics,
+            SendStage::GroupProjectionLock,
+            query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                .bind(format!("group-projection:{}", projection.group_space_id))
+                .execute(&mut **transaction),
+        )
+        .await?;
         group_avatar::authorize_group_space_attachment(
             transaction,
             account_id,
@@ -249,17 +259,21 @@ pub(crate) async fn send_message_in_transaction(
     validate_subtyped_attachment_bytes(transaction, account_id, &subtyped_attachments).await?;
     validate_live_photo_resources(transaction, account_id, &live_resources).await?;
 
-    let allocation: Option<(i64, i32)> = query_as(
-        "UPDATE cloud_chat_conversations \
+    let allocation: Option<(i64, i32)> = measure(
+        metrics,
+        SendStage::SequenceAllocation,
+        query_as(
+            "UPDATE cloud_chat_conversations \
          SET next_message_sequence = next_message_sequence + 1, \
              latest_message_sequence = next_message_sequence, \
              version = version + 1, \
              updated_at = now() \
          WHERE conversation_id = $1 \
          RETURNING next_message_sequence - 1, version",
+        )
+        .bind(conversation_id)
+        .fetch_optional(&mut **transaction),
     )
-    .bind(conversation_id)
-    .fetch_optional(&mut **transaction)
     .await?;
     let (conversation_sequence, _conversation_version) = allocation.ok_or(StoreError::NotFound)?;
     let message_id = Uuid::now_v7();
@@ -329,7 +343,12 @@ pub(crate) async fn send_message_in_transaction(
             .await?;
         }
     }
-    fanout_message_sync_event(transaction, "message.created", &message).await?;
+    measure(
+        metrics,
+        SendStage::Fanout,
+        fanout_message_sync_event(transaction, "message.created", &message),
+    )
+    .await?;
     Ok(InsertOutcome {
         value: message,
         inserted: true,

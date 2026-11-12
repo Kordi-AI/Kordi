@@ -132,8 +132,6 @@ enum ComposerMessageFieldLayout {
 
 enum ComposerTextExclusionLayout {
     static let defaultTrailingWidth: CGFloat = 88
-    /// Extra width for the compact Stop control beside Send.
-    static let stopControlWidth: CGFloat = 44
 
     static func rects(
         containerWidth: CGFloat,
@@ -217,9 +215,10 @@ struct ComposerView: View {
     @ScaledMetric(relativeTo: .body) private var composerControlHeight: CGFloat = 50
     @ScaledMetric(relativeTo: .body) private var sendButtonDiameter: CGFloat = 44
     @ScaledMetric(relativeTo: .body) private var draftPaneExpansionThreshold: CGFloat = 84
-    @ScaledMetric(relativeTo: .body) private var mentionPickerMaxHeight: CGFloat = 264
-    @ScaledMetric(relativeTo: .body) private var mentionPickerRowHeight: CGFloat = 46
-    @ScaledMetric(relativeTo: .caption) private var mentionPickerChromeHeight: CGFloat = 44
+    @ScaledMetric(relativeTo: .body) private var mentionPickerMaxHeight: CGFloat = 204
+    @ScaledMetric(relativeTo: .body) private var mentionPickerRowHeight: CGFloat = 36
+    @ScaledMetric(relativeTo: .caption) private var mentionPickerChromeHeight: CGFloat = 4
+    @ScaledMetric(relativeTo: .caption) private var mentionPickerSectionHeight: CGFloat = 20
 
     var body: some View {
         composerBody
@@ -243,7 +242,7 @@ struct ComposerView: View {
                 .padding(.leading, composerControlHeight + 18)
                 .padding(.trailing, sendButtonDiameter + 18)
             }
-            .overlay(alignment: .bottom) {
+            .background(alignment: .bottom) {
                 floatingPanelLayer
             }
             .padding(.vertical, 9)
@@ -361,9 +360,16 @@ struct ComposerView: View {
     private var floatingPanelLayer: some View {
         ZStack(alignment: .bottom) {
             if showsMentionPicker {
-                mentionPicker
-                    .padding(.horizontal, 10)
-                    .offset(y: -composerContentHeight - 8)
+                // Extend the suggestions behind the field so its rounded corners
+                // cannot expose a gap. The field keeps its own foreground glass.
+                VStack(spacing: 0) {
+                    mentionPicker
+                    Color.clear.frame(height: composerContentHeight)
+                }
+                    .modifier(ComposerMentionPanelSurface())
+                    .padding(.leading, editingMessage == nil && conversation.subsessionId == nil
+                        ? composerControlHeight + 18 : 10)
+                    .padding(.trailing, 10)
                     .transition(mentionPickerTransition)
                     .zIndex(10)
             }
@@ -492,21 +498,16 @@ struct ComposerView: View {
     private var messageFieldSurface: some View {
         if #available(iOS 26.0, *) {
             messageFieldContent
-                .glassEffect(.regular, in: .rect(cornerRadius: messageFieldCornerRadius))
+                .glassEffect(.regular,
+                    in: .rect(cornerRadius: messageFieldCornerRadius))
         } else {
             messageFieldContent
-                .background(
-                    .ultraThinMaterial,
-                    in: RoundedRectangle(
-                        cornerRadius: messageFieldCornerRadius,
-                        style: .continuous
-                    )
-                )
+                .background {
+                    RoundedRectangle(cornerRadius: messageFieldCornerRadius, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
                 .overlay {
-                    RoundedRectangle(
-                        cornerRadius: messageFieldCornerRadius,
-                        style: .continuous
-                    )
+                    RoundedRectangle(cornerRadius: messageFieldCornerRadius, style: .continuous)
                         .stroke(Color(uiColor: .separator).opacity(0.32), lineWidth: 0.5)
                 }
         }
@@ -525,13 +526,24 @@ struct ComposerView: View {
                 messageEditor
                     .padding(.horizontal, 4)
                     .padding(.vertical, 3)
+                    .overlay(alignment: .topLeading) {
+                        if text.isEmpty {
+                            Text("Message")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 20)
+                                .padding(.top, 14)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                    }
                     .animation(messageFieldAnimation) { content in
                         content.frame(height: messageFieldHeight, alignment: .bottom)
                     }
                     .overlay(alignment: .bottomTrailing) {
                         if !isMessageFieldExpanded, editingMessage == nil && conversation.subsessionId == nil {
                             expressivePickerButton
-                                .padding(.trailing, 8 + sendButtonDiameter)
+                                .padding(.trailing, 8 + trailingControlsWidth)
                                 .padding(.bottom, 3)
                                 // Fades in once the row's own emoji button has mostly faded out.
                                 .transition(.asymmetric(
@@ -549,7 +561,7 @@ struct ComposerView: View {
                         if showsModelEffortPill {
                             modelEffortPill.padding(.trailing, 12)
                         }
-                        Color.clear.frame(width: sendButtonDiameter)
+                        Color.clear.frame(width: trailingControlsWidth)
                     }
                     .frame(height: sendButtonDiameter)
                     .padding([.horizontal, .bottom], 8)
@@ -611,9 +623,8 @@ struct ComposerView: View {
         .accessibilityHint("Hold to record. Recordings shorter than one second are discarded.")
     }
 
-    private var showsStopBesideSend: Bool {
-        editingMessage == nil && !isVoiceInputMode
-            && model.composerStopPlacement(for: conversation) == .beside
+    private var trailingControlsWidth: CGFloat {
+        sendButtonDiameter
     }
 
     private var messageEditor: some View {
@@ -634,8 +645,7 @@ struct ComposerView: View {
             draftButtonThreshold: draftPaneExpansionThreshold,
             trailingExclusionWidth: isMessageFieldExpanded
                 ? (showsDraftPaneButton ? 44 : 0)
-                : ComposerTextExclusionLayout.defaultTrailingWidth
-                    + (showsStopBesideSend ? ComposerTextExclusionLayout.stopControlWidth : 0),
+                : ComposerTextExclusionLayout.defaultTrailingWidth,
             accessibilityLabel: editingMessage == nil
                 ? "Message \(destinationName)"
                 : "Edit message"
@@ -649,6 +659,16 @@ struct ComposerView: View {
             }
         }
         .onChange(of: text) { _, newValue in
+            #if DEBUG
+            if model.isPreviewMode, newValue == "@",
+               ProcessInfo.processInfo.arguments.contains("--preview-composer-mentions") {
+                textSelection = ComposerTextSelection(location: 1, length: 0)
+            }
+            if model.isPreviewMode,
+               ProcessInfo.processInfo.arguments.contains("--preview-composer-typing") {
+                textSelection = ComposerTextSelection(location: newValue.utf16.count, length: 0)
+            }
+            #endif
             if let selectedMention,
                !newValue.localizedCaseInsensitiveContains(selectedMention.mentionText) {
                 self.selectedMention = nil
@@ -808,9 +828,7 @@ struct ComposerView: View {
     private var mentionPickerTransition: AnyTransition {
         reduceMotion
             ? .identity
-            : .scale(scale: 0.92, anchor: .bottom)
-                .combined(with: .move(edge: .bottom))
-                .combined(with: .opacity)
+            : .move(edge: .bottom).combined(with: .opacity)
     }
 
     @ViewBuilder
@@ -876,29 +894,9 @@ struct ComposerView: View {
         .accessibilityLabel("Add photo, video, or file")
     }
 
-    /// In agent chats, Stop takes the send button's place while a request this
-    /// account sent runs or waits. In person and group chats Send stays and a
-    /// compact Stop sits beside it. The draft stays and can be sent after.
-    @ViewBuilder
+    // Request cancellation remains on the corresponding message's processing row.
     private var sendButton: some View {
-        let stopID = model.composerStopAgentRequestID(conversationId: conversation.id)
-        let placement = editingMessage == nil && !isVoiceInputMode
-            ? ComposerStopPlacement.resolve(kind: conversation.kind, pendingRequestID: stopID)
-            : .none
-        if placement == .replaceSend, let stopID {
-            ComposerAgentRequestStopButton(
-                conversationId: conversation.id,
-                requestMessageId: stopID,
-                diameter: sendButtonDiameter
-            )
-        } else if placement == .beside, let stopID {
-            HStack(spacing: 0) {
-                AgentRequestStopButton(conversationId: conversation.id, requestMessageId: stopID)
-                sendOrVoiceButton
-            }
-        } else {
-            sendOrVoiceButton
-        }
+        sendOrVoiceButton
     }
 
     private var sendOrVoiceButton: some View {
@@ -931,6 +929,7 @@ struct ComposerView: View {
                         ? "checkmark"
                         : isVoiceInputMode ? "keyboard" : canSend || conversation.subsessionId != nil ? "arrow.up" : "mic.fill")
                         .font(.body.weight(.bold))
+                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                         .foregroundStyle(
                             canSend && !isVoiceInputMode
                                 ? .white
@@ -941,6 +940,7 @@ struct ComposerView: View {
             .frame(width: sendButtonDiameter, height: sendButtonDiameter)
             .frame(width: max(44, sendButtonDiameter), height: max(44, sendButtonDiameter))
             .contentShape(Circle())
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: canSend)
         }
         .buttonStyle(.plain)
         .disabled(
@@ -1151,7 +1151,6 @@ struct ComposerView: View {
             onSelect: acceptMentionItem, peopleTitle: conversation.subsessionId == nil ? "Contacts" : "Members")
         .frame(height: mentionPickerHeight)
         .frame(maxWidth: .infinity)
-        .modifier(ComposerFloatingPanelSurfaceModifier())
     }
 
     private var showsMentionPicker: Bool {
@@ -1166,7 +1165,8 @@ struct ComposerView: View {
         ComposerMentionPickerLayout.height(
             targetCount: mentionMenuItems.count,
             rowHeight: mentionPickerRowHeight,
-            chromeHeight: mentionPickerChromeHeight,
+            chromeHeight: mentionPickerChromeHeight
+                + CGFloat(Set(mentionMenuItems.map(\.section)).count) * mentionPickerSectionHeight,
             maximumHeight: verticalSizeClass == .compact
                 ? min(mentionPickerMaxHeight, 188)
                 : mentionPickerMaxHeight
