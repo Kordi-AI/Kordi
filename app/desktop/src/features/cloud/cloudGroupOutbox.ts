@@ -6,10 +6,9 @@ import {
   type CloudGroupOutboxAttachmentSource,
 } from './cloudGroupOutboxAttachmentCodec';
 
-export type { CloudGroupOutboxAttachmentSource } from './cloudGroupOutboxAttachmentCodec';
+import { applyCloudGroupDeliveryRound, CLOUD_GROUP_OUTBOX_MAX_ATTEMPTS } from './cloudGroupOutboxRetry';
 
-export const CLOUD_GROUP_OUTBOX_RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 15_000, 30_000] as const;
-export const CLOUD_GROUP_OUTBOX_MAX_ATTEMPTS = CLOUD_GROUP_OUTBOX_RETRY_DELAYS_MS.length + 1;
+export type { CloudGroupOutboxAttachmentSource } from './cloudGroupOutboxAttachmentCodec';
 export const CLOUD_GROUP_CANONICAL_RECONCILE_DELAY_MS = 1_000;
 
 const CLOUD_GROUP_OUTBOX_VERSION = 1 as const;
@@ -643,40 +642,7 @@ export class CloudGroupOutbox {
     const outcome = await this.commitMutation((state) => {
       const persistedEntry = state.entries.find((candidate) => candidate.canonicalMessageId === canonicalMessageId);
       if (!persistedEntry) return null;
-      const delivered = new Set(persistedEntry.deliveredRecipientIds);
-      const exhausted = new Set(persistedEntry.exhaustedRecipientIds ?? []);
-      const pending = new Set(persistedEntry.pendingRecipientIds);
-
-      outcomes.forEach((recipientOutcome, index) => {
-        const recipientId = pendingAtStart[index];
-        if (!recipientId) return;
-        if (recipientOutcome.status === 'fulfilled') {
-          pending.delete(recipientId);
-          exhausted.delete(recipientId);
-          delivered.add(recipientId);
-          return;
-        }
-        const attempts = (persistedEntry.attemptsByRecipientId[recipientId] ?? 0) + 1;
-        persistedEntry.attemptsByRecipientId[recipientId] = attempts;
-        if (attempts >= CLOUD_GROUP_OUTBOX_MAX_ATTEMPTS) {
-          pending.delete(recipientId);
-          exhausted.add(recipientId);
-        }
-      });
-
-      persistedEntry.pendingRecipientIds = [...pending];
-      persistedEntry.deliveredRecipientIds = [...delivered];
-      persistedEntry.exhaustedRecipientIds = exhausted.size > 0 ? [...exhausted] : undefined;
-      persistedEntry.awaitingCanonicalAck = persistedEntry.pendingRecipientIds.length === 0
-        && delivered.size > 0
-        && exhausted.size === 0;
-      const retryDelays = persistedEntry.pendingRecipientIds.map((recipientId) => {
-        const attempts = Math.max(1, persistedEntry.attemptsByRecipientId[recipientId] ?? 1);
-        return CLOUD_GROUP_OUTBOX_RETRY_DELAYS_MS[
-          Math.min(attempts - 1, CLOUD_GROUP_OUTBOX_RETRY_DELAYS_MS.length - 1)
-        ];
-      });
-      persistedEntry.nextAttemptAtMs = retryDelays.length > 0 ? nowMs + Math.min(...retryDelays) : 0;
+      applyCloudGroupDeliveryRound(persistedEntry, pendingAtStart, outcomes, nowMs);
       return cloneEntry(persistedEntry);
     });
     if (outcome) this.notify();

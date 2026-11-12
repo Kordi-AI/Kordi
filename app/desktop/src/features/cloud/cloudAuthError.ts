@@ -72,17 +72,28 @@ export type CloudAuthErrorCode =
   | 'browser_sign_in_timed_out'
   | 'unknown';
 
+export type CloudAuthErrorDetails = {
+  /** The server's own error code, kept even when `code` maps it to 'unknown'. */
+  serverCode?: string;
+  /** The server said local state must be rebuilt from a fresh bootstrap. */
+  bootstrapRequired?: boolean;
+};
+
 export class CloudAuthError extends Error {
   readonly code: CloudAuthErrorCode;
   readonly status: number;
-  /** Seconds the server asked the client to wait, from a 429 Retry-After header. */
+  /** Seconds the server asked the client to wait, from a Retry-After header. */
   readonly retryAfterSeconds?: number;
+  readonly serverCode?: string | null;
+  readonly bootstrapRequired?: boolean;
 
-  constructor(code: CloudAuthErrorCode, message: string, status: number, retryAfterSeconds?: number) {
+  constructor(code: CloudAuthErrorCode, message: string, status: number, retryAfterSeconds?: number, details: CloudAuthErrorDetails = {}) {
     super(message);
     this.code = code;
     this.status = status;
     if (retryAfterSeconds !== undefined) this.retryAfterSeconds = retryAfterSeconds;
+    if (details.serverCode) this.serverCode = details.serverCode;
+    if (details.bootstrapRequired) this.bootstrapRequired = true;
     this.name = 'CloudAuthError';
   }
 }
@@ -131,7 +142,7 @@ export function isRetryableCloudDeliveryError(error: unknown): boolean {
 type ServerErrorBody = {
   errorCode?: string;
   message?: string;
-  error?: string | { code?: string; message?: string };
+  error?: string | { code?: string; message?: string; details?: { bootstrap_required?: unknown } | null };
   error_description?: string;
   /** The wait a 429 names in its body, matching `Retry-After`. */
   retryAfterSeconds?: unknown;
@@ -190,5 +201,8 @@ export function buildCloudAuthError(
   // The account turned AI models off; the consent store shows the "AI models are off" prompt.
   if (code === 'ai_consent_required') signalAiConsentRequired();
   const retryAfterSeconds = parseRetryAfterSeconds(retryAfter) ?? bodyRetryAfterSeconds(data);
-  return new CloudAuthError(code, message, status, retryAfterSeconds);
+  return new CloudAuthError(code, message, status, retryAfterSeconds, {
+    serverCode: typeof serverCode === 'string' ? serverCode : undefined,
+    bootstrapRequired: typeof data.error === 'object' && data.error?.details?.bootstrap_required === true,
+  });
 }

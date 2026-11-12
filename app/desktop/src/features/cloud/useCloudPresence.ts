@@ -2,11 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   CloudAuthClient,
-  cloudRealtimeWebSocketEnabled,
-  cloudWebSocketUrl,
   defaultCloudAuthClient,
   type CloudAccount,
 } from './authClient';
+import { openCloudEventSocket, type CloudEventSocket } from './cloudEventSocket';
 import {
   applyPresenceSnapshot,
   cloudPresenceChangedFromWsPayload,
@@ -30,7 +29,7 @@ type CloudPresenceStoreState = {
   generation: number;
   listeners: Set<() => void>;
   timer: ReturnType<typeof window.setInterval> | null;
-  ws: WebSocket | null;
+  socket: CloudEventSocket | null;
 };
 
 type CloudPresenceView = { snapshot: CloudPresenceStore; ready: boolean };
@@ -60,7 +59,7 @@ function storeFor(accountId: string): CloudPresenceStoreState {
   installSignedOutListener();
   let store = stores.get(accountId);
   if (!store) {
-    store = { snapshot: {}, loaded: false, generation: 0, listeners: new Set(), timer: null, ws: null };
+    store = { snapshot: {}, loaded: false, generation: 0, listeners: new Set(), timer: null, socket: null };
     stores.set(accountId, store);
   }
   return store;
@@ -90,34 +89,20 @@ async function refresh(store: CloudPresenceStoreState, client: CloudAuthClient) 
 export function __resetCloudPresenceStoresForTests() {
   for (const store of stores.values()) {
     if (store.timer && typeof window !== 'undefined') window.clearInterval(store.timer);
-    store.ws?.close();
+    store.socket?.close();
   }
   stores.clear();
 }
 
+// Malformed frames are ignored; polling refreshes the snapshot.
 function ensurePresenceWebSocket(store: CloudPresenceStoreState) {
-  if (store.ws || typeof WebSocket === 'undefined' || !cloudRealtimeWebSocketEnabled()) return;
-  void loadSession().then((session) => {
-    if (!session?.token || store.ws) return;
-    const ws = new WebSocket(cloudWebSocketUrl(session.token));
-    store.ws = ws;
-    ws.onmessage = (event) => {
-      try {
-        const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
-        if (!shouldRefreshPresenceForWsSubject(String(frame.subject ?? ''))) return;
-        const changed = cloudPresenceChangedFromWsPayload(frame.payload);
-        if (changed) publish(store, mergePresenceEvent(store.snapshot, changed));
-      } catch {
-        // Ignore malformed frames; polling refreshes the snapshot.
-      }
-    };
-    ws.onclose = () => {
-      if (store.ws === ws) store.ws = null;
-    };
-    ws.onerror = () => {
-      ws.close();
-    };
-  }).catch(() => undefined);
+  store.socket ??= openCloudEventSocket({
+    onFrame: (frame) => {
+      if (!shouldRefreshPresenceForWsSubject(frame.subject)) return;
+      const changed = cloudPresenceChangedFromWsPayload(frame.payload);
+      if (changed) publish(store, mergePresenceEvent(store.snapshot, changed));
+    },
+  });
 }
 
 export function useCloudPresence(account: CloudAccount | null) {
@@ -146,8 +131,8 @@ export function useCloudPresence(account: CloudAccount | null) {
       if (store.listeners.size === 0) {
         if (store.timer && typeof window !== 'undefined') window.clearInterval(store.timer);
         store.timer = null;
-        store.ws?.close();
-        store.ws = null;
+        store.socket?.close();
+        store.socket = null;
       }
     };
   }, [client, store]);
