@@ -6,7 +6,7 @@ import { reopenCloudOAuthBrowser } from '@/features/cloud/cloudOAuthSignIn';
 import { AppShellFrame } from '@/app/AppShellFrame';
 import { useNativeViewport } from '@/app/useNativeViewport';
 import { useKordiAppModel } from '@/app/useKordiAppModel';
-import { useBrowserWorkspaceScope } from '@web/app/browserWorkspaceScope';
+import { browserWorkspaceScope as workspaceScopeKey, useBrowserWorkspaceScope } from '@web/app/browserWorkspaceScope';
 import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
 import { signOutToSite, useBrowserSiteSignInRedirect } from '@web/auth/browserSiteSignIn';
 import { CloudCallHost } from '@/features/cloud/CloudCallHost';
@@ -39,6 +39,7 @@ import { readLoginModePreference } from '@/features/cloud/loginModePreference';
 import { useCloudWindowSurface } from '@/features/cloud/useCloudWindowSurface';
 import { useCloudSyncPresentation } from '@/features/cloud/useCloudSyncPresentation';
 import { useCloudAuthTransition } from '@/features/cloud/useCloudAuthTransition';
+import { cachedSessionSnapshot } from '@/features/cloud/session';
 import { useCloudSession, type UseCloudSessionResult } from '@/features/cloud/useCloudSession';
 import { WhatsNewLaunchWindow } from '@/features/updates/useWhatsNewWindow';
 import { CloudSignInGate } from '@/kordi-app/cloud/CloudSignInGate';
@@ -107,7 +108,11 @@ function CloudEditionRoot({
   cloudSessionStatusOverride?: CloudSessionStatus;
   cloudSessionOverride?: CloudSessionGateResult;
 }) {
-  const browserWorkspaceScope = useBrowserWorkspaceScope();
+  const publishedWorkspaceScope = useBrowserWorkspaceScope();
+  const restoredBrowserSession = WEB_APP_BUILD ? cachedSessionSnapshot() : null;
+  const browserWorkspaceScope = publishedWorkspaceScope === 'browser' && restoredBrowserSession?.organizationId
+    ? workspaceScopeKey(restoredBrowserSession.accountId, restoredBrowserSession.organizationId)
+    : publishedWorkspaceScope;
   const pendingGroupInvitation = usePendingGroupInvitation();
   // Tests can hand us a stubbed session result; in production we use the hook.
   const liveSession = useCloudSession({

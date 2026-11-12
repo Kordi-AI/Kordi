@@ -147,8 +147,10 @@ export class ChatSyncSyncClient {
     conversationId: string,
     beforeSequence?: number,
     limit = 200,
+    options?: { signal?: AbortSignal; aroundMessageId?: string },
   ): Promise<{
     messages: ChatSyncMessage[];
+    anchorMessageId?: string;
     nextBeforeSequence: number | null;
     hasMore: boolean;
   }> {
@@ -161,14 +163,17 @@ export class ChatSyncSyncClient {
       }
       params.set('before_sequence', String(beforeSequence));
     }
+    if (options?.aroundMessageId) params.set('around_message_id', options.aroundMessageId);
     const response = await this.state.send<{
       messages: ChatSyncMessage[];
+      anchor_message_id?: string;
       next_before_sequence: number | null;
       has_more: boolean;
     }>(
       `/v2/chat/conversations/${encodeURIComponent(conversationId)}/messages?${params.toString()}`,
       {
         method: 'GET',
+        signal: options?.signal,
         headers: { authorization: `Bearer ${token}` },
       },
       'Could not backfill reliable message history.',
@@ -176,6 +181,7 @@ export class ChatSyncSyncClient {
     const messages = this.state.retainMessages(response.messages, accountId);
     return {
       messages,
+      ...(response.anchor_message_id ? { anchorMessageId: response.anchor_message_id } : {}),
       nextBeforeSequence: response.next_before_sequence,
       hasMore: response.has_more,
     };

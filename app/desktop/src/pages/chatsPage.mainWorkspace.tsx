@@ -257,6 +257,22 @@ export function ChatMainWorkspace({
                 }}
               />
 
+            {transcript.browserGroupHistory?.page?.throughSequence !== undefined ? (
+              <div className="flex items-center gap-3 px-4 py-2 text-sm">
+                <span>Viewing pinned history</span>
+                <button type="button" className="app-button-quiet" onClick={transcript.browserGroupHistory.returnToLatest}>Back to latest messages</button>
+              </div>
+            ) : null}
+            {transcript.browserGroupHistory?.error ? (
+              <div role="status" className="flex items-center gap-3 px-4 py-2 text-sm">
+                <span>{transcript.browserGroupHistory.error === 'older' ? 'Could not load older messages.' : 'Could not load recent messages.'}</span>
+                <button type="button" className="app-button-quiet" onClick={transcript.browserGroupHistory.retry}>Retry history</button>
+              </div>
+            ) : null}
+            {models.pins.navigationError ? (
+              <div role="status" className="px-4 py-2 text-sm">{models.pins.navigationError}</div>
+            ) : null}
+
             <MessageSeenByProvider isGroup={conversationIsGroupChat(activeConv)} participants={activeConv.canonicalParticipants}>
             <ModelRecoveryProvider messages={presentation.messages}>
             <SupportReportSubmissionProvider

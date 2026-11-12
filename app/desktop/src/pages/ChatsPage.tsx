@@ -1,3 +1,4 @@
+import { TRANSCRIPT_FOLLOW_TAIL_EVENT } from '@/features/chat/transcriptNavigation';
 import type { CompanionView } from './chatsPage.companionToolbar';
 import {useUnreadThreadNavigation} from './useUnreadThreadNavigation';
 import {ThreadShortcut} from '@/features/chat/ThreadShortcut';
@@ -256,7 +257,22 @@ export function ChatsPage({
   );
   const loadedThreadPage=unreadThreads.page;
   const notificationMessage=loadedThreadPage && !loadedThreadPage.isThread?loadedThreadPage.thread.root:undefined;
-  const {threadProjection,locatedLiveTurn}=useThreadTranscript(activeConv,activeTranscriptLiveTurn,notificationMessage,loadedThreadPage?.isThread?loadedThreadPage.thread:undefined);
+  const browserHistory = transcript.browserGroupHistory?.sessionId === activeSessionId ? transcript.browserGroupHistory : undefined;
+  const historyPage = browserHistory?.page;
+  const historyConversation = useMemo(() => historyPage ? {
+    ...activeConv,
+    messages: activeConv.messages.filter(({ conversationSequence }) => conversationSequence == null
+      || (conversationSequence >= (historyPage.firstSequence ?? 0) && conversationSequence <= (historyPage.throughSequence ?? Infinity))),
+  } : activeConv, [activeConv, historyPage]);
+  const pinnedHistory = historyPage?.throughSequence !== undefined;
+  const wasPinnedHistory = useRef(false);
+  useLayoutEffect(() => {
+    if (wasPinnedHistory.current && !pinnedHistory) {
+      transcript.chatTranscriptScrollRef.current?.dispatchEvent(new Event(TRANSCRIPT_FOLLOW_TAIL_EVENT));
+    }
+    wasPinnedHistory.current = pinnedHistory;
+  }, [pinnedHistory, transcript.chatTranscriptScrollRef]);
+  const {threadProjection,locatedLiveTurn}=useThreadTranscript(historyConversation,activeTranscriptLiveTurn,notificationMessage,loadedThreadPage?.isThread?loadedThreadPage.thread:undefined);
   const activeLiveTurnThreadRootId = locatedLiveTurn && !locatedLiveTurn.completed
     ? threadProjection.threadRootIdByMessageId.get(locatedLiveTurn.replyToMessageId?.trim() ?? '') ?? null
     : null;
@@ -327,6 +343,7 @@ export function ChatsPage({
     cloudPin: cloudSessionPin,
     onUpdateCloudPin: onUpdateCloudSessionPin,
     onNavigateToMessage: transcriptNavigation.main.navigate,
+    loadBrowserPin: browserHistory?.loadPin,
   });
   const createSideAgentSession = async (initialPrompt = '') => {
     setCompanionView('chat');

@@ -117,11 +117,23 @@ export function applyBrowserChatSyncCommand(state: BrowserChatSyncState, command
     case 'desktop_chat_sync_cursor': return { accountId: state.accountId, cursor: state.cursor, lastStreamSeq: state.lastStreamSeq };
     case 'desktop_chat_sync_conversations': return state.conversations;
     case 'desktop_chat_sync_unread_counts': return heads(state);
-    case 'desktop_chat_sync_coverage': return state.conversations.map(row => {
-      const messages = messageRows(state, row.id);
-      return { conversationId: row.id, earliestSequence: messages[0]?.conversation_sequence ?? 0,
-        latestSequence: messages[messages.length - 1]?.conversation_sequence ?? 0, messageCount: messages.length };
-    });
+    case 'desktop_chat_sync_coverage': {
+      const coverage = new Map<string, { earliestSequence: number; latestSequence: number; messageCount: number }>();
+      for (const row of state.messages) {
+        const sequence = row.conversation_sequence;
+        const found = coverage.get(row.conversation_id);
+        if (found) {
+          found.earliestSequence = Math.min(found.earliestSequence, sequence);
+          found.latestSequence = Math.max(found.latestSequence, sequence);
+          found.messageCount++;
+        } else {
+          coverage.set(row.conversation_id, { earliestSequence: sequence, latestSequence: sequence, messageCount: 1 });
+        }
+      }
+      return state.conversations.map(row => ({
+        conversationId: row.id, ...(coverage.get(row.id) ?? { earliestSequence: 0, latestSequence: 0, messageCount: 0 }),
+      }));
+    }
     case 'desktop_chat_sync_message_refs':
       return state.messages.filter(row => (args.conversationIds as string[]).includes(row.conversation_id))
         .map(({ id, client_message_id, conversation_id }) => ({ id, client_message_id, conversation_id }));

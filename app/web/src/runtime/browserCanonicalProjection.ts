@@ -19,36 +19,50 @@ export function emptyBrowserCanonicalState(accountId: string, now = Date.now()):
   };
 }
 
-export function browserCanonicalCatalog(state: CanonicalSessionState): CanonicalSessionCatalog {
-  const { messages, contextSnapshots, ...catalog } = state;
-  const bySession = new Map<string, CanonicalSessionMessage[]>();
+export type BrowserMessageSummaries = Record<string, {
+  messageCount: number;
+  latestMessage: CanonicalSessionMessage | null;
+}>;
+
+export function browserCanonicalMessageSummaries(messages: readonly CanonicalSessionMessage[]): BrowserMessageSummaries {
+  const summaries = Object.create(null) as BrowserMessageSummaries;
   for (const message of messages) {
-    const rows = bySession.get(message.sessionId) ?? [];
-    rows.push(message);
-    bySession.set(message.sessionId, rows);
+    const summary = summaries[message.sessionId] ??= { messageCount: 0, latestMessage: null };
+    summary.messageCount++;
+    if (canonicalMessageCountsAsReadable(message)
+      && (!summary.latestMessage || compareCanonicalTimeline(summary.latestMessage, message) < 0)) {
+      summary.latestMessage = message;
+    }
   }
-  return { ...catalog, summaries: state.sessions.map(session => {
-    const rows = bySession.get(session.id) ?? [];
-    const readable = rows.filter(canonicalMessageCountsAsReadable).sort(compareTimeline);
-    return { sessionId: session.id, messageCount: rows.length,
-      latestMessage: readable[readable.length - 1] ?? null,
-      contextSnapshotCount: contextSnapshots.filter(item => item.sessionId === session.id).length };
-  }) };
+  return summaries;
 }
 
-function compareTimeline(left: CanonicalTimelineCursor, right: CanonicalTimelineCursor) {
+export function browserCanonicalCatalog(
+  state: CanonicalSessionState,
+  cachedSummaries?: BrowserMessageSummaries,
+): CanonicalSessionCatalog {
+  const { messages, contextSnapshots, storagePath, profile, identities, sessions, participants, delegatedExchanges, presence } = state;
+  const summaries = cachedSummaries ?? browserCanonicalMessageSummaries(messages);
+  return { storagePath, profile, identities, sessions, participants, delegatedExchanges, presence, summaries: sessions.map(session => ({
+    sessionId: session.id, messageCount: summaries[session.id]?.messageCount ?? 0,
+    latestMessage: summaries[session.id]?.latestMessage ?? null,
+    contextSnapshotCount: contextSnapshots.filter(item => item.sessionId === session.id).length,
+  })) };
+}
+
+export function compareCanonicalTimeline(left: CanonicalTimelineCursor, right: CanonicalTimelineCursor) {
   return left.createdAtMs - right.createdAtMs || left.sequenceNum - right.sequenceNum || left.id.localeCompare(right.id);
 }
 
-export function browserCanonicalPage(state: CanonicalSessionState, input: {
+export function browserCanonicalPage(state: Pick<CanonicalSessionState, 'messages'>, input: {
   sessionId: string; beforeSequenceNum?: number | null; limit?: number;
   timelineOrder?: boolean; beforeTimeline?: CanonicalTimelineCursor | null;
 }): CanonicalMessagePage {
   const count = Math.min(500, Math.max(1, Math.trunc(input.limit ?? 100)));
   const rows = state.messages.filter(row => row.sessionId === input.sessionId
     && (input.beforeSequenceNum == null || row.sequenceNum < input.beforeSequenceNum)
-    && (!input.beforeTimeline || compareTimeline(row, input.beforeTimeline) < 0))
-    .sort(input.timelineOrder ? compareTimeline : (a, b) => a.sequenceNum - b.sequenceNum);
+    && (!input.beforeTimeline || compareCanonicalTimeline(row, input.beforeTimeline) < 0))
+    .sort(input.timelineOrder ? compareCanonicalTimeline : (a, b) => a.sequenceNum - b.sequenceNum);
   const messages = rows.slice(-count);
   const sequences = messages.map(row => row.sequenceNum);
   return { sessionId: input.sessionId, messages, hasOlder: rows.length > count,

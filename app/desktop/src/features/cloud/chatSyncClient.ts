@@ -1,3 +1,5 @@
+import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
+import { cachedSessionSnapshot } from './session';
 import type { CloudMessage, CloudSessionTitle, CloudSyncResponse, SendCloudMessageOptions, UpdateCloudSessionTitleInput } from './authClient';
 import { ChatSyncConversationClient } from './chatSyncConversationClient';
 import { ChatSyncState, type ChatSyncRequest } from './chatSyncState';
@@ -27,13 +29,14 @@ export class ChatSyncClient {
     this.sync = new ChatSyncSyncClient(this.state);
     // Several conversations missing at once (for example a batch of read
     // receipts) share one bootstrap instead of downloading it per conversation.
-    let bootstrapInFlight: { token: string; promise: Promise<ChatSyncBootstrapResponse> } | null = null;
+    let bootstrapInFlight: { key: string; promise: Promise<ChatSyncBootstrapResponse> } | null = null;
     this.state.bootstrap = (token) => {
-      if (bootstrapInFlight?.token !== token) {
+      const key = isBrowserAppRuntime() ? JSON.stringify([token, cachedSessionSnapshot()?.organizationId]) : token;
+      if (bootstrapInFlight?.key !== key) {
         const promise = this.sync.bootstrapChatSync(token).finally(() => {
           if (bootstrapInFlight?.promise === promise) bootstrapInFlight = null;
         });
-        bootstrapInFlight = { token, promise };
+        bootstrapInFlight = { key, promise };
       }
       // Callers may complete fields on their response; each receives its own copy.
       return bootstrapInFlight.promise.then((response) => ({ ...response }));
@@ -127,12 +130,12 @@ export class ChatSyncClient {
     return this.sync.listMessageSnapshot(token, peerAccountId, limit, viewerAccountId);
   }
 
-  listHistoryPage(token: string, conversationId: string, beforeSequence?: number, limit = 200): Promise<{ messages: ChatSyncMessage[]; nextBeforeSequence: number | null; hasMore: boolean }> {
-    return this.sync.listChatConversationHistoryPage(token, conversationId, beforeSequence, limit);
+  listHistoryPage(token: string, conversationId: string, beforeSequence?: number, limit = 200, options?: { signal?: AbortSignal; aroundMessageId?: string }): Promise<{ messages: ChatSyncMessage[]; anchorMessageId?: string; nextBeforeSequence: number | null; hasMore: boolean }> {
+    return this.sync.listChatConversationHistoryPage(token, conversationId, beforeSequence, limit, options);
   }
 
   bootstrap(token: string): Promise<ChatSyncBootstrapResponse> {
-    return this.sync.bootstrapChatSync(token);
+    return this.state.bootstrap(token);
   }
 
   issueRealtimeTicket(token: string): Promise<{ ticket: string; device_id: string; expires_at: string }> {

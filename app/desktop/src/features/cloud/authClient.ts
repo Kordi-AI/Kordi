@@ -835,8 +835,8 @@ export class CloudAuthClient {
     return this.chat.listMessageSnapshot(token, peerAccountId, limit, viewerAccountId);
   }
 
-  async listChatConversationHistoryPage(token: string, conversationId: string, beforeSequence?: number, limit = 200): Promise<{ messages: ChatSyncMessage[]; nextBeforeSequence: number | null; hasMore: boolean }> {
-    return this.chat.listHistoryPage(token, conversationId, beforeSequence, limit);
+  async listChatConversationHistoryPage(token: string, conversationId: string, beforeSequence?: number, limit = 200, options?: { signal?: AbortSignal; aroundMessageId?: string }): Promise<{ messages: ChatSyncMessage[]; anchorMessageId?: string; nextBeforeSequence: number | null; hasMore: boolean }> {
+    return this.chat.listHistoryPage(token, conversationId, beforeSequence, limit, options);
   }
 
   async bootstrapChatSync(token: string): Promise<ChatSyncBootstrapResponse> { return this.chat.bootstrap(token); }

@@ -2,7 +2,7 @@ import { mergePinSyncSnapshot } from './cloudPinHistory';
 import { applyCloudSyncEventsToSessionPins } from './cloudDiffSync';
 import { cloudMessageDeletions } from './cloudMessageDeletions';
 import { useCloudRepairPolling } from './useCloudRepairPolling';
-import { createCloudHistoryRepair } from './cloudHistoryRepair';
+import { createCloudHistoryRepair, hydrateCloudHistory } from './cloudHistoryRepair';
 import {
   useCallback,
   useEffect,
@@ -41,8 +41,6 @@ export type {
 import { loadSession } from './session';
 import {
   applyChatSyncLocalBatch,
-  loadChatSyncConversations,
-  loadChatSyncCoverage,
   loadChatSyncCursor,
   loadChatSyncLocalState,
 } from '@/lib/desktopChatSync';
@@ -332,52 +330,12 @@ export function useCloudMessageSync({
     if (!account || !coordinator.isCurrentGeneration(generation)) return;
     const session = await loadSession();
     if (!session?.token || session.accountId !== account.accountId || !coordinator.isCurrentGeneration(generation)) return;
-    const [conversations, coverage] = await Promise.all([
-      loadChatSyncConversations(account.accountId),
-      loadChatSyncCoverage(account.accountId),
-    ]);
+    await hydrateCloudHistory({
+      session, client, accountId: account.accountId,
+      isCurrent: () => coordinator.isCurrentGeneration(generation),
+    });
     if (!coordinator.isCurrentGeneration(generation)) return;
-    const coverageByConversation = new Map(coverage.map((value) => [value.conversationId, value]));
-    for (const conversation of conversations) {
-      if (!coordinator.isCurrentGeneration(generation)) return;
-      if (conversation.latest_message_sequence <= 0) continue;
-      const stored = coverageByConversation.get(conversation.id);
-      const earliestSequence = stored?.earliestSequence;
-      const hasLatest = stored?.latestSequence === conversation.latest_message_sequence;
-      const hasContiguousSuffix = Boolean(
-        hasLatest
-        && earliestSequence
-        && stored?.messageCount === stored.latestSequence - earliestSequence + 1,
-      );
-      if (hasContiguousSuffix && earliestSequence === 1) continue;
-      // A clean bootstrap contains a contiguous suffix ending at the current
-      // head, so page from its first item. If the local projection itself has
-      // a middle gap, re-read the whole conversation instead of trusting the
-      // presence of sequence one.
-      let beforeSequence = hasContiguousSuffix ? earliestSequence : undefined;
-      while (true) {
-        const page = await client.listChatConversationHistoryPage(
-          session.token,
-          conversation.id,
-          beforeSequence,
-        );
-        if (!coordinator.isCurrentGeneration(generation)) return;
-        await applyChatSyncLocalBatch({
-          accountId: account.accountId,
-          expectedOrganizationId: session.organizationId ?? null,
-          bootstrap: false,
-          messages: page.messages,
-        });
-        if (!page.hasMore) break;
-        const next = page.nextBeforeSequence;
-        if (!next || (beforeSequence !== undefined && next >= beforeSequence)) {
-          throw new Error('Reliable chat history did not advance its sequence cursor.');
-        }
-        beforeSequence = next;
-      }
-    }
-    if (!coordinator.isCurrentGeneration(generation)) return;
-    const prunedMessageIds = await pruneMissingCanonicalCloudMessages(account.accountId); // Full hydration above makes absence authoritative.
+    const prunedMessageIds = await pruneMissingCanonicalCloudMessages(account.accountId);
     if (!coordinator.isCurrentGeneration(generation)) return;
     if (prunedMessageIds.length > 0) await onCanonicalMessagesPruned?.(prunedMessageIds);
   }, [account, client, coordinator, onCanonicalMessagesPruned]);
