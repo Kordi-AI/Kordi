@@ -163,6 +163,7 @@ fn asks_system_agent(input: &Value) -> bool {
         .any(|message| {
             message["isNew"] == true
                 && message["addressesSystemAgent"] == true
+                && message["fromSystemAgent"] != true
                 && message["agentOwned"] != true
                 && message["fromAgent"] != true
         })
@@ -201,7 +202,7 @@ pub(super) async fn plan(
         seen_sequence: candidate.seen_sequence,
         hooks_fired: &candidate.hooks_fired,
         hooks,
-        plan_talk: addressing::new_chat_worth_a_look(&input),
+        plan_talk: addressing::new_human_messages(&input).next().is_some(),
         asks_system_agent: asks_system_agent(&input),
         gate: &gate,
         newest_card_created_at: cards.iter().map(|card| card.created_at).max(),
@@ -232,5 +233,8 @@ pub(super) async fn plan(
         mark(&mut input, &Default::default(), &gate.agents);
     }
     apply(&mut input, &trigger, plan.marks);
+    if super::triggers::allows_workflows(&input) {
+        input["replyMode"] = json!("semantic");
+    }
     Ok(Some((candidate, input)))
 }

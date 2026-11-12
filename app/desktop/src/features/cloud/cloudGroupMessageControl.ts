@@ -285,8 +285,9 @@ export async function applyCloudGroupMessageControl({
         replyToMessageId: messageReplyToId,
         ...(message.messageAction?.kind === 'thread' ? { messageAction: message.messageAction } : {}),
         ...(cloudMessage.planCard ? { planCard: cloudMessage.planCard } : {}),
+        ...(cloudMessage.facilitatorCard ? { facilitatorCard: cloudMessage.facilitatorCard } : {}),
         ...(agentDeliveryState === 'failed' ? { error: message.text || 'Message failed', ...(message.failureCode ? { failureCode: message.failureCode } : {}) } : {}),
-      } : (Object.keys(structuredContent).length > 0 || mappedAttachments.length > 0 || message.voiceMessage?.mediaId || message.mentions?.length || message.messageAction || cloudMessage.planCard) ? {
+      } : (Object.keys(structuredContent).length > 0 || mappedAttachments.length > 0 || message.voiceMessage?.mediaId || message.mentions?.length || message.messageAction || cloudMessage.planCard || cloudMessage.facilitatorCard) ? {
         ...structuredContent,
         cloudMessageVersion: cloudMessage.version ?? null,
         conversationSequence: cloudMessage.conversationSequence,
@@ -300,6 +301,7 @@ export async function applyCloudGroupMessageControl({
         } : {}),
         ...(message.mentions?.length ? { mentions: message.mentions } : {}),
         ...(cloudMessage.planCard ? { planCard: cloudMessage.planCard } : {}),
+        ...(cloudMessage.facilitatorCard ? { facilitatorCard: cloudMessage.facilitatorCard } : {}),
         ...(message.messageAction ? {
           messageAction: message.messageAction,
           replyToMessageId: message.messageAction.kind === 'quote' || message.messageAction.kind === 'thread'

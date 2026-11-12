@@ -17,9 +17,16 @@ pub(crate) async fn identity_for_run(pool: &PgPool, run_id: &str) -> RunResult<V
     if let Some(saved) = saved {
         return Ok(saved);
     }
-    let policy = super::envelopes::cloud_group_request_envelope_for_run(pool, &session, &request)
-        .await?
-        .and_then(|envelope| super::group_mentions::persona_instruction(&envelope, &owner, &agent));
+    let facilitator_assignment = request.starts_with(super::facilitator_handoff::REQUEST_PREFIX);
+    let policy = if facilitator_assignment {
+        None
+    } else {
+        super::envelopes::cloud_group_request_envelope_for_run(pool, &session, &request)
+            .await?
+            .and_then(|envelope| {
+                super::group_mentions::persona_instruction(&envelope, &owner, &agent)
+            })
+    };
     let (mut identity,): (Value,) = query_as(
         "SELECT
             jsonb_build_object('requestId',r.request_message_id,'agentId',COALESCE(NULLIF(r.execution_agent_id,''),'cloud-agent:'||r.owner_account_id),
@@ -39,13 +46,15 @@ pub(crate) async fn identity_for_run(pool: &PgPool, run_id: &str) -> RunResult<V
     // A short note for the tail of this turn's context: the current time, the
     // members when they changed, and whom reach_out can reach. It never goes
     // into the system prompt, which stays the same from run to run.
-    if let Some((note, digest)) = super::conversation_context::note(pool, run_id).await? {
-        let note = match super::exchanges::reachable(pool, run_id).await? {
-            Some(reachable) => format!("{note}\nYou can reach_out to: {reachable}"),
-            None => note,
-        };
-        identity["conversationContext"] = Value::String(note);
-        identity["conversationMembersDigest"] = Value::String(digest);
+    if !facilitator_assignment {
+        if let Some((note, digest)) = super::conversation_context::note(pool, run_id).await? {
+            let note = match super::exchanges::reachable(pool, run_id).await? {
+                Some(reachable) => format!("{note}\nYou can reach_out to: {reachable}"),
+                None => note,
+            };
+            identity["conversationContext"] = Value::String(note);
+            identity["conversationMembersDigest"] = Value::String(digest);
+        }
     }
     // The current request decides the reply's language, not history or memory.
     let (request_text,): (String,) = query_as("SELECT COALESCE(omp_input_json->>'prompt',prompt,'') FROM cloud_agent_fallback_runs WHERE run_id=$1")

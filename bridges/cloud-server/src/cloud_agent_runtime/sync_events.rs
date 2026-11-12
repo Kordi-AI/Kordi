@@ -30,14 +30,15 @@ pub(super) struct CloudAgentResponseSyncEvent<'a> {
     pub documents: &'a [crate::document_shares::agents::create::reply::RunDocument],
 }
 
-fn deterministic_message_uuid(event: &CloudAgentResponseSyncEvent<'_>) -> Uuid {
+pub(super) fn deterministic_message_uuid(
+    session_id: &str,
+    sender: &str,
+    response_id: &str,
+) -> Uuid {
     // The run/response identity is stable across retries and recipients. Body
     // text is intentionally excluded because durable AI snapshots may advance
     // while retaining one timeline position.
-    let digest = Sha256::digest(format!(
-        "{}\0{}\0{}",
-        event.session_id, event.from_account_id, event.message_id
-    ));
+    let digest = Sha256::digest(format!("{session_id}\0{sender}\0{response_id}"));
     let mut bytes = [0u8; 16];
     bytes.copy_from_slice(&digest[..16]);
     bytes[6] = (bytes[6] & 0x0f) | 0x50;
@@ -173,7 +174,8 @@ pub(super) async fn append_cloud_agent_response_sync_event(
     } else {
         None
     };
-    let client_message_id = deterministic_message_uuid(&event);
+    let client_message_id =
+        deterministic_message_uuid(event.session_id, event.from_account_id, event.message_id);
     let mut request = SendMessageRequest {
         client_message_id,
         kind: "text".to_string(),

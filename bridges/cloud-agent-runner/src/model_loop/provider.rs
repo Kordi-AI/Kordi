@@ -44,6 +44,7 @@ pub struct OpenAiProviderConfig {
     /// non-OpenAI endpoint verbatim; member routes keep dropping their
     /// provider prefix.
     pub verbatim_model: bool,
+    pub max_output_tokens: Option<u32>,
     /// Extra request headers from the provider payload, such as a
     /// gateway's attribution headers.
     pub headers: BTreeMap<String, String>,
@@ -163,6 +164,7 @@ impl OpenAiProviderConfig {
             api_mode,
             account_id,
             verbatim_model,
+            max_output_tokens: None,
             headers: payload_headers::from_payload(payload),
         })
     }
@@ -313,7 +315,9 @@ fn completion_request_from_cloud_messages(
         model: auth.model.clone(),
         // Claude's default cap of 16,384 tokens covers thinking and the reply together, which a
         // long digest can use up before writing anything.
-        max_tokens: (auth.provider == "anthropic").then_some(ANTHROPIC_MAX_TOKENS),
+        max_tokens: auth
+            .max_output_tokens
+            .or_else(|| (auth.provider == "anthropic").then_some(ANTHROPIC_MAX_TOKENS)),
         stream: true,
         thinking: Some(auth.thinking.clone()),
     }

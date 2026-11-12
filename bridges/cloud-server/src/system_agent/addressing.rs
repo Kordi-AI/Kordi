@@ -9,7 +9,6 @@ use serde_json::{json, Value};
 use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 
-use super::context;
 use super::mentions::mention_handle;
 
 fn normalized_handle(value: &str) -> String {
@@ -100,6 +99,23 @@ pub(super) fn addresses_system_agent(envelope: &Value, system_agent_account_id: 
             })
 }
 
+/// A manually typed service handle when the composer has no matching
+/// structured target. A member with that name takes precedence.
+pub(super) fn starts_with_facilitator_mention(
+    text: &str,
+    human_handles: &BTreeSet<String>,
+) -> bool {
+    let Some(text) = text.trim_start().strip_prefix('@') else {
+        return false;
+    };
+    let handle: String = text
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
+    let handle = handle.to_ascii_lowercase();
+    matches!(handle.as_str(), "facilitator" | "system") && !human_handles.contains(&handle)
+}
+
 /// Member handles as `addresses_other_agent` compares them.
 pub(super) fn member_handles<'a>(display_names: impl Iterator<Item = &'a str>) -> BTreeSet<String> {
     display_names.map(normalized_handle).collect()
@@ -141,19 +157,16 @@ pub(super) async fn answered_ids(
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
-/// Whether the new chat alone is worth a model call: members' new messages
-/// that address no agent, that no agent answered or owns, and that no agent
-/// wrote, checked for plan words.
-pub(super) fn new_chat_worth_a_look(input: &Value) -> bool {
-    let new_texts: Vec<String> = input["messages"]
+/// Eligible human messages can support a Facilitator action. Old messages
+/// can explain the action, but only new messages can initiate it.
+pub(super) fn human_messages(input: &Value) -> impl Iterator<Item = &Value> {
+    input["messages"]
         .as_array()
         .into_iter()
         .flatten()
         .filter(|message| {
-            message["isNew"] == json!(true) && message["fromSystemAgent"] != json!(true)
-        })
-        .filter(|message| {
             [
+                "fromSystemAgent",
                 "addressesAgent",
                 "answeredByAgent",
                 "agentOwned",
@@ -162,9 +175,15 @@ pub(super) fn new_chat_worth_a_look(input: &Value) -> bool {
             .iter()
             .all(|flag| message[*flag] != json!(true))
         })
-        .filter_map(|message| message["text"].as_str().map(str::to_string))
-        .collect();
-    context::worth_a_look(&new_texts, !input["openCard"].is_null())
+}
+
+pub(super) fn new_human_messages(input: &Value) -> impl Iterator<Item = &Value> {
+    human_messages(input).filter(|message| {
+        message["isNew"] == true
+            && message["text"]
+                .as_str()
+                .is_some_and(|text| !text.trim().is_empty())
+    })
 }
 
 #[cfg(test)]
@@ -258,18 +277,36 @@ mod tests {
     #[test]
     fn messages_for_an_agent_or_already_answered_do_not_wake_system_agent() {
         let plain = json!({"text": "Can we meet Friday at 7?"});
-        assert!(new_chat_worth_a_look(&input(plain.clone())));
+        assert_eq!(new_human_messages(&input(plain.clone())).count(), 1);
         let mut addressed = plain.clone();
         addressed["addressesAgent"] = json!(true);
-        assert!(!new_chat_worth_a_look(&input(addressed)));
+        assert_eq!(new_human_messages(&input(addressed)).count(), 0);
         let mut answered = plain;
         answered["answeredByAgent"] = json!(true);
-        assert!(!new_chat_worth_a_look(&input(answered)));
+        assert_eq!(new_human_messages(&input(answered)).count(), 0);
     }
 
     #[test]
-    fn the_prompt_keeps_system_agent_quiet_about_messages_for_other_agents() {
-        assert!(super::super::prompt::SYSTEM_AGENT_PROMPT
-            .contains("stay quiet about it unless the card itself needs attention"));
+    fn facilitator_requests_respect_member_names_and_other_agent_ownership() {
+        assert!(starts_with_facilitator_mention(
+            "@Facilitator, could you help?",
+            &handles()
+        ));
+        assert!(!starts_with_facilitator_mention(
+            "@System can you help?",
+            &handles()
+        ));
+        assert!(starts_with_facilitator_mention(
+            "@System can you help?",
+            &BTreeSet::new()
+        ));
+        assert!(!starts_with_facilitator_mention(
+            "Riya said @Facilitator",
+            &handles()
+        ));
+        assert!(!starts_with_facilitator_mention(
+            "@Facilitator_bot",
+            &handles()
+        ));
     }
 }

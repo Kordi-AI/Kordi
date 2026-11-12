@@ -132,6 +132,7 @@ struct MessageBubble: View, Equatable {
     let onSelect: () -> Void
     let onOpenActions: (CGRect, ChatAttachment?) -> Void
     var onPlanCardAction: ((PlanCardAction) async -> PlanCard?)? = nil
+    var onFacilitatorCardRequest: ((UUID, FacilitatorCardAction?) async throws -> FacilitatorCard)? = nil
     let onUpdateActionFrame: (CGRect) -> Void
     let actionPreviewScroll: MessageActionPreviewScroll?
     let onReactToAttachment: (ChatAttachment, String) -> Void
@@ -531,7 +532,7 @@ struct MessageBubble: View, Equatable {
                 || message.reactionTargetMessageId.flatMap(UUID.init(uuidString:)) != nil)
             && message.deliveryState != .sending
             && message.deliveryState != .failed
-            && (!message.text.isEmpty || !message.attachments.isEmpty || message.planCard != nil)
+            && (!message.text.isEmpty || !message.attachments.isEmpty || message.planCard != nil || message.facilitatorCard != nil)
     }
 
     @ViewBuilder
@@ -782,6 +783,10 @@ struct MessageBubble: View, Equatable {
             if let planCard = message.planCard {
                 PlanCardView(card: planCard, ownAccountId: ownAccountId, onAction: onPlanCardAction)
                     .id("\(message.id):plan:\(planCard.eventId)")
+            }
+            if let card = message.facilitatorCard, let onFacilitatorCardRequest {
+                FacilitatorCardView(snapshot: card, accountId: ownAccountId, request: onFacilitatorCardRequest)
+                    .id(card.id)
             }
 
             if hasVisibleMessageText && (Self.agentExecutionForDisplay(message)?.orderedGroups.isEmpty ?? true) {
@@ -1043,7 +1048,7 @@ struct MessageBubble: View, Equatable {
     }
 
     private var hasVisibleMessageText: Bool {
-        if message.voiceMessage != nil { return false }
+        if message.voiceMessage != nil || (message.facilitatorCard != nil && onFacilitatorCardRequest != nil) { return false }
         let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
         return !text.isEmpty && (
             message.author != .agent
@@ -1055,7 +1060,8 @@ struct MessageBubble: View, Equatable {
         guard message.author != .agent,
               message.attachments.isEmpty,
               message.voiceMessage == nil,
-              message.planCard == nil else { return nil }
+              message.planCard == nil,
+              message.facilitatorCard == nil else { return nil }
         return KordiMarkdownParser.standaloneExternalURL(in: message.text)
     }
 

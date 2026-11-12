@@ -275,7 +275,7 @@ pub(crate) use conversation::{
     create_conversation_in_transaction, create_personal_session_in_transaction,
     create_room_group_in_transaction,
 };
-pub use cursors::{bootstrap, history, sync_batch};
+pub use cursors::{bootstrap, history, history_page, sync_batch};
 pub use members::{accept_invited_conversation_member, add_conversation_members};
 pub use message::{
     conversation_id_for_session, delete_message, edit_message, load_message_snapshot,

@@ -49,14 +49,14 @@ test('system notices show as System with the front-facing bird and no tag', () =
   assert.doesNotMatch(markup, /app-system-notice-row/);
 });
 
-test('plan agent messages show as System too', () => {
+test('the built-in group agent shows as Facilitator', () => {
   // An identity stored before the server rename still carries the old name and no picture.
   const legacy = { ...systemAgent, displayName: 'PiP', profileImageUrl: undefined } as CanonicalIdentity;
   const message = mapCanonicalMessage(systemAgentMessage('text', 'Here is the plan.'), new Map([[systemAgent.id, legacy]]), 'human:me');
   assert.ok(message);
-  assert.equal(message.sender, 'System');
+  assert.equal(message.sender, 'Facilitator');
   assert.equal(message.senderProfileImageUrl, KORDI_SYSTEM_AVATAR_URL);
   const markup = renderToStaticMarkup(createElement(MessageBubble, { msg: message, onOpenSenderProfile: () => {} }));
-  assert.match(markup, />System</);
-  assert.doesNotMatch(markup, /Built-in agent|PiP|aria-label="Open System profile"/);
+  assert.match(markup, />Facilitator</);
+  assert.doesNotMatch(markup, /Built-in agent|PiP|aria-label="Open Facilitator profile"/);
 });

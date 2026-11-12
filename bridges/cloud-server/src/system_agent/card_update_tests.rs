@@ -19,6 +19,7 @@ async fn tool_time_changes_refresh_the_same_message_before_run_completion() {
     seed_account(&pool, &member).await;
     let pending = super::PendingSystemAgentConfig::from_lookup(|key| match key {
         "KORDI_SYSTEM_AGENT_OPENAI_API_KEY" => Some("synthetic-test-key".to_string()),
+        "KORDI_SYSTEM_AGENT_OPENAI_MODEL" => Some("synthetic-model".to_string()),
         _ => None,
     })
     .unwrap()

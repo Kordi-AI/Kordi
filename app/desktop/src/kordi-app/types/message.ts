@@ -327,6 +327,7 @@ export type Message = {
   messageKind?: string | null;
   voiceMessage?: MessageVoice | null;
   planCard?: MessagePlanCard | null;
+  facilitatorCard?: import("@/features/cloud/facilitatorCard").FacilitatorCard | null;
   eventSources?: MessageEventSource[] | null;
   detail?: string;
   statusChips?: string[];

@@ -1,4 +1,3 @@
-import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
 import {
   useEffect,
   useReducer,
@@ -137,7 +136,7 @@ export function useCloudGroupReplay({
       }),
     );
     const run = async () => {
-      const nativeShell = isNativeDesktopShell() || isBrowserAppRuntime();
+      const nativeShell = isNativeDesktopShell();
       const flushIfCurrent = () => {
         if (
           !mountedRef.current
@@ -159,7 +158,7 @@ export function useCloudGroupReplay({
               }
             }, 1_000);
           };
-          const recovery = recoverNativeCloudGroupHistory({
+          cache.nativeHistoryRecovery ??= recoverNativeCloudGroupHistory({
               accountId,
               prioritySessionId,
               applyControl: (wire, envelope, options) => (
@@ -177,8 +176,7 @@ export function useCloudGroupReplay({
                 && recoveryContextKeyRef.current === cache.contextKey
                 && durableSourceCacheRef.current === cache
               ),
-            });
-          cache.nativeHistoryRecovery ??= recovery.then((recovered) => {
+            }).then((recovered) => {
             if (recovered && durableSourceCacheRef.current === cache) {
               cache.nativeHistoryRecovered = true;
               onNativeHistorySettledRef.current?.();

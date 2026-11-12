@@ -1,3 +1,4 @@
+import type { BrowserGroupHistoryActions } from '@/features/cloud/useBrowserGroupHistory';
 import type { PinActivity } from '@/pages/chatsPage.pinActivity';
 import type {
   ComponentProps,
@@ -101,6 +102,7 @@ export type ChatsPageSession = {
 export type ChatsPageTranscript = {
   chatTranscriptScrollRef: RefObject<HTMLDivElement | null>;
   canonicalHasOlderBySessionId?: Record<string, boolean>;
+  browserGroupHistory?: BrowserGroupHistoryActions;
   onLoadOlderCanonicalSessionMessages?: (sessionId: string) => Promise<void>;
   onTranscriptScroll: (isAtLatest?: boolean) => void;
   onCompanionReadPresentationChange?: (sessionId: string | null) => void;

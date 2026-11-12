@@ -216,12 +216,13 @@ enum CloudMessageCodec {
 
     static func agentWaitingExecution(
         deliveryState: CloudAgentLifecycleState?,
-        updatedAtMs: Double
+        updatedAtMs: Double,
+        queued: Bool = false
     ) -> AgentExecutionSnapshot? {
-        guard deliveryState == .processing else { return nil }
+        guard deliveryState == .processing || queued else { return nil }
         // Shared chats expose execution status, not the owner's private trace.
         return AgentExecutionSnapshot(
-            phase: .preparing,
+            phase: queued ? .queued : .preparing,
             summary: "",
             steps: [],
             startedAtMs: updatedAtMs,

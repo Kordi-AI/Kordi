@@ -1,6 +1,4 @@
-//! Optional token accounting for one run. Production runs never install a
-//! meter, so recording is a no-op; the System agent quality test installs one
-//! around each replayed run to measure tokens and cost.
+//! Token accounting for service runs and the synthetic quality replay.
 
 use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -47,6 +45,30 @@ impl UsageMeter {
             .fetch_add(input.unwrap_or(0), Ordering::Relaxed);
         self.output_tokens
             .fetch_add(output.unwrap_or(0), Ordering::Relaxed);
+    }
+}
+
+/// Emits usage even when a service attempt is cancelled or times out.
+#[derive(Default)]
+pub(crate) struct FacilitatorUsage(Arc<UsageMeter>);
+
+impl FacilitatorUsage {
+    pub(crate) async fn measure<F: Future>(&self, future: F) -> F::Output {
+        measure(self.0.clone(), future).await
+    }
+}
+
+impl Drop for FacilitatorUsage {
+    fn drop(&mut self) {
+        let usage = self.0.snapshot();
+        tracing::info!(
+            feature = "facilitator",
+            observed_model_calls = usage.calls,
+            calls_with_reported_usage = usage.reported_calls,
+            reported_input_tokens = usage.input_tokens,
+            reported_output_tokens = usage.output_tokens,
+            "Facilitator model usage"
+        );
     }
 }
 

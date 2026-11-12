@@ -11,8 +11,9 @@ use crate::grounding::BuildOutcome;
 use crate::replay::{CardSnapshot, TurnOutcome};
 
 /// Metric names, in report order.
-pub const METRICS: [&str; 8] = [
+pub const METRICS: [&str; 9] = [
     "planCard",
+    "workflow",
     "silence",
     "reply",
     "toolValidity",
@@ -84,6 +85,14 @@ pub fn score_turn(
 
 fn model_checks(expect: &Expect, outcome: &TurnOutcome, seeded_event: Option<&str>) -> Vec<Check> {
     let mut checks = Vec::new();
+    if let Some(kind) = &expect.workflow_kind {
+        checks.push(check(
+            "workflow",
+            format!("publishes a {kind} card"),
+            outcome.workflow_kind.as_ref() == Some(kind),
+            Some(format!("published: {:?}", outcome.workflow_kind)),
+        ));
+    }
     if outcome.ran {
         checks.push(check(
             "reliability",

@@ -275,7 +275,7 @@ export function useKordiAppFoundation({
   });
 
   const {
-    cloudAgentRuntimeRouteMessages, directHistory,
+    cloudAgentRuntimeRouteMessages, directHistory, groupHistory,
     setCloudCollaborationState,
     mergedCollaborationState: desktopCollaborationState,
     prepareCloudForwardAttachments, sendCloudCollaborationMessage, editCloudMessage, deleteCloudMessage,
@@ -456,7 +456,7 @@ export function useKordiAppFoundation({
       startWindowResize, startPanelResize,
     },
     cloud: {
-      setCloudCollaborationState, desktopCollaborationState, directHistory,
+      setCloudCollaborationState, desktopCollaborationState, directHistory, groupHistory,
       prepareCloudForwardAttachments, sendCloudCollaborationMessage,
       editCloudMessage, deleteCloudMessage,
       sendCloudGroupControl, setCloudMessageReaction, recordCloudSessionFork, updateCloudSessionPin, prepareCloudSessionPin,

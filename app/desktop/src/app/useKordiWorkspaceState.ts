@@ -93,7 +93,7 @@ export function useKordiWorkspaceState(foundation: KordiAppFoundation) {
       isDetailPanelCollapsed,
     },
     cloud: {
-      desktopCollaborationState, directHistory,
+      desktopCollaborationState, directHistory, groupHistory,
       prepareCloudForwardAttachments, sendCloudCollaborationMessage, editCloudMessage, deleteCloudMessage,
       sendCloudGroupControl,
       setCloudMessageReaction,
@@ -117,8 +117,8 @@ export function useKordiWorkspaceState(foundation: KordiAppFoundation) {
     },
   } = foundation;
   const transcriptHydration = useMemo(() => ({
-    ...canonicalStore.hydrationBySessionId, ...directHistory.hydrationBySessionId,
-  }), [canonicalStore.hydrationBySessionId, directHistory.hydrationBySessionId]);
+    ...canonicalStore.hydrationBySessionId, ...directHistory.hydrationBySessionId, ...groupHistory.hydrationBySessionId,
+  }), [canonicalStore.hydrationBySessionId, directHistory.hydrationBySessionId, groupHistory.hydrationBySessionId]);
   const combinedHiddenSessionIds = useMemo(() => new Set([
     ...locallyHiddenSessionIds,
     ...cloudHiddenSessionIds,

@@ -192,6 +192,7 @@ export function useKordiCanonicalSessionStore({
       beforeSequenceNum?: number | null;
       beforeTimeline?: CanonicalTimelineCursor | null;
       force?: boolean;
+      page?: Pick<CanonicalMessagePage, 'messages' | 'hasOlder'>;
     } = {},
   ) => {
     const normalizedSessionId = sessionId.trim();
@@ -203,6 +204,17 @@ export function useKordiCanonicalSessionStore({
       normalizedSessionId,
     );
     const retained = new Set(recentPageSessionIdsRef.current);
+    if (options.page) {
+      const messages = [...options.page.messages].sort(compareCanonicalMessages);
+      const sequenceNumbers = messages.map(row => row.sequenceNum);
+      const page: CanonicalMessagePage = {
+        ...options.page, messages, sessionId: normalizedSessionId, timelineOrder: true,
+        oldestSequenceNum: messages.length ? Math.min(...sequenceNumbers) : null,
+        newestSequenceNum: messages.length ? Math.max(...sequenceNumbers) : null,
+      };
+      updateStore(current => retainCanonicalSessionPages(mergeCanonicalMessagePage(current, page), retained));
+      return Promise.resolve(page);
+    }
     const beforeSequenceNum = options.beforeSequenceNum ?? null;
     const beforeTimeline = options.beforeTimeline ? {
       id: options.beforeTimeline.id, createdAtMs: options.beforeTimeline.createdAtMs,

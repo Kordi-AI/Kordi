@@ -47,7 +47,7 @@ export function turnProgressLabel(turn: DesktopChatTurnSnapshot) {
   if (['waiting', 'waiting-approval', 'waiting_approval'].includes(turn.status)) return 'Waiting for approval';
   if (turn.hostedRunStatus === 'leased') return 'Starting…';
   if (turn.status === 'queued' || turn.hostedRunStatus === 'queued') return 'Queued…';
-  if (turn.pendingCollaborationAgentRequest && !turn.localExecutionStarted && !turn.tools.length && !turn.thinkingText) return 'Waiting for agent';
+  if (turn.pendingCollaborationAgentRequest && turn.hostedRunStatus !== 'running' && !turn.localExecutionStarted && !turn.tools.length && !turn.thinkingText) return 'Waiting for agent';
   const active = turn.tools.filter(progressToolIsActive);
   if (active.length) {
     const actions = [...new Set(active.map(progressAction))];

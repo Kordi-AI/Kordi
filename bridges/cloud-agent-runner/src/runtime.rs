@@ -174,8 +174,9 @@ where
 
     client.mark_running(&run.run_id).await?;
     if run.run_id.starts_with(crate::system_agent::RUN_PREFIX) {
+        let usage = crate::usage_meter::FacilitatorUsage::default();
         let response = {
-            let generation = async {
+            let generation = usage.measure(async {
                 match client.fetch_provider_auth(&run.run_id).await {
                     Ok(material) => match engine {
                         CloudModelEngine::Omp => crate::system_agent::run_omp(client, &run, material).await,
@@ -189,7 +190,7 @@ where
                         Err(())
                     }
                 }
-            };
+            });
             tokio::pin!(generation);
             let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(40));
             heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -468,7 +469,9 @@ mod failure_code_tests {
     fn refused_models_are_reported_as_unavailable() {
         let code = super::model_failure_code;
         assert_eq!(
-            code("provider error: The selected model is unavailable for this account. Choose another model."),
+            code(
+                "provider error: The selected model is unavailable for this account. Choose another model."
+            ),
             "model_unavailable"
         );
         assert_eq!(

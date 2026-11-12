@@ -1,6 +1,10 @@
 import { relatedAgentSessionsFromTools } from '@/features/chat/relatedAgentSessions';
 import { buildTaskActivityDashboard,type TaskDashboardItem,type TaskDashboardSubtask,type TaskDashboardTone } from '@/features/chat/taskActivityDashboard';
 import { navigateToTranscriptMessage } from '@/features/chat/transcriptNavigation';
+import { defaultCloudAuthClient } from '@/features/cloud/authClient';
+import { cloudTaskToSessionTaskActivity } from '@/features/cloud/cloudSessionActivity';
+import { isCloudGroupSessionId } from '@/features/cloud/cloudGroupMessages';
+import { loadSession } from '@/features/cloud/session';
 import { useAgentSubsessionTasks } from '@/features/cloud/agentSubsessionTasks';
 import type { ScheduledTask,ScheduledTaskRun } from '@/features/cloud/scheduledTasksClient';
 import { IdentityAvatar } from '@/kordi-app/components/IdentityAvatar';
@@ -385,6 +389,20 @@ function dedupeScheduledTaskRows<T extends Pick<TaskDashboardItem, 'taskId'>>(ta
 
 export function TaskActivityDashboardPanel({ messages, liveTurn, emptyMessage, artifacts = [], taskActivities = [], scheduledTasks = [], scheduledRunsByTaskId = {}, currentSessionId = null, agentThreadParentId = null, targetParticipants = [], onOpenArtifact, onNavigateToResponse, now = new Date(), timeZone }: TaskActivityDashboardPanelProps) {
   const threads = useAgentSubsessionTasks(agentThreadParentId);
+  const [groupActivity, setGroupActivity] = useState<{ sessionId: string; tasks: SessionTaskActivity[] } | null>(null);
+  useEffect(() => {
+    if (!currentSessionId || !isCloudGroupSessionId(currentSessionId)) return;
+    let cancelled = false;
+    void loadSession().then(async session => {
+      if (!session || cancelled) return;
+      const { tasks } = await defaultCloudAuthClient().listSessionActivity(session.token, currentSessionId);
+      if (!cancelled) setGroupActivity({ sessionId: currentSessionId, tasks: tasks.map(cloudTaskToSessionTaskActivity) });
+    }).catch(() => { /* Keep the task activity already synced into this session. */ });
+    return () => { cancelled = true; };
+  }, [currentSessionId]);
+  const allTaskActivities = groupActivity?.sessionId === currentSessionId
+    ? [...groupActivity.tasks, ...taskActivities]
+    : taskActivities;
   const delegatedMessages = new Set(messages.filter(message => relatedAgentSessionsFromTools(message.turn?.tools).length > 0));
   const delegatedTaskIds = new Set(threads.tasks.flatMap(task => [task.sessionId, task.parentRequestId]));
   for (const message of delegatedMessages) {
@@ -404,7 +422,7 @@ export function TaskActivityDashboardPanel({ messages, liveTurn, emptyMessage, a
   // Recompute on every render so a newly attached task_operator/update_plan tool appears as soon
   // as the transcript rerenders, even if the array identity did not change.
   const dashboard = buildTaskActivityDashboard({ messages: messages.filter(message => !delegatedMessages.has(message)), liveTurn: relatedAgentSessionsFromTools(liveTurn?.tools).length ? null : liveTurn });
-  const activityTargetParticipants: TaskTargetParticipant[] = taskActivities.flatMap((activity) => activity.participants.map((participant) => ({
+  const activityTargetParticipants: TaskTargetParticipant[] = allTaskActivities.flatMap((activity) => activity.participants.map((participant) => ({
     id: participant.id,
     name: participant.name,
     kind: participant.kind === 'agent' ? 'agent' : 'human',
@@ -418,7 +436,7 @@ export function TaskActivityDashboardPanel({ messages, liveTurn, emptyMessage, a
     ? scheduledTasks.filter((task) => task.sessionId?.trim() === normalizedCurrentSessionId)
     : scheduledTasks;
   const scheduledRows = dedupeScheduledTaskRows(sessionScheduledTasks.map((task) => scheduledTaskToDashboardItem(task, now, timeZone, scheduledRunsByTaskId[task.taskId] ?? [], messages)));
-  const taskActivityRows = dedupeTaskRowsByKeys(taskActivities.filter(activity => !delegatedTaskIds.has(activity.sourceRequestId ?? activity.id)).map((activity) => taskActivityToDashboardItem(activity, mergedTargetParticipants)));
+  const taskActivityRows = dedupeTaskRowsByKeys(allTaskActivities.filter(activity => !delegatedTaskIds.has(activity.sourceRequestId ?? activity.id)).map((activity) => taskActivityToDashboardItem(activity, mergedTargetParticipants)));
   const existingTaskKeys = new Set([...scheduledRows, ...taskActivityRows].flatMap(taskDedupeKeys));
   const localRows = dashboard.tasks.filter((task) => !taskDedupeKeys(task).some((key) => existingTaskKeys.has(key)));
   const tasks = [...scheduledRows, ...taskActivityRows, ...localRows];

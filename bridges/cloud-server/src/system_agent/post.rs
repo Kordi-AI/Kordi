@@ -7,6 +7,7 @@ use sqlx_postgres::PgPool;
 use uuid::Uuid;
 
 use crate::chat_sync::models::SendMessageRequest;
+use crate::document_shares::agents::create::reply::{add_to_request, RunDocument};
 
 use super::mentions::{encode_system_agent_message_with_mentions, render_mentions, MentionMember};
 
@@ -71,17 +72,17 @@ pub(super) fn forward_text(
 pub(super) async fn post_text(
     pool: &PgPool,
     run_id: &str,
-    sender: &str,
-    conversation_id: Uuid,
-    input: &Value,
+    run: &super::store::ActiveRun,
     text: &str,
     card_touched: bool,
+    documents: &[RunDocument],
 ) -> Result<Option<String>, sqlx_core::Error> {
-    let members = mention_members(pool, conversation_id, sender).await?;
-    let text = forward_text(input, text, card_touched, &members);
-    let text = super::ownership::with_step_in_line(input, &text);
+    let sender = &run.owner_account_id;
+    let members = mention_members(pool, run.conversation_id, sender).await?;
+    let text = forward_text(&run.input, text, card_touched, &members);
+    let text = super::ownership::with_step_in_line(&run.input, &text);
     let (text, mentions) = render_mentions(&text, &members);
-    let request = SendMessageRequest {
+    let mut request = SendMessageRequest {
         client_message_id: Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("{run_id}:text").as_bytes()),
         kind: "text".to_string(),
         content: json!({
@@ -92,7 +93,8 @@ pub(super) async fn post_text(
         reply_to_message_id: None,
         attachment_ids: Vec::new(),
     };
-    match crate::chat_sync::store::send_message(pool, sender, conversation_id, request).await {
+    add_to_request(&mut request, documents);
+    match crate::chat_sync::store::send_message(pool, sender, run.conversation_id, request).await {
         Ok(outcome) => Ok(Some(outcome.value.id.to_string())),
         Err(error) => {
             eprintln!("[system-agent] Could not post the System agent's text message: {error}");

@@ -140,14 +140,16 @@ export function chatSyncHistoryIsComplete(
 export async function waitForCompleteChatSyncHistory(
   accountId: string,
   shouldContinue: () => boolean,
+  includes: (conversation: ChatSyncConversation) => boolean = () => true,
 ) {
   while (shouldContinue()) {
     const [conversations, coverage] = await Promise.all([
       loadChatSyncConversations(accountId),
       loadChatSyncCoverage(accountId),
     ]);
-    if (chatSyncHistoryIsComplete(conversations, coverage)) {
-      return conversations;
+    const relevant = conversations.filter(includes);
+    if (chatSyncHistoryIsComplete(relevant, coverage)) {
+      return relevant;
     }
     await new Promise((resolve) => globalThis.setTimeout(resolve, 1_000));
   }

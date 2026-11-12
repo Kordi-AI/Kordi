@@ -1,5 +1,4 @@
-/** The System agent, the built-in plan agent. Its account is system-managed on the server, and the
- * client shows its messages and cards as System with the front-facing Kordi bird. */
+/** Facilitator is the built-in group agent. Its account is managed on the server. */
 // The stored ids keep the agent's old name.
 export const KORDI_SYSTEM_AGENT_ACCOUNT_ID = 'acct_kordi_pip';
 export const KORDI_SYSTEM_AGENT_CLOUD_AGENT_ID = 'cloud_agent_kordi_pip';
@@ -17,8 +16,13 @@ export function isSystemAgentAccountId(accountId: string | null | undefined): bo
   return accountId?.trim() === KORDI_SYSTEM_AGENT_ACCOUNT_ID;
 }
 
-/** Server notices in group chats (introductions, joins) and the plan agent's messages show as
- * System with a front-facing Kordi bird, whichever built-in account posted them. */
+export const KORDI_FACILITATOR_NAME = 'Facilitator';
+
+export function isFacilitatorHandoffRequestId(id: string | null | undefined): boolean {
+  return id?.startsWith('facilitator-handoff:') ?? false;
+}
+
+/** Server notices such as introductions and joins show as System with the front-facing Kordi bird. */
 export const KORDI_SYSTEM_NOTICE_KIND = 'system-notice';
 export const KORDI_SYSTEM_NAME = 'System';
 export const KORDI_SYSTEM_AVATAR_URL = publicAssetPath('kordi-system-avatar.jpg');

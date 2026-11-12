@@ -4,8 +4,8 @@
 //! proposals route, refreshed by `proactive.proposal_changed`.
 
 use serde_json::Value;
-use sqlx_core::query_as::query_as;
 use sqlx_core::transaction::Transaction;
+use sqlx_core::{query::query, query_as::query_as};
 use sqlx_postgres::{PgPool, Postgres};
 use uuid::Uuid;
 
@@ -93,6 +93,21 @@ pub(crate) async fn hint(
     if proposal_ids.is_empty() {
         return Ok(());
     }
+    // Facilitator tasks are shown on their shared card and in Tasks.
+    query(
+        "UPDATE cloud_session_tasks task
+         SET status = CASE p.status WHEN 'approved' THEN 'pending' WHEN 'done' THEN 'completed'
+                      ELSE p.status END,
+             updated_at = $2, response_message_id = run.response_message_id
+         FROM cloud_agent_proactive_proposals p
+         LEFT JOIN cloud_agent_fallback_runs run ON run.run_id = p.run_id
+         WHERE p.facilitator_task AND p.proposal_id = ANY($1)
+           AND task.session_id = p.session_id AND task.task_id = p.proposal_id",
+    )
+    .bind(proposal_ids)
+    .bind(chrono::Utc::now().to_rfc3339())
+    .execute(&mut **tx)
+    .await?;
     let rows: Vec<(String, Value)> = query_as(
         "SELECT p.owner_account_id, jsonb_build_object(
              'proposalId', p.proposal_id, 'agentId', p.agent_id,
@@ -104,7 +119,7 @@ pub(crate) async fn hint(
              'replyMessageId', CASE WHEN p.status = 'done' THEN run.response_message_id END)
          FROM cloud_agent_proactive_proposals p
          LEFT JOIN cloud_agent_fallback_runs run ON run.run_id = p.run_id
-         WHERE p.proposal_id = ANY($1)
+         WHERE p.proposal_id = ANY($1) AND NOT p.facilitator_task
          ORDER BY p.proposal_id",
     )
     .bind(proposal_ids)

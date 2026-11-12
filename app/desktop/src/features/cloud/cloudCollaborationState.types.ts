@@ -45,7 +45,7 @@ export type UseCloudCollaborationStateArgs = {
   >;
   hydrateCanonicalSessionPage?: (
     sessionId: string,
-    options?: { beforeSequenceNum?: number | null; force?: boolean },
+    options?: { beforeSequenceNum?: number | null; force?: boolean; page?: Pick<import('@/kordi-app/types').CanonicalMessagePage, 'messages' | 'hasOlder'> },
   ) => Promise<unknown>;
   localTurnsBySessionId?: Record<string, DesktopChatTurnSnapshot>;
   cloudAgentRuntimeRoutesBySessionId?: Record<
@@ -60,6 +60,7 @@ export type UseCloudCollaborationStateArgs = {
 };
 
 export type UseCloudCollaborationStateResult = {
+  groupHistory: ReturnType<typeof import('./useBrowserGroupHistory').useBrowserGroupHistory>;
   directHistory: Pick<ReturnType<typeof import('./useCloudDirectHistory').useCloudDirectHistory>, 'hasOlderBySessionId' | 'hydrationBySessionId' | 'loadOlderSessionMessages'>;
   cloudAgentRuntimeRouteMessages: CloudMessage[];
   cloudCollaborationState: DesktopCollaborationState | null;

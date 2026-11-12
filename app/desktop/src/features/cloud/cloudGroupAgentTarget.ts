@@ -1,4 +1,5 @@
 import type { MessageMention } from '@/kordi-app/types';
+import { isFacilitatorHandoffRequestId, isSystemAgentAccountId } from '@/features/systemAgent/systemAgentIdentity';
 import type { CloudGroupControlEnvelope, CloudGroupParticipant } from './cloudGroupMessages';
 
 export type CloudGroupAgentTarget = { ownerAccountId: string; agentId: string };
@@ -48,6 +49,8 @@ function tokens(text: string): string[] {
 export function cloudGroupHumanAgentTarget(message: GroupMessage, participants: readonly CloudGroupParticipant[]): CloudGroupAgentTarget | null {
   if (message.senderKind === 'agent' || message.forkSnapshot || message.messageAction?.kind === 'forward') return null;
   const sender = clean(message.senderAccountId);
+  // Approval already queued this addressed request.
+  if (isSystemAgentAccountId(sender) && isFacilitatorHandoffRequestId(message.id)) return null;
   if (!participants.some((p) => p.accountId === sender)) return null;
   const agent = clean(message.targetCloudAgentId);
   const owner = clean(message.targetCloudAgentOwnerAccountId);

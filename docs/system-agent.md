@@ -1,9 +1,10 @@
-# The System agent
+# The Facilitator
 
-The System agent is the agent Kordi runs for everyone in a conversation. It
-runs on a Kordi-operated provider credential, never on a member's key, and people see
-it as System with the front-facing Kordi bird. It used to be called PiP; the
-stored identifiers below keep that name.
+The Facilitator is Kordi's neutral group agent. It helps members compare
+options, make shared decisions, and clarify next steps on a service model
+configured by the operator. The System account still posts server notices
+with the front-facing Kordi bird. Stored identifiers retain the former PiP
+name for compatibility.
 
 Kordi runs two agents on its own service credentials: the System agent described here, and
 Kordi Support, which people chat with directly. In code, "system agent" as a
@@ -14,7 +15,9 @@ agent.
 
 | Job | What the System agent does | Code |
 | --- | --- | --- |
-| Group plans | A standing member of every group conversation except Grounding groups. It notices when a plan is forming, keeps one plan card per conversation through the `plan_card` tool, and reminds people before the event. | `bridges/cloud-server/src/system_agent/`, `plan_cards/` |
+| Group plans | A standing member of group conversations other than Grounding groups. It can propose a schedule, open a time or place poll, and send event reminders. Members vote, RSVP, and confirm on the card. | `bridges/cloud-server/src/system_agent/`, `plan_cards/` |
+| Shared workflows | Proposes decision polls, Memory drafts, and assignments. Members vote or save a Memory draft, managers confirm decisions, and only the assignee can approve a handoff to their agent. | `bridges/cloud-server/src/system_agent/workflows/` |
+| Group documents | Drafts and attaches a Markdown document when a new member request clearly asks for one. | `bridges/cloud-server/src/system_agent/draft.rs` |
 | Grounding | Card builds, matching and group intros run on its service credential. Grounding is available only while the System agent is configured (`common_ground::available`). | `bridges/cloud-server/src/common_ground/` |
 
 These are not System agent jobs:
@@ -43,23 +46,26 @@ Stored identifiers keep the old name: the account `acct_kordi_pip`, the agent
 definition `cloud_agent_kordi_pip`, run ids starting with `pip_`, the
 credential ids `pip-service-openai` and `pip-service-api-key`, and the
 `cloud_pip_conversation_state` table. Both clients recognise the account by
-its id and show it as System.
+its id and show it as Facilitator.
 
 ## Configuration
 
 Google Cloud deployments use workload identity and explicit Vertex model IDs; see
 [Service models on Google Cloud](service-models-google-cloud.md). The OpenAI
 settings below remain available for existing deployments and isolated fixtures.
-
+Resource pool configuration can select a different provider and model for
+each organization. Set an explicit model through one of these sources
+before enabling the service. An approved assignment uses the assignee's
+agent configuration and execution route.
 
 | Variable | Meaning |
 | --- | --- |
 | `KORDI_SYSTEM_AGENT_PROVIDER` | `vertex-ai` selects Google Cloud; omitted or `openai` retains the existing provider |
 | `KORDI_SYSTEM_AGENT_VERTEX_MODEL` | Explicit model ID for the Vertex Chat Completions endpoint; no default |
 | `KORDI_SYSTEM_AGENT_GROUP_CHAT_ENABLED` | `false` keeps Grounding available while disabling group-plan automation |
-| `KORDI_SYSTEM_AGENT_OPENAI_API_KEY` | Kordi-operated OpenAI key; the System agent is on whenever it is set |
+| `KORDI_SYSTEM_AGENT_OPENAI_API_KEY` | Service key for the configured OpenAI-compatible provider |
 | `KORDI_SYSTEM_AGENT_ENABLED` | `false` switches it off; `true` without a complete provider configuration is an error |
-| `KORDI_SYSTEM_AGENT_OPENAI_MODEL` | Model name; defaults to the support agent's default |
+| `KORDI_SYSTEM_AGENT_OPENAI_MODEL` | Required model ID for the OpenAI-compatible route. Also accepts the shared `KORDI_SERVICE_MODEL_MODEL` setting. |
 | `KORDI_SYSTEM_AGENT_OPENAI_BASE_URL` | OpenAI-compatible gateway; https only (plain http for loopback); defaults to the OpenAI API |
 | `KORDI_SYSTEM_AGENT_ACCOUNT_ID`, `KORDI_SYSTEM_AGENT_AGENT_ID`, `KORDI_SYSTEM_AGENT_AGENT_NAME`, `KORDI_SYSTEM_AGENT_AGENT_SUBTITLE`, `KORDI_SYSTEM_AGENT_OWNER_EMAIL` | Identity overrides; defaults are fine for every environment |
 
@@ -75,22 +81,17 @@ from the ignored `deploy/dev/.env` file.
 
 ## Persona and playbook
 
-The System agent is warm, brief, and practical. It speaks only when a hook
-gives it a reason and never repeats a nudge. Its messages exist to move the
-group: open a vote, ask the one person whose answer is missing (by `@handle`),
-confirm a deal, or remind people shortly before the event. Member responses
-live on the card, never in its chat lines.
+The [Facilitator skill](../bridges/skills/facilitator/SKILL.md) defines
+how the model chooses a useful action in the language of the group. It can
+stay silent, reply briefly, propose a plan or group workflow, or draft a
+document. A direct mention and a quiet batch of group messages use the same
+semantic response format.
 
-| Situation | What the System agent does |
-| --- | --- |
-| The chat names competing days, times, or places | opens a vote on its own (`propose` a polling card with 2 to 4 options), without anyone asking |
-| Votes or answers missing for a while | asks the missing people by name, once per card |
-| The group settles, or the vote has a clear winner and the organizer agrees | `confirm` (with `optionId` when the poll decides it); one message saying what is fixed |
-| A member cannot make it | `rsvp` no for that member only; the plan stands |
-| The organizer cancels, or the group calls it off | `cancel` |
-| An explicit replacement date, time, or place | `propose` with the same event ID and current revision; atomically reopens and replaces even a confirmed plan |
-| Genuinely unclear whether a confirmed plan stands | asks one question and preserves the current card |
-| 24 hours and 2 hours before start | one reminder each, while the card is open |
+Members retain control of shared actions. Only members vote, RSVP, confirm,
+or cancel a plan. An assignee's approval posts an explicit mention of their
+agent and creates a queued group reply. The agent updates that same reply
+through processing and completion. The handoff carries the approved task
+title and deliverable as its context.
 
 Confirming with an option marks everyone who voted for it as attending.
 Confirming adds the plan to every attending member's Kordi calendar
@@ -101,9 +102,8 @@ It never reads or writes anyone's personal calendar.
 ## When the System agent spends a model call
 
 It is on in every group once its provider is configured, unless
-`KORDI_SYSTEM_AGENT_GROUP_CHAT_ENABLED=false`; `KORDI_SYSTEM_AGENT_ENABLED=false` switches it off. There are no
-per-group caps. A five-second sweep considers a group only when one of these
-holds:
+`KORDI_SYSTEM_AGENT_GROUP_CHAT_ENABLED=false`. Resource pool admission applies
+configured run and spend limits. A five-second sweep considers these signals:
 
 | Trigger | Condition |
 | --- | --- |
@@ -118,13 +118,12 @@ the next tick. The System agent records the revision it saw when a run starts
 and after each of its own card actions, so its own calls never wake it, while
 a vote cast during a run still does.
 
-New messages alone then pass a free text check
-(`bridges/cloud-server/src/system_agent/context.rs`) before any run is
-queued: a clock time or date written with digits, a day or plan word in
-English, Chinese, or Arabic, or, while a card is open, a short answer such as
-"yes" or "can't". Small talk without any of these moves the cursor forward
-and costs nothing. Recording votes and answers, refreshing cards, posting the
-calendar card on confirm, and writing calendars never use the model.
+Ordinary member messages are batched until the conversation is quiet
+(`KORDI_SYSTEM_AGENT_SILENCE_MINUTES`, 10 minutes by default). A direct mention
+can run after the initial sweep debounce. The model interprets the bounded
+snapshot, including deciding to stay silent on small talk. Semantic runs
+make one model decision with a 1,536 output token limit. Recording member
+actions and refreshing cards use no model calls.
 
 ### What a run sees
 
@@ -163,25 +162,15 @@ calendar card on confirm, and writing calendars never use the model.
 2. The sweep queues one cloud run (`pip_` prefix) whose prompt is a bounded
    JSON snapshot (`bridges/cloud-server/src/system_agent/input.rs`) within the
    limits above, and the hooks that woke the agent.
-3. The cloud runner (`bridges/cloud-agent-runner/src/system_agent.rs`) runs
-   the model with exactly one tool, `plan_card` (propose with options, rsvp,
-   vote, confirm with an option, cancel), defined only for the System
-   agent in `bridges/cloud-agent-runner/src/system_agent_tool.rs`; members'
-   own agents do not get it. Every call is forwarded to
-   `POST /v1/cloud/agent-runs/:run_id/plan-card`, authenticated with the
-   runner token. Every action, not only a proposal, must target a card in
-   the run's own conversation.
-4. The server records the action as the System agent
-   (`bridges/cloud-server/src/plan_cards/runner.rs`). It may record another
-   active member's RSVP, vote, confirmation, or cancellation from what that
-   member said; a signed-in member still acts only for themselves. Every
-   participant on a card must be an active member of its conversation, since
-   a confirmed plan writes to their calendars and digests.
-5. When the run changed the card, the System agent posts the card as its own
-   message; the run's final JSON `{"message": ..., "hooksHandled": [...]}` is
-   then posted as a separate text message when `message` is non-empty.
-   `@Handle` tokens that match one member become real mentions. The handled
-   reminder hooks are stored so a reminder never fires twice.
+3. The runner reads the configured provider and model. A conversation or
+   direct request run returns one structured action. Scheduling proposals
+   from that response use the same server handler as the `plan_card` tool
+   used by the other triggers.
+4. The server validates group membership, source messages, and the requested
+   action. Only scheduling proposals can be submitted through the runner.
+   Member actions use the authenticated card routes.
+5. The server publishes the card or attached document and any separate chat
+   reply. Handled reminder hooks are stored to avoid duplicate reminders.
 
 Failures back off at 1 minute, 5 minutes, 30 minutes, 2 hours, then 12 hours
 between attempts (`bridges/cloud-server/src/system_agent/retry.rs`). Progress
@@ -218,7 +207,7 @@ Validation and replacement share one mutation: a rejected replacement preserves
 the prior card and its calendar entries. Invalid time ranges return an actionable
 validation error. A successful replacement resets affected attendee answers and
 awaits confirmation before recreating the same per-member calendar event IDs.
-Standalone System reopen calls are rejected with `atomic_replacement_required`, including calls from older runners. When details are unclear, System asks a question without mutating the current plan. Authorized member reopen actions remain available.
+The runner only submits proposals. When details are unclear, the Facilitator can ask a question. Authorized members can reopen plans from the card.
 
 A member's button press goes to `POST /v1/cloud/plan_cards` as that member. On
 `plan_card_revision_conflict`, desktop and iOS read the latest snapshot from
@@ -241,13 +230,10 @@ A transcript shows one card per plan. Only the newest message carrying a
 card renders it, at the newest snapshot known for that plan; every earlier
 copy keeps just its text.
 
-## What this stage does not include
+## Scope
 
-- The System agent in direct and AI sessions.
-- Handing a question to a member's own agent (for example to check that
-  member's calendar). The System agent mentions people; mentioning an agent
-  does not yet start that agent's run.
-- Decision and route cards.
+The Facilitator operates in group chats. A member's agent performs an
+assignment only after the assignee approves it on the card.
 
 ## Validation
 

@@ -187,6 +187,7 @@
 		5A9CA0356AB0A944A1DC8C1D /* OrderedAgentExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D8AF8ABA81E2E6C3E4339FD /* OrderedAgentExecution.swift */; };
 		5B9361FC05AF8979043DD7CD /* UsageSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1204F62F1868736E42A00966 /* UsageSettingsView.swift */; };
 		5C1EC1453E25A89022265980 /* ConnectorsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 415D506669236EB1BE457B68 /* ConnectorsModelTests.swift */; };
+		5C2B70585C2817956DDC721F /* FacilitatorCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A320518648673CC98E2933B /* FacilitatorCard.swift */; };
 		5C54E489D8184813121801FB /* CommonGroundProfileViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE662D9A17E886DF1A7FB3E4 /* CommonGroundProfileViews.swift */; };
 		5D39C868B09410391B2008BB /* ConnectorsSettingsLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E1D5EB9F29E06DD365480B /* ConnectorsSettingsLink.swift */; };
 		5DD4E8AD82A78062888E01F8 /* CloudRealtimeLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58D1F517F8A69BF67F5CE680 /* CloudRealtimeLink.swift */; };
@@ -407,6 +408,7 @@
 		CCB2300E90B26B2402BA8933 /* MainNavigationDestinations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C7A5D910D9A8B4D8343F6 /* MainNavigationDestinations.swift */; };
 		CD04D68B670F6591F51E6250 /* ProviderAuthenticationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F583054F514DF4B9CE1523 /* ProviderAuthenticationDetailView.swift */; };
 		CD3C7A3CE21759DEED457B45 /* Distribution.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1FE75FD69082AA54E82579EC /* Distribution.xcassets */; };
+		CD46881DC8822A94743D1382 /* FacilitatorCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9663055488AD8B698E9D51B8 /* FacilitatorCardView.swift */; };
 		CE346817245E10DB34E82CC1 /* ChatProjectImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA044228D16E5914AC65185F /* ChatProjectImportSheet.swift */; };
 		CE3B28D7B1662C11FCB93086 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4021DE92BF82560F7905E214 /* ConversationView.swift */; };
 		CFC44788A96F3E6E99FA48C2 /* MessageDeletionRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8323A1DC4175F5728F6656 /* MessageDeletionRecoveryTests.swift */; };
@@ -597,6 +599,7 @@
 		18B71004987B4644D607239C /* VoiceSpeechOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSpeechOperation.swift; sourceTree = "<group>"; };
 		19D7E03C00B6716981C6470A /* GroupMemberInviteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupMemberInviteSheet.swift; sourceTree = "<group>"; };
 		19F8E7BC371380131AD40A10 /* DigestCalendarSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigestCalendarSync.swift; sourceTree = "<group>"; };
+		1A320518648673CC98E2933B /* FacilitatorCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FacilitatorCard.swift; sourceTree = "<group>"; };
 		1A3A55FE7BDA62F4175A28D2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1AC62340EAC0499F399211E9 /* MessageAuthorIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageAuthorIdentityTests.swift; sourceTree = "<group>"; };
 		1B208AC082D8D2E3AC98654A /* CloudMessageCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudMessageCodec.swift; sourceTree = "<group>"; };
@@ -839,6 +842,7 @@
 		95CE270CEA87A8CE6D97F559 /* GroupSessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupSessionListView.swift; sourceTree = "<group>"; };
 		95D54234F756AF56779AFB43 /* CloudSyncCatchUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncCatchUpTests.swift; sourceTree = "<group>"; };
 		96042CF63F22D2ED8FFE8C1E /* DigestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigestView.swift; sourceTree = "<group>"; };
+		9663055488AD8B698E9D51B8 /* FacilitatorCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FacilitatorCardView.swift; sourceTree = "<group>"; };
 		96A7E0BDA87B6A971DA67BD7 /* CommonGroundCardDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundCardDetail.swift; sourceTree = "<group>"; };
 		97E71FFE7B72E4ED6D1DE623 /* CloudSyncCatchUp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncCatchUp.swift; sourceTree = "<group>"; };
 		97E9E1638C1F54B5AC299797 /* CommonGroundNearbyNeedTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundNearbyNeedTypes.swift; sourceTree = "<group>"; };
@@ -1098,6 +1102,7 @@
 				A65E789E3576D0F0275E8B65 /* ConversationSendQueue.swift */,
 				947D36AE16CB8FC9349B6169 /* EmojiAnimationDiskCache.swift */,
 				416A049DC931011ECA554628 /* EmojiAnimationRepository.swift */,
+				1A320518648673CC98E2933B /* FacilitatorCard.swift */,
 				8B58CB494BE1FE3E64175CFF /* GroupAgentTarget.swift */,
 				A63AD8A97A7983AD032145F6 /* GroupInviteLink.swift */,
 				DDB063759C8072686227B4C1 /* GroupSpaceSummary.swift */,
@@ -1284,6 +1289,7 @@
 				E73D9AC825DC3BC458F81028 /* ConversationTrajectoryViewport.swift */,
 				4021DE92BF82560F7905E214 /* ConversationView.swift */,
 				C2C10B9D09B7992549A6CE35 /* ExpressiveMediaPicker.swift */,
+				9663055488AD8B698E9D51B8 /* FacilitatorCardView.swift */,
 				3310BE41F1F31B92D8D6151B /* ForwardMessageSheet.swift */,
 				366FB25C511905DAAB4EEEC8 /* KordiMarkdownListParser.swift */,
 				EFCC37295C93ECDF39C84206 /* LivePhotoSurface.swift */,
@@ -2507,6 +2513,8 @@
 				28FF1EBEC8F73B3403895F8D /* EmojiAnimationDiskCache.swift in Sources */,
 				E8E26A61A67DA53EF99B4DC7 /* EmojiAnimationRepository.swift in Sources */,
 				D0D50762EB040DB1DAB59C52 /* ExpressiveMediaPicker.swift in Sources */,
+				5C2B70585C2817956DDC721F /* FacilitatorCard.swift in Sources */,
+				CD46881DC8822A94743D1382 /* FacilitatorCardView.swift in Sources */,
 				F9E33A7DCCE9CF63E615408F /* ForwardMessageSheet.swift in Sources */,
 				22A8E54BEF31249E570DABA2 /* GroupAgentTarget.swift in Sources */,
 				0BC280400290839FA07CB175 /* GroupAvatarPicker.swift in Sources */,

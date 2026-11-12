@@ -93,8 +93,8 @@ pub async fn bootstrap_system_agent(
              avatar_url, avatar_source, avatar_style, avatar_seed, avatar_renderer_version,
              avatar_version, avatar_updated_at
          ) VALUES (
-             $1, $2, 'participant_conversations', 'active', $3, 'Built-in plan agent',
-             $4, $5, 'Turns group plans into shared cards and keeps them honest.', '[]', '[]', '[]',
+             $1, $2, 'participant_conversations', 'active', $3, 'Group facilitator',
+             $4, $5, 'Guides group discussions and turns scheduling options into shared cards.', '[]', '[]', '[]',
              $6, $7, $7, NULL, TRUE, $8, 'generated', $9, $1, $10, 1, $7
          )
          ON CONFLICT (agent_id) DO UPDATE SET

@@ -8,9 +8,9 @@ It calls a real model, so it is opt-in and never part of default CI. A scripted 
 
 Each System agent fixture is written into a disposable PostgreSQL database, created for that run, through the server's own stores. Then, for every pass:
 
-1. The server's sweep decides whether the conversation needs a model call (including its free plan-word check) and builds the run input.
-2. The runner's System agent loop (the `omp` or `rust` engine) calls the configured model with the production prompt and the `plan_card` tool.
-3. Every `plan_card` call goes to the server's runner handler, which applies the same validation as production.
+1. The server batches eligible member messages until the group is quiet, or responds to a direct mention after the sweep debounce. It builds a bounded snapshot and lets the model decide whether the group needs help.
+2. The runner's System agent loop (the `omp` or `rust` engine) calls the configured model with the production prompt. On conversation and direct request runs, the model chooses one action in a JSON reply.
+3. A scheduling proposal from the JSON reply or from the `plan_card` tool goes to the same server handler, which applies the production validation and member permissions.
 4. The server completes the run: it posts the reply, refreshes cards, and records reminders.
 
 Grounding fixtures use the server's redaction, card-build instructions and reply parsing, and the runner's Common ground completion on the same service credential. They need no database.
@@ -91,7 +91,8 @@ The base URL must be `https`, and the runner refuses local or private-network en
 | Metric | Meaning |
 |---|---|
 | Plan card correctness | The card ends in the expected state, time, place and attendance, and required actions succeeded |
-| Silence when no hook applies | No message where none is expected |
+| Silence when no intervention is useful | No message where none is expected |
+| Facilitator workflow correctness | The expected decision, Memory, or assignment card is published |
 | Replies when one is due | A message where one is expected, mentioning what it must |
 | Valid tool calls | Every `plan_card` call is allowed for that pass and accepted by the server |
 | No repeated messages | No message repeats an earlier System agent message |

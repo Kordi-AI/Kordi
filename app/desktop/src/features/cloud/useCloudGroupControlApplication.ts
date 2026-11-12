@@ -1,3 +1,5 @@
+import { useBrowserGroupHistoryReplay } from './useBrowserGroupHistoryReplay';
+import type { BrowserGroupHistoryReplay } from '@web/runtime/browserGroupHistoryReplay';
 import {
   useCallback,
   useEffect,
@@ -383,6 +385,7 @@ export function useCloudGroupControlApplication({
       catalogGroupTitle?: string | null;
       catalogGroupAvatar?: CloudGroupControlEnvelope['groupAvatar'];
       catalogGroupOrigin?: string | null;
+      replay?: BrowserGroupHistoryReplay;
     } = {},
   ) => {
     const currentAccountId = account?.accountId ?? null;
@@ -394,10 +397,13 @@ export function useCloudGroupControlApplication({
     }
     // Canonical state stays behind a ref so replay does not rebuild this
     // callback after every canonical write and re-enter the replay effect.
+    const publish = options.replay?.canonical.setState ?? publishCanonicalState;
     const sessionContext = await applyCloudGroupSessionControl({
+      persistence: options.replay?.persistence,
       cloudMessage,
       envelope,
       historyReplay: options.historyReplay,
+      useCatalogProfiles: Boolean(options.replay),
       catalogGroupTitle: options.catalogGroupTitle,
       catalogGroupAvatar: options.catalogGroupAvatar,
       catalogGroupOrigin: options.catalogGroupOrigin,
@@ -406,9 +412,9 @@ export function useCloudGroupControlApplication({
         client,
         profileCache: profileCacheRef.current,
         sessionPreparationCache:
-          sessionPreparationCacheRef.current.entries,
+          options.replay?.preparations ?? sessionPreparationCacheRef.current.entries,
       },
-      canonical: {
+      canonical: options.replay?.canonical ?? {
         getState: () => canonicalStateRef.current,
         setState: publishCanonicalState,
       },
@@ -427,7 +433,7 @@ export function useCloudGroupControlApplication({
 
     const messageContext = await applyCloudGroupMessageControl({
       context: sessionContext,
-      setCanonicalState: publishCanonicalState,
+      setCanonicalState: publish,
       stateOps: {
         objectContent: cloudObjectContent,
         cleanText: cleanCloudText,
@@ -475,5 +481,6 @@ export function useCloudGroupControlApplication({
     publishCanonicalStateImmediately,
     setCanonicalState,
   ]);
-  return { apply, flushCanonicalState };
+  const applyHistoryPage = useBrowserGroupHistoryReplay(apply, publishCanonicalState, flushCanonicalState);
+  return { apply, applyHistoryPage, flushCanonicalState };
 }

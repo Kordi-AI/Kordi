@@ -12,6 +12,7 @@ fn expect(reply: &str) -> Expect {
         allowed_actions: Vec::new(),
         required_actions: Vec::new(),
         card: None,
+        workflow_kind: None,
     }
 }
 

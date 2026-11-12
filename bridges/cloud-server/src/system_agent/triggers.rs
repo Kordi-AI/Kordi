@@ -2,14 +2,14 @@
 //! person's agent plans for them; the System agent is not a parallel planner.
 //! It acts only when:
 //!
-//! - silence: a plan discussion nobody's agent took has gone quiet without a
-//!   card,
+//! - silence: a batch of member messages has gone quiet and is ready for
+//!   semantic review,
 //! - loop: agents went back and forth without progress,
 //! - conflict: two plan cards overlap or disagree on the time of one plan,
 //! - stall: the agent that owns a task stopped replying (see `ownership`).
 //!
 //! Card hooks (votes, reminders) and a member asking the System agent
-//! directly still wake it, but plan talk alone never does until it is quiet.
+//! directly still wake it. Ordinary conversation is reviewed after it is quiet.
 //! Every trigger fires once: its marks join the sweep row's `hooks_fired`
 //! when the run finishes, so a retried run still has it and a finished one
 //! never repeats it.
@@ -29,7 +29,7 @@ const MARKS_KEY: &str = "triggerMarks";
 /// How soon a trigger that had to wait is checked again.
 pub(super) const RECHECK_SECONDS: i64 = 60;
 
-/// Plan talk the System agent holds until the conversation goes quiet.
+/// Member messages held until the conversation goes quiet.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct PlanDiscussion {
@@ -66,7 +66,7 @@ pub(super) enum Trigger {
     Request {
         rewind_to: Option<i64>,
     },
-    /// A plan discussion went quiet.
+    /// A conversation batch went quiet.
     Silence {
         from_sequence: i64,
         quiet: Duration,
@@ -97,7 +97,7 @@ pub(super) struct PassFacts<'a> {
     pub hooks_fired: &'a Value,
     /// Hook names in the run input (`new_messages`, `card_changed`, ...).
     pub hooks: Vec<String>,
-    /// New messages from people that could be about a plan, for no agent.
+    /// New messages from people that the Facilitator may review.
     pub plan_talk: bool,
     /// A new message from a person addresses the System agent itself.
     pub asks_system_agent: bool,
@@ -125,7 +125,7 @@ pub(super) fn decide(facts: PassFacts<'_>) -> PassPlan {
     let stored = PlanDiscussion::read(facts.hooks_fired);
     // A card made since the discussion began, an agent taking a task, or an
     // agent speaking up, updating its answer, or finishing a task all mean
-    // someone is on it. Only new plan talk after that starts a new discussion.
+    // someone is on it. Only new member messages start another review.
     let resolved = |discussion: &PlanDiscussion| {
         gate.agent_task
             || gate
@@ -284,6 +284,14 @@ pub(super) fn apply(input: &mut Value, trigger: &Trigger, marks: Map<String, Val
     if !marks.is_empty() {
         input[MARKS_KEY] = Value::Object(marks);
     }
+}
+
+/// Only a direct request or a new group discussion can lead to a new workflow.
+pub(super) fn allows_workflows(input: &Value) -> bool {
+    matches!(
+        input["trigger"]["kind"].as_str(),
+        Some("request" | "silence")
+    )
 }
 
 /// The first person who spoke in the discussion the run reads as new.

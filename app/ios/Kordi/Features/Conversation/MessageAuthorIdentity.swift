@@ -27,6 +27,9 @@ enum MessageAuthorIdentity {
             )
         }
 
+        if message.messageKind == KordiSystemAgentIdentity.messageKind {
+            return KordiSystemAgentIdentity.avatar
+        }
         if KordiSystemIdentity.isSystemNotice(message) { return KordiSystemIdentity.avatar }
 
         // In an agent session the conversation is the agent itself; anywhere

@@ -223,6 +223,7 @@ export function useKordiShellArgs(groups: KordiShellCompositionArgs): KordiShell
         handleRenameDesktopSession: args.handleRenameDesktopSession,
         chatTranscriptScrollRef: args.chatTranscriptScrollRef,
         canonicalHasOlderBySessionId: args.canonicalHasOlderBySessionId,
+        browserGroupHistory: args.browserGroupHistory,
         loadOlderCanonicalSessionMessages: args.loadOlderCanonicalSessionMessages,
         onProjectTranscriptScroll: args.onProjectTranscriptScroll,
         setActiveSourcePreview: args.setActiveSourcePreview,

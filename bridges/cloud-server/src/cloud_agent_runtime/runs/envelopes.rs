@@ -171,7 +171,7 @@ pub(super) fn parse_cloud_group_envelope(body: &str) -> Option<CloudGroupEnvelop
     serde_json::from_slice(&bytes).ok()
 }
 
-fn encode_cloud_group_envelope(envelope: &CloudGroupEnvelope) -> String {
+pub(super) fn encode_cloud_group_envelope(envelope: &CloudGroupEnvelope) -> String {
     let mut value = serde_json::to_value(envelope).unwrap_or_default();
     if value["message"]["senderKind"] == "agent" {
         super::exchanges::separate_control_outcome(&mut value["message"], true);
@@ -411,6 +411,28 @@ pub(super) async fn cloud_group_request_envelope_with_created_at_for_run(
 ) -> Result<Option<(CloudGroupEnvelope, String)>, sqlx_core::Error> {
     if !session_id.trim().starts_with("session:group:") {
         return Ok(None);
+    }
+    if request_message_id.starts_with(super::facilitator_handoff::REQUEST_PREFIX) {
+        let row = query_as::<_, (serde_json::Value, DateTime<Utc>)>(
+            "SELECT message.content, message.created_at
+             FROM cloud_chat_conversations conversation
+             JOIN cloud_chat_messages message USING (conversation_id)
+             WHERE conversation.legacy_session_id = $1 AND message.client_message_id = $2
+               AND message.deleted_at IS NULL",
+        )
+        .bind(session_id)
+        .bind(super::facilitator_handoff::request_client_id(
+            request_message_id,
+        ))
+        .fetch_optional(pool)
+        .await?;
+        return Ok(row.and_then(|(body, created_at)| {
+            let envelope =
+                parse_cloud_group_envelope(&crate::chat_sync::voice::body_for_agent(&body))?;
+            let message = envelope.message.as_ref()?;
+            (envelope.kind == "group-message" && message.id == request_message_id)
+                .then_some((envelope, created_at.to_rfc3339()))
+        }));
     }
     let rows = query_as::<_, (serde_json::Value, DateTime<Utc>)>(
         "SELECT message.content, message.created_at

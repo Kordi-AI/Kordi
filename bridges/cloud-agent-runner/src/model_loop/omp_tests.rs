@@ -185,6 +185,7 @@ async fn real_bun_cloud_adapter_returns_durable_context() {
         api_mode: OpenAiApiMode::ChatCompletions,
         account_id: None,
         verbatim_model: false,
+        max_output_tokens: None,
         headers: Default::default(),
     };
     let worker = OmpRuntime::new(WorkerCommand {

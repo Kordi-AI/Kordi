@@ -9,14 +9,20 @@ const nativePersistence = { openOrCreateCanonicalSessionFast, removeCanonicalSes
 export type CloudGroupCanonicalPersistence = typeof nativePersistence;
 
 /** Preserve the source scope through every await in one group replay operation. */
+export function browserGroupCanonicalPersistence(
+  invoke: <T>(command: string, args: Record<string, unknown>) => Promise<T>,
+): CloudGroupCanonicalPersistence {
+  return {
+    openOrCreateCanonicalSessionFast: request => invoke('desktop_canonical_open_or_create_session_fast', { request }),
+    removeCanonicalSessionParticipant: request => invoke('desktop_canonical_remove_session_participant', { request }),
+    upsertCanonicalIdentityFast: request => invoke('desktop_canonical_upsert_identity_fast', { request }),
+    upsertCanonicalMessageFast: request => invoke('desktop_canonical_upsert_message_fast', { request }),
+  };
+}
+
 export function scopedCloudGroupCanonicalPersistence(accountId: string, organizationId?: string): CloudGroupCanonicalPersistence {
   const expectedBrowserScope = browserCanonicalScope(accountId, organizationId);
-  return {
-    openOrCreateCanonicalSessionFast: request => invokeDesktop('desktop_canonical_open_or_create_session_fast', { request, expectedBrowserScope }),
-    removeCanonicalSessionParticipant: request => invokeDesktop('desktop_canonical_remove_session_participant', { request, expectedBrowserScope }),
-    upsertCanonicalIdentityFast: request => invokeDesktop('desktop_canonical_upsert_identity_fast', { request, expectedBrowserScope }),
-    upsertCanonicalMessageFast: request => invokeDesktop('desktop_canonical_upsert_message_fast', { request, expectedBrowserScope }),
-  };
+  return browserGroupCanonicalPersistence((command, args) => invokeDesktop(command, { ...args, expectedBrowserScope }));
 }
 
 export function captureCloudGroupCanonicalPersistence(): CloudGroupCanonicalPersistence {

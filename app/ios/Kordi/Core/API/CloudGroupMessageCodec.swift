@@ -358,6 +358,11 @@ enum CloudGroupAgentLifecycleProjector {
     ) -> CloudGroupMessagePayload {
         let existingIsProcessing = existing.deliveryState == "processing"
         let candidateIsProcessing = candidate.deliveryState == "processing"
+        let existingIsQueued = existing.deliveryState == "queued"
+        let candidateIsQueued = candidate.deliveryState == "queued"
+        if existingIsQueued != candidateIsQueued {
+            return existingIsQueued ? candidate : existing
+        }
         if existingIsProcessing != candidateIsProcessing {
             return existingIsProcessing ? candidate : existing
         }
