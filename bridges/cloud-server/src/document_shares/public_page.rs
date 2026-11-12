@@ -56,7 +56,7 @@ pub(crate) fn new_nonce() -> String {
 pub(crate) fn page_csp(nonce: &str) -> String {
     format!(
         "default-src 'none'; style-src 'nonce-{nonce}'; script-src 'nonce-{nonce}'; \
-         img-src https: data:; font-src 'self'; connect-src 'self'; frame-src 'self'; \
+         img-src 'self' https: data:; font-src 'self'; connect-src 'self'; frame-src 'self'; \
          base-uri 'none'; form-action 'none'"
     )
 }
@@ -96,13 +96,23 @@ fn initials(name: &str) -> String {
     }
 }
 
+/// Where the page loads an avatar from: an https or data URL as is, an
+/// uploaded avatar from this server. Anything else shows initials.
+pub(crate) fn public_avatar_src(url: &str) -> Option<String> {
+    if url.starts_with("https://") || url.starts_with("data:image/") {
+        return Some(url.to_string());
+    }
+    crate::avatars::assets::parse_uploaded_avatar_marker(url)
+        .map(|marker| format!("/v1/avatars/assets/{}/128.jpg", marker.asset_id))
+}
+
 fn avatar_html(author: &DocumentAuthor) -> String {
-    match author.avatar_url.as_deref() {
-        Some(url) if url.starts_with("https://") || url.starts_with("data:image/") => format!(
+    match author.avatar_url.as_deref().and_then(public_avatar_src) {
+        Some(src) => format!(
             r#"<span class="av"><img alt="" src="{}"></span>"#,
-            escape_html(url)
+            escape_html(&src)
         ),
-        _ => format!(
+        None => format!(
             r#"<span class="av">{}</span>"#,
             escape_html(&initials(&author.display_name))
         ),

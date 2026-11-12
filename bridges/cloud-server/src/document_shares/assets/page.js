@@ -47,7 +47,9 @@
   function avatar(author) {
     var a = el('span', 'av');
     var url = author && author.avatarUrl;
-    if (url && (/^https:\/\//.test(url) || /^data:image\//.test(url))) {
+    var uploaded = url && /^kordi-avatar:\/\/uploaded\/(ava_[0-9a-fA-F]{32})$/.exec(url);
+    if (uploaded) url = '/v1/avatars/assets/' + uploaded[1] + '/128.jpg';
+    if (url && (uploaded || /^https:\/\//.test(url) || /^data:image\//.test(url))) {
       var img = el('img'); img.alt = ''; img.src = url; a.appendChild(img);
     } else { a.textContent = initials(author && author.displayName); }
     return a;
