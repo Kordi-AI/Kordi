@@ -19,6 +19,7 @@ mod processing_slot;
 mod project_unavailable;
 pub(crate) mod prompt_history;
 mod request_language;
+pub mod retention;
 pub(crate) mod route_fill;
 pub mod stop;
 pub(crate) mod subsession_lifecycle;

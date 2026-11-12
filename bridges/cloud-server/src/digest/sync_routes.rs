@@ -1,8 +1,9 @@
 use super::{
     models::{normalize_event_times, validate_event, CalendarEvent},
-    routes::{error, failed, valid_timezone},
+    routes::{error, failed},
     series_routes::ExpectedEvent,
     store,
+    timezones::valid_timezone,
 };
 use crate::{auth::routes::CloudSession, server::ServerState};
 use axum::{
