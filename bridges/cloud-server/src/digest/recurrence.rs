@@ -117,12 +117,10 @@ pub async fn expand(
     {
         return Err("Event and recurrence timezones must match.");
     }
-    let valid: (bool,) = query_as("SELECT EXISTS(SELECT 1 FROM pg_timezone_names WHERE name=$1)")
-        .bind(&rule.timezone)
-        .fetch_one(pool)
+    let valid = super::timezones::valid_timezone(pool, &rule.timezone)
         .await
         .map_err(|_| "Could not validate the timezone.")?;
-    if !valid.0 {
+    if !valid {
         return Err("Choose a valid IANA timezone.");
     }
     let start = DateTime::parse_from_rfc3339(&base.start_at)

@@ -1,4 +1,4 @@
-use super::{models::*, store};
+use super::{models::*, store, timezones::valid_timezone};
 use crate::cloud_agent_runtime::provider_auth::newest_account_needing_reconnect;
 use crate::{
     auth::routes::{cloud_session_middleware, CloudSession},
@@ -349,16 +349,6 @@ pub(super) async fn save_event(
         ),
         Err(_) => failed(),
     }
-}
-pub(super) async fn valid_timezone(
-    pool: &sqlx_postgres::PgPool,
-    zone: &str,
-) -> Result<bool, sqlx_core::Error> {
-    query_as::<_, (bool,)>("SELECT EXISTS(SELECT 1 FROM pg_timezone_names WHERE name=$1)")
-        .bind(zone)
-        .fetch_one(pool)
-        .await
-        .map(|row| row.0)
 }
 #[derive(Deserialize)]
 struct ExpectedRevision {

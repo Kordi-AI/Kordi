@@ -17,6 +17,10 @@ use sqlx_postgres::{PgPool, Postgres};
 
 pub const SESSION_TOKEN_PREFIX: &str = "kordi_cs_";
 pub const DEFAULT_SESSION_LIFETIME_DAYS: i64 = 30;
+/// A sliding session expiry is rewritten only once it trails the new target
+/// by more than this many minutes, so steady use writes at most about once
+/// per hour instead of on every request.
+pub const SESSION_EXPIRY_BUMP_GRANULARITY_MINUTES: i64 = 60;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IssuedSession {
@@ -31,6 +35,9 @@ pub struct CloudSessionRow {
     pub account_id: String,
     pub device_id: String,
     pub expires_at: DateTime<Utc>,
+    /// The expiry slides forward with use. Access tokens from a browser
+    /// sign-in keep a fixed expiry instead.
+    pub sliding_expiry: bool,
     pub organization: SessionOrganization,
 }
 
@@ -126,6 +133,41 @@ where
     })
 }
 
+/// Everything one authenticated request needs from its session, read in
+/// one statement: the session row, the facts instance admission checks, and
+/// how long the organization claim stays valid.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionLookup {
+    pub row: CloudSessionRow,
+    /// The browser sign-in that issued this access token, if any.
+    pub app_sign_in_id: Option<String>,
+    /// The account's primary email and whether it is verified; `None` when
+    /// the account row is missing.
+    pub account: Option<(Option<String>, bool)>,
+    /// When the membership behind an active organization claim expires.
+    pub membership_expires_at: Option<DateTime<Utc>>,
+}
+
+impl SessionLookup {
+    /// Whether this answer is still exactly what a fresh lookup at `now`
+    /// would return, as far as time alone is concerned: the session has not
+    /// expired, and neither has the membership its claim depends on.
+    pub(crate) fn valid_at(&self, now: DateTime<Utc>) -> bool {
+        now < self.row.expires_at
+            && !(self.row.organization.claim_active
+                && self
+                    .membership_expires_at
+                    .is_some_and(|expires_at| expires_at <= now))
+    }
+
+    /// The `(email, verified)` facts instance admission checks.
+    pub fn admission_facts(&self) -> Option<(Option<&str>, bool)> {
+        self.account
+            .as_ref()
+            .map(|(email, verified)| (email.as_deref(), *verified))
+    }
+}
+
 /// Look up an active session by its plaintext token. Returns `Ok(None)` for
 /// "token does not match a live session" (expired, revoked, or absent).
 pub async fn lookup_session(
@@ -136,8 +178,21 @@ pub async fn lookup_session(
         return Ok(None);
     }
     let token_hash = hash_session_token(plaintext_token);
-    let now = Utc::now();
+    Ok(lookup_session_by_hash(pool, &token_hash, Utc::now())
+        .await?
+        .map(|lookup| lookup.row))
+}
 
+/// Look up the active session whose token hashes to `token_hash`, as of
+/// `now`. The personal organization, the claimed membership, and the
+/// account's admission facts are joined in, so this is a single statement;
+/// the results match [`SESSION_ORGANIZATION_COLUMNS`] and
+/// `AdmissionPolicy::authorize_account`.
+pub(crate) async fn lookup_session_by_hash(
+    pool: &PgPool,
+    token_hash: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<SessionLookup>, SessionError> {
     type Row = (
         String,
         String,
@@ -146,33 +201,66 @@ pub async fn lookup_session(
         Option<String>,
         Option<String>,
         bool,
+        Option<DateTime<Utc>>,
+        Option<String>,
+        bool,
+        Option<String>,
+        bool,
     );
-    let row: Option<Row> = query_as(&format!(
+    let row: Option<Row> = query_as(
         "SELECT token.token_id, token.account_id, token.device_id, token.expires_at, \
-                {SESSION_ORGANIZATION_COLUMNS} \
+                token.organization_id, personal.organization_id, \
+                member.account_id IS NOT NULL, member.expires_at, token.app_sign_in_id, \
+                account.account_id IS NOT NULL, account.primary_email, \
+                account.primary_email_verified_at IS NOT NULL \
          FROM cloud_refresh_tokens token \
          JOIN cloud_devices device ON device.device_id = token.device_id \
+         LEFT JOIN cloud_organizations personal \
+           ON personal.personal_account_id = token.account_id \
+         LEFT JOIN cloud_organization_members member \
+           ON token.organization_id IS NOT NULL \
+          AND member.organization_id = token.organization_id \
+          AND member.account_id = token.account_id \
+          AND (member.expires_at IS NULL OR member.expires_at > now()) \
+         LEFT JOIN cloud_accounts account ON account.account_id = token.account_id \
          WHERE token.token_hash = $1 AND token.revoked_at IS NULL AND token.expires_at > $2 \
-           AND device.account_id = token.account_id AND device.revoked_at IS NULL"
-    ))
-    .bind(&token_hash)
+           AND device.account_id = token.account_id AND device.revoked_at IS NULL",
+    )
+    .bind(token_hash)
     .bind(now.to_rfc3339())
     .fetch_optional(pool)
     .await?;
 
     Ok(row.map(
-        |(token_id, account_id, device_id, expires_at, claimed, personal, claim_active)| {
-            CloudSessionRow {
+        |(
+            token_id,
+            account_id,
+            device_id,
+            expires_at,
+            claimed,
+            personal,
+            claim_active,
+            membership_expires_at,
+            app_sign_in_id,
+            account_found,
+            email,
+            verified,
+        )| SessionLookup {
+            row: CloudSessionRow {
                 token_id,
                 account_id,
                 device_id,
                 expires_at: parse_rfc3339(expires_at),
+                sliding_expiry: app_sign_in_id.is_none(),
                 organization: SessionOrganization {
                     claimed,
                     personal,
                     claim_active,
                 },
-            }
+            },
+            app_sign_in_id,
+            account: account_found.then_some((email, verified)),
+            membership_expires_at,
         },
     ))
 }
@@ -191,27 +279,56 @@ pub async fn revoke_session(pool: &PgPool, token_id: &str) -> Result<(), Session
     Ok(())
 }
 
-/// Slide a session's `expires_at` forward by `lifetime_days`. Access tokens
-/// from a browser sign-in keep their fixed expiry; the app refreshes them.
+/// The expiry a sliding session should move to, or `None` when the stored
+/// expiry `current` is already within [`SESSION_EXPIRY_BUMP_GRANULARITY_MINUTES`]
+/// of the target. Skipping a bump never shortens a session: the stored expiry
+/// stays at least `lifetime_days` minus the granularity in the future.
+pub fn sliding_expiry_target(
+    current: DateTime<Utc>,
+    now: DateTime<Utc>,
+    lifetime_days: i64,
+) -> Option<DateTime<Utc>> {
+    let target = now + Duration::days(lifetime_days.max(1));
+    let threshold = target - Duration::minutes(SESSION_EXPIRY_BUMP_GRANULARITY_MINUTES);
+    (current < threshold).then_some(target)
+}
+
+/// Slide the session `row` forward by `lifetime_days`, at most about once per
+/// [`SESSION_EXPIRY_BUMP_GRANULARITY_MINUTES`]. The decision uses the expiry
+/// the session lookup already loaded, so steady use sends no statement at
+/// all. Access tokens from a browser sign-in keep their fixed expiry; the app
+/// refreshes them. Returns whether the stored expiry moved.
 pub async fn bump_expiry(
     pool: &PgPool,
-    token_id: &str,
+    row: &CloudSessionRow,
     lifetime_days: i64,
-) -> Result<(), SessionError> {
-    let new_expiry = (Utc::now() + Duration::days(lifetime_days.max(1))).to_rfc3339();
-    query(
+) -> Result<bool, SessionError> {
+    if !row.sliding_expiry {
+        return Ok(false);
+    }
+    let now = Utc::now();
+    let Some(new_expiry) = sliding_expiry_target(row.expires_at, now, lifetime_days) else {
+        return Ok(false);
+    };
+    let threshold = new_expiry - Duration::minutes(SESSION_EXPIRY_BUMP_GRANULARITY_MINUTES);
+    // The expiry guard keeps concurrent requests that loaded the same stale
+    // row from writing again. `expires_at` is RFC 3339 text, so compare it as
+    // a timestamp rather than as a string.
+    let result = query(
         "UPDATE cloud_refresh_tokens token SET expires_at = $1 \
          FROM cloud_devices device \
          WHERE token.token_id = $2 AND token.revoked_at IS NULL \
            AND token.app_sign_in_id IS NULL \
+           AND token.expires_at::timestamptz < $3 \
            AND device.device_id = token.device_id AND device.account_id = token.account_id \
            AND device.revoked_at IS NULL",
     )
-    .bind(&new_expiry)
-    .bind(token_id)
+    .bind(new_expiry.to_rfc3339())
+    .bind(&row.token_id)
+    .bind(threshold)
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(result.rows_affected() > 0)
 }
 
 /// Check the PostgreSQL authorization source of truth for a long-lived
@@ -286,5 +403,7 @@ fn parse_rfc3339(value: String) -> DateTime<Utc> {
         .unwrap_or_else(|_| Utc::now())
 }
 
+#[cfg(test)]
+mod statement_count;
 #[cfg(test)]
 mod tests;
