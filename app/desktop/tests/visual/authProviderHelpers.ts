@@ -40,16 +40,17 @@ export const callbackHint = "After you approve in the browser it will land on a 
 // ChatGPT sign-in (OMP openai-codex) and API keys (OMP openai) share one OpenAI row.
 export const expectedProviderRows = 79;
 
-export async function openPreview(page: Page, variant: 'settings' | 'start' | 'login', options: { theme?: 'light' | 'dark'; provider?: string; method?: string; flags?: string[] } = {}) {
+export async function openPreview(page: Page, variant: 'settings' | 'start' | 'login', options: { theme?: 'light' | 'dark'; chatTheme?: string; provider?: string; method?: string; flags?: string[] } = {}) {
   const offOrigin: string[] = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (url.protocol.startsWith('http') && url.origin !== `http://127.0.0.1:${process.env.KORDI_VISUAL_PORT ?? '4174'}`) offOrigin.push(url.href);
   });
+  const chatTheme = options.chatTheme ? `&chatTheme=${encodeURIComponent(options.chatTheme)}` : '';
   const provider = options.provider ? `&provider=${encodeURIComponent(options.provider)}` : '';
   const method = options.method ? `&method=${encodeURIComponent(options.method)}` : '';
   const flags = (options.flags ?? []).map((flag) => `&${flag}=1`).join('');
-  await page.goto(`/tests/visual/authProviderConfig.html?variant=${variant}&theme=${options.theme ?? 'dark'}${provider}${method}${flags}`);
+  await page.goto(`/tests/visual/authProviderConfig.html?variant=${variant}&theme=${options.theme ?? 'dark'}${chatTheme}${provider}${method}${flags}`);
   await expect(page.getByRole('button', { name: /^Back( to providers)?$/ }).or(page.getByRole('textbox', { name: 'Search providers' }))).toBeVisible();
   return offOrigin;
 }

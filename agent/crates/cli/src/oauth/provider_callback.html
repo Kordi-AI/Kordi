@@ -9,18 +9,18 @@
   <style>
     :root {
       color-scheme: light dark;
-      --paper: #faf9f7;
-      --ink: #1a1714;
-      --ink-muted: #655e56;
-      --footer-ink: #81786f;
-      --rule: rgba(26, 23, 20, .09);
+      --paper: #fcfaf8;
+      --ink: #191817;
+      --ink-muted: #6d6865;
+      --footer-ink: var(--ink-muted);
+      --rule: #e8ddd8;
     }
 
     * { box-sizing: border-box; }
     html, body { min-height: 100%; margin: 0; }
     body {
       min-height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-family: Geist, "Helvetica Neue", system-ui, sans-serif;
       color: var(--ink);
       background: var(--paper);
       -webkit-font-smoothing: antialiased;
@@ -42,29 +42,28 @@
       align-items: center;
       gap: 10px;
       color: var(--ink);
-      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
       font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -.045em;
       line-height: 1;
     }
     .brand svg { width: 30px; height: 30px; flex: 0 0 auto; }
     main { display: flex; align-items: center; padding-block: 3.5rem 4.5rem; }
     .copy { width: 100%; }
     h1 {
-      max-width: 11ch;
       margin: 0;
       color: var(--ink);
-      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-      font-size: clamp(48px, 8vw, 72px);
-      font-weight: 400;
-      line-height: .98;
-      letter-spacing: -.035em;
+      font-size: clamp(2.5rem, 1.6rem + 2.6vw, 3.75rem);
+      font-weight: 600;
+      line-height: 1.06;
+      letter-spacing: -.045em;
       text-wrap: balance;
     }
     p {
       max-width: 43ch;
       margin: 18px 0 0;
       color: var(--ink-muted);
-      font-size: 15px;
+      font-size: 1.125rem;
       line-height: 1.65;
       text-wrap: balance;
     }
@@ -78,17 +77,16 @@
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --paper: #191814;
-        --ink: #f2efe9;
-        --ink-muted: #b8b0a7;
-        --footer-ink: #938b82;
-        --rule: rgba(242, 239, 233, .09);
+        --paper: #191817;
+        --ink: #f6f1ed;
+        --ink-muted: #bcb3ae;
+        --rule: rgb(246 241 237 / 0.13);
       }
     }
     @media (max-width: 520px) {
       .wrap, header .wrap { width: calc(100% - 3.5rem); }
       main { align-items: flex-start; padding-block: 5.5rem 3.5rem; }
-      h1 { font-size: clamp(48px, 16vw, 62px); }
+      h1 { font-size: clamp(2.125rem, 9vw, 2.75rem); }
     }
   </style>
 </head>
@@ -97,12 +95,12 @@
     <header>
       <div class="wrap">
         <div class="brand" aria-label="Kordi">
-          <svg viewBox='64 58 384 384' aria-hidden='true'><mask id='kordi-bird-cut' maskUnits='userSpaceOnUse' x='-100' y='-100' width='712' height='712'><ellipse cx='262' cy='292' rx='150' ry='136' fill='#fff'/><path d='M400,342 C436,322 462,272 470,204 C448,236 420,244 386,218Z' fill='#fff' stroke='#fff' stroke-width='4' stroke-linejoin='round'/><circle cx='194' cy='266' r='17'/><path d='M269.6,333.2 C292,299.6 348,282 397.6,285.2 C381.6,325.2 336.8,357.2 288.8,355.6 C272.8,354 264.8,344.4 269.6,333.2Z'/></mask><g transform='translate(256,250) scale(0.94) translate(-270,-292)'><path d='M120,276 L82,294 L120,312Z' fill='currentColor' stroke='currentColor' stroke-width='12' stroke-linejoin='round'/><rect x='-100' y='-100' width='712' height='712' fill='currentColor' mask='url(#kordi-bird-cut)'/></g></svg>
+          <svg viewBox='64 58 384 384' aria-hidden='true'><mask id='kordi-bird-cut' maskUnits='userSpaceOnUse' x='-100' y='-100' width='712' height='712'><ellipse cx='262' cy='292' rx='150' ry='136' fill='#fff'/><path d='M400,342 C436,322 462,272 470,204 C448,236 420,244 386,218Z' fill='#fff' stroke='#fff' stroke-width='4' stroke-linejoin='round'/><circle cx='194' cy='266' r='17'/><path d='M269.6,333.2 C292,299.6 348,282 397.6,285.2 C381.6,325.2 336.8,357.2 288.8,355.6 C272.8,354 264.8,344.4 269.6,333.2Z'/></mask><g transform='translate(256,250) scale(0.94) translate(-270,-292)'><path d='M120,276 L82,294 L120,312Z' fill='#f7b32b' stroke='#f7b32b' stroke-width='12' stroke-linejoin='round'/><rect x='-100' y='-100' width='712' height='712' fill='currentColor' mask='url(#kordi-bird-cut)'/></g></svg>
           <span>kordi</span>
         </div>
       </div>
     </header>
-    <main class="wrap" role="status">
+    <main class="wrap" role="status" aria-live="polite">
       <section class="copy">
         <h1>{{heading}}</h1>
         <p>{{description}}</p>

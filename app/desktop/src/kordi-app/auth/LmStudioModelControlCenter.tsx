@@ -28,7 +28,7 @@ import {
 } from '@/lib/desktop';
 import { cn } from '@/lib/utils';
 import {
-  AuthActionButton,
+  AuthActionButton, authButtonNeutralClass, authButtonPrimaryClass,
   nonDragStyle,
 } from './AuthDetailPrimitives';
 
@@ -103,10 +103,10 @@ const LM_STUDIO_CATALOG_URL = 'https://lmstudio.ai/models';
 const flatButtonShapeClass = '!h-8 !rounded-[10px] !px-3 shadow-none';
 
 const modelControlPrimaryClass =
-  `${flatButtonShapeClass} border border-emerald-300/24 bg-emerald-300/[0.09] text-emerald-50 hover:border-emerald-200/34 hover:bg-emerald-300/[0.13]`;
+  `${flatButtonShapeClass} ${authButtonPrimaryClass}`;
 
 const modelControlNeutralClass =
-  `${flatButtonShapeClass} border border-white/8 bg-white/[0.035] text-slate-200 hover:border-white/14 hover:bg-white/[0.06]`;
+  `${flatButtonShapeClass} ${authButtonNeutralClass}`;
 
 const modelControlStopClass =
   `${flatButtonShapeClass} border border-amber-300/18 bg-amber-300/[0.055] text-amber-50 hover:border-amber-200/26 hover:bg-amber-300/[0.08]`;
@@ -159,7 +159,7 @@ function RuntimeStatusPill({ running }: { running: boolean }) {
       'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium',
       running
         ? 'border-emerald-300/22 bg-emerald-300/[0.08] text-emerald-100'
-        : 'border-white/10 bg-white/[0.045] text-slate-300',
+        : 'border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] text-[color:var(--utility-muted-text)]',
     )}
     >
       {running ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
@@ -186,7 +186,7 @@ function ReadinessStep({
         ? 'border-emerald-300/18 bg-emerald-300/[0.055]'
         : active
           ? 'border-amber-300/18 bg-amber-300/[0.06]'
-          : 'border-white/8 bg-white/[0.035]',
+          : 'border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)]',
     )}
     >
       <span className={cn(
@@ -195,14 +195,14 @@ function ReadinessStep({
           ? 'border-emerald-300/25 bg-emerald-300/[0.12] text-emerald-100'
           : active
             ? 'border-amber-300/24 bg-amber-300/[0.1] text-amber-100'
-            : 'border-white/10 bg-white/[0.045] text-slate-500',
+            : 'border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] text-[color:var(--utility-meta-text)]',
       )}
       >
         {complete ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3 w-3" />}
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[12px] font-medium text-slate-100">{label}</span>
-        <span className="mt-0.5 block text-[10.5px] leading-4 text-slate-500">{detail}</span>
+        <span className="block truncate text-[12px] font-medium text-[color:var(--utility-foreground)]">{label}</span>
+        <span className="mt-0.5 block text-[10.5px] leading-4 text-[color:var(--utility-meta-text)]">{detail}</span>
       </span>
     </div>
   );
@@ -210,9 +210,9 @@ function ReadinessStep({
 
 function RuntimeMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[14px] border border-white/8 bg-white/[0.035] px-3 py-2">
-      <div className="text-[11px] font-medium tracking-[-0.01em] text-slate-500">{label}</div>
-      <div className="mt-1 truncate font-mono text-[11px] text-slate-200">{value}</div>
+    <div className="rounded-[14px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-3 py-2">
+      <div className="text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">{label}</div>
+      <div className="mt-1 truncate font-mono text-[11px] text-[color:var(--utility-foreground)]">{value}</div>
     </div>
   );
 }
@@ -738,17 +738,17 @@ export function LmStudioModelControlCenter({
 
   return (
     <div className="space-y-3.5 px-4 py-3.5">
-      <div className="overflow-hidden rounded-[24px] border border-white/8 bg-white/[0.045] shadow-none">
+      <div className="overflow-hidden rounded-[24px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] shadow-none">
         <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1.06fr)_minmax(280px,0.94fr)]">
           <div className="min-w-0">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.055] px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-slate-300">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-2.5 py-1 text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-muted-text)]">
               <Server className="h-3.5 w-3.5" /> LM Studio authentication
             </div>
-            <div className="mt-3 max-w-[16rem] text-[21px] font-semibold leading-7 tracking-[-0.04em] text-white sm:max-w-[30rem]">
+            <div className="mt-3 max-w-[16rem] text-[21px] font-semibold leading-7 tracking-[-0.04em] text-[color:var(--utility-foreground)] sm:max-w-[30rem]">
               One local model, loaded correctly, ready for Kordi chat.
             </div>
-            <div className="mt-2 max-w-[62ch] text-[12px] leading-5 text-slate-300">
-              Kordi treats LM Studio like a local chat provider: resolve <span className="font-mono text-slate-100">lms</span>, start the server, install an exact variant, then run it with the best supported context instead of the 4k default.
+            <div className="mt-2 max-w-[62ch] text-[12px] leading-5 text-[color:var(--utility-muted-text)]">
+              Kordi treats LM Studio like a local chat provider: resolve <span className="font-mono text-[color:var(--utility-foreground)]">lms</span>, start the server, install an exact variant, then run it with the best supported context instead of the 4k default.
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {pageEndAction ? (
@@ -761,13 +761,13 @@ export function LmStudioModelControlCenter({
                 </AuthActionButton>
               )}
             </div>
-            <div className="mt-3 rounded-[16px] border border-white/8 bg-white/[0.04] px-3 py-2 text-[11px] leading-5 text-slate-300">
-              <span className="font-medium text-slate-100">Next:</span> {primaryActionDetail}
+            <div className="mt-3 rounded-[16px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-3 py-2 text-[11px] leading-5 text-[color:var(--utility-muted-text)]">
+              <span className="font-medium text-[color:var(--utility-foreground)]">Next:</span> {primaryActionDetail}
             </div>
             {actionError ? (
               <ErrorLine className="mt-2" action={repairInstallAction}>{actionError}</ErrorLine>
             ) : actionMessage ? (
-              <div className="mt-2 rounded-[16px] border border-white/10 bg-white/[0.045] px-3 py-2 text-[11px] leading-5 text-slate-200">
+              <div className="mt-2 rounded-[16px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-3 py-2 text-[11px] leading-5 text-[color:var(--utility-foreground)]">
                 <div>{actionMessage}</div>
                 {setupNeedsInstallRefresh ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -780,15 +780,15 @@ export function LmStudioModelControlCenter({
             ) : null}
           </div>
 
-          <div className="rounded-[20px] border border-white/8 bg-black/15 p-3.5">
+          <div className="rounded-[20px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] p-3.5">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-[12px] font-medium text-white">Current runtime</div>
-                <div className="mt-1 text-[11px] leading-5 text-slate-400">Kordi uses this OpenAI-compatible endpoint for chat and checks running models with lms.</div>
+                <div className="text-[12px] font-medium text-[color:var(--utility-foreground)]">Current runtime</div>
+                <div className="mt-1 text-[11px] leading-5 text-[color:var(--utility-muted-text)]">Kordi uses this OpenAI-compatible endpoint for chat and checks running models with lms.</div>
               </div>
               <RuntimeStatusPill running={serverStatus?.running ?? false} />
             </div>
-            <div className="mt-3 rounded-[16px] border border-white/8 bg-white/[0.045] px-3 py-2 font-mono text-[11px] text-slate-200">
+            <div className="mt-3 rounded-[16px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-3 py-2 font-mono text-[11px] text-[color:var(--utility-foreground)]">
               {endpoint || `http://localhost:${port}/v1`}
             </div>
             <div className={cn(
@@ -864,11 +864,11 @@ export function LmStudioModelControlCenter({
         ))}
       </div>
 
-      <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-3.5">
+      <div className="rounded-[22px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] p-3.5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-[13px] font-medium text-white">LM Studio setup</div>
+              <div className="text-[13px] font-medium text-[color:var(--utility-foreground)]">LM Studio setup</div>
               <div className={cn(
                 'rounded-full border px-2 py-0.5 text-[10px] font-medium',
                 environment?.cliPath ? 'border-emerald-300/18 bg-emerald-300/[0.08] text-emerald-100' : 'border-amber-300/18 bg-amber-300/[0.08] text-amber-100',
@@ -878,8 +878,8 @@ export function LmStudioModelControlCenter({
               </div>
               {environment?.cliInShellPath ? <div className="rounded-full border border-sky-300/18 bg-sky-300/[0.07] px-2 py-0.5 text-[10px] text-sky-100">PATH configured</div> : null}
             </div>
-            <div className="mt-1 max-w-[72ch] text-[11px] leading-5 text-slate-400">
-              LM Studio ships <span className="font-mono text-slate-300">lms</span>, but macOS apps do not always inherit your Terminal PATH. Kordi checks the app, LM Studio home, CLI path, and shell PATH here.
+            <div className="mt-1 max-w-[72ch] text-[11px] leading-5 text-[color:var(--utility-muted-text)]">
+              LM Studio ships <span className="font-mono text-[color:var(--utility-muted-text)]">lms</span>, but macOS apps do not always inherit your Terminal PATH. Kordi checks the app, LM Studio home, CLI path, and shell PATH here.
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -906,28 +906,28 @@ export function LmStudioModelControlCenter({
 
         {isSetupDetailsExpanded ? (
         <div className="mt-3 grid gap-2 md:grid-cols-2">
-          <div className="rounded-[16px] border border-white/8 bg-black/10 px-3 py-2">
-            <div className="text-[11px] font-medium tracking-[-0.01em] text-slate-500">LM Studio app</div>
-            <div className="mt-1 break-all font-mono text-[11px] text-slate-200">{compactPath(environment?.appPath)}</div>
-            {environment?.appVersion ? <div className="mt-1 text-[10px] text-slate-500">Version {environment.appVersion}</div> : null}
+          <div className="rounded-[16px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] px-3 py-2">
+            <div className="text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">LM Studio app</div>
+            <div className="mt-1 break-all font-mono text-[11px] text-[color:var(--utility-foreground)]">{compactPath(environment?.appPath)}</div>
+            {environment?.appVersion ? <div className="mt-1 text-[10px] text-[color:var(--utility-meta-text)]">Version {environment.appVersion}</div> : null}
           </div>
-          <div className="rounded-[16px] border border-white/8 bg-black/10 px-3 py-2">
-            <div className="text-[11px] font-medium tracking-[-0.01em] text-slate-500">lms CLI</div>
-            <div className="mt-1 break-all font-mono text-[11px] text-slate-200">{compactPath(environment?.cliPath)}</div>
-            <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-slate-500">
+          <div className="rounded-[16px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] px-3 py-2">
+            <div className="text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">lms CLI</div>
+            <div className="mt-1 break-all font-mono text-[11px] text-[color:var(--utility-foreground)]">{compactPath(environment?.cliPath)}</div>
+            <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-[color:var(--utility-meta-text)]">
               {environment?.cliVersion ? <span>Version {environment.cliVersion}</span> : null}
               {environment?.cliSource ? <span>Source {environment.cliSource}</span> : null}
             </div>
           </div>
-          <div className="rounded-[16px] border border-white/8 bg-black/10 px-3 py-2">
-            <div className="text-[11px] font-medium tracking-[-0.01em] text-slate-500">LM Studio home</div>
-            <div className="mt-1 break-all font-mono text-[11px] text-slate-200">{compactPath(environment?.homePath)}</div>
-            {environment?.binPath ? <div className="mt-1 break-all font-mono text-[10px] text-slate-500">bin {compactPath(environment.binPath)}</div> : null}
+          <div className="rounded-[16px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] px-3 py-2">
+            <div className="text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">LM Studio home</div>
+            <div className="mt-1 break-all font-mono text-[11px] text-[color:var(--utility-foreground)]">{compactPath(environment?.homePath)}</div>
+            {environment?.binPath ? <div className="mt-1 break-all font-mono text-[10px] text-[color:var(--utility-meta-text)]">bin {compactPath(environment.binPath)}</div> : null}
           </div>
-          <div className="rounded-[16px] border border-white/8 bg-black/10 px-3 py-2">
-            <div className="text-[11px] font-medium tracking-[-0.01em] text-slate-500">Shell path</div>
-            <div className="mt-1 text-[11px] text-slate-200">{environment?.cliInShellPath ? 'lms is available from shell PATH' : 'lms is not in shell PATH yet'}</div>
-            {environment?.shellConfigPaths.length ? <div className="mt-1 break-all font-mono text-[10px] text-slate-500">{environment.shellConfigPaths.map(compactPath).join(' · ')}</div> : null}
+          <div className="rounded-[16px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] px-3 py-2">
+            <div className="text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">Shell path</div>
+            <div className="mt-1 text-[11px] text-[color:var(--utility-foreground)]">{environment?.cliInShellPath ? 'lms is available from shell PATH' : 'lms is not in shell PATH yet'}</div>
+            {environment?.shellConfigPaths.length ? <div className="mt-1 break-all font-mono text-[10px] text-[color:var(--utility-meta-text)]">{environment.shellConfigPaths.map(compactPath).join(' · ')}</div> : null}
           </div>
         </div>
         ) : null}
@@ -951,11 +951,11 @@ export function LmStudioModelControlCenter({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-[13px] font-medium text-white">Installed locally</div>
+              <div className="text-[13px] font-medium text-[color:var(--utility-foreground)]">Installed locally</div>
               <div className="rounded-full border border-emerald-300/18 bg-emerald-300/[0.07] px-2 py-0.5 text-[10px] text-emerald-100">{installedModels.length} models</div>
             </div>
-            <div className="mt-1 max-w-[72ch] text-[11px] leading-5 text-slate-400">
-              This list comes from <span className="font-mono text-slate-300">lms ls --json</span>. Run clears stale LM Studio instances, then reloads with the best supported context length.
+            <div className="mt-1 max-w-[72ch] text-[11px] leading-5 text-[color:var(--utility-muted-text)]">
+              This list comes from <span className="font-mono text-[color:var(--utility-muted-text)]">lms ls --json</span>. Run clears stale LM Studio instances, then reloads with the best supported context length.
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -983,20 +983,20 @@ export function LmStudioModelControlCenter({
         ) : null}
 
         {isInstalledSectionExpanded ? (
-        <div className="mt-3 overflow-hidden rounded-[18px] border border-white/8 bg-black/10">
+        <div className="mt-3 overflow-hidden rounded-[18px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)]">
           {installedModels.length > 0 ? installedModels.map((model) => {
             const running = isVariantRunning(model.id);
             const runtimeAction = running ? `stop:${model.id}` : `load:${model.id}`;
             const catalogDetail = variantDetailsById.get(model.id);
             return (
-              <div key={model.id} className="grid gap-2 border-b border-white/6 px-3.5 py-2.5 last:border-b-0 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+              <div key={model.id} className="grid gap-2 border-b border-[color:var(--app-divider)] px-3.5 py-2.5 last:border-b-0 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="truncate font-mono text-[12px] text-slate-100">{model.id}</div>
+                    <div className="truncate font-mono text-[12px] text-[color:var(--utility-foreground)]">{model.id}</div>
                     <span className="rounded-full border border-emerald-300/18 bg-emerald-300/[0.08] px-2 py-0.5 text-[10px] font-medium text-emerald-100">Installed</span>
                     {running ? <span className="rounded-full border border-amber-300/18 bg-amber-300/[0.08] px-2 py-0.5 text-[10px] font-medium text-amber-100">Running</span> : null}
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-[color:var(--utility-meta-text)]">
                     {model.size ?? catalogDetail?.variant.size ? <span>{model.size ?? catalogDetail?.variant.size}</span> : null}
                     {catalogDetail ? <span>{catalogDetail.family.name}</span> : null}
                     {model.architecture ? <span>{model.architecture}</span> : null}
@@ -1020,8 +1020,8 @@ export function LmStudioModelControlCenter({
             );
           }) : (
             <div className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-              <div className="min-w-0 text-[12px] leading-5 text-slate-400">
-                <div className="font-medium text-slate-200">No installed LM Studio models yet.</div>
+              <div className="min-w-0 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">
+                <div className="font-medium text-[color:var(--utility-foreground)]">No installed LM Studio models yet.</div>
                 <div className="mt-1">Open the catalog, expand a family, and click Get on the exact variant you want Kordi to run.</div>
               </div>
               <AuthActionButton
@@ -1036,14 +1036,14 @@ export function LmStudioModelControlCenter({
         ) : null}
       </div>
 
-      <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-3.5">
+      <div className="rounded-[22px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] p-3.5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-[13px] font-medium text-white">Full LM Studio model catalog</div>
-              <div className="rounded-full border border-white/10 bg-white/[0.045] px-2 py-0.5 text-[10px] text-slate-300">{catalogSummary}</div>
+              <div className="text-[13px] font-medium text-[color:var(--utility-foreground)]">Full LM Studio model catalog</div>
+              <div className="rounded-full border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-2 py-0.5 text-[10px] text-[color:var(--utility-muted-text)]">{catalogSummary}</div>
             </div>
-            <div className="mt-1 max-w-[72ch] text-[11px] leading-5 text-slate-400">
+            <div className="mt-1 max-w-[72ch] text-[11px] leading-5 text-[color:var(--utility-muted-text)]">
               Families stay folded by default. Catalog rows install variants; runtime controls live in the Installed locally list.
             </div>
           </div>
@@ -1063,13 +1063,13 @@ export function LmStudioModelControlCenter({
 
         {isCatalogSectionExpanded ? (
           <>
-        <div className="mt-3 flex items-center gap-2 rounded-[17px] border border-white/8 bg-black/10 px-3 py-2">
-          <Search className="h-4 w-4 shrink-0 text-slate-500" />
+        <div className="mt-3 flex items-center gap-2 rounded-[17px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] px-3 py-2">
+          <Search className="h-4 w-4 shrink-0 text-[color:var(--utility-meta-text)]" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search families or variants, e.g. gemma-4-e4b…"
-            className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-slate-500"
+            className="min-w-0 flex-1 bg-transparent text-[12px] text-[color:var(--utility-foreground)] outline-none placeholder:text-[color:var(--utility-meta-text)]"
             style={nonDragStyle}
           />
         </div>
@@ -1081,18 +1081,18 @@ export function LmStudioModelControlCenter({
             const expanded = expandedFamilyIds.has(model.id);
             const variants = visibleVariants(model, expanded, normalizedQuery);
             return (
-              <div key={model.id} className="overflow-hidden rounded-[19px] border border-white/8 bg-[color:var(--app-control-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
+              <div key={model.id} className="overflow-hidden rounded-[19px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
                 <div className="px-3.5 py-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="text-[13px] font-medium text-white">{model.name}</div>
+                        <div className="text-[13px] font-medium text-[color:var(--utility-foreground)]">{model.name}</div>
                         <div className={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', modelToneClass(index))}>{modelSizesLabel(model)}</div>
-                        <div className="rounded-full border border-white/8 bg-white/[0.035] px-2 py-0.5 text-[10px] text-slate-400">{model.variants.length} variants</div>
-                        {model.updated ? <div className="text-[10px] text-slate-500">{model.updated}</div> : null}
+                        <div className="rounded-full border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-2 py-0.5 text-[10px] text-[color:var(--utility-muted-text)]">{model.variants.length} variants</div>
+                        {model.updated ? <div className="text-[10px] text-[color:var(--utility-meta-text)]">{model.updated}</div> : null}
                       </div>
-                      <div className="mt-1 text-[11px] leading-5 text-slate-400">
-                        Family id <span className="font-mono text-slate-300">{model.id}</span>. Expand to choose the exact model variant.
+                      <div className="mt-1 text-[11px] leading-5 text-[color:var(--utility-muted-text)]">
+                        Family id <span className="font-mono text-[color:var(--utility-muted-text)]">{model.id}</span>. Expand to choose the exact model variant.
                       </div>
                     </div>
                     <div className="flex flex-wrap justify-end gap-1.5">
@@ -1109,17 +1109,17 @@ export function LmStudioModelControlCenter({
                   </div>
                 </div>
                 {expanded || normalizedQuery ? (
-                  <div className="border-t border-white/8">
+                  <div className="border-t border-[color:var(--app-divider)]">
                     {variants.length > 0 ? variants.map((variant) => {
                       const installed = installedModelIds.has(variant.id);
                       return (
-                        <div key={variant.id} className="grid gap-2 border-b border-white/6 px-3.5 py-2.5 last:border-b-0 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                        <div key={variant.id} className="grid gap-2 border-b border-[color:var(--app-divider)] px-3.5 py-2.5 last:border-b-0 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <div className="truncate font-mono text-[12px] text-slate-100">{variant.id}</div>
+                              <div className="truncate font-mono text-[12px] text-[color:var(--utility-foreground)]">{variant.id}</div>
                               {installed ? <span className="rounded-full border border-emerald-300/18 bg-emerald-300/[0.08] px-2 py-0.5 text-[10px] font-medium text-emerald-100">Installed</span> : null}
                             </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-[color:var(--utility-meta-text)]">
                               {variant.size ? <span>{variant.size}</span> : <span>Size from LM Studio</span>}
                               <span>Exact model variant</span>
                             </div>
@@ -1136,14 +1136,14 @@ export function LmStudioModelControlCenter({
                         </div>
                       );
                     }) : (
-                      <div className="px-3.5 py-3 text-[11px] text-slate-500">No variants matched this search.</div>
+                      <div className="px-3.5 py-3 text-[11px] text-[color:var(--utility-meta-text)]">No variants matched this search.</div>
                     )}
                   </div>
                 ) : null}
               </div>
             );
           }) : (
-            <div className="rounded-[18px] border border-white/8 bg-white/[0.035] px-4 py-4 text-[12px] text-slate-400">
+            <div className="rounded-[18px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-4 py-4 text-[12px] text-[color:var(--utility-muted-text)]">
               {activeAction === 'catalog' ? 'Loading LM Studio catalog…' : `No LM Studio catalog models match “${query}”.`}
             </div>
           )}
