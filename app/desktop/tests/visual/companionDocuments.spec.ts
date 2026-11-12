@@ -1,10 +1,19 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 test.use({ reducedMotion: 'no-preference' });
+
+async function openDocumentFixture(page: Page, tabs: number, theme: string) {
+  await page.goto(`/tests/visual/companionDocuments.html?tabs=${tabs}&theme=${theme}`);
+  // This fixture boots the complete app before opening its sample documents.
+  // Allow cold CI startup more time; interaction assertions keep their usual timeout.
+  await expect(page.getByRole('tab', { name: 'notes.txt', exact: true }))
+    .toBeVisible({ timeout: 15_000 });
+}
+
 for (const theme of ['light', 'dark']) {
  test(`${theme}: smooth document tab navigation and overflow`, async ({ page }, testInfo) => {
  await page.setViewportSize({width:1440,height:900});
  const errors: string[]=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto(`/tests/visual/companionDocuments.html?tabs=12&theme=${theme}`);
+ await openDocumentFixture(page, 12, theme);
  const list=page.getByRole('tablist',{name:'Open documents',exact:true});
  const next=page.getByRole('button',{name:'Next tabs',exact:true});
  const previous=page.getByRole('button',{name:'Previous tabs',exact:true});
@@ -59,8 +68,7 @@ for (const theme of ['light', 'dark']) {
  test(`${theme}: folding restores document readers and tab state`, async ({ page }, testInfo) => {
  await page.setViewportSize({width:1440,height:800});
  const errors: string[]=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto(`/tests/visual/companionDocuments.html?tabs=6&theme=${theme}`);
- await expect(page.getByRole('tab',{name:'notes.txt',exact:true})).toBeVisible();
+ await openDocumentFixture(page, 6, theme);
  await page.getByRole('button',{name:'Wrap lines',exact:true}).click();
  const source=page.locator('.app-companion-source:visible');
  await source.evaluate(e=>{e.scrollLeft=160;(e as HTMLElement).dataset.retainedReader='true';});
@@ -95,9 +103,8 @@ for (const theme of ['light', 'dark']) {
 
 for (const theme of ['light', 'dark']) {
  test(`${theme}: Chat, Digest, Calendar and documents share one tab strip`, async ({ page }, testInfo) => {
-  await page.goto(`/tests/visual/companionDocuments.html?tabs=2&theme=${theme}`);
+  await openDocumentFixture(page, 2, theme);
   const toolbar = page.getByRole('group', { name: 'Companion panel' });
-  await expect(page.getByRole('tab', { name: 'notes.txt', exact: true })).toBeVisible();
   await toolbar.getByRole('button', { name: 'Digest', exact: true }).click();
   await toolbar.getByRole('button', { name: 'Digest', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Digest', exact: true })).toHaveCount(1);
@@ -146,8 +153,7 @@ for (const theme of ['light', 'dark']) {
 
 for (const theme of ['light', 'dark']) {
  test(`${theme}: Chat navigation aligns with the main conversation`, async ({ page }, testInfo) => {
-  await page.goto(`/tests/visual/companionDocuments.html?tabs=2&theme=${theme}`);
-  await expect(page.getByRole('tab', { name: 'notes.txt', exact: true })).toBeVisible();
+  await openDocumentFixture(page, 2, theme);
   await page.getByRole('group', { name: 'Companion panel' }).getByRole('button', { name: 'Chat', exact: true }).click();
   const panel = page.locator('[data-chat-side-agent-panel]');
   await expect(panel).toBeVisible();
