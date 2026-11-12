@@ -11,6 +11,30 @@ use uuid::Uuid;
 use super::db_fixture::*;
 
 #[tokio::test]
+async fn uploaded_author_avatar_is_preserved_for_members_and_public_readers() {
+    let Some(f) = fixture().await else { return };
+    let marker = format!("kordi-avatar://uploaded/ava_{}", Uuid::new_v4().simple());
+    query("UPDATE cloud_accounts SET avatar_url = $1 WHERE account_id = $2")
+        .bind(&marker)
+        .bind(&f.owner)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+
+    let share = create_share(&f).await;
+    let public_uri = format!("/v1/cloud/public/documents/{}", token_of(&share));
+    let member_uri = format!("/v1/cloud/documents/{}", f.attachment_id);
+    for (uri, token) in [
+        (member_uri.as_str(), Some(f.member_token.as_str())),
+        (public_uri.as_str(), None),
+    ] {
+        let (status, document) = send(&f.app, "GET", uri, token, None).await;
+        assert_eq!(status, StatusCode::OK, "{document}");
+        assert_eq!(document["author"]["avatarUrl"], marker);
+    }
+}
+
+#[tokio::test]
 async fn owner_share_is_reused_and_members_cannot_share() {
     let Some(f) = fixture().await else { return };
     let first = create_share(&f).await;
