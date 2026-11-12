@@ -248,7 +248,7 @@ pub(crate) async fn match_replies(
         let reply = &replies[*index];
         // Questions that share one asked message (a task's runs waiting on
         // the same question) all take the answer.
-        let answered: Vec<(Uuid,)> = query_as("UPDATE cloud_agent_exchanges SET status='reply_received',response_text=$2,response_message_id=$3,received_at=now() WHERE status='pending' AND target_kind='person' AND (exchange_id=$1 OR request_message_id=(SELECT request_message_id FROM cloud_agent_exchanges WHERE exchange_id=$1)) RETURNING exchange_id")
+        let answered: Vec<(Uuid,)> = query_as("UPDATE cloud_agent_exchanges SET status='reply_received',response_text=$2,response_message_id=$3,received_at=now() WHERE status='pending' AND target_kind='person' AND deadline_at>now() AND (exchange_id=$1 OR request_message_id=(SELECT request_message_id FROM cloud_agent_exchanges WHERE exchange_id=$1)) RETURNING exchange_id")
             .bind(exchange).bind(&reply.text).bind(reply.message).fetch_all(&mut *tx).await?;
         for (answered,) in answered {
             progress::update(&mut tx, answered, "processing").await?;

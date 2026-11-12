@@ -221,7 +221,7 @@ private struct AppIconThumbnail: View {
                     if isSelected {
                         Image(systemName: "checkmark")
                             .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(chatTheme.accentForeground)
                             .frame(width: 16, height: 16)
                             .background(chatTheme.accent, in: Circle())
                             .offset(x: 2, y: -2)
@@ -265,7 +265,7 @@ private struct AppearanceOptionCard<Preview: View>: View {
                         if isSelected {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(chatTheme.accentForeground)
                                 .frame(width: 16, height: 16)
                                 .background(chatTheme.accent, in: Circle())
                                 .padding(5)

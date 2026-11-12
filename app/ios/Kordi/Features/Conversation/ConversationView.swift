@@ -3279,7 +3279,7 @@ private struct ConversationCallBanner: View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(chatTheme.accentForeground)
                 .frame(width: 38, height: 38)
                 .background(chatTheme.accent.gradient, in: Circle())
 
@@ -3689,7 +3689,7 @@ private struct MentionNavigationButton: View {
                 .overlay(alignment: .topTrailing) {
                     Text(ConversationAttentionBadge.countLabel(count))
                         .font(.caption2.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(chatTheme.accentForeground)
                         .padding(.horizontal, 5)
                         .frame(minWidth: 20, minHeight: 20)
                         .background(chatTheme.accent, in: Capsule())
@@ -3729,7 +3729,7 @@ private struct LatestMessageButton: View {
                     if count > 0 {
                         Text(ConversationAttentionBadge.countLabel(count))
                             .font(.caption2.bold())
-                            .foregroundStyle(.white)
+                            .foregroundStyle(chatTheme.accentForeground)
                             .padding(.horizontal, 5)
                             .frame(minWidth: 20, minHeight: 20)
                             .background(chatTheme.accent, in: Capsule())
@@ -4198,7 +4198,7 @@ private struct ThreadNavigationButton: View {
                 .background(.regularMaterial, in: Circle())
                 .overlay { Circle().stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5) }
                 .overlay(alignment: .topTrailing) {
-                    Text(ConversationAttentionBadge.countLabel(count)).font(.caption2.bold()).foregroundStyle(.white)
+                    Text(ConversationAttentionBadge.countLabel(count)).font(.caption2.bold()).foregroundStyle(chatTheme.accentForeground)
                         .padding(.horizontal, 5).frame(minWidth: 20, minHeight: 20)
                         .background(chatTheme.accent, in: Capsule()).offset(x: 7, y: -6)
                 }

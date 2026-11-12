@@ -19,3 +19,21 @@ pub(super) async fn answered_exchange(
     .await?;
     Ok(row.map(|r| r.0))
 }
+
+/// Check under the session lock before publishing or resuming an answer.
+pub(super) async fn can_reply(
+    conn: &mut sqlx_postgres::PgConnection,
+    exchange: Option<Uuid>,
+) -> RunResult<bool> {
+    let Some(exchange) = exchange else {
+        return Ok(true);
+    };
+    let (open,): (bool,) = query_as(
+        "SELECT EXISTS(SELECT 1 FROM cloud_agent_exchanges
+         WHERE exchange_id=$1 AND status='pending' AND deadline_at>clock_timestamp())",
+    )
+    .bind(exchange)
+    .fetch_one(conn)
+    .await?;
+    Ok(open)
+}

@@ -454,15 +454,13 @@ final class AppModel: ObservableObject {
             token = savedToken
             account = restoredAccount.preservingEmailVerification(from: account)
             conversations = []
+            archivedConversations = []
             projectDevices = []
             projectError = nil
             if let snapshot = await wireCache.load(accountId: restoredAccount.accountId) {
                 personalAgents = snapshot.personalAgents
                 if let visibility = snapshot.visibility {
-                    applyCloudSessionVisibility(visibility)
-                    conversations = restoredConversations(accountId: restoredAccount.accountId).filter {
-                        !hiddenCloudSessionIds.contains($0.sessionId) && !deletedCloudSessionIds.contains($0.sessionId)
-                    }
+                    restoreCachedConversationCatalog(accountId: restoredAccount.accountId, visibility: visibility)
                 }
                 sessionPinsByID = snapshot.sessionPinsByID ?? [:]
                 cloudMessagesByPeer = snapshot.messagesByPeer
@@ -879,8 +877,7 @@ final class AppModel: ObservableObject {
             async let fetchedPersonalAgents = try? api.listPersonalAgents(token: token)
             let (canonicalAccount, contactList) = try await (refreshedAccount, fetchedContacts)
             guard sessionIdentity.contains(token), self.account?.accountId == canonicalAccount.accountId else { return false }
-            self.account = canonicalAccount.preservingEmailVerification(from: self.account)
-            contacts = contactList.sorted { $0.preferredName.localizedCaseInsensitiveCompare($1.preferredName) == .orderedAscending }
+            applyWorkspaceDirectory(account: canonicalAccount, contacts: contactList)
             didRefreshDirectory = true
             // Profile updates must not be discarded if unrelated workspace data fails.
             let (presence, requests, owned, visibility, authProfiles, deviceList, latestCanonical, activeCalls, listedPersonalAgents) = try await (
@@ -898,13 +895,12 @@ final class AppModel: ObservableObject {
                 ownerAccountIds: Array(sharedAgentOwnerIDs)
             )
             guard sessionIdentity.contains(token), self.account?.accountId == account.accountId, !Task.isCancelled else { return false }
-            contacts = contactList.sorted { $0.preferredName.localizedCaseInsensitiveCompare($1.preferredName) == .orderedAscending }
             if let presence {
                 applyContactPresenceSnapshot(presence)
             }
-            contactRequests = requests
-            if let listedPersonalAgents { personalAgents = listedPersonalAgents }
-            ownedCloudAgents = owned
+            if contactRequests != requests { contactRequests = requests }
+            if let listedPersonalAgents, personalAgents != listedPersonalAgents { personalAgents = listedPersonalAgents }
+            if ownedCloudAgents != owned { ownedCloudAgents = owned }
             if shouldRecordRemoteModelChanges {
                 recordSyncedAgentModelChanges(
                     previousAgentsByID: previousOwnedAgents,
@@ -915,14 +911,17 @@ final class AppModel: ObservableObject {
             if let authProfiles {
                 applyProviderAuthProfiles(authProfiles, loaded: true)
             } else {
-                hasLoadedProviderAuthentication = false
+                if hasLoadedProviderAuthentication { hasLoadedProviderAuthentication = false }
             }
             if let deviceList {
-                devices = deviceList
-                currentDeviceId = deviceList.first(where: \.currentDevice)?.deviceId
-                deviceReviewRequired = deviceList.contains { $0.needsReview && !$0.currentDevice }
+                if devices != deviceList { devices = deviceList }
+                let currentID = deviceList.first(where: \.currentDevice)?.deviceId
+                if currentDeviceId != currentID { currentDeviceId = currentID }
+                let needsReview = deviceList.contains { $0.needsReview && !$0.currentDevice }
+                if deviceReviewRequired != needsReview { deviceReviewRequired = needsReview }
             }
-            sharedCloudAgents = normalizedSharedCloudAgents(shared)
+            let normalizedShared = normalizedSharedCloudAgents(shared)
+            if sharedCloudAgents != normalizedShared { sharedCloudAgents = normalizedShared }
             if SessionVisibilitySnapshotPolicy.shouldApply(
                 startRevision: sessionVisibilityRevisionAtStart,
                 currentRevision: sessionVisibilityMutationRevision,
@@ -953,9 +952,19 @@ final class AppModel: ObservableObject {
                 sessionIds: canonicalGroupSessionIds
             )
             guard sessionIdentity.contains(token), self.account?.accountId == account.accountId, !Task.isCancelled else { return false }
-            let groupParticipantIds = Set(cloudMessagesByPeer.values.flatMap { messages in
-                messages.flatMap { CloudGroupMessageCodec.parse($0.body)?.participants.map(\.accountId) ?? [] }
-            })
+            let participantSnapshot = cloudMessagesByPeer
+            // Decoding the full wire cache can exceed a frame budget even in
+            // Release. Transfer an immutable snapshot off the main actor.
+            let participantScan = Task.detached(priority: .utility) {
+                CloudMessageStateProjector.groupParticipantAccountIDs(in: participantSnapshot)
+            }
+            let groupParticipantIds = await withTaskCancellationHandler {
+                await participantScan.value
+            } onCancel: {
+                participantScan.cancel()
+            }
+            guard sessionIdentity.contains(token), self.account?.accountId == account.accountId,
+                  !Task.isCancelled else { return false }
             let alreadyLoadedOwners = Set(shared.map(\.ownerAccountId))
             let additionalOwners = groupParticipantIds
                 .subtracting(alreadyLoadedOwners)
@@ -967,12 +976,12 @@ final class AppModel: ObservableObject {
                 )
                 guard sessionIdentity.contains(token), self.account?.accountId == account.accountId, !Task.isCancelled else { return false }
                 shared = normalizedSharedCloudAgents(shared + additional)
-                sharedCloudAgents = shared
+                if sharedCloudAgents != shared { sharedCloudAgents = shared }
             }
             mergeMessageHistories(history.messagesByPeer)
             await rebuildConversationCatalog()
             await refreshProviderAuthentication()
-            cloudConnectionState = .connected
+            if cloudConnectionState != .connected { cloudConnectionState = .connected }
             messageSyncState = history.complete
                 && groupHistoryComplete
                 ? (hasHydratedWireSnapshot ? .upToDate : .syncing)
@@ -981,7 +990,7 @@ final class AppModel: ObservableObject {
                 lastMessageSyncAt = Date()
             }
             await persistCloudSnapshot(accountId: account.accountId)
-            errorMessage = nil
+            if errorMessage != nil { errorMessage = nil }
         } catch {
             if CloudTransportErrorPolicy.isCancellation(error) || Task.isCancelled { return false }
             guard sessionIdentity.contains(token), self.account?.accountId == account.accountId else { return false }
@@ -993,12 +1002,23 @@ final class AppModel: ObservableObject {
         return didRefreshDirectory
     }
 
+    /// Refreshes profile data without invalidating every observing page for an
+    /// identical server snapshot. Directory order is canonical before comparison.
+    func applyWorkspaceDirectory(account: CloudAccount, contacts: [CloudContact]) {
+        let nextAccount = account.preservingEmailVerification(from: self.account)
+        if self.account != nextAccount { self.account = nextAccount }
+        let nextContacts = contacts.sorted {
+            $0.preferredName.localizedCaseInsensitiveCompare($1.preferredName) == .orderedAscending
+        }
+        if self.contacts != nextContacts { self.contacts = nextContacts }
+    }
+
     func refreshContactRequests() async {
         guard let token, !previewMode else { return }
         do {
             let requests = try await api.listContactRequests(token: token)
             guard sessionIdentity.contains(token) else { return }
-            contactRequests = requests
+            if contactRequests != requests { contactRequests = requests }
         } catch {
             // The chat sync loop retries this best-effort inbox refresh. User-triggered
             // contact actions continue to surface their own actionable errors.
@@ -1540,21 +1560,21 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func applyProviderAuthProfiles(_ profiles: [CloudProviderAuthSnapshot], loaded: Bool? = nil) {
-        if let loaded { hasLoadedProviderAuthentication = loaded }
+    func applyProviderAuthProfiles(_ profiles: [CloudProviderAuthSnapshot], loaded: Bool? = nil) {
+        if let loaded, hasLoadedProviderAuthentication != loaded { hasLoadedProviderAuthentication = loaded }
         let ordered = profiles.sorted {
             $0.createdAt == $1.createdAt
                 ? $0.snapshotId > $1.snapshotId
                 : $0.createdAt > $1.createdAt
         }
-        providerAuthProfiles = ordered
-        providerAuthSnapshot = ordered.first
+        if providerAuthProfiles != ordered { providerAuthProfiles = ordered }
+        if providerAuthSnapshot != ordered.first { providerAuthSnapshot = ordered.first }
         var latest: [String: CloudProviderAuthSnapshot] = [:]
         for profile in ordered {
             let providerID = ProviderAuthenticationDefinition.canonicalID(profile.provider)
             if latest[providerID] == nil { latest[providerID] = profile }
         }
-        providerAuthSnapshots = latest
+        if providerAuthSnapshots != latest { providerAuthSnapshots = latest }
     }
 
     private func upsertProviderAuthProfile(_ profile: CloudProviderAuthSnapshot) {
@@ -5240,6 +5260,7 @@ final class AppModel: ObservableObject {
             conversations.append(contentsOf: moved)
             conversations.sort { $0.lastActivityAt > $1.lastActivityAt }
         }
+        cacheCurrentConversations()
     }
 
     private func beginSessionVisibilityMutation() {
@@ -6005,6 +6026,16 @@ final class AppModel: ObservableObject {
         return attachment.kind == .image ? "Photo" : attachment.name
     }
 
+    func restoreCachedConversationCatalog(accountId: String, visibility: CloudSessionVisibility) {
+        guard account?.accountId == accountId else { return }
+        applyCloudSessionVisibility(visibility)
+        let restored = restoredConversations(accountId: accountId).filter {
+            !deletedCloudSessionIds.contains($0.sessionId)
+        }
+        conversations = restored.filter { !hiddenCloudSessionIds.contains($0.sessionId) }
+        archivedConversations = restored.filter { hiddenCloudSessionIds.contains($0.sessionId) }
+    }
+
     private func restoredConversations(accountId: String) -> [ConversationSummary] {
         guard let cache else { return [] }
         let restored = cache.loadConversations(accountId: accountId)
@@ -6319,6 +6350,22 @@ final class AppModel: ObservableObject {
                 .subtracting(fullyHydratedCanonicalGroupSessionIds)
         ).sorted()
         guard !uniqueSessionIds.isEmpty else { return true }
+        let expectedAccountID = account?.accountId
+        let wireSnapshot = cloudMessagesByPeer
+        // Envelope decoding is CPU work. Keep it off the main actor and reuse
+        // one snapshot across all pages instead of scanning the cache per group.
+        let indexing = Task.detached(priority: .utility) {
+            CloudMessageStateProjector.historyMessagesBySession(
+                wireSnapshot, sessionIDs: Set(uniqueSessionIds)
+            )
+        }
+        let historyIndex = await withTaskCancellationHandler {
+            await indexing.value
+        } onCancel: {
+            indexing.cancel()
+        }
+        guard !Task.isCancelled, sessionIdentity.contains(token),
+              account?.accountId == expectedAccountID else { return false }
         var complete = true
         let batchSize = 4
         for start in stride(from: 0, to: uniqueSessionIds.count, by: batchSize) {
@@ -6348,20 +6395,19 @@ final class AppModel: ObservableObject {
                 for await page in group { result.append(page) }
                 return result
             }
+            guard !Task.isCancelled, sessionIdentity.contains(token),
+                  account?.accountId == expectedAccountID else { return false }
             for page in pages {
                 guard let messages = page.messages else {
                     complete = false
                     continue
                 }
-                removeCloudMessages(Self.cloudMessageIDsMissingFromHistoryPage(
-                    cloudMessagesByPeer.values.flatMap { $0 },
-                    page: CloudConversationMessagePage(
-                        messages: messages,
-                        nextBeforeSequence: nil,
-                        hasMore: false
-                    ),
-                    sessionId: page.sessionId,
-                    beforeSequence: nil
+                let pageIDs = Set(messages.map(\.messageId))
+                let missing = historyIndex[page.sessionId, default: []].filter {
+                    !pageIDs.contains($0.messageId)
+                }
+                removeCloudMessages(CloudMessageStateProjector.unchangedHistoryMessageIDs(
+                    missing, in: cloudMessagesByPeer
                 ))
                 for message in messages { mergeCloudMessage(message, peerHint: nil) }
                 fullyHydratedCanonicalGroupSessionIds.insert(page.sessionId)
@@ -7160,6 +7206,10 @@ final class AppModel: ObservableObject {
             )
         }.value
         guard self.account?.accountId == account.accountId, token == expectedToken, visibilityRevision == sessionVisibilityMutationRevision else { return }
+        // Publishing once per session makes catalog size multiply the work of
+        // every AppModel observer, including the tab/navigation shell. Reconcile
+        // a local snapshot and publish only when its value actually changed.
+        var nextAgentRunState = agentRunState
         let projected = rebuilt.map { conversation in
             var copy = conversation
             if let attention = threadAttentionBySession[conversation.sessionId] {
@@ -7173,10 +7223,11 @@ final class AppModel: ObservableObject {
                 if pendingAgentRequestIds[conversation.id] != nil {
                     copy.agentActivity = agentRunState[conversation.id] ?? .replying
                 }
-                agentRunState[conversation.id] = copy.agentActivity ?? .ready
+                nextAgentRunState[conversation.id] = copy.agentActivity ?? .ready
             }
             return copy
         }
+        if nextAgentRunState != agentRunState { agentRunState = nextAgentRunState }
         let visible = projected.filter {
             !hiddenSnapshot.contains($0.sessionId)
                 && !deletedSnapshot.contains($0.sessionId)
@@ -7185,19 +7236,24 @@ final class AppModel: ObservableObject {
             hiddenSnapshot.contains($0.sessionId)
                 && !deletedSnapshot.contains($0.sessionId)
         }
+        // An inout access to @Published writes back even when the helper made
+        // no changes. Keep unchanged message histories out of the update path.
+        var rekeyedMessages = messagesByConversation
         let rekeyedConversationIDs = Self.rekeyMessages(
-            &messagesByConversation,
+            &rekeyedMessages,
             from: conversations + archivedConversations,
             to: projected
         )
+        if !rekeyedConversationIDs.isEmpty { messagesByConversation = rekeyedMessages }
         rekeyedConversationIDs.forEach(cacheCurrentMessages)
+        let catalogChanged = visible != conversations || archived != archivedConversations
         if visible != conversations {
             conversations = visible
-            cacheCurrentConversations()
         }
         if archived != archivedConversations {
             archivedConversations = archived
         }
+        if catalogChanged { cacheCurrentConversations() }
         await reconcileVisibleConversationReadState()
     }
 
@@ -7744,17 +7800,22 @@ final class AppModel: ObservableObject {
     private func applyCloudSessionVisibility(_ visibility: CloudSessionVisibility) {
         hiddenCloudSessionIds = Set(visibility.hiddenSessionIds.compactMap(\.nonEmpty))
         deletedCloudSessionIds = Set(visibility.deletedSessionIds.compactMap(\.nonEmpty))
-        pinnedSessionIds = Set((visibility.pinnedSessionIds ?? []).compactMap(\.nonEmpty))
-        mutedSessionIds = Set((visibility.mutedSessionIds ?? []).compactMap(\.nonEmpty))
-        markedUnreadSessionIds = Set((visibility.unreadSessionIds ?? []).compactMap(\.nonEmpty))
-        pinnedGroupSpaceIds = Set((visibility.pinnedGroupSpaceIds ?? []).compactMap(\.nonEmpty))
+        let nextPinnedSessionIds = Set((visibility.pinnedSessionIds ?? []).compactMap(\.nonEmpty))
+        if pinnedSessionIds != nextPinnedSessionIds { pinnedSessionIds = nextPinnedSessionIds }
+        let nextMutedSessionIds = Set((visibility.mutedSessionIds ?? []).compactMap(\.nonEmpty))
+        if mutedSessionIds != nextMutedSessionIds { mutedSessionIds = nextMutedSessionIds }
+        let nextUnreadSessionIds = Set((visibility.unreadSessionIds ?? []).compactMap(\.nonEmpty))
+        if markedUnreadSessionIds != nextUnreadSessionIds { markedUnreadSessionIds = nextUnreadSessionIds }
+        let nextPinnedGroupSpaceIds = Set((visibility.pinnedGroupSpaceIds ?? []).compactMap(\.nonEmpty))
+        if pinnedGroupSpaceIds != nextPinnedGroupSpaceIds { pinnedGroupSpaceIds = nextPinnedGroupSpaceIds }
         hasHydratedSessionVisibility = true
         sessionVisibilityMutationRevision &+= 1
     }
 
     private func setAgentActivity(_ activity: AgentActivity, conversationId: String) {
-        agentRunState[conversationId] = activity
-        if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
+        if agentRunState[conversationId] != activity { agentRunState[conversationId] = activity }
+        if let index = conversations.firstIndex(where: { $0.id == conversationId }),
+           conversations[index].agentActivity != activity {
             conversations[index].agentActivity = activity
         }
     }
@@ -7952,7 +8013,9 @@ final class AppModel: ObservableObject {
 
     private func cacheCurrentConversations() {
         guard let accountId = account?.accountId else { return }
-        cache?.saveConversations(conversations, accountId: accountId)
+        // Restore the complete list shape before a network refresh. Otherwise
+        // the archive entry appears late and shifts every visible chat row.
+        cache?.saveConversations(conversations + archivedConversations, accountId: accountId)
     }
 
     private func appendPreviewCallActivity(

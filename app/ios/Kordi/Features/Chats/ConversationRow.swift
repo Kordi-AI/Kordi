@@ -275,7 +275,7 @@ struct ConversationAttentionBadge: View {
                 }
                 Text(Self.countLabel(displayUnreadCount))
                     .font(.caption2.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(isMuted ? Color.white : chatTheme.accentForeground)
                     .padding(.horizontal, 5)
                     .frame(minWidth: 20, minHeight: 20)
                     .background(isMuted ? Color.secondary : chatTheme.accent, in: Capsule())

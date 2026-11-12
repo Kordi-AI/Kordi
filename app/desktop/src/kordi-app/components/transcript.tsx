@@ -43,8 +43,7 @@ import { MessageDeliveryStatusSlot,TranscriptMessageTransferActions } from './tr
 import { RequestReplyLine,SourceMessageQuoteRow,ThreadReplyLine } from './transcriptReplyAttribution';
 import { TranscriptSystemNoticeContent } from './transcriptSystemNoticeContent';
 import { VoiceMessageContent } from './voiceMessage';
-import { FacilitatorCardContent } from './facilitatorCard';
-import { PlanCardContent } from './planCard';
+import { TranscriptCardContent } from './planCard';
 import { CompactionSummaryMessage } from './transcriptCompactionSummary';
 import { isCompactionSummaryMessage } from './transcriptCompactionSummaryEligibility';
 export { MessageContextMenuContent, type MessageContextMenuActionHandlers } from './messageContextMenuContent';
@@ -636,7 +635,7 @@ function MessageBubbleView({
   const canOpenSenderProfile = Boolean(isPeerHumanMessage && onOpenSenderProfile && !selectionMode && !isSystemAvatarUrl(msg.senderProfileImageUrl)); const isForwardedMessage = msg.messageAction?.kind === 'forward';
   const standaloneEmojiItem = isForwardedMessage ? null : standaloneEmojiItemForMessage(msg, { isHuman: showCompactFooter, showsSender: showInlineHumanSender, footerDetail });
   const bubbleAttachmentPreview = hasBubbleAttachments ? <AttachmentPreview msg={msg} scope={hasDetachedImageGroup ? 'non-images' : 'all'} imageGallery={imageGallery} imageDeliveryStatus={hasOnlyBorderlessMediaAttachments && isOwnHumanMessage ? bubbleDeliveryStatus : null} /> : null;
-  const planCardContent = msg.facilitatorCard ? <FacilitatorCardContent snapshot={msg.facilitatorCard} /> : msg.planCard ? <PlanCardContent card={msg.planCard} conversationId={msg.reactionConversationId} /> : null;
+  const planCardContent = msg.facilitatorCard || msg.planCard ? <TranscriptCardContent message={msg} /> : null;
   const messageSurfaceContent = (
     <>
       {threadLayout && (!isGroupedWithPrevious || msg.sourceMessage) ? <ThreadMessageHeader msg={msg} name={avatarName} ownerName={agentOwnerName} /> : null}{showHeaderMeta && groupChatAgentAvatar ? <AgentHeaderMeta sender={msg.sender} ownerName={agentOwnerName} highlightName className="mb-1 px-0" /> : null}

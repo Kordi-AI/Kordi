@@ -216,7 +216,7 @@ struct CommonGroundNearbyPeopleSection: View {
                 Spacer(minLength: 8)
                 Button("Settings", action: onSettings)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(chatTheme.accentForeground)
                     .padding(.horizontal, 14)
                     .frame(height: 30)
                     .background(chatTheme.accent, in: Capsule())

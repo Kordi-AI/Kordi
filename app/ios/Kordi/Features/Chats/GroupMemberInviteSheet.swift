@@ -338,7 +338,7 @@ private struct GroupInviteCompletionView: View {
             VStack(spacing: 14) {
                 Image(systemName: "checkmark")
                     .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(chatTheme.accentForeground)
                     .frame(width: 72, height: 72)
                     .background(chatTheme.accent, in: Circle())
                     .scaleEffect(reduceMotion || isSettled ? 1 : 0.78)

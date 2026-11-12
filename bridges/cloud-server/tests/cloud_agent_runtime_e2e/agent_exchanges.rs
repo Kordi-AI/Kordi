@@ -274,22 +274,6 @@ async fn exchange_membership_revocation_cancels_delivery_and_resume() {
 }
 
 #[tokio::test]
-async fn exchange_timeout_resumes_with_explicit_failure_without_a_fake_reply() {
-    let Some(f) = Fixture::new().await else {
-        return;
-    };
-    f.send("call", 2).await;
-    f.end_parent().await;
-    query("UPDATE cloud_agent_exchanges SET deadline_at=now()-interval '1 second' WHERE parent_run_id=$1").bind(&f.root).execute(&f.pool).await.unwrap();
-    let resume = f.pending(0).await.remove(0);
-    assert!(resume["prompt"]
-        .as_str()
-        .unwrap()
-        .contains("did not reply before the deadline"));
-    assert!(f.pending(2).await.is_empty());
-}
-
-#[tokio::test]
 async fn exchange_direct_chat_and_shared_requester_boundaries() {
     let Some(f) = Fixture::kind(false).await else {
         return;

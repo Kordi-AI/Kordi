@@ -114,7 +114,7 @@ struct PhotoLibraryPreview: View {
                 if let position {
                     Text("\(position + 1)")
                         .font(.subheadline.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(chatTheme.accentForeground)
                         .minimumScaleFactor(0.6)
                 }
             }
@@ -172,7 +172,7 @@ struct PhotoLibraryPreview: View {
         } label: {
             Image(systemName: "arrow.up")
                 .font(.body.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(chatTheme.accentForeground)
                 .frame(width: 48, height: 48)
                 .background(chatTheme.accent, in: Circle())
                 .overlay(alignment: .topTrailing) {

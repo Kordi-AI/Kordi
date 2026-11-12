@@ -141,7 +141,7 @@ struct CommonGroundMatchBadge: View {
             if let score {
                 Text("\(score)% match")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(chatTheme.accentForeground)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(chatTheme.accent, in: Capsule())

@@ -1145,7 +1145,7 @@ final class KordiMarkdownParserTests: XCTestCase {
         let refreshView = source[start.lowerBound..<end.lowerBound]
 
         XCTAssertTrue(refreshView.contains("List {"))
-        XCTAssertTrue(refreshView.contains("visualState = .pulling(progress:"))
+        XCTAssertTrue(refreshView.contains("refreshState.updatePullDistance"))
         XCTAssertFalse(source.contains(".refreshable"))
     }
 

@@ -193,25 +193,18 @@ async fn an_unanswered_person_question_times_out_and_leaving_cancels() {
         return;
     };
     let receipt = f.ask_ok("gamma", 2, "Are you joining?").await;
-    let (deadline,): (bool,) = query_as("SELECT deadline_at>now()+interval '23 hours' FROM cloud_agent_exchanges WHERE exchange_id=$1::uuid")
+    let (deadline,): (bool,) = query_as("SELECT deadline_at=created_at+interval '2 hours' FROM cloud_agent_exchanges WHERE exchange_id=$1::uuid")
         .bind(receipt["exchangeId"].as_str().unwrap()).fetch_one(&f.pool).await.unwrap();
-    assert!(deadline, "people get a long deadline");
+    assert!(deadline, "a direct question gets two hours");
     f.end_parent().await;
     query("UPDATE cloud_agent_exchanges SET deadline_at=now()-interval '1 second' WHERE parent_run_id=$1").bind(&f.root).execute(&f.pool).await.unwrap();
     let resume = f.pending(0).await.remove(0);
     let resumed = data(&resume);
     assert_eq!(resumed["personReplied"], false);
-    assert!(resumed["personReply"]
-        .as_str()
-        .unwrap()
-        .contains("did not answer"));
+    assert!(resumed["personReply"].is_null());
+    assert_eq!(resumed["remainingRequests"], 0);
     f.say(2, "Too late", None).await;
-    assert!(f
-        .exchange(&receipt["exchangeId"])
-        .await
-        .1
-        .unwrap()
-        .contains("did not answer"));
+    assert_eq!(f.exchange(&receipt["exchangeId"]).await.1, None);
 
     let Some(f) = Fixture::new().await else {
         return;

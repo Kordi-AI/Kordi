@@ -12,6 +12,8 @@ struct KordiBirdFlightSample: Equatable {
     /// Whole-bird rotation in degrees around the body centre.
     let bodyRotation: Double
 
+    static let folded = holding(wingAngle: KordiBirdFlightMotion.wingDownAngle)
+
     /// Flight pose held still: the wing at `wingAngle`, the body at rest.
     static func holding(wingAngle: Double) -> KordiBirdFlightSample {
         KordiBirdFlightSample(wingAngle: wingAngle, bodyOffsetX: 0, bodyOffsetY: 0, bodyRotation: 0)
@@ -91,6 +93,15 @@ struct KordiMark: View {
 struct KordiBirdTint: Equatable {
     let body: Color
     let beak: Color
+
+    static func adaptive(for scheme: ColorScheme) -> Self {
+        Self(
+            body: scheme == .dark
+                ? Color(red: 0xF4 / 255.0, green: 0xED / 255.0, blue: 0xE1 / 255.0)
+                : Color(red: 0x1F / 255.0, green: 0x1A / 255.0, blue: 0x17 / 255.0),
+            beak: Color(red: 0xF7 / 255.0, green: 0xB3 / 255.0, blue: 0x2B / 255.0)
+        )
+    }
 }
 
 enum KordiBirdPose: Equatable {
@@ -101,6 +112,7 @@ enum KordiBirdPose: Equatable {
 /// Draws into a canvas larger than the mark so the raised wing and the swoop
 /// are never clipped; layout still uses the mark's own size.
 private struct KordiBirdCanvas: View {
+    @Environment(\.colorScheme) private var colorScheme
     static let overflow: CGFloat = 0.25
 
     let size: CGFloat
@@ -111,7 +123,7 @@ private struct KordiBirdCanvas: View {
         let canvasSide = size * (1 + (Self.overflow * 2))
         Canvas { context, _ in
             context.translateBy(x: size * Self.overflow, y: size * Self.overflow)
-            KordiBirdDrawing.draw(pose: pose, in: &context, side: size, tint: tint)
+            KordiBirdDrawing.draw(pose: pose, in: &context, side: size, tint: tint ?? .adaptive(for: colorScheme))
         }
         .frame(width: canvasSide, height: canvasSide)
         .frame(width: size, height: size)
@@ -120,13 +132,6 @@ private struct KordiBirdCanvas: View {
 }
 
 private enum KordiBirdDrawing {
-    static let ink = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0xF4 / 255, green: 0xED / 255, blue: 0xE1 / 255, alpha: 1)
-            : UIColor(red: 0x1F / 255, green: 0x1A / 255, blue: 0x17 / 255, alpha: 1)
-    })
-    static let beakColor = Color(red: 0xF7 / 255, green: 0xB3 / 255, blue: 0x2B / 255)
-
     /// Places the bird optically centred in the 512-unit box.
     private static let placement = CGAffineTransform(translationX: -270, y: -292)
         .concatenating(CGAffineTransform(scaleX: 0.94, y: 0.94))
@@ -134,9 +139,9 @@ private enum KordiBirdDrawing {
     private static let bodyCenter = CGPoint(x: 256, y: 250)
     private static let wingRoot = CGPoint(x: 296, y: 262)
 
-    static func draw(pose: KordiBirdPose, in context: inout GraphicsContext, side: CGFloat, tint: KordiBirdTint? = nil) {
-        let ink = tint?.body ?? Self.ink
-        let beakColor = tint?.beak ?? Self.beakColor
+    static func draw(pose: KordiBirdPose, in context: inout GraphicsContext, side: CGFloat, tint: KordiBirdTint) {
+        let ink = tint.body
+        let beakColor = tint.beak
         context.scaleBy(x: side / 512, y: side / 512)
 
         if case let .flight(sample) = pose {
@@ -158,17 +163,17 @@ private enum KordiBirdDrawing {
         cut.blendMode = .destinationOut
         cut.fill(eyePath.applying(placement), with: .color(.black))
 
-        switch pose {
-        case .still:
-            cut.fill(staticWingPath.applying(placement), with: .color(.black))
-        case let .flight(sample):
-            let wingTransform = CGAffineTransform(rotationAngle: sample.wingAngle * .pi / 180)
-                .concatenating(CGAffineTransform(translationX: wingRoot.x, y: wingRoot.y))
-                .concatenating(placement)
-            let wing = flightWingPath.applying(wingTransform)
-            cut.stroke(wing, with: .color(.black), style: StrokeStyle(lineWidth: 14, lineJoin: .round))
-            context.fill(wing, with: .color(ink))
-        }
+        // Rest and flight share one opaque wing, palette and outline. Switching
+        // state must not replace a transparent cutout with a differently colored leaf.
+        let wingAngle: Double
+        if case let .flight(sample) = pose { wingAngle = sample.wingAngle }
+        else { wingAngle = KordiBirdFlightSample.folded.wingAngle }
+        let wingTransform = CGAffineTransform(rotationAngle: wingAngle * .pi / 180)
+            .concatenating(CGAffineTransform(translationX: wingRoot.x, y: wingRoot.y))
+            .concatenating(placement)
+        let wing = flightWingPath.applying(wingTransform)
+        cut.stroke(wing, with: .color(.black), style: StrokeStyle(lineWidth: 14, lineJoin: .round))
+        context.fill(wing, with: .color(ink))
     }
 
     private static let bodyPath = Path(ellipseIn: CGRect(x: 262 - 150, y: 292 - 136, width: 300, height: 272))
@@ -188,19 +193,6 @@ private enum KordiBirdDrawing {
         path.addLine(to: CGPoint(x: 120, y: 312))
         path.closeSubpath()
     }
-
-    private static let staticWingPath = Path { path in
-        path.move(to: CGPoint(x: 248, y: 326))
-        path.addCurve(to: CGPoint(x: 408, y: 266), control1: CGPoint(x: 276, y: 284), control2: CGPoint(x: 346, y: 262))
-        path.addCurve(to: CGPoint(x: 272, y: 354), control1: CGPoint(x: 388, y: 316), control2: CGPoint(x: 332, y: 356))
-        path.addCurve(to: CGPoint(x: 248, y: 326), control1: CGPoint(x: 252, y: 352), control2: CGPoint(x: 242, y: 340))
-        path.closeSubpath()
-    }
-    .applying(
-        CGAffineTransform(translationX: -326, y: -312)
-            .concatenating(CGAffineTransform(scaleX: 0.8, y: 0.8))
-            .concatenating(CGAffineTransform(translationX: 332, y: 322))
-    )
 
     /// Leaf with its root at the origin, pointing right.
     private static let flightWingPath = Path { path in

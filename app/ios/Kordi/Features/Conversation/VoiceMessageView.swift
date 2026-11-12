@@ -906,7 +906,7 @@ struct VoiceRecordingComposer: View {
         Button(action: onSend) {
             Image(systemName: "arrow.up")
                 .font(.body.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(chatTheme.accentForeground)
                 .frame(width: 40, height: 40)
                 .background(chatTheme.accent, in: Circle())
                 .contentShape(Circle().inset(by: -2))

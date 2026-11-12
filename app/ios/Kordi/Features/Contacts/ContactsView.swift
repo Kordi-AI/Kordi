@@ -134,15 +134,13 @@ struct ContactsView<PinnedRows: View>: View {
                 .task { _ = await model.restoreConversationIfNeeded(conversation) }
         }
         .toolbar {
-            if #available(iOS 26.0, *) {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    toolbarButtons
+            if showsCommonGroundEntry {
+                ToolbarItem(placement: .topBarLeading) {
+                    commonGroundButton
                 }
-                .sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    toolbarButtons
-                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                addContactButton
             }
         }
         .sheet(isPresented: $showAddContact) { AddContactSheet() }
@@ -153,20 +151,10 @@ struct ContactsView<PinnedRows: View>: View {
         .task { await model.refreshContactRequests() }
     }
 
-    @ViewBuilder
-    private var toolbarButtons: some View {
-        if showsCommonGroundEntry {
-            commonGroundButton
-        }
-        addContactButton
-    }
-
     private var commonGroundButton: some View {
         Button(action: openCommonGround) {
             ContactsToolbarIcon(assetName: "CommonGroundHug", showsBadge: commonGroundInvitationWaiting)
         }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
         .accessibilityLabel("Grounding")
         .accessibilityValue(commonGroundInvitationWaiting ? "Invitation waiting" : "")
     }
@@ -183,8 +171,6 @@ struct ContactsView<PinnedRows: View>: View {
         Button { showAddContact = true } label: {
             ContactsToolbarIcon(systemName: "person.badge.plus")
         }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
         .accessibilityLabel("Add contact")
     }
 }
@@ -199,7 +185,7 @@ extension ContactsView where PinnedRows == EmptyView {
     }
 }
 
-/// A plain navigation-bar icon matching the other tab toolbars.
+/// A navigation-bar icon with a consistent touch target and optional invitation badge.
 struct ContactsToolbarIcon: View {
     var systemName: String? = nil
     var assetName: String? = nil
@@ -372,7 +358,7 @@ private struct ContactRequestRow: View {
                         }
                     }
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(chatTheme.accentForeground)
                     .padding(.horizontal, 14)
                     .frame(minHeight: 30)
                     .background(chatTheme.accent, in: Capsule())

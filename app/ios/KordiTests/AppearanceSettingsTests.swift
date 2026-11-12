@@ -76,7 +76,7 @@ final class AppearanceSettingsTests: XCTestCase {
         }
     }
 
-    func testChatThemeAccentsMatchTheMacPalette() throws {
+    func testOtherChatThemeAccentsMatchTheMacPalette() throws {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -114,7 +114,7 @@ final class AppearanceSettingsTests: XCTestCase {
         }
 
         XCTAssertEqual(Set(macAccents.keys), Set(KordiChatTheme.allCases.map(\.rawValue)))
-        for theme in KordiChatTheme.allCases {
+        for theme in KordiChatTheme.allCases where theme != .classic {
             let accent = try XCTUnwrap(macAccents[theme.rawValue], theme.rawValue)
             XCTAssertTrue(
                 themeSource.contains(
@@ -124,4 +124,29 @@ final class AppearanceSettingsTests: XCTestCase {
             )
         }
     }
+
+    func testClassicAccentAndItsForegroundRemainReadableInBothAppearances() {
+        func luminance(_ color: UIColor) -> Double {
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            XCTAssertTrue(color.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+            func linear(_ component: CGFloat) -> Double {
+                let value = Double(component)
+                return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+        }
+        func contrast(_ first: UIColor, _ second: UIColor) -> Double {
+            let values = [luminance(first), luminance(second)].sorted()
+            return (values[1] + 0.05) / (values[0] + 0.05)
+        }
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            let traits = UITraitCollection(userInterfaceStyle: style)
+            let accent = UIColor(KordiChatTheme.classic.accent).resolvedColor(with: traits)
+            let foreground = UIColor(KordiChatTheme.classic.accentForeground).resolvedColor(with: traits)
+            let background = UIColor.systemBackground.resolvedColor(with: traits)
+            XCTAssertGreaterThanOrEqual(contrast(accent, background), 4.5)
+            XCTAssertGreaterThanOrEqual(contrast(foreground, accent), 4.5)
+        }
+    }
+
 }

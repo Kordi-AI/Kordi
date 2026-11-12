@@ -176,7 +176,7 @@ mod tests {
             let prompt = super::super::lifecycle::continuation_prompt(
                 original,
                 "Which day works?",
-                "Sunday 13:00-15:00 works better",
+                Some("Sunday 13:00-15:00 works better"),
                 &[],
                 7,
                 serde_json::json!({}),

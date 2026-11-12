@@ -41,6 +41,7 @@ struct AgentSessionRow: View {
     var isFork = false
     var isPinned = false
     var isMuted = false
+    var showsMetadata = true
 
     var body: some View {
         Group {
@@ -88,15 +89,8 @@ struct AgentSessionRow: View {
 
             Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: compact ? 2 : 4) {
-                timestamp
-
-                if conversation.hasUnreadAttention {
-                    attentionBadge
-                } else if let activity = conversation.agentActivity,
-                          activity != .ready {
-                    AgentSessionActivityLabel(activity: activity, compact: true)
-                }
+            if showsMetadata {
+                AgentSessionMetadata(conversation: conversation, compact: compact, nested: nested, isMuted: isMuted)
             }
         }
     }
@@ -157,6 +151,35 @@ struct AgentSessionRow: View {
 
     private var relativeTimestamp: String {
         chatListTimestamp(conversation.lastActivityAt)
+    }
+}
+
+/// Kept outside the fork control so every session timestamp shares the same trailing edge.
+struct AgentSessionMetadata: View {
+    @Environment(\.kordiChatTheme) private var chatTheme
+    let conversation: ConversationSummary
+    var compact = false
+    var nested = false
+    var isMuted = false
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: compact ? 2 : 4) {
+            Text(chatListTimestamp(conversation.lastActivityAt))
+                .font(nested ? .footnote : compact ? .caption2 : .caption)
+                .foregroundStyle(conversation.hasUnreadAttention && !isMuted ? chatTheme.accent : .secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+
+            if conversation.hasUnreadAttention {
+                ConversationAttentionBadge(
+                    unreadCount: conversation.unreadCount,
+                    mentionCount: conversation.unreadMentionCount,
+                    isMuted: isMuted
+                )
+            } else if let activity = conversation.agentActivity, activity != .ready {
+                AgentSessionActivityLabel(activity: activity, compact: true)
+            }
+        }
     }
 }
 

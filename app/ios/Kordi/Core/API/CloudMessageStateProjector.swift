@@ -12,6 +12,63 @@ enum CloudReadScope: Equatable {
 }
 
 enum CloudMessageStateProjector {
+    static func groupParticipantAccountIDs(
+        in messagesByPeer: [String: [CloudMessageDTO]]
+    ) -> Set<String> {
+        var result = Set<String>()
+        for messages in messagesByPeer.values {
+            for message in messages {
+                guard !Task.isCancelled else { return [] }
+                guard let envelope = CloudGroupMessageCodec.parse(message.body) else { continue }
+                result.formUnion(envelope.participants.map(\.accountId))
+            }
+        }
+        return result
+    }
+
+    /// Build once per history refresh, rather than decoding every cached group
+    /// envelope again for each session's authoritative page.
+    static func historyMessagesBySession(
+        _ messagesByPeer: [String: [CloudMessageDTO]],
+        sessionIDs: Set<String>
+    ) -> [String: [CloudMessageDTO]] {
+        var result: [String: [CloudMessageDTO]] = [:]
+        for messages in messagesByPeer.values {
+            for message in messages {
+                guard !Task.isCancelled else { return [:] }
+                for sessionID in sessionKeys(for: message).intersection(sessionIDs) {
+                    result[sessionID, default: []].append(message)
+                }
+            }
+        }
+        return result
+    }
+
+    /// A history response may only prune the snapshot it was requested against.
+    /// Preserve newer wire values and messages received while indexing/fetching.
+    static func unchangedHistoryMessageIDs(
+        _ candidates: [CloudMessageDTO],
+        in current: [String: [CloudMessageDTO]]
+    ) -> Set<String> {
+        guard !candidates.isEmpty else { return [] }
+        let originals = Dictionary(candidates.map { ($0.messageId, $0) },
+                                   uniquingKeysWith: { first, _ in first })
+        var unchanged = Set<String>()
+        var changed = Set<String>()
+        for messages in current.values {
+            for message in messages {
+                if let original = originals[message.messageId] {
+                    if original == message {
+                        unchanged.insert(message.messageId)
+                    } else {
+                        changed.insert(message.messageId)
+                    }
+                }
+            }
+        }
+        return unchanged.subtracting(changed)
+    }
+
     static func carriesAgentRuntimeRoute(_ message: CloudMessageDTO) -> Bool {
         if CloudMessageCodec.isAgentModelChange(message) { return true }
         guard let envelope = CloudMessageCodec.directEnvelope(message.body) else { return false }

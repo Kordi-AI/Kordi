@@ -387,9 +387,56 @@ final class CloudMessageStateProjectorTests: XCTestCase {
         XCTAssertNil(projected?.first?.readAt)
     }
 
-    private func groupBody(messageId: String) throws -> String {
+    func testHistoryIndexPreservesExplicitAndEnvelopeSessionAliases() throws {
+        let group = wire(id: "group", from: "acct_me", to: "acct_a",
+            body: try groupBody(messageId: "group"), sessionId: "canonical-group")
+        let direct = wire(id: "direct", from: "acct_me", to: "acct_a", sessionId: "direct-session")
+        let unrelated = wire(id: "other", from: "acct_me", to: "acct_b", sessionId: "other-session")
+
+        let index = CloudMessageStateProjector.historyMessagesBySession(
+            ["acct_a": [group, direct], "acct_b": [unrelated]],
+            sessionIDs: ["canonical-group", "session:group:one", "direct-session"]
+        )
+
+        XCTAssertEqual(index["canonical-group"], [group])
+        XCTAssertEqual(index["session:group:one"], [group])
+        XCTAssertEqual(index["direct-session"], [direct])
+        XCTAssertNil(index["other-session"])
+    }
+
+    func testHistoryPruningPreservesMessagesChangedOrReceivedAfterSnapshot() {
+        let missing = wire(id: "missing", from: "acct_me", to: "acct_a")
+        let original = wire(id: "edited", from: "acct_me", to: "acct_a", body: "Before")
+        let edited = wire(id: "edited", from: "acct_me", to: "acct_a", body: "After")
+        let arrived = wire(id: "arrived", from: "acct_me", to: "acct_a")
+
+        let ids = CloudMessageStateProjector.unchangedHistoryMessageIDs(
+            [missing, original], in: ["acct_a": [missing, edited, arrived]]
+        )
+
+        XCTAssertEqual(ids, ["missing"])
+    }
+
+    func testParticipantScanIncludesAllGroupsAndIgnoresNonGroupMessages() throws {
+        let first = wire(id: "first", from: "acct_me", to: "acct_a",
+                         body: try groupBody(messageId: "first"))
+        let second = wire(id: "second", from: "acct_me", to: "acct_b",
+                          body: try groupBody(messageId: "second", peerAccountID: "acct_b"))
+        let direct = wire(id: "direct", from: "acct_c", to: "acct_me")
+        let malformed = wire(id: "malformed", from: "acct_d", to: "acct_me",
+                             body: CloudGroupMessageCodec.prefix + "invalid")
+
+        XCTAssertEqual(
+            CloudMessageStateProjector.groupParticipantAccountIDs(
+                in: ["acct_a": [first, direct], "acct_b": [second, first, malformed]]
+            ),
+            ["acct_me", "acct_a", "acct_b"]
+        )
+    }
+
+    private func groupBody(messageId: String, peerAccountID: String = "acct_a") throws -> String {
         let me = CloudGroupParticipant(accountId: "acct_me", displayName: "Me", avatarUrl: nil, role: "self")
-        let peer = CloudGroupParticipant(accountId: "acct_a", displayName: "A", avatarUrl: nil, role: "person")
+        let peer = CloudGroupParticipant(accountId: peerAccountID, displayName: "A", avatarUrl: nil, role: "person")
         return try CloudGroupMessageCodec.encode(CloudGroupControlEnvelope(
             kind: "group-message",
             groupId: "session:group:one",

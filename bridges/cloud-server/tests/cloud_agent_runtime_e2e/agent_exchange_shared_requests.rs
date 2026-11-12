@@ -164,10 +164,20 @@ async fn an_answering_agent_asks_its_owner_and_its_answer_returns_to_the_asking_
         assert_ne!(refused.status(), StatusCode::OK, "{key}");
     }
     let asked = f.post(1, &path, json!({"claimId":claim,"toolCallId":"owner","arguments":{"target":f.people[1].account_id,"targetKind":"person","message":"Alpha's agent asks when you are free on Friday. OK to share?"}})).await;
-    // The asking agent's request waits for Beta, as long as Beta's question.
-    let (deadline,): (bool,) = query_as("SELECT deadline_at>now()+interval '23 hours' FROM cloud_agent_exchanges WHERE exchange_id=$1::uuid")
-        .bind(exchange.as_str().unwrap()).fetch_one(&f.pool).await.unwrap();
-    assert!(deadline);
+    // Beta's question and its continuation share the original wait budget.
+    let (within_limit, has_time_to_resume): (bool, bool) = query_as(
+        "SELECT agent.deadline_at=agent.created_at+interval '2 hours',
+                person.deadline_at=agent.deadline_at-interval '15 minutes'
+         FROM cloud_agent_exchanges agent, cloud_agent_exchanges person
+         WHERE agent.exchange_id=$1::uuid AND person.exchange_id=$2::uuid",
+    )
+    .bind(exchange.as_str().unwrap())
+    .bind(asked["exchangeId"].as_str().unwrap())
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert!(within_limit);
+    assert!(has_time_to_resume);
     let wire = f.question_wire(&exchange).await;
     assert_eq!(
         wire["message"]["structuredContent"]["agentExchangeWaitingFor"],
@@ -204,6 +214,40 @@ async fn an_answering_agent_asks_its_owner_and_its_answer_returns_to_the_asking_
         continued["agentOwner"]["accountId"],
         f.people[1].account_id.as_str()
     );
+}
+
+#[tokio::test]
+async fn an_expired_agent_question_cannot_be_reopened_by_its_owners_reply() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    let sent = f.send("ask-beta-agent", 1).await;
+    let target = f.pending(1).await.remove(0);
+    let run = target["runId"].as_str().unwrap();
+    let claim = f.claim(1, &target).await;
+    let asked = f
+        .post(
+            1,
+            &format!("/v1/cloud/agent-runs/desktop/{run}/agent-exchange"),
+            json!({"claimId":claim,"toolCallId":"owner","arguments":{"target":f.people[1].account_id,"targetKind":"person","message":"May I share your availability?"}}),
+        )
+        .await;
+    f.finish(1, run, claim, r#"{"agentExchangeOutcome":"waiting"}"#)
+        .await;
+    f.end_parent().await;
+    f.say(1, "Yes, you may share it", None).await;
+    assert_eq!(f.exchange(&asked["exchangeId"]).await.0, "reply_received");
+
+    query("UPDATE cloud_agent_exchanges SET deadline_at=now()-interval '1 second' WHERE exchange_id=$1::uuid")
+        .bind(sent["exchangeId"].as_str().unwrap())
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    assert!(f.pending(1).await.is_empty());
+    assert_eq!(f.exchange(&asked["exchangeId"]).await.0, "cancelled");
+    let resume = data(&f.pending(0).await.remove(0));
+    assert!(resume["agentReply"].is_null());
+    assert_eq!(resume["remainingRequests"], 0);
 }
 
 #[tokio::test]

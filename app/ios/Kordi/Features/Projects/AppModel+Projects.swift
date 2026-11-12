@@ -29,8 +29,8 @@ extension AppModel {
         do {
             let catalog = try await api.projectCatalog(token: token)
             guard (try? projectContext().1) == token, account?.accountId == accountID else { return }
-            projectDevices = catalog.devices
-            projectError = nil
+            if projectDevices != catalog.devices { projectDevices = catalog.devices }
+            if projectError != nil { projectError = nil }
         } catch {
             guard (try? projectContext().1) == token else { return }
             projectError = error.localizedDescription
