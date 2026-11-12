@@ -392,7 +392,7 @@ pub(crate) fn clean_display_name(value: Option<&str>) -> String {
         .collect()
 }
 
-/// Same rule as the group invitation lookup: generated avatar markers,
+/// Avatars the apps can show: generated and uploaded avatar markers,
 /// http(s) URLs, and small raster data URLs.
 pub(crate) fn syncable_avatar_url(value: &str) -> Option<String> {
     let value = value.trim();
@@ -400,6 +400,7 @@ pub(crate) fn syncable_avatar_url(value: &str) -> Option<String> {
         return None;
     }
     (crate::avatars::parse_generated_avatar_marker(value).is_some()
+        || crate::avatars::assets::parse_uploaded_avatar_marker(value).is_some()
         || value.starts_with("https://")
         || value.starts_with("http://")
         || value.starts_with("data:image/png;base64,")
