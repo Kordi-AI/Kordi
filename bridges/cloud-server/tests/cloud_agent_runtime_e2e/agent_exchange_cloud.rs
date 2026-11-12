@@ -340,10 +340,8 @@ async fn a_newer_question_to_a_person_supersedes_older_ones_and_takes_their_plai
     let resumed: Value = serde_json::from_str(prompt.split_once('\n').unwrap().1).unwrap();
     assert_eq!(resumed["personReplied"], false);
     assert_eq!(resumed["personSuperseded"], true);
-    assert!(resumed["personReply"]
-        .as_str()
-        .unwrap()
-        .contains("A newer question"));
+    assert!(resumed["personReply"].is_null());
+    assert_eq!(resumed["remainingRequests"], 0);
     assert_ne!(
         f.exchange(&old["exchangeId"]).await.1.as_deref(),
         Some("Sunday afternoon works for me")

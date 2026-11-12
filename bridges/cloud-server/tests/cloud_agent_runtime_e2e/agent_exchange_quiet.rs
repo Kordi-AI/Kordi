@@ -346,7 +346,7 @@ async fn exchange_in_a_secondary_group_channel_preserves_its_group_identity() {
 }
 
 #[tokio::test]
-async fn useful_follow_up_is_public_and_timeout_cannot_disappear_silently() {
+async fn useful_follow_up_is_public() {
     let Some(f) = Fixture::new().await else {
         return;
     };
@@ -368,40 +368,6 @@ async fn useful_follow_up_is_public_and_timeout_cannot_disappear_silently() {
     let texts = f.public_texts().await;
     assert_eq!(texts.len(), 3);
     assert_eq!(texts[2], "The requested total is 19.");
-
-    let Some(f) = Fixture::new().await else {
-        return;
-    };
-    f.send("timeout", 1).await;
-    f.complete_parent(false).await;
-    query("UPDATE cloud_agent_exchanges SET deadline_at=now()-interval '1 second' WHERE parent_run_id=$1").bind(&f.root).execute(&f.pool).await.unwrap();
-    let resume = f.pending(0).await.remove(0);
-    let (_, _, retired) = f.recipient_row().await;
-    assert_eq!(retired["deliveryState"], "cancelled");
-    assert_eq!(retired["structuredContent"]["synchronizationOnly"], true);
-    let claim = f.claim(0, &resume).await;
-    let response = f
-        .router
-        .clone()
-        .oneshot(post_json_with_token(
-            &format!(
-                "/v1/cloud/agent-exchanges/desktop/{}/complete",
-                resume["runId"].as_str().unwrap()
-            ),
-            &f.people[0].token,
-            json!({"claimId":claim,"text":SILENT}),
-        ))
-        .await
-        .unwrap();
-    assert_ne!(response.status(), StatusCode::OK);
-    f.finish(
-        0,
-        resume["runId"].as_str().unwrap(),
-        claim,
-        "The agent did not reply before the deadline.",
-    )
-    .await;
-    assert_eq!(f.public_texts().await.len(), 2);
 }
 
 #[tokio::test]
@@ -486,3 +452,6 @@ async fn desktop_streaming_control_is_metadata_before_completion() {
         f.complete_parent(false).await;
     }
 }
+
+#[path = "agent_exchange_quiet_timeout.rs"]
+mod timeout;

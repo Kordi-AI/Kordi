@@ -14,6 +14,7 @@ type AuthorizedRunRow = (
     String,
     String,
     bool,
+    bool,
 );
 
 pub(crate) struct Parent {
@@ -27,6 +28,8 @@ pub(crate) struct Parent {
     pub kind: String,
     /// A child task (subsession or follow-up run); it never reaches out.
     pub child: bool,
+    /// A continuation can finish from available information when no reply arrived.
+    reply_skipped: bool,
     /// The agent exchange this run answers, directly or after asking its own
     /// owner; such a run may ask only its owner.
     pub answering: Option<Uuid>,
@@ -53,6 +56,9 @@ impl Parent {
     /// owner's private agent chat. A child task keeps its parent's rule for
     /// the owner's own request and asks nobody otherwise.
     pub fn may_reach_out(&self) -> bool {
+        if self.reply_skipped {
+            return false;
+        }
         if self.child {
             return self.only_person().is_none();
         }
@@ -71,7 +77,8 @@ pub(crate) async fn authorize(
     let row: Option<AuthorizedRunRow> = query_as(&format!(
         "SELECT r.session_id,r.owner_account_id,r.requester_account_id,r.execution_agent_id,c.conversation_id,c.kind,
                 COALESCE(e.root_run_id,r.run_id),root.request_message_id,
-                r.subsession_id IS NOT NULL OR r.parent_run_id IS NOT NULL
+                r.subsession_id IS NOT NULL OR r.parent_run_id IS NOT NULL,
+                r.run_id IS NOT DISTINCT FROM e.resume_run_id AND e.response_message_id IS NULL
          FROM cloud_agent_fallback_runs r JOIN cloud_chat_conversations c ON c.legacy_session_id=r.session_id
          LEFT JOIN cloud_agent_exchanges e ON r.run_id=e.target_run_id OR r.run_id=e.resume_run_id
          JOIN cloud_agent_fallback_runs root ON root.run_id=COALESCE(e.root_run_id,r.run_id)
@@ -89,8 +96,18 @@ pub(crate) async fn authorize(
         root_access = crate::agent_access::access_allows_sql("r.owner_account_id", "root.requester_account_id", "r.execution_agent_id"),
         go_between_access = crate::agent_access::access_allows_sql("r.owner_account_id", "COALESCE((SELECT parent.owner_account_id FROM cloud_agent_fallback_runs parent WHERE parent.run_id=e.parent_run_id),r.owner_account_id)", "r.execution_agent_id"),
     )).bind(run).bind(who).bind(account).fetch_optional(pool).await?;
-    let (session, owner, requester, agent, conversation, kind, root, original_request, child) =
-        row.ok_or(RunError::NotFound)?;
+    let (
+        session,
+        owner,
+        requester,
+        agent,
+        conversation,
+        kind,
+        root,
+        original_request,
+        child,
+        reply_skipped,
+    ) = row.ok_or(RunError::NotFound)?;
     // A deleted source request cannot authorize new work or restored context.
     if super::super::request_identity(pool, &session, &original_request)
         .await?
@@ -108,6 +125,7 @@ pub(crate) async fn authorize(
         conversation,
         kind,
         child,
+        reply_skipped,
         answering: super::answering::answered_exchange(&mut *pool.acquire().await?, run).await?,
     })
 }
