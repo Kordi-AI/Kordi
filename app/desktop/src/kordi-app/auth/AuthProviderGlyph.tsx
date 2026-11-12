@@ -1,3 +1,4 @@
+import { publicAssetPath } from '@/lib/publicAsset';
 import { cn } from '@/lib/utils';
 
 type AuthProviderGlyphProps = {
@@ -76,6 +77,12 @@ const providerLogo: Record<string, string> = {
   'zhipu-coding-plan': 'zhipu-color',
 };
 
+const paleMonochromeLogos = new Set([
+  'baseten', 'cline', 'commandcode', 'cursor', 'githubcopilot', 'gmicloud', 'groq', 'kilocode',
+  'lmstudio', 'moonshot', 'ollama', 'openai', 'opencode', 'vercel', 'wafer', 'xai', 'xiaomimimo',
+  'zai', 'zenmux',
+]);
+
 export function AuthProviderGlyph({ providerId, label, size = 'md' }: AuthProviderGlyphProps) {
   const logo = providerLogo[providerId];
   const words = label.match(/[\p{L}\p{N}]+/gu) ?? [];
@@ -88,7 +95,7 @@ export function AuthProviderGlyph({ providerId, label, size = 'md' }: AuthProvid
       data-provider-glyph={providerId}
       aria-hidden="true"
       className={cn(
-        'app-auth-provider-glyph grid shrink-0 place-items-center text-slate-400',
+        'app-auth-provider-glyph grid shrink-0 place-items-center text-[color:var(--utility-muted-text)]',
         size === 'sm' && 'h-9 w-9',
         size === 'md' && 'h-10 w-10',
         size === 'lg' && 'h-12 w-12',
@@ -99,6 +106,7 @@ export function AuthProviderGlyph({ providerId, label, size = 'md' }: AuthProvid
           src={publicAssetPath(`provider-logos/${logo}.svg`)}
           alt=""
           loading="lazy"
+          data-pale-provider-logo={paleMonochromeLogos.has(logo) || undefined}
           className={cn('object-contain', size === 'sm' && 'h-[22px] w-[22px]', size === 'md' && 'h-6 w-6', size === 'lg' && 'h-7 w-7')}
         />
       ) : (
@@ -107,4 +115,3 @@ export function AuthProviderGlyph({ providerId, label, size = 'md' }: AuthProvid
     </span>
   );
 }
-import { publicAssetPath } from '@/lib/publicAsset';

@@ -1,71 +1,26 @@
-/* Auth control-centers (LM Studio / Ollama) use bg-black/10 and bg-black/15
- * as their inner-panel fills. Those darken the surface regardless of theme;
- * flip them to a subtle slate tint so the panels read on light mode too. */
-.kordi-app.theme-light .bg-black\/10 {
-  background-color: rgba(15, 23, 42, 0.04) !important;
+.kordi-app :is(.app-auth-settings-page, .app-auth-gate-shell) .app-button-primary {
+  background: var(--app-button-primary-bg);
+  color: var(--app-button-primary-text);
 }
 
-.kordi-app.theme-light .bg-black\/15 {
-  background-color: rgba(15, 23, 42, 0.06) !important;
+.kordi-app :is(.app-auth-settings-page, .app-auth-gate-shell) .app-button-primary:hover:not(:disabled) {
+  background: var(--app-button-primary-hover);
 }
 
-/* AuthDetailPrimitives buttons & badges — refined light-mode treatment.
- *
- * Per the Kordi design language (fast / technical / low-noise surfaces, NOT
- * toy-like or flashy), accent buttons in light mode use a low-chroma tint of
- * the brand colour as fill, the same hue darkened as text, and a hairline
- * border in the matching hue. Mirrors how Linear, GitHub, and macOS settings
- * treat colour: dense, restrained, immediately readable.
- *
- * Dark mode keeps the existing translucent gradient look (defined inline
- * via Tailwind classes), so this override is scoped to .theme-light only. */
-.kordi-app.theme-light .app-auth-button-neutral {
-  background: rgba(255, 255, 255, 0.92) !important;
-  border-color: rgba(15, 23, 42, 0.10) !important;
-  color: rgb(15, 23, 42) !important;
-  box-shadow:
-    inset 0 0 0 1px rgba(15, 23, 42, 0.02),
-    0 1px 2px rgba(15, 23, 42, 0.04) !important;
+.kordi-app.theme-light [data-pale-provider-logo] {
+  filter: brightness(0.2);
 }
 
-.kordi-app.theme-light .app-auth-button-neutral:hover {
-  background: rgb(248, 250, 252) !important;
-  border-color: rgba(15, 23, 42, 0.18) !important;
+.app-auth-popup-header,
+.app-auth-popup-footer {
+  border-color: var(--app-transient-divider);
 }
 
-.kordi-app.theme-light .app-auth-button-primary {
-  background: rgba(16, 185, 129, 0.10) !important;
-  border-color: rgba(5, 150, 105, 0.28) !important;
-  color: rgb(6, 95, 70) !important;
-  box-shadow:
-    inset 0 0 0 1px rgba(5, 150, 105, 0.05),
-    0 1px 2px rgba(5, 150, 105, 0.04) !important;
-}
-
-.kordi-app.theme-light .app-auth-button-primary:hover {
-  background: rgba(16, 185, 129, 0.16) !important;
-  border-color: rgba(5, 150, 105, 0.40) !important;
-}
-
-.kordi-app.theme-light .app-auth-button-danger {
-  background: rgba(244, 63, 94, 0.08) !important;
-  border-color: rgba(225, 29, 72, 0.24) !important;
-  color: rgb(159, 18, 57) !important;
-  box-shadow:
-    inset 0 0 0 1px rgba(225, 29, 72, 0.04),
-    0 1px 2px rgba(225, 29, 72, 0.04) !important;
-}
-
-.kordi-app.theme-light .app-auth-button-danger:hover {
-  background: rgba(244, 63, 94, 0.14) !important;
-  border-color: rgba(225, 29, 72, 0.36) !important;
-}
-
-.kordi-app.theme-light .app-auth-badge-active {
-  background: rgba(139, 92, 246, 0.10) !important;
-  border-color: rgba(124, 58, 237, 0.24) !important;
-  color: rgb(91, 33, 182) !important;
-  box-shadow: inset 0 0 0 1px rgba(124, 58, 237, 0.04) !important;
+.app-auth-flow-steps,
+.app-auth-popup-info-card,
+.app-auth-popup-note {
+  border-color: var(--app-transient-border);
+  background: var(--app-transient-raised-bg);
 }
 
 .kordi-app.theme-light .bg-slate-800 {
@@ -188,7 +143,7 @@
   color: rgb(190 24 93) !important;
 }
 
-.kordi-app.theme-light a:not(.app-markdown-link):not(.app-message-link-preview):not(.app-workspace-nav-button) {
+.kordi-app.theme-light a:not(.app-auth-provider-link):not(.app-markdown-link):not(.app-message-link-preview):not(.app-workspace-nav-button) {
   color: rgb(14 116 144);
 }
 

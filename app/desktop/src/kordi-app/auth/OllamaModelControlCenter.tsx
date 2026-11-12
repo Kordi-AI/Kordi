@@ -26,7 +26,7 @@ import {
   type DesktopOllamaServerStatus,
 } from '@/lib/desktop';
 import { cn } from '@/lib/utils';
-import { AuthActionButton, nonDragStyle } from './AuthDetailPrimitives';
+import { AuthActionButton, authButtonNeutralClass, authButtonPrimaryClass, authButtonDangerClass, nonDragStyle } from './AuthDetailPrimitives';
 
 type OllamaModelControlCenterProps = {
   endpoint: string;
@@ -71,10 +71,10 @@ const OLLAMA_OPENAI_DOCS_URL = 'https://docs.ollama.com/openai';
 const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
 
 const flatButtonShapeClass = '!h-8 !rounded-[10px] !px-3 shadow-none';
-const ollamaPrimaryClass = `${flatButtonShapeClass} border border-emerald-300/24 bg-emerald-300/[0.09] text-emerald-50 hover:border-emerald-200/34 hover:bg-emerald-300/[0.13]`;
-const ollamaNeutralClass = `${flatButtonShapeClass} border border-white/8 bg-white/[0.035] text-slate-200 hover:border-white/14 hover:bg-white/[0.06]`;
+const ollamaPrimaryClass = `${flatButtonShapeClass} ${authButtonPrimaryClass}`;
+const ollamaNeutralClass = `${flatButtonShapeClass} ${authButtonNeutralClass}`;
 const ollamaStopClass = `${flatButtonShapeClass} border border-amber-300/18 bg-amber-300/[0.055] text-amber-50 hover:border-amber-200/26 hover:bg-amber-300/[0.08]`;
-const ollamaDangerClass = `${flatButtonShapeClass} border border-rose-300/16 bg-rose-300/[0.055] text-rose-100 hover:border-rose-300/24 hover:bg-rose-300/[0.08]`;
+const ollamaDangerClass = `${flatButtonShapeClass} ${authButtonDangerClass}`;
 
 function openHelpUrl(url: string) {
   void openDesktopExternalUrl(url).catch((error) => {
@@ -144,7 +144,7 @@ function RuntimeStatusPill({ running }: { running: boolean }) {
       'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium',
       running
         ? 'border-emerald-300/22 bg-emerald-300/[0.08] text-emerald-100'
-        : 'border-white/10 bg-white/[0.045] text-slate-300',
+        : 'border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] text-[color:var(--utility-muted-text)]',
     )}
     >
       {running ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
@@ -171,7 +171,7 @@ function ReadinessStep({
         ? 'border-emerald-300/18 bg-emerald-300/[0.055]'
         : active
           ? 'border-amber-300/18 bg-amber-300/[0.06]'
-          : 'border-white/8 bg-white/[0.035]',
+          : 'border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)]',
     )}
     >
       <span className={cn(
@@ -180,14 +180,14 @@ function ReadinessStep({
           ? 'border-emerald-300/25 bg-emerald-300/[0.12] text-emerald-100'
           : active
             ? 'border-amber-300/24 bg-amber-300/[0.1] text-amber-100'
-            : 'border-white/10 bg-white/[0.045] text-slate-500',
+            : 'border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] text-[color:var(--utility-meta-text)]',
       )}
       >
         {complete ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3 w-3" />}
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[12px] font-medium text-slate-100">{label}</span>
-        <span className="mt-0.5 block text-[10.5px] leading-4 text-slate-500">{detail}</span>
+        <span className="block truncate text-[12px] font-medium text-[color:var(--utility-foreground)]">{label}</span>
+        <span className="mt-0.5 block text-[10.5px] leading-4 text-[color:var(--utility-meta-text)]">{detail}</span>
       </span>
     </div>
   );
@@ -195,9 +195,9 @@ function ReadinessStep({
 
 function RuntimeMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[14px] border border-white/8 bg-white/[0.035] px-3 py-2">
-      <div className="text-[11px] font-medium tracking-[-0.01em] text-slate-500">{label}</div>
-      <div className="mt-1 truncate font-mono text-[11px] text-slate-200">{value}</div>
+    <div className="rounded-[14px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-3 py-2">
+      <div className="text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">{label}</div>
+      <div className="mt-1 truncate font-mono text-[11px] text-[color:var(--utility-foreground)]">{value}</div>
     </div>
   );
 }
@@ -597,7 +597,7 @@ export function OllamaModelControlCenter({
 
   return (
     <div className="grid gap-3.5" style={nonDragStyle}>
-      <div className="rounded-[24px] border border-white/8 bg-white/[0.045] p-4 shadow-none">
+      <div className="rounded-[24px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] p-4 shadow-none">
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -606,20 +606,20 @@ export function OllamaModelControlCenter({
                 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium',
                 appReady
                   ? 'border-emerald-300/22 bg-emerald-300/[0.08] text-emerald-100'
-                  : 'border-white/10 bg-white/[0.045] text-slate-300',
+                  : 'border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] text-[color:var(--utility-muted-text)]',
               )}
               >
                 {appReady ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
                 {appReady ? 'Installed' : 'Not installed'}
               </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.045] px-2.5 py-1 text-[11px] text-slate-300">Ollama authentication</span>
+              <span className="rounded-full border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-2.5 py-1 text-[11px] text-[color:var(--utility-muted-text)]">Ollama authentication</span>
             </div>
-            <h3 className="mt-3 text-[17px] font-semibold tracking-tight text-white">One Ollama model, pulled locally, ready for Kordi chat.</h3>
-            <p className="mt-1 max-w-[70ch] text-[12px] leading-5 text-slate-400">
+            <h3 className="mt-3 text-[17px] font-semibold tracking-tight text-[color:var(--utility-foreground)]">One Ollama model, pulled locally, ready for Kordi chat.</h3>
+            <p className="mt-1 max-w-[70ch] text-[12px] leading-5 text-[color:var(--utility-muted-text)]">
               Kordi uses Ollama’s OpenAI-compatible endpoint for chat, while this panel uses Ollama’s native API for model pull, run, stop, and removal. Removing a model stops any running copy before deleting it from disk.
             </p>
           </div>
-          <div className="flex min-w-[15rem] flex-col gap-2 rounded-[18px] border border-white/8 bg-black/10 p-3">
+          <div className="flex min-w-[15rem] flex-col gap-2 rounded-[18px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] p-3">
             {pageEndAction ? (
               <div className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[10px] border border-emerald-300/18 bg-emerald-300/[0.07] px-3 text-[11px] font-medium text-emerald-50">
                 <CheckCircle2 className="h-3.5 w-3.5" /> Ready
@@ -634,7 +634,7 @@ export function OllamaModelControlCenter({
                 {activeAction === 'install' ? (appReady ? 'Updating…' : 'Installing…') : activeAction === 'server-start' ? 'Starting…' : primaryActionLabel}
               </AuthActionButton>
             )}
-            <div className="text-[11px] leading-4 text-slate-500">{primaryActionDetail}</div>
+            <div className="text-[11px] leading-4 text-[color:var(--utility-meta-text)]">{primaryActionDetail}</div>
           </div>
         </div>
 
@@ -651,11 +651,11 @@ export function OllamaModelControlCenter({
         </div>
       ) : null}
 
-      <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-3.5">
+      <div className="rounded-[22px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] p-3.5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-[13px] font-medium text-white">Runtime endpoint</div>
-            <div className="mt-1 text-[11px] leading-5 text-slate-400">Ollama exposes OpenAI-compatible chat at <span className="font-mono text-slate-300">/v1/chat/completions</span>; native model controls use <span className="font-mono text-slate-300">/api/*</span>.</div>
+            <div className="text-[13px] font-medium text-[color:var(--utility-foreground)]">Runtime endpoint</div>
+            <div className="mt-1 text-[11px] leading-5 text-[color:var(--utility-muted-text)]">Ollama exposes OpenAI-compatible chat at <span className="font-mono text-[color:var(--utility-muted-text)]">/v1/chat/completions</span>; native model controls use <span className="font-mono text-[color:var(--utility-muted-text)]">/api/*</span>.</div>
           </div>
           <div className="flex flex-wrap gap-1.5">
             <AuthActionButton className={ollamaNeutralClass} onClick={() => void Promise.all([refreshServerStatus(), refreshInstalledModels(), refreshRunningModels()])}>
@@ -699,14 +699,14 @@ export function OllamaModelControlCenter({
         ) : null}
       </div>
 
-      <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-3.5">
+      <div className="rounded-[22px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] p-3.5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-[13px] font-medium text-white">Installed locally</div>
-              <div className="rounded-full border border-white/10 bg-white/[0.045] px-2 py-0.5 text-[10px] text-slate-300">{installedModels.length} chat models</div>
+              <div className="text-[13px] font-medium text-[color:var(--utility-foreground)]">Installed locally</div>
+              <div className="rounded-full border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-2 py-0.5 text-[10px] text-[color:var(--utility-muted-text)]">{installedModels.length} chat models</div>
             </div>
-            <div className="mt-1 max-w-[72ch] text-[11px] leading-5 text-slate-400">
+            <div className="mt-1 max-w-[72ch] text-[11px] leading-5 text-[color:var(--utility-muted-text)]">
               Run loads the model through Ollama’s native API. Remove first stops a running copy, then deletes it from disk. Embedding models are filtered out because they cannot answer chat.
             </div>
           </div>
@@ -723,19 +723,19 @@ export function OllamaModelControlCenter({
         ) : null}
 
         {isInstalledSectionExpanded ? (
-          <div className="mt-3 overflow-hidden rounded-[18px] border border-white/8 bg-black/10">
+          <div className="mt-3 overflow-hidden rounded-[18px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)]">
             {installedModels.length > 0 ? installedModels.map((model) => {
               const running = isModelRunning(model.id);
               const runtimeAction = running ? `stop:${model.id}` : `load:${model.id}`;
               return (
-                <div key={model.id} className="grid gap-2 border-b border-white/6 px-3.5 py-2.5 last:border-b-0 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                <div key={model.id} className="grid gap-2 border-b border-[color:var(--app-divider)] px-3.5 py-2.5 last:border-b-0 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="truncate font-mono text-[12px] text-slate-100">{model.id}</div>
+                      <div className="truncate font-mono text-[12px] text-[color:var(--utility-foreground)]">{model.id}</div>
                       <span className="rounded-full border border-emerald-300/18 bg-emerald-300/[0.08] px-2 py-0.5 text-[10px] font-medium text-emerald-100">Installed</span>
                       {running ? <span className="rounded-full border border-amber-300/18 bg-amber-300/[0.08] px-2 py-0.5 text-[10px] font-medium text-amber-100">Running</span> : null}
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-[color:var(--utility-meta-text)]">
                       {model.size ? <span>{model.size}</span> : null}
                       {model.family ? <span>{model.family}</span> : null}
                       {model.parameterSize ? <span>{model.parameterSize}</span> : null}
@@ -760,9 +760,9 @@ export function OllamaModelControlCenter({
               );
             }) : (
               <div className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                <div className="min-w-0 text-[12px] leading-5 text-slate-400">
-                  <div className="font-medium text-slate-200">No installed Ollama chat models yet.</div>
-                  <div className="mt-1">Pull a model from the library or enter an exact Ollama tag such as <span className="font-mono text-slate-300">llama3.2:latest</span>.</div>
+                <div className="min-w-0 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">
+                  <div className="font-medium text-[color:var(--utility-foreground)]">No installed Ollama chat models yet.</div>
+                  <div className="mt-1">Pull a model from the library or enter an exact Ollama tag such as <span className="font-mono text-[color:var(--utility-muted-text)]">llama3.2:latest</span>.</div>
                 </div>
                 <AuthActionButton
                   className={ollamaNeutralClass}
@@ -776,14 +776,14 @@ export function OllamaModelControlCenter({
         ) : null}
       </div>
 
-      <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-3.5">
+      <div className="rounded-[22px] border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] p-3.5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-[13px] font-medium text-white">Ollama library</div>
-              <div className="rounded-full border border-white/10 bg-white/[0.045] px-2 py-0.5 text-[10px] text-slate-300">{catalogSummary}</div>
+              <div className="text-[13px] font-medium text-[color:var(--utility-foreground)]">Ollama library</div>
+              <div className="rounded-full border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-2 py-0.5 text-[10px] text-[color:var(--utility-muted-text)]">{catalogSummary}</div>
             </div>
-            <div className="mt-1 max-w-[72ch] text-[11px] leading-5 text-slate-400">
+            <div className="mt-1 max-w-[72ch] text-[11px] leading-5 text-[color:var(--utility-muted-text)]">
               Pull a common family directly, expand it for exact tags, or type a model name from docs. Embeddings are omitted from this chat setup flow.
             </div>
           </div>
@@ -800,14 +800,14 @@ export function OllamaModelControlCenter({
 
         {isCatalogSectionExpanded ? (
           <div className="mt-3 grid gap-3">
-            <div className="grid gap-2 rounded-[18px] border border-white/8 bg-black/10 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <div className="grid gap-2 rounded-[18px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
               <label className="min-w-0">
-                <div className="text-[11px] font-medium tracking-[-0.01em] text-slate-500">Exact Ollama model</div>
+                <div className="text-[11px] font-medium tracking-[-0.01em] text-[color:var(--utility-meta-text)]">Exact Ollama model</div>
                 <input
                   value={exactModelDraft}
                   onChange={(event) => setExactModelDraft(event.target.value)}
                   placeholder="llama3.2:latest"
-                  className="app-input-shell mt-1 h-9 w-full rounded-[12px] px-3 font-mono text-[12px] text-white outline-none"
+                  className="app-input-shell mt-1 h-9 w-full rounded-[12px] px-3 font-mono text-[12px] text-[color:var(--utility-foreground)] outline-none"
                   style={nonDragStyle}
                 />
               </label>
@@ -818,12 +818,12 @@ export function OllamaModelControlCenter({
 
             <div className="flex flex-wrap gap-2">
               <div className="relative min-w-[16rem] flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--utility-meta-text)]" />
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Filter library"
-                  className="app-input-shell h-9 w-full rounded-[12px] pl-9 pr-3 text-[12px] text-white outline-none"
+                  className="app-input-shell h-9 w-full rounded-[12px] pl-9 pr-3 text-[12px] text-[color:var(--utility-foreground)] outline-none"
                   style={nonDragStyle}
                 />
               </div>
@@ -841,29 +841,29 @@ export function OllamaModelControlCenter({
             {catalogError ? <ErrorLine className="mt-0">{catalogError}</ErrorLine> : null}
 
             {catalogModels.length === 0 && activeAction !== 'catalog' ? (
-              <div className="rounded-[18px] border border-white/8 bg-black/10 px-4 py-4 text-[12px] leading-5 text-slate-400">
+              <div className="rounded-[18px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] px-4 py-4 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">
                 Load the Ollama library to browse popular chat models, or pull an exact tag above.
               </div>
             ) : null}
 
-            <div className="overflow-hidden rounded-[18px] border border-white/8 bg-black/10">
+            <div className="overflow-hidden rounded-[18px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)]">
               {visibleModels.map((model) => {
                 const expanded = expandedFamilyIds.has(model.id);
                 const loadingVariants = loadingFamilyIds.has(model.id);
                 const latestId = normalizeOllamaModelId(model.id);
                 const installed = installedIds.has(latestId) || installedIds.has(model.id);
                 return (
-                  <div key={model.id} className="border-b border-white/6 last:border-b-0">
+                  <div key={model.id} className="border-b border-[color:var(--app-divider)] last:border-b-0">
                     <div className="grid gap-2 px-3.5 py-2.5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                       <button type="button" className="min-w-0 text-left" onClick={() => toggleFamily(model.id)}>
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          {expanded ? <ChevronDown className="h-3.5 w-3.5 text-slate-500" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-500" />}
-                          <span className="truncate font-mono text-[12px] text-slate-100">{model.id}</span>
+                          {expanded ? <ChevronDown className="h-3.5 w-3.5 text-[color:var(--utility-meta-text)]" /> : <ChevronRight className="h-3.5 w-3.5 text-[color:var(--utility-meta-text)]" />}
+                          <span className="truncate font-mono text-[12px] text-[color:var(--utility-foreground)]">{model.id}</span>
                           {installed ? <span className="rounded-full border border-emerald-300/18 bg-emerald-300/[0.08] px-2 py-0.5 text-[10px] font-medium text-emerald-100">Installed</span> : null}
-                          {model.pulls ? <span className="rounded-full border border-white/10 bg-white/[0.045] px-2 py-0.5 text-[10px] text-slate-300">{model.pulls} pulls</span> : null}
+                          {model.pulls ? <span className="rounded-full border border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-2 py-0.5 text-[10px] text-[color:var(--utility-muted-text)]">{model.pulls} pulls</span> : null}
                         </div>
-                        <div className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-400">{model.description ?? modelSizesLabel(model)}</div>
-                        <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-slate-500">
+                        <div className="mt-1 line-clamp-2 text-[11px] leading-5 text-[color:var(--utility-muted-text)]">{model.description ?? modelSizesLabel(model)}</div>
+                        <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-[color:var(--utility-meta-text)]">
                           <span>{modelSizesLabel(model)}</span>
                           {model.tags ? <span>{model.tags} tags</span> : null}
                         </div>
@@ -879,16 +879,16 @@ export function OllamaModelControlCenter({
                     </div>
 
                     {expanded ? (
-                      <div className="border-t border-white/6 bg-white/[0.025] px-3.5 py-2.5">
+                      <div className="border-t border-[color:var(--app-divider)] bg-[color:var(--app-control-bg)] px-3.5 py-2.5">
                         {loadingVariants ? (
-                          <div className="text-[11px] text-slate-500">Loading tags…</div>
+                          <div className="text-[11px] text-[color:var(--utility-meta-text)]">Loading tags…</div>
                         ) : model.variants.length > 0 ? (
                           <div className="grid gap-1.5">
                             {model.variants.map((variant) => (
-                              <div key={variant.id} className="grid gap-2 rounded-[14px] border border-white/8 bg-black/10 px-3 py-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                              <div key={variant.id} className="grid gap-2 rounded-[14px] border border-[color:var(--app-divider)] bg-[color:var(--app-main-muted-bg)] px-3 py-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                                 <div className="min-w-0">
-                                  <div className="truncate font-mono text-[11px] text-slate-200">{variant.id}</div>
-                                  <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-slate-500">
+                                  <div className="truncate font-mono text-[11px] text-[color:var(--utility-foreground)]">{variant.id}</div>
+                                  <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-[color:var(--utility-meta-text)]">
                                     {variant.size ? <span>{variant.size}</span> : null}
                                     {variant.context ? <span>{variant.context}</span> : null}
                                     {variant.input ? <span>{variant.input}</span> : null}
@@ -906,7 +906,7 @@ export function OllamaModelControlCenter({
                             ))}
                           </div>
                         ) : (
-                          <div className="text-[11px] text-slate-500">No chat tags found for this family.</div>
+                          <div className="text-[11px] text-[color:var(--utility-meta-text)]">No chat tags found for this family.</div>
                         )}
                       </div>
                     ) : null}

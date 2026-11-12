@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { AuthActionButton, authButtonPrimaryClass } from './AuthDetailPrimitives';
 import { CUSTOM_MODEL_MAX_LENGTH, customModelIdError, type CustomApiAccount } from './customApiAccount';
 
-const inputClass = 'app-input-shell app-flat-input h-8 w-[260px] max-w-full rounded-lg px-3 text-[13px] text-white outline-none placeholder:text-slate-500';
+const inputClass = 'app-input-shell app-flat-input h-8 w-[260px] max-w-full rounded-lg px-3 text-[13px] text-[color:var(--utility-foreground)] outline-none placeholder:text-[color:var(--utility-meta-text)]';
 
 function validCustomBaseUrl(value: string) {
   try {
