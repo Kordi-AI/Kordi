@@ -10,6 +10,10 @@
 //! not response-body streaming or WebSocket lifetime. Pool wait and database
 //! timing cover bearer-session lookups only. Buckets have inclusive upper
 //! bounds and are disjoint; concurrent snapshots are approximate.
+//! `chat_send` adds fixed-label stage timings for completed HTTP sends and
+//! returned errors, with abandoned futures counted separately. Handler timing
+//! begins after request extraction/authentication; store and handler totals
+//! overlap their sub-stages. Other background store callers are not included.
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,6 +21,8 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use super::session_signals::SessionSignalHub;
+
+pub(crate) mod send;
 
 const BOUNDS_US: [u64; 10] = [
     100,
@@ -111,6 +117,7 @@ impl Histogram {
 
 #[derive(Default)]
 pub(crate) struct SessionMetrics {
+    pub(crate) send: send::SendTimings,
     counters: [AtomicU64; 8],
     pool_wait: Histogram,
     lookup: Histogram,
@@ -143,7 +150,7 @@ impl SessionMetrics {
             .map(|(name, histogram)| ((*name).to_string(), histogram.snapshot()))
             .collect();
         json!({"schema": 1, "counters": counters, "bucket_upper_us": BOUNDS_US,
-            "pool_wait": self.pool_wait.snapshot(), "database_lookup": self.lookup.snapshot(), "requests": requests})
+            "pool_wait": self.pool_wait.snapshot(), "database_lookup": self.lookup.snapshot(), "requests": requests, "chat_send": self.send.snapshot()})
     }
 }
 

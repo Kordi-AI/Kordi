@@ -1,3 +1,4 @@
+use crate::auth::session_metrics::send::{measure, SendStage};
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
@@ -200,52 +201,65 @@ async fn send_message(
     Path(conversation_id): Path<Uuid>,
     Json(mut request): Json<SendMessageRequest>,
 ) -> Response {
-    if let Err(error) = normalize_legacy_group_envelope(&mut request) {
-        return error.into_response();
-    }
-    if let Err(error) = validate_message_request(&request) {
-        return error.into_response();
-    }
-    if let Some(Extension(rate_limiter)) = rate_limiter {
-        if let RateLimitDecision::Limited { retry_after } = rate_limiter
-            .observe_account_limit(MESSAGE_SEND_LIMIT, &session.account_id)
-            .await
-        {
-            return rate_limited_response(retry_after);
+    let metrics = &state.session_signals().lookup_cache().metrics().send;
+    measure(Some(metrics), SendStage::Handler, async {
+        if let Err(error) = normalize_legacy_group_envelope(&mut request) {
+            return error.into_response();
         }
-    }
-    match store::send_message(
-        state.db_pool(),
-        &session.account_id,
-        conversation_id,
-        request,
-    )
-    .await
-    {
-        Ok(outcome) => {
-            let message = match store::message_for_viewer(
+        if let Err(error) = validate_message_request(&request) {
+            return error.into_response();
+        }
+        if let Some(Extension(rate_limiter)) = rate_limiter {
+            if let RateLimitDecision::Limited { retry_after } = rate_limiter
+                .observe_account_limit(MESSAGE_SEND_LIMIT, &session.account_id)
+                .await
+            {
+                return rate_limited_response(retry_after);
+            }
+        }
+        match measure(
+            Some(metrics),
+            SendStage::Store,
+            store::send_message_measured(
                 state.db_pool(),
                 &session.account_id,
-                outcome.value.clone(),
-            )
-            .await
-            {
-                Ok(message) => message,
-                Err(error) => return store_error("project message", error),
-            };
-            message_sent::message_sent(&state, &outcome.value).await;
-            (
-                if outcome.inserted {
-                    StatusCode::CREATED
-                } else {
-                    StatusCode::OK
-                },
-                Json(MessageResponse { message }),
-            )
-                .into_response()
+                conversation_id,
+                request,
+                metrics,
+            ),
+        )
+        .await
+        {
+            Ok(outcome) => {
+                let message = match measure(
+                    Some(metrics),
+                    SendStage::Projection,
+                    store::message_for_viewer(
+                        state.db_pool(),
+                        &session.account_id,
+                        outcome.value.clone(),
+                    ),
+                )
+                .await
+                {
+                    Ok(message) => message,
+                    Err(error) => return store_error("project message", error),
+                };
+                message_sent::message_sent(&state, &outcome.value).await;
+                (
+                    if outcome.inserted {
+                        StatusCode::CREATED
+                    } else {
+                        StatusCode::OK
+                    },
+                    Json(MessageResponse { message }),
+                )
+                    .into_response()
+            }
+            Err(error) => store_error("send message", error),
         }
-        Err(error) => store_error("send message", error),
-    }
+    })
+    .await
 }
 
 async fn update_shared_title(

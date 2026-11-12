@@ -35,3 +35,32 @@ async fn diagnostics_distinguish_cache_use_and_invalidation_causes() {
     assert_eq!(metrics["pool_wait"]["count"], 2);
     assert_eq!(metrics["database_lookup"]["count"], 0);
 }
+
+#[tokio::test]
+async fn failed_send_pool_acquisition_does_not_record_unreached_stages() {
+    let cache = SessionLookupCache::default();
+    let pool = sqlx_postgres::PgPoolOptions::new()
+        .connect_lazy("postgresql://localhost/synthetic")
+        .unwrap();
+    pool.close().await;
+    let request = serde_json::from_value(serde_json::json!({
+        "client_message_id": uuid::Uuid::now_v7(), "kind": "text",
+        "content": {"schema":1,"blocks":[{"type":"text","text":"Synthetic"}]},
+        "attachment_ids": []
+    }))
+    .unwrap();
+    let result = crate::chat_sync::store::send_message_measured(
+        &pool,
+        "synthetic",
+        uuid::Uuid::now_v7(),
+        request,
+        &cache.metrics().send,
+    )
+    .await;
+    assert!(result.is_err());
+    let snapshot = cache.metrics().snapshot();
+    assert_eq!(snapshot["chat_send"]["pool_wait"]["count"], 1);
+    assert_eq!(snapshot["chat_send"]["pool_wait"]["abandoned"], 0);
+    assert_eq!(snapshot["chat_send"]["begin"]["count"], 0);
+    assert_eq!(snapshot["chat_send"]["commit"]["count"], 0);
+}
