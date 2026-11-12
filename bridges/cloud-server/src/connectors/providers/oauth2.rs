@@ -1,5 +1,8 @@
 //! Standard OAuth 2 token exchange shared by every connector provider.
 
+use std::collections::BTreeSet;
+use std::sync::Mutex;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::Deserialize;
@@ -38,17 +41,51 @@ struct RawSlackUser {
     scope: Option<String>,
 }
 
-/// Maps a token endpoint error code. `invalid_grant` (the grant was revoked
-/// or expired) and `unauthorized_client` (the refresh token was issued to a
-/// different OAuth client, for example after the server moved to a new
-/// client) mean only a new sign-in helps. Anything else, including
-/// `invalid_client` (our own client settings), is a retryable provider error.
+/// Maps a token endpoint error code. These codes mean this one grant is
+/// dead and only a new sign-in helps: `invalid_grant` (OAuth 2, Google),
+/// `invalid_refresh_token` (Slack), and `bad_refresh_token` (GitHub).
+/// Anything else, including `invalid_client` (our own client settings) and
+/// `unauthorized_client` (see [`is_other_client`]), is a retryable provider
+/// error.
 fn token_error(code: Option<&str>) -> ProviderError {
     match code {
-        Some("invalid_grant" | "unauthorized_client") => ProviderError::Unauthorized,
+        Some("invalid_grant" | "invalid_refresh_token" | "bad_refresh_token") => {
+            ProviderError::Unauthorized
+        }
         Some(code) => ProviderError::Rejected(safe_error_code(code)),
         None => ProviderError::Rejected("provider error".to_string()),
     }
+}
+
+/// OAuth client IDs that this process has seen succeed at the token
+/// endpoint. Client settings only change with a restart, so the set lives
+/// as long as the process.
+static CONFIRMED_CLIENTS: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
+
+fn confirm_client(client_id: &str) {
+    if let Ok(mut confirmed) = CONFIRMED_CLIENTS.lock() {
+        if !confirmed.contains(client_id) {
+            confirmed.insert(client_id.to_string());
+        }
+    }
+}
+
+fn client_confirmed(client_id: &str) -> bool {
+    CONFIRMED_CLIENTS
+        .lock()
+        .map(|confirmed| confirmed.contains(client_id))
+        .unwrap_or(false)
+}
+
+/// `unauthorized_client` on a refresh: the refresh token was issued to a
+/// different OAuth client, as after a server moves to a new client. The same
+/// answer comes back for every connector when the server is deployed with a
+/// valid but wrong client, so it only counts as a dead grant once this client
+/// has worked here. Otherwise one bad deploy would ask every user to sign in
+/// again, and fixing the deploy would not undo it.
+fn is_other_client(error: &ProviderError) -> bool {
+    matches!(error, ProviderError::Rejected(detail)
+        if detail == "unauthorized_client" || detail.ends_with(" unauthorized_client"))
 }
 
 /// An OAuth error code reduced to the characters RFC 6749 allows in codes we
@@ -154,7 +191,14 @@ impl OAuth2ConnectorProvider {
                 .and_then(|body| body.get("error"))
                 .and_then(Value::as_str);
             return Err(match token_error(code) {
-                ProviderError::Unauthorized => ProviderError::Unauthorized,
+                ProviderError::Unauthorized => {
+                    eprintln!(
+                        "[connectors] token endpoint answered HTTP {} {}",
+                        status.as_u16(),
+                        code.map(safe_error_code).unwrap_or_default()
+                    );
+                    ProviderError::Unauthorized
+                }
                 ProviderError::Rejected(code) if body.is_some() => {
                     ProviderError::Rejected(format!("HTTP {} {code}", status.as_u16()))
                 }
@@ -202,7 +246,9 @@ impl ConnectorProvider for OAuth2ConnectorProvider {
             form.push(("code_verifier", verifier));
         }
         let body = self.token_request(&form).await?;
-        token_grant_from_json(&body, None, Utc::now())
+        let grant = token_grant_from_json(&body, None, Utc::now())?;
+        confirm_client(&client.client_id);
+        Ok(grant)
     }
 
     async fn refresh(
@@ -220,8 +266,23 @@ impl ConnectorProvider for OAuth2ConnectorProvider {
             ("refresh_token", refresh),
             ("grant_type", "refresh_token"),
         ];
-        let body = self.token_request(&form).await?;
-        token_grant_from_json(&body, Some(refresh), Utc::now()).map(|grant| grant.secret)
+        let refreshed = match self.token_request(&form).await {
+            Ok(body) => token_grant_from_json(&body, Some(refresh), Utc::now()),
+            Err(error) => Err(error),
+        };
+        match refreshed {
+            Ok(grant) => {
+                confirm_client(&client.client_id);
+                Ok(grant.secret)
+            }
+            Err(error) if is_other_client(&error) && client_confirmed(&client.client_id) => {
+                eprintln!(
+                    "[connectors] refresh token belongs to another OAuth client; a new sign-in is needed"
+                );
+                Err(ProviderError::Unauthorized)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     async fn revoke(
