@@ -218,6 +218,17 @@ pub(crate) async fn refresh_tasks(pool: &PgPool, proposal_ids: &[String]) -> sql
     Ok(())
 }
 
+type CardRow = (
+    Uuid,
+    String,
+    String,
+    Value,
+    Value,
+    i64,
+    Option<String>,
+    Option<Uuid>,
+);
+
 struct Card {
     id: Uuid,
     conversation: Uuid,
@@ -232,16 +243,7 @@ struct Card {
 
 impl Card {
     async fn load(pool: &PgPool, id: Uuid) -> sqlx_core::Result<Option<Self>> {
-        let row: Option<(
-            Uuid,
-            String,
-            String,
-            Value,
-            Value,
-            i64,
-            Option<String>,
-            Option<Uuid>,
-        )> = query_as(
+        let row: Option<CardRow> = query_as(
             "SELECT conversation_id,sender_account_id,kind,content,votes,revision,result,message_id
              FROM cloud_facilitator_cards WHERE card_id = $1",
         )

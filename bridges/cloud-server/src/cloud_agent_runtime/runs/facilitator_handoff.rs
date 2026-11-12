@@ -44,7 +44,7 @@ pub(crate) async fn post(
          WHERE card.card_id = $1 AND card.conversation_id = $2 AND card.kind = 'task'
            AND card.message_id IS NOT NULL AND conversation.kind = 'group'",
     ).bind(card_id).bind(proposal.conversation_id).fetch_one(&mut **tx).await?;
-    let participants = conversation_participants(&mut **tx, proposal.conversation_id).await?;
+    let participants = conversation_participants(tx, proposal.conversation_id).await?;
     let actor = participants
         .iter()
         .find(|member| member.account_id == sender)

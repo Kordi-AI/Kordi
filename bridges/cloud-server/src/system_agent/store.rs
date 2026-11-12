@@ -424,18 +424,7 @@ pub async fn complete(
         .or_else(|| (!documents.is_empty()).then_some("I drafted a document for the group."))
     {
         Some(text) if !text.is_empty() => {
-            let (sender, conversation) = (&run.owner_account_id, run.conversation_id);
-            post_text(
-                pool,
-                run_id,
-                sender,
-                conversation,
-                &run.input,
-                text,
-                card_touched,
-                &documents,
-            )
-            .await?
+            post_text(pool, run_id, &run, text, card_touched, &documents).await?
         }
         _ => None,
     };

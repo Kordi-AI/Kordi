@@ -72,16 +72,15 @@ pub(super) fn forward_text(
 pub(super) async fn post_text(
     pool: &PgPool,
     run_id: &str,
-    sender: &str,
-    conversation_id: Uuid,
-    input: &Value,
+    run: &super::store::ActiveRun,
     text: &str,
     card_touched: bool,
     documents: &[RunDocument],
 ) -> Result<Option<String>, sqlx_core::Error> {
-    let members = mention_members(pool, conversation_id, sender).await?;
-    let text = forward_text(input, text, card_touched, &members);
-    let text = super::ownership::with_step_in_line(input, &text);
+    let sender = &run.owner_account_id;
+    let members = mention_members(pool, run.conversation_id, sender).await?;
+    let text = forward_text(&run.input, text, card_touched, &members);
+    let text = super::ownership::with_step_in_line(&run.input, &text);
     let (text, mentions) = render_mentions(&text, &members);
     let mut request = SendMessageRequest {
         client_message_id: Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("{run_id}:text").as_bytes()),
@@ -95,7 +94,7 @@ pub(super) async fn post_text(
         attachment_ids: Vec::new(),
     };
     add_to_request(&mut request, documents);
-    match crate::chat_sync::store::send_message(pool, sender, conversation_id, request).await {
+    match crate::chat_sync::store::send_message(pool, sender, run.conversation_id, request).await {
         Ok(outcome) => Ok(Some(outcome.value.id.to_string())),
         Err(error) => {
             eprintln!("[system-agent] Could not post the System agent's text message: {error}");
