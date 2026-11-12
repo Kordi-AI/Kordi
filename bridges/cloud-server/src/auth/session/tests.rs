@@ -276,3 +276,5 @@ async fn sliding_expiry_leaves_revoked_and_fixed_sessions_untouched() {
     assert!(!bump_expiry(&pool, &row, 30).await.unwrap());
     assert_eq!(stored_expiry(&pool, &on_device.token_id).await, stale);
 }
+
+mod activity;
