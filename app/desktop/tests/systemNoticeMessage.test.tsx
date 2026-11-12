@@ -43,7 +43,7 @@ test('system notices show as System with the front-facing bird and no tag', () =
 
   const markup = renderToStaticMarkup(createElement(MessageBubble, { msg: message, onOpenSenderProfile: () => {} }));
   assert.match(markup, />System</);
-  assert.match(markup, /kordi-system-avatar\.png/);
+  assert.match(markup, /kordi-system-avatar\.jpg/);
   assert.doesNotMatch(markup, /Built-in agent|PiP/);
   assert.doesNotMatch(markup, /aria-label="Open System profile"/);
   assert.doesNotMatch(markup, /app-system-notice-row/);

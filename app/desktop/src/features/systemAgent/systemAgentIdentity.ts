@@ -21,7 +21,7 @@ export function isSystemAgentAccountId(accountId: string | null | undefined): bo
  * System with a front-facing Kordi bird, whichever built-in account posted them. */
 export const KORDI_SYSTEM_NOTICE_KIND = 'system-notice';
 export const KORDI_SYSTEM_NAME = 'System';
-export const KORDI_SYSTEM_AVATAR_URL = publicAssetPath('kordi-system-avatar.png');
+export const KORDI_SYSTEM_AVATAR_URL = publicAssetPath('kordi-system-avatar.jpg');
 
 export function isSystemAvatarUrl(url: string | null | undefined): boolean {
   return url?.trim() === KORDI_SYSTEM_AVATAR_URL;

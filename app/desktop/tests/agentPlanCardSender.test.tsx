@@ -54,7 +54,7 @@ test("the owner sees their agent's card as their agent's message, not System", (
   assert.match(markup, /Owner · You/);
   assert.match(markup, /app-plan-card/);
   assert.doesNotMatch(markup, />System</);
-  assert.doesNotMatch(markup, /kordi-system-avatar\.png/);
+  assert.doesNotMatch(markup, /kordi-system-avatar\.jpg/);
   assert.doesNotMatch(markup, /app-chat-bubble-user/);
 });
 
