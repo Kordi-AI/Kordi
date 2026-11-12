@@ -37,9 +37,9 @@ impl Editor {
         }
         let mut result = String::new();
         result.push_str(&self.state.lines[sl][sc..]);
-        for i in (sl + 1)..el {
+        for line in &self.state.lines[(sl + 1)..el] {
             result.push('\n');
-            result.push_str(&self.state.lines[i]);
+            result.push_str(line);
         }
         result.push('\n');
         result.push_str(&self.state.lines[el][..ec]);
