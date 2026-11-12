@@ -12,11 +12,10 @@ struct ComposerBackdropBand: View {
     static let topOverhang: CGFloat = 3
     /// Height of the clear-to-full fade at the band's top edge.
     static let softEdgeHeight: CGFloat = 22
-    /// Wallpaper laid over the blur. The material already carries its own tint, so these
-    /// sit below the proposal's 42% / 46% to keep bubbles readable as soft shapes; dark
-    /// needs more to pull the material's grey lift back toward the dark wallpaper.
-    static let lightWallpaperOpacity = 0.18
-    static let darkWallpaperOpacity = 0.35
+    /// A light wallpaper tint keeps the floating glass controls distinct while
+    /// preserving enough contrast for messages behind the composer.
+    static let lightWallpaperOpacity = 0.08
+    static let darkWallpaperOpacity = 0.20
 
     var body: some View {
         surface

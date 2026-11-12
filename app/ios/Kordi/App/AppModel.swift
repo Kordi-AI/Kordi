@@ -8079,6 +8079,20 @@ final class AppModel: ObservableObject {
         })
         conversations = fixture.conversations
         messagesByConversation = fixture.messagesByConversation
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--preview-composer-stop") {
+            let requestID = "preview-composer-running-request"
+            let conversationID = "group:mobile"
+            messagesByConversation[conversationID, default: []].append(ChatMessage(
+                id: requestID, conversationId: conversationID, author: .me, authorName: "Alex",
+                text: "@Kordi Review the release checklist.", createdAt: now,
+                deliveryState: .sent, errorMessage: nil, requestMessageId: nil
+            ))
+            pendingAgentRequestIds[conversationID] = [requestID]
+            pendingAgentRequestStartedAt[requestID] = now
+            pendingAgentDisplayNames[requestID] = "Kordi"
+        }
+        #endif
         if ProcessInfo.processInfo.arguments.contains("--preview-projects"),
            let template = conversations.first(where: { $0.kind == .agent && !$0.isAgentLaunchTemplate }) {
             for (index, title) in ["Review homepage", "Update typography", "Improve project discovery", "Review sidebar navigation"].enumerated() {
