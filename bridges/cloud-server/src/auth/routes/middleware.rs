@@ -76,12 +76,16 @@ async fn session_middleware(
                 account_id: row.account_id,
                 device_id: row.device_id,
             });
-            let response = next.run(req).await;
+            let mut response = next.run(req).await;
+            let preserves_session =
+                crate::auth::session_cache::routes::take_preserved_session(&mut response);
             // A request may have signed out, revoked a device, left an
             // organization, or deleted the account. Database signals reach
             // every replica's cache, but this one drops the caller's cached
             // sessions now, so the caller's next request sees the change.
-            if changes_state {
+            // Only explicitly reviewed successful chat methods can omit this
+            // blanket eviction. Signals still evict concurrent auth changes.
+            if changes_state && !preserves_session {
                 cache.evict_after_mutation(&account_id);
             }
             response
