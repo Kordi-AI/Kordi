@@ -75,10 +75,11 @@ pub(super) async fn check_proof(
             ));
         };
         caller.charge_proof().await?;
-        let verified = tokio::task::spawn_blocking(move || verify_password(&hash, &plaintext))
-            .await
-            .map_err(|_| server_error())?
-            .map_err(|_| server_error())?;
+        let verified = match verify_password_queued(hash, plaintext).await {
+            Ok(verified) => verified,
+            Err(PasswordWorkError::Busy) => return Err(Box::new(password_busy_response())),
+            Err(PasswordWorkError::Failed) => return Err(server_error()),
+        };
         if !verified {
             let _ = write_audit(
                 pool,

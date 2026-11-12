@@ -7,6 +7,7 @@ use futures_util::SinkExt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::close::CloseReason;
 use super::ticket::ConsumedRealtimeTicket;
 use super::{CONNECT_TIMEOUT, MAX_SERVER_FRAME_BYTES, SEND_TIMEOUT};
 use crate::chat_sync::cursor::CursorCodec;
@@ -60,74 +61,125 @@ struct ResyncRequiredFrame<'a> {
 }
 
 #[derive(Serialize)]
-pub(super) struct ErrorFrame<'a> {
+struct ErrorFrame<'a> {
     #[serde(rename = "type")]
-    pub(super) frame_type: &'static str,
-    pub(super) code: &'a str,
+    frame_type: &'static str,
+    code: &'a str,
+}
+
+/// Why a frame could not be sent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SendError {
+    /// The frame is larger than [`MAX_SERVER_FRAME_BYTES`].
+    TooLarge,
+    /// The client did not take the frame within [`SEND_TIMEOUT`].
+    Timeout,
+    /// The connection is already gone.
+    Closed,
+    /// The frame could not be serialized.
+    Encode,
+}
+
+impl SendError {
+    pub(super) fn reason(self) -> CloseReason {
+        match self {
+            Self::TooLarge => CloseReason::FrameTooLarge,
+            Self::Timeout => CloseReason::SendTimeout,
+            Self::Closed => CloseReason::ClientGone,
+            Self::Encode => CloseReason::ServerError,
+        }
+    }
+}
+
+fn encode<T: Serialize>(value: &T) -> Result<String, SendError> {
+    let body = serde_json::to_string(value).map_err(|_| SendError::Encode)?;
+    if body.len() > MAX_SERVER_FRAME_BYTES {
+        return Err(SendError::TooLarge);
+    }
+    Ok(body)
+}
+
+/// Sends one message, giving up after [`SEND_TIMEOUT`].
+pub(super) async fn send_message(
+    sender: &mut SplitSink<WebSocket, Message>,
+    message: Message,
+) -> Result<(), SendError> {
+    tokio::time::timeout(SEND_TIMEOUT, sender.send(message))
+        .await
+        .map_err(|_| SendError::Timeout)?
+        .map_err(|_| SendError::Closed)
 }
 
 pub(super) async fn send_json<T: Serialize>(
     sender: &mut SplitSink<WebSocket, Message>,
     value: &T,
-) -> Result<(), ()> {
-    let body = serde_json::to_string(value).map_err(|_| ())?;
-    if body.len() > MAX_SERVER_FRAME_BYTES {
-        return Err(());
-    }
-    tokio::time::timeout(SEND_TIMEOUT, sender.send(Message::Text(body)))
-        .await
-        .map_err(|_| ())?
-        .map_err(|_| ())
+) -> Result<(), SendError> {
+    send_message(sender, Message::Text(encode(value)?)).await
 }
 
-pub(super) async fn send_socket_json<T: Serialize>(
-    socket: &mut WebSocket,
-    value: &T,
-) -> Result<(), ()> {
-    let body = serde_json::to_string(value).map_err(|_| ())?;
-    if body.len() > MAX_SERVER_FRAME_BYTES {
-        return Err(());
-    }
-    tokio::time::timeout(SEND_TIMEOUT, socket.send(Message::Text(body)))
-        .await
-        .map_err(|_| ())?
-        .map_err(|_| ())
+/// Sends a close frame, giving up after [`SEND_TIMEOUT`] so a client that
+/// stopped reading cannot hold the socket open.
+pub(super) async fn send_close(sender: &mut SplitSink<WebSocket, Message>) {
+    let _ = send_message(sender, Message::Close(None)).await;
 }
 
+/// Refuses a socket whose connect frame was not accepted.
+pub(super) async fn reject_connect(socket: &mut WebSocket) {
+    let frame = ErrorFrame {
+        frame_type: "error",
+        code: "INVALID_CONNECT_FRAME",
+    };
+    if let Ok(body) = encode(&frame) {
+        let _ = tokio::time::timeout(SEND_TIMEOUT, socket.send(Message::Text(body))).await;
+    }
+    let _ = tokio::time::timeout(SEND_TIMEOUT, socket.send(Message::Close(None))).await;
+}
+
+/// Waits for the connect frame and returns the stream position it resumes
+/// from, or why the socket must close.
 pub(super) async fn receive_connect(
     socket: &mut WebSocket,
     ticket: &ConsumedRealtimeTicket,
     codec: &CursorCodec,
-) -> Result<i64, ()> {
+) -> Result<i64, CloseReason> {
     let incoming = tokio::time::timeout(CONNECT_TIMEOUT, socket.recv())
         .await
-        .map_err(|_| ())?;
-    let Some(Ok(Message::Text(body))) = incoming else {
-        return Err(());
+        .map_err(|_| CloseReason::InvalidConnect)?;
+    let body = match incoming {
+        Some(Ok(Message::Text(body))) => body,
+        Some(Ok(Message::Close(_))) => return Err(CloseReason::ClientClosed),
+        None | Some(Err(_)) => return Err(CloseReason::ClientGone),
+        Some(Ok(_)) => return Err(CloseReason::InvalidConnect),
     };
-    let frame: ClientFrame = serde_json::from_str(&body).map_err(|_| ())?;
-    let ClientFrame::Connect {
+    let Ok(ClientFrame::Connect {
         protocol_version,
         device_id,
         cursor,
-    } = frame
+    }) = serde_json::from_str::<ClientFrame>(&body)
     else {
-        return Err(());
+        return Err(CloseReason::InvalidConnect);
     };
     if protocol_version != PROTOCOL_VERSION || device_id != ticket.device_id {
-        return Err(());
+        return Err(CloseReason::InvalidConnect);
     }
-    codec.decode(&cursor, &ticket.account_id).map_err(|_| ())
+    codec
+        .decode(&cursor, &ticket.account_id)
+        .map_err(|_| CloseReason::InvalidConnect)
 }
 
-pub(super) async fn resync_and_close(sender: &mut SplitSink<WebSocket, Message>, reason: &str) {
+/// Asks the client to resync, closes, and returns `reason` for the log.
+pub(super) async fn resync_and_close(
+    sender: &mut SplitSink<WebSocket, Message>,
+    reason: CloseReason,
+) -> CloseReason {
     let _ = send_json(
         sender,
         &ResyncRequiredFrame {
             frame_type: "resync_required",
-            reason,
+            reason: reason.resync_reason(),
         },
     )
     .await;
-    let _ = sender.send(Message::Close(None)).await;
+    send_close(sender).await;
+    reason
 }

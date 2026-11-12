@@ -2,12 +2,20 @@
 //!
 //! Stays free of any DB or HTTP code — call sites in `cloud_auth` compose this
 //! with the existing `rusqlite` connection helpers and the axum router.
+//! Request handlers hash and verify through [`hash_password_queued`] and
+//! [`verify_password_queued`], which cap how many hashes run at once.
 
 use std::fmt;
 
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version};
 use password_hash::{PasswordHash, SaltString};
 use rand::rngs::OsRng;
+
+mod queue;
+pub use queue::{
+    hash_password_queued, verify_password_queued, PasswordHashQueue, PasswordWorkError,
+    DEFAULT_PASSWORD_HASH_CONCURRENCY, PASSWORD_HASH_CONCURRENCY_ENV, PASSWORD_HASH_MAX_WAIT,
+};
 
 pub const PASSWORD_ALGORITHM_ID: &str = "argon2id-v19-m65536-t3-p4";
 pub const PASSWORD_MIN_LENGTH: usize = 8;

@@ -23,6 +23,12 @@
 //! the publishing pod (e.g. the one handling the contact-add HTTP
 //! request) and the subscribing pod (the one holding the WS) talk via
 //! the broker. No Redis pubsub or cluster gossip required.
+//!
+//! # Session checks
+//!
+//! Sign-out, device revocation, and account deletion close the socket at once
+//! through the session signal hub. A backstop recheck runs every ~30 s and
+//! tolerates a minute of database errors (see [`session_guard`]).
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -34,9 +40,16 @@ use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use tokio::time::Instant;
 
-use crate::auth::session::{lookup_session, session_is_active};
+use crate::auth::session::lookup_session;
+use crate::auth::session_signals::{SessionSignalSubscription, SignalVerdict};
 use crate::server::ServerState;
+use session_guard::{GatewayGuard, GatewayStep};
+
+mod session_guard;
+#[cfg(test)]
+mod tests_socket;
 
 #[derive(Debug, Deserialize)]
 pub struct WsAuthQuery {
@@ -66,7 +79,8 @@ pub async fn ws_handler(
             device_id: session.device_id,
             token_id: session.token_id,
         };
-        return ws.on_upgrade(move |socket| run_ws(socket, connection, state));
+        let signals = connection.subscribe(&state);
+        return ws.on_upgrade(move |socket| run_ws(socket, connection, signals, state));
     }
     let pool = state.db_pool();
     let session = match lookup_session(pool, q.token.as_deref().unwrap_or_default()).await {
@@ -77,19 +91,22 @@ pub async fn ws_handler(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
-    if let Err(error) = state
-        .admission()
-        .authorize_account(pool, &session.account_id)
-        .await
-    {
-        return error.response();
-    }
     let connection = WsConnection {
         account_id: session.account_id,
         device_id: session.device_id,
         token_id: session.token_id,
     };
-    ws.on_upgrade(move |socket| run_ws(socket, connection, state))
+    // Subscribed before the admission check, so a revocation that commits
+    // after it still reaches the socket.
+    let signals = connection.subscribe(&state);
+    if let Err(error) = state
+        .admission()
+        .authorize_account(pool, &connection.account_id)
+        .await
+    {
+        return error.response();
+    }
+    ws.on_upgrade(move |socket| run_ws(socket, connection, signals, state))
 }
 
 /// The authenticated identity behind one gateway socket. The socket stays
@@ -101,29 +118,11 @@ struct WsConnection {
 }
 
 impl WsConnection {
-    async fn is_active(&self, state: &ServerState) -> bool {
-        if state
-            .admission()
-            .authorize_account(state.db_pool(), &self.account_id)
-            .await
-            .is_err()
-        {
-            return false;
-        }
-        match session_is_active(
-            state.db_pool(),
-            &self.account_id,
-            &self.device_id,
-            &self.token_id,
-        )
-        .await
-        {
-            Ok(active) => active,
-            Err(error) => {
-                eprintln!("[ws] revalidate session: {error}");
-                false
-            }
-        }
+    /// The session signals that concern this socket.
+    fn subscribe(&self, state: &ServerState) -> SessionSignalSubscription {
+        state
+            .session_signals()
+            .subscribe(&self.account_id, &self.device_id, Some(&self.token_id))
     }
 }
 
@@ -145,7 +144,12 @@ struct ConnectedFrame<'a> {
     account_id: &'a str,
 }
 
-async fn run_ws(socket: WebSocket, connection: WsConnection, state: Arc<ServerState>) {
+async fn run_ws(
+    socket: WebSocket,
+    connection: WsConnection,
+    mut signals: SessionSignalSubscription,
+    state: Arc<ServerState>,
+) {
     let account_id = connection.account_id.clone();
     let device_id = connection.device_id.clone();
     let bus = state.events().clone();
@@ -154,7 +158,7 @@ async fn run_ws(socket: WebSocket, connection: WsConnection, state: Arc<ServerSt
         // clients can tell the difference between "connected" and
         // "actually receiving events," then idle until close.
         mark_presence_online_on_websocket_connect(&state, &account_id, &device_id).await;
-        idle_without_nats(socket, &state, &connection).await;
+        idle_without_nats(socket, &state, &connection, &mut signals).await;
         let disconnected_at = Utc::now();
         mark_presence_offline_on_websocket_disconnect(
             &state,
@@ -219,8 +223,7 @@ async fn run_ws(socket: WebSocket, connection: WsConnection, state: Arc<ServerSt
         return;
     }
     mark_presence_online_on_websocket_connect(&state, &account_id, &device_id).await;
-    let mut session_revalidation = tokio::time::interval(SESSION_REVALIDATION_INTERVAL);
-    session_revalidation.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut guard = GatewayGuard::new(Instant::now());
 
     loop {
         tokio::select! {
@@ -273,8 +276,16 @@ async fn run_ws(socket: WebSocket, connection: WsConnection, state: Arc<ServerSt
                 break;
             },
 
-            _ = session_revalidation.tick() => {
-                if !connection.is_active(&state).await {
+            verdict = signals.recv() => match verdict {
+                SignalVerdict::Close => {
+                    let _ = sender.send(Message::Close(None)).await;
+                    break;
+                }
+                SignalVerdict::Recheck => guard.recheck_now(Instant::now()),
+            },
+
+            _ = tokio::time::sleep_until(guard.deadline()) => {
+                if guard.revalidate(&state, &connection).await == GatewayStep::Close {
                     let _ = sender.send(Message::Close(None)).await;
                     break;
                 }
@@ -294,9 +305,6 @@ async fn run_ws(socket: WebSocket, connection: WsConnection, state: Arc<ServerSt
 }
 
 const WS_DISCONNECT_OFFLINE_GRACE: Duration = Duration::from_secs(2);
-/// How often an open socket re-checks that its session and device are live,
-/// so sign-out and device revocation both close it within this interval.
-const SESSION_REVALIDATION_INTERVAL: Duration = Duration::from_secs(2);
 
 fn should_mark_presence_offline_on_websocket_disconnect(account_id: &str, device_id: &str) -> bool {
     !account_id.trim().is_empty() && !device_id.trim().is_empty()
@@ -408,6 +416,7 @@ async fn idle_without_nats(
     mut socket: WebSocket,
     state: &Arc<ServerState>,
     connection: &WsConnection,
+    signals: &mut SessionSignalSubscription,
 ) {
     let frame = serde_json::to_string(&ConnectedFrame {
         event: "connected_no_events",
@@ -415,15 +424,22 @@ async fn idle_without_nats(
     })
     .unwrap_or_else(|_| String::from(r#"{"event":"connected_no_events"}"#));
     let _ = socket.send(Message::Text(frame)).await;
-    let mut session_revalidation = tokio::time::interval(SESSION_REVALIDATION_INTERVAL);
+    let mut guard = GatewayGuard::new(Instant::now());
     loop {
         tokio::select! {
             message = socket.recv() => match message {
                 Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
                 _ => {}
             },
-            _ = session_revalidation.tick() => {
-                if !connection.is_active(state).await {
+            verdict = signals.recv() => match verdict {
+                SignalVerdict::Close => {
+                    let _ = socket.send(Message::Close(None)).await;
+                    break;
+                }
+                SignalVerdict::Recheck => guard.recheck_now(Instant::now()),
+            },
+            _ = tokio::time::sleep_until(guard.deadline()) => {
+                if guard.revalidate(state, connection).await == GatewayStep::Close {
                     let _ = socket.send(Message::Close(None)).await;
                     break;
                 }

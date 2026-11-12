@@ -7,8 +7,9 @@ use chrono::Utc;
 use sqlx_core::query::query;
 use tokio::time::Instant;
 
+use super::close::CloseReason;
 use super::delivery::{Delivery, DeliveryEnd, REPAIR_WHILE_LISTENING, REPAIR_WITHOUT_LISTENER};
-use super::retry::FAILURE_GRACE;
+use super::retry::{FAILURE_GRACE, FAILURE_GRACE_SPREAD};
 use super::session::{
     check_connection, GuardStep, SessionCheck, SessionGuard, SESSION_RECHECK_INTERVAL,
 };
@@ -60,12 +61,12 @@ fn a_socket_closes_at_its_known_session_expiry() {
     let mut expired = SessionGuard::new(now, Some(expires_at), None);
     assert_eq!(
         expired.record(at_expiry, SessionCheck::Inactive),
-        GuardStep::Close
+        GuardStep::Close(CloseReason::SessionEnded)
     );
     let mut unknown = SessionGuard::new(now, Some(expires_at), None);
     assert_eq!(
         unknown.record(at_expiry, SessionCheck::Unavailable),
-        GuardStep::Close,
+        GuardStep::Close(CloseReason::SessionEnded),
         "an unconfirmed session past its expiry fails closed"
     );
     let mut extended = SessionGuard::new(now, Some(expires_at), None);
@@ -114,10 +115,20 @@ fn database_failures_retry_with_backoff_before_closing() {
         delays.windows(2).any(|pair| pair[1] > pair[0]),
         "retries back off"
     );
-    assert_eq!(
-        guard.record(now, SessionCheck::Unavailable),
-        GuardStep::Close
-    );
+    // Each socket closes within the spread after the shared grace.
+    loop {
+        match guard.record(now, SessionCheck::Unavailable) {
+            GuardStep::Continue => {
+                assert!(guard.deadline() > now, "a failed check retries later");
+                now = guard.deadline();
+            }
+            step => {
+                assert_eq!(step, GuardStep::Close(CloseReason::DatabaseUnavailable));
+                break;
+            }
+        }
+    }
+    assert!(now.duration_since(opened) <= FAILURE_GRACE + FAILURE_GRACE_SPREAD);
 
     let mut recovered = SessionGuard::new(opened, None, None);
     let later = opened + Duration::from_secs(100);
@@ -163,8 +174,8 @@ fn durable_reads_back_off_on_failure_and_relax_while_listening() {
     assert_eq!(polling.fail_for_test(now), DeliveryEnd::Continue);
     assert!(polling.repair_deadline() - now <= Duration::from_millis(1_200));
     assert_eq!(
-        polling.fail_for_test(now + FAILURE_GRACE),
-        DeliveryEnd::Resync("SERVER_ERROR")
+        polling.fail_for_test(now + FAILURE_GRACE + FAILURE_GRACE_SPREAD),
+        DeliveryEnd::Resync(CloseReason::DatabaseUnavailable)
     );
 }
 
