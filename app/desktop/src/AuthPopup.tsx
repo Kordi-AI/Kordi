@@ -1,12 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
-import { syncNativeWindowTheme } from '@/app/nativeWindowTheme';
-import { applyChatTheme, KORDI_CHAT_THEME_STORAGE_KEY, KORDI_THEME_MODE_STORAGE_KEY, readStoredChatTheme, readStoredThemeMode, resolveThemeMode } from '@/app/themePreference';
+import { useEffect, useMemo, useState } from 'react';
 import { Copy, ExternalLink, LoaderCircle, LogIn, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorLine } from '@/components/ui/ErrorLine';
 import { broadcastDesktopAuthUpdated, type DesktopAuthUpdateReason } from '@/features/auth/desktopAuthSync';
+import { StandaloneAuthWindow } from '@/features/auth/StandaloneAuthWindow';
 import { AuthFlowSteps, type AuthFlowStep } from '@/kordi-app/auth/AuthFlowSteps';
-import type { DesktopAuthAttemptSnapshot, DesktopAuthProvider, DesktopAuthState, ResolvedThemeMode } from '@/kordi-app/types';
+import type { DesktopAuthAttemptSnapshot, DesktopAuthProvider, DesktopAuthState } from '@/kordi-app/types';
 import {
   authPopupDescription,
   authPopupPrimaryActionLabel,
@@ -558,46 +557,5 @@ export default function AuthPopup({
     );
   }
 
-  return (
-    <StandaloneAuthWindow>{shell}</StandaloneAuthWindow>
-  );
-}
-
-function StandaloneAuthWindow({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState(() => readStoredThemeMode());
-  const [systemTheme, setSystemTheme] = useState<ResolvedThemeMode>(() => (
-    window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
-  ));
-  const theme = resolveThemeMode(mode, systemTheme);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia?.('(prefers-color-scheme: light)');
-    const updateSystemTheme = () => setSystemTheme(mediaQuery?.matches ? 'light' : 'dark');
-    const updatePreferences = (event: StorageEvent) => {
-      if (event.key === null || event.key === KORDI_THEME_MODE_STORAGE_KEY) setMode(readStoredThemeMode());
-      if (event.key === null || event.key === KORDI_CHAT_THEME_STORAGE_KEY) applyChatTheme(readStoredChatTheme());
-    };
-
-    mediaQuery?.addEventListener('change', updateSystemTheme);
-    window.addEventListener('storage', updatePreferences);
-    return () => {
-      mediaQuery?.removeEventListener('change', updateSystemTheme);
-      window.removeEventListener('storage', updatePreferences);
-    };
-  }, []);
-
-  useLayoutEffect(() => {
-    document.documentElement.style.colorScheme = theme;
-    return () => { document.documentElement.style.removeProperty('color-scheme'); };
-  }, [theme]);
-
-  useEffect(() => {
-    void syncNativeWindowTheme(mode).catch(() => undefined);
-  }, [mode]);
-
-  return (
-    <div className={`kordi-app theme-${theme} flex h-[100dvh] w-full overflow-hidden bg-[color:var(--app-main-bg)] px-6 py-8 text-[color:var(--utility-foreground)]`}>
-      {children}
-    </div>
-  );
+  return <StandaloneAuthWindow>{shell}</StandaloneAuthWindow>;
 }
