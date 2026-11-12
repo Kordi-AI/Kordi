@@ -15,6 +15,7 @@ import { useDocumentReaderHost } from '@/features/documents/documentReaderHost';
 import { artifactPreviewDocumentSource, type ArtifactPreviewMode } from './artifactPreviewDocument';
 import { ArtifactDataTable } from './artifactDataTable';
 import { ArtifactListRow } from './ArtifactListRow';
+import { OPEN_ARTIFACT_FAILED, openArtifactExternally } from './openArtifactExternally';
 import { ARTIFACT_MARKDOWN_PREVIEW_CLASS, artifactFromDirectoryEntry, formattedJsonSource, formatFileSize } from './artifactPreviewText';
 
 type ArtifactInspectorProps = {
@@ -151,17 +152,19 @@ type ArtifactListSectionProps = {
   artifacts: SessionArtifact[];
   activeArtifact: SessionArtifact | null;
   onSelect: (artifactId: string) => void;
+  onOpenExternal?: (artifact: SessionArtifact) => void;
   participants?: ConversationParticipant[];
 };
 
-function ArtifactListSection({ title, section, description, artifacts, activeArtifact, onSelect, participants }: ArtifactListSectionProps) {
+function ArtifactListSection({ title, section, description, artifacts, activeArtifact, onSelect, onOpenExternal, participants }: ArtifactListSectionProps) {
   if (artifacts.length === 0) return null;
 
+  // Rows fill the column, so a filled row lines up with the toolbar edges above the list.
   return (
-    <section className="app-detail-section" data-artifact-section={section}>
-      {title ? <div className="app-detail-kicker">{title}</div> : null}
+    <section className="app-artifact-list-section" data-artifact-section={section}>
+      {title ? <h3 className="app-artifact-list-section-title">{title}</h3> : null}
       {description ? <div className="mb-2 text-[11px] leading-5 text-[color:var(--utility-muted-text)]">{description}</div> : null}
-      <div className="-mx-2 flex flex-col gap-px">
+      <div className="flex flex-col gap-px">
         {artifacts.map((artifact) => (
           <ArtifactListRow
             key={artifact.id}
@@ -170,6 +173,7 @@ function ArtifactListSection({ title, section, description, artifacts, activeArt
             isActive={activeArtifact?.id === artifact.id}
             participants={participants ?? []}
             onSelect={() => onSelect(artifact.id)}
+            onOpenExternal={onOpenExternal ? () => onOpenExternal(artifact) : undefined}
           />
         ))}
       </div>
@@ -246,6 +250,15 @@ export function ArtifactInspector({
   const [isBrowserLoading, setIsBrowserLoading] = useState(false);
   const [browserSelectedArtifact, setBrowserSelectedArtifact] = useState<SessionArtifact | null>(null);
   const [previewWindowOpen, setPreviewWindowOpen] = useState(false);
+  const [pickedArtifactId, setPickedArtifactId] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
+  // Files open in their default app only from the desktop app, which can reach them.
+  const openExternally = isNativeShell
+    ? (artifact: SessionArtifact) => {
+      setOpenError(null);
+      openArtifactExternally(artifact, previewBaseRoot).catch(() => setOpenError(OPEN_ARTIFACT_FAILED));
+    }
+    : undefined;
 
   const folderBrowserRootPath = folderBrowserRoot?.trim() ?? '';
   const effectiveBrowserPath = useMemo(() => {
@@ -265,7 +278,11 @@ export function ArtifactInspector({
   // In chats, Markdown and HTML open in the companion pane instead of inline.
   const documentsInCompanion = Boolean(useDocumentReaderHost().opensDocumentsInCompanion);
   const opensInCompanion = documentsInCompanion && Boolean(documentFormatForPath(previewArtifact?.path));
+  // A document that opens in the companion is marked only once picked here, so the list does not
+  // start with a filled row; anything previewed below the list stays marked.
+  const listActiveArtifact = opensInCompanion && pickedArtifactId !== activeArtifact?.id ? null : activeArtifact;
   const selectListArtifact = (artifactId: string) => {
+    setPickedArtifactId(artifactId);
     setBrowserSelectedArtifact(null);
     onSelectArtifact(artifactId);
     const artifact = artifacts.find((entry) => entry.id === artifactId);
@@ -384,7 +401,7 @@ export function ArtifactInspector({
 
   return (
     <div data-artifact-inspector="true" className="flex h-full min-h-0 flex-col">
-      <div data-artifact-file-list="true" className={cn('shrink-0 overflow-y-auto overflow-x-hidden pr-1', previewArtifact && !opensInCompanion ? 'max-h-[38%]' /* room for the preview */ : 'max-h-full')}>
+      <div data-artifact-file-list="true" className={cn('shrink-0 overflow-y-auto overflow-x-hidden', previewArtifact && !opensInCompanion ? 'max-h-[38%]' /* room for the preview */ : 'max-h-full')}>
         {folderBrowserRootPath ? (
           <section className="app-detail-section">
           <div className="app-detail-kicker">Project folder</div>
@@ -459,23 +476,26 @@ export function ArtifactInspector({
           </section>
         ) : null}
 
+        {openError ? <ErrorLine className="mb-2">{openError}</ErrorLine> : null}
         {generatedArtifacts.length > 0 || relatedArtifacts.length > 0 ? (
           <>
           <ArtifactListSection
-            title={generatedArtifacts.length > 0 ? 'Generated artifacts' : ''}
+            title=""
             section="generated"
             artifacts={generatedArtifacts}
-            activeArtifact={activeArtifact}
+            activeArtifact={listActiveArtifact}
             participants={participants}
             onSelect={selectListArtifact}
+            onOpenExternal={openExternally}
           />
           <ArtifactListSection
-            title="Related changed files"
+            title="Changed files"
             section="related"
             artifacts={relatedArtifacts}
-            activeArtifact={activeArtifact}
+            activeArtifact={listActiveArtifact}
             participants={participants}
             onSelect={selectListArtifact}
+            onOpenExternal={openExternally}
           />
           </>
         ) : emptyMessage === null ? null : (

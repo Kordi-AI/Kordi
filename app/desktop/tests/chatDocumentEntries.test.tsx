@@ -35,6 +35,7 @@ import { DocumentReaderHostContext, documentReaderHostForConversation, type Docu
 import type { CanonicalSessionMessage, Message, MessageAttachment, SessionArtifact } from '../src/kordi-app/types';
 import { ArtifactInspector } from '../src/pages/ArtifactInspector';
 import { ChatDetailPanel } from '../src/pages/ChatDetailPanel';
+import { ARTIFACT_LAYOUT_STORAGE_KEY, resetArtifactLayoutForTests, setArtifactLayout } from '../src/pages/artifactLayoutPreference';
 import { withJsdomRoot } from './helpers/mountWithJsdom';
 import { waitForReactCondition } from './helpers/waitForReactCondition';
 
@@ -133,11 +134,18 @@ test('the entries are absent where an attachment cannot be sent', () => {
   assert.doesNotMatch(renderToStaticMarkup(artifactsPanel(null)), /New document|Add file/, 'no reader host, as in the agent companion page');
 
   const artifacts: SessionArtifact[] = [{ id: 'notes/plan.md', path: 'notes/plan.md', name: 'plan.md', kind: 'document', category: 'artifact', summary: 'Created' }];
-  for (const markup of [renderToStaticMarkup(artifactsPanel(hostWith(send))), renderToStaticMarkup(artifactsPanel(hostWith(send), artifacts))]) {
-    assert.match(markup, />New document</);
-    assert.match(markup, />Add file</);
-    assert.match(markup, /accept="\.md,\.markdown,\.html,\.htm"/);
-  }
+  const emptyMarkup = renderToStaticMarkup(artifactsPanel(hostWith(send)));
+  assert.match(emptyMarkup, />New document</);
+  assert.match(emptyMarkup, />Add file</);
+  assert.match(emptyMarkup, /accept="\.md,\.markdown,\.html,\.htm"/);
+  // With artifacts, the entries move into the toolbar's New menu.
+  const listed = renderToStaticMarkup(artifactsPanel(hostWith(send), artifacts));
+  assert.match(listed, /aria-label="New"[^>]*aria-haspopup="menu"/);
+  assert.doesNotMatch(listed, />New document</, 'New document waits in the closed menu');
+  assert.match(listed, /accept="\.md,\.markdown,\.html,\.htm"/);
+  const withoutSend = renderToStaticMarkup(artifactsPanel(hostWith(), artifacts));
+  assert.doesNotMatch(withoutSend, /aria-label="New"|type="file"/, 'no New menu without an attachment send');
+  assert.match(withoutSend, /aria-label="Search artifacts"/, 'search and the layout switch stay');
 });
 
 test('the chat detail slot adds a document through the composer send as an attachment-only message', () => {
@@ -210,21 +218,23 @@ test('New document sends a blank Markdown file through the chat attachment send,
       }));
 
     const root = await mount(entries([]));
+    const newMenu = () => root.querySelector('[aria-label="New"]') as HTMLButtonElement;
+    await click(newMenu());
     await click(button(root, 'New document'));
+    assert.equal(root.querySelector('[role="menu"]'), null, 'picking an entry closes the menu');
     assert.equal(stored.length, 1);
     assert.equal(stored[0].name, 'Untitled 2.md', 'the listed Untitled.md is taken');
     assert.equal(stored[0].type, 'text/markdown');
     assert.equal(await stored[0].text(), BLANK_DOCUMENT_BODY);
     assert.deepEqual(sent.map((attachment) => [attachment.name, attachment.path, attachment.mimeType]), [['Untitled 2.md', STORED_PATH, 'text/markdown']]);
     assert.equal(opened.length, 0, 'nothing opens before the chat has the document');
-    assert.equal(button(root, 'New document').disabled, true);
-    assert.equal(button(root, 'Add file').disabled, true);
+    assert.equal(newMenu().disabled, true, 'no second document while one is on its way');
 
     await mount(entries([attachmentMessage('m1', { name: 'Untitled 2.md', localPath: CACHED_COPY_PATH, attachmentId: 'att_new' })]));
     assert.deepEqual(opened.map((attachment) => [attachment.name, attachment.attachmentId]), [['Untitled 2.md', 'att_new']]);
     await act(async () => { finishSend(); await new Promise((resolve) => setTimeout(resolve, 0)); });
     assert.equal(opened.length, 1, 'the finished send does not open it again');
-    assert.equal(button(root, 'New document').disabled, false);
+    assert.equal(newMenu().disabled, false);
     assert.equal(root.querySelector('[role="alert"]'), null);
   });
   clearCloudAttachmentLocalPathCache();
@@ -422,9 +432,57 @@ test('the listed Untitled.md row of a channel opens the same editor tab as the t
   clearCloudAttachmentLocalPathCache();
 });
 
-test('the Artifacts tab shows the entries and the list, with nothing under the list', async () => {
+test('the Artifacts tab starts with cards, and the switch moves to the list and is remembered', async () => {
   const delivered = serverRow(storedItem(new File([BLANK_DOCUMENT_BODY], 'Untitled.md', { type: 'text/markdown' })), 'cloud-group', CACHED_COPY_PATH);
   await withJsdomRoot(async (mount) => {
+    window.localStorage.removeItem(ARTIFACT_LAYOUT_STORAGE_KEY);
+    resetArtifactLayoutForTests();
+    const root = await mount(artifactsPanel(hostWith(() => {}), [], [delivered]));
+    assert.equal(root.querySelectorAll('[data-artifact-card="true"]').length, 1);
+    assert.equal(root.querySelector('[data-artifact-inspector="true"]'), null);
+    const option = (label: string) => root.querySelector(`[data-artifact-layout-switch] [aria-label="${label}"]`) as HTMLButtonElement;
+    assert.equal(option('Cards').getAttribute('aria-pressed'), 'true');
+    await click(option('List'));
+    assert.equal(option('List').getAttribute('aria-pressed'), 'true');
+    assert.ok(root.querySelector('[data-artifact-inspector="true"]'));
+    assert.equal(root.querySelector('[data-artifact-card="true"]'), null);
+    assert.equal(window.localStorage.getItem(ARTIFACT_LAYOUT_STORAGE_KEY), 'list');
+    await click(option('Cards'));
+    window.localStorage.removeItem(ARTIFACT_LAYOUT_STORAGE_KEY);
+  });
+  resetArtifactLayoutForTests();
+});
+
+test('the Artifacts search filters by title and file name, and says when nothing matches', async () => {
+  const artifacts: SessionArtifact[] = [
+    { id: 'notes/plan.md', path: 'notes/plan.md', name: 'plan.md', kind: 'document', category: 'artifact', summary: 'Created' },
+    { id: 'site/pricing.html', path: 'site/pricing.html', name: 'pricing.html', kind: 'document', category: 'artifact', summary: 'Created' },
+  ];
+  await withJsdomRoot(async (mount) => {
+    const root = await mount(artifactsPanel(hostWith(() => {}), artifacts));
+    const search = root.querySelector('input[aria-label="Search artifacts"]') as HTMLInputElement;
+    // React DOM loaded before this window existed, so it watches text fields through focus and key events.
+    const type = async (value: string) => {
+      await act(async () => {
+        search.dispatchEvent(new window.FocusEvent('focusin', { bubbles: true }));
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(search, value);
+        search.dispatchEvent(new window.Event('input', { bubbles: true }));
+        search.dispatchEvent(new window.KeyboardEvent('keyup', { bubbles: true }));
+      });
+    };
+    await type('pric');
+    assert.deepEqual(Array.from(root.querySelectorAll('[data-artifact-card-title]')).map((title) => title.textContent), ['pricing.html']);
+    await type('nothing here');
+    assert.equal(root.querySelector('[data-artifact-search-empty]')?.textContent, 'No matches');
+    await type('');
+    assert.equal(root.querySelectorAll('[data-artifact-card="true"]').length, 2);
+  });
+});
+
+test('the Artifacts list shows the entries and the list, with nothing under the list', async () => {
+  const delivered = serverRow(storedItem(new File([BLANK_DOCUMENT_BODY], 'Untitled.md', { type: 'text/markdown' })), 'cloud-group', CACHED_COPY_PATH);
+  await withJsdomRoot(async (mount) => {
+    setArtifactLayout('list');
     const root = await mount(artifactsPanel(hostWith(() => {}), [], [delivered]));
     const inspector = root.querySelector('[data-artifact-inspector="true"]');
     assert.ok(inspector);
@@ -433,5 +491,7 @@ test('the Artifacts tab shows the entries and the list, with nothing under the l
     // The rows bleed 8px past the list on each side; the list must not scroll sideways for that.
     assert.match(list.className, /\boverflow-x-hidden\b/);
     assert.equal(list.querySelectorAll('[data-artifact-file-row="true"]').length, 1);
+    window.localStorage.removeItem(ARTIFACT_LAYOUT_STORAGE_KEY);
   });
+  resetArtifactLayoutForTests();
 });

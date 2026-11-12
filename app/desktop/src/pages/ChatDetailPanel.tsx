@@ -1,4 +1,4 @@
-import { memo, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { memo, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { formatSessionIdSubtitle } from '@/app/viewModels/helpers';
@@ -8,7 +8,9 @@ import { usePresenceNow } from '@/kordi-app/contacts/usePresenceNow';
 import type { CloudAccount } from '@/features/cloud/authClient';
 import { useCloudPresence } from '@/features/cloud/useCloudPresence';
 import type { Conversation, DesktopChatTurnSnapshot, DetailTab, SessionArtifact } from '@/kordi-app/types';
+import { ArtifactCardGrid } from '@/pages/ArtifactCardGrid';
 import { ArtifactInspector } from '@/pages/ArtifactInspector';
+import { setArtifactLayout, useArtifactLayout } from '@/pages/artifactLayoutPreference';
 import { ChatMemoryTab } from '@/pages/ChatMemoryTab';
 import { TaskActivityDashboardPanel } from '@/pages/TaskActivityDashboardPanel';
 import { useScheduledTasks } from '@/features/cloud/useScheduledTasks';
@@ -18,6 +20,7 @@ import { conversationIsGroupChat } from '@/pages/chatsPage.model';
 import { displayCanonicalParticipants } from '@/features/canonical/readModel/participantPresentation';
 import { ChatDocumentEntries } from '@/features/documents/ChatDocumentEntries';
 import { withChatDocumentArtifacts } from '@/features/documents/chatDocuments';
+import { documentTitleFor } from '@/features/documents/documentTitles';
 
 type ActiveConversation = Conversation;
 
@@ -219,6 +222,11 @@ function ChatDetailPanelView({
   });
   // Markdown and HTML sent in the chat are documents of the chat, listed with what agents produced.
   const listedArtifacts = useMemo(() => withChatDocumentArtifacts(artifacts, activeConv.messages), [artifacts, activeConv.messages]);
+  const artifactLayout = useArtifactLayout();
+  // The search belongs to one chat; another chat starts with the full list.
+  const [artifactSearch, setArtifactSearch] = useState<{ conversationId: string; text: string }>({ conversationId: activeConv.id, text: '' });
+  const artifactQuery = artifactSearch.conversationId === activeConv.id ? artifactSearch.text : '';
+  const shownArtifacts = useMemo(() => filterArtifacts(listedArtifacts, artifactQuery), [artifactQuery, listedArtifacts]);
   const scheduledTasks = useScheduledTasks({ enabled: true });
   const openSenderProfile = useContext(ChatSenderProfileContext);
 
@@ -377,19 +385,41 @@ function ChatDetailPanelView({
   if (activeDetailTab === 'artifacts') {
     return (
       <div className="app-detail-sheet flex h-full min-h-0 flex-col overflow-hidden">
-        <ChatDocumentEntries conversationId={activeConv.id} messages={activeConv.messages} artifacts={listedArtifacts} />
-        <div className="min-h-0 flex-1">
-          <ArtifactInspector
-            isNativeShell={isNativeShell}
-            artifacts={listedArtifacts}
-            activeArtifactId={activeArtifactId}
-            onSelectArtifact={onSelectArtifact}
-            previewBaseRoot={artifactPreviewBaseRoot}
-            participants={activeConv.canonicalParticipants}
-            // The entries above show the empty state, like the Memory tab.
-            emptyMessage={null}
-          />
-        </div>
+        <ChatDocumentEntries
+          conversationId={activeConv.id}
+          messages={activeConv.messages}
+          artifacts={listedArtifacts}
+          query={artifactQuery}
+          onQueryChange={(text) => setArtifactSearch({ conversationId: activeConv.id, text })}
+          layout={artifactLayout}
+          onLayoutChange={setArtifactLayout}
+        >
+          {shownArtifacts.length === 0 ? (
+            <div data-artifact-search-empty="" className="px-1 py-6 text-center text-[13px] leading-5 text-[color:var(--utility-muted-text)]">No matches</div>
+          ) : artifactLayout === 'cards' ? (
+            <div className="app-artifact-card-scroll h-full min-h-0 overflow-y-auto overflow-x-hidden">
+              <ArtifactCardGrid
+                isNativeShell={isNativeShell}
+                artifacts={shownArtifacts}
+                activeArtifactId={activeArtifactId}
+                onSelectArtifact={onSelectArtifact}
+                previewBaseRoot={artifactPreviewBaseRoot}
+                participants={activeConv.canonicalParticipants}
+              />
+            </div>
+          ) : (
+            <ArtifactInspector
+              isNativeShell={isNativeShell}
+              artifacts={shownArtifacts}
+              activeArtifactId={activeArtifactId}
+              onSelectArtifact={onSelectArtifact}
+              previewBaseRoot={artifactPreviewBaseRoot}
+              participants={activeConv.canonicalParticipants}
+              // The entries above show the empty state, like the Memory tab.
+              emptyMessage={null}
+            />
+          )}
+        </ChatDocumentEntries>
       </div>
     );
   }
@@ -413,6 +443,16 @@ function ChatDetailPanelView({
       {scheduledTasks.error ? <div className="app-inspector-empty">{scheduledTasks.error}</div> : null}
     </div>
   );
+}
+
+/** Artifacts whose title, file name, or folder contains every word of the search. */
+function filterArtifacts(artifacts: SessionArtifact[], query: string) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return artifacts;
+  return artifacts.filter((artifact) => {
+    const haystack = [artifact.name, artifact.path, documentTitleFor(artifact.attachmentId) ?? ''].join(' ').toLowerCase();
+    return words.every((word) => haystack.includes(word));
+  });
 }
 
 function chatDetailPanelPropsEqual(previous: ChatDetailPanelProps, next: ChatDetailPanelProps) {

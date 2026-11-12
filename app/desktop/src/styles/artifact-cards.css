@@ -1,0 +1,139 @@
+/* Chat Artifacts tab: the toolbar (search, cards/list switch, New menu) and the card layout,
+ * where each artifact shows a scaled thumbnail of its first lines. */
+.app-artifact-toolbar,
+.app-artifact-card-layout {
+  --artifact-switch-on-bg: #fff;
+  --artifact-card-backdrop: var(--app-control-bg);
+  --artifact-card-paper: #fff;
+  --artifact-card-ink: #1f2328;
+  --artifact-card-muted-ink: #5d636b;
+  --artifact-card-border: color-mix(in srgb, var(--utility-foreground) 9%, transparent);
+  --artifact-card-border-hover: color-mix(in srgb, var(--utility-foreground) 18%, transparent);
+}
+.theme-dark :is(.app-artifact-toolbar, .app-artifact-card-layout) {
+  --artifact-switch-on-bg: rgb(255 255 255 / 12%);
+  --artifact-card-paper: #202227;
+  --artifact-card-ink: #e7e8eb;
+  --artifact-card-muted-ink: #a2a6ad;
+}
+
+.app-artifact-toolbar { display: flex; align-items: center; gap: 6px; min-height: 28px; }
+.app-artifact-search {
+  display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; height: 28px; padding: 0 8px;
+  border: 1px solid transparent; border-radius: 7px; background: var(--app-control-bg); color: var(--utility-muted-text);
+}
+.app-artifact-search:focus-within { border-color: var(--app-focus-border); }
+.app-artifact-search input {
+  flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; color: var(--utility-foreground);
+  font-size: 12.5px; line-height: 18px; box-shadow: none;
+}
+.app-artifact-search input::placeholder { color: var(--utility-muted-text); }
+.app-artifact-layout-switch { display: inline-flex; flex-shrink: 0; height: 28px; padding: 2px; border-radius: 7px; background: var(--app-control-bg); }
+.app-artifact-layout-option {
+  display: grid; place-items: center; width: 26px; height: 24px; border: 0; border-radius: 5px; background: transparent;
+  color: var(--utility-muted-text);
+}
+.app-artifact-layout-option:hover { color: var(--utility-foreground); }
+.app-artifact-layout-option[aria-pressed='true'] {
+  background: var(--artifact-switch-on-bg); color: var(--utility-foreground); box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
+}
+.app-artifact-toolbar-button {
+  display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; border: 0; border-radius: 7px;
+  background: var(--app-control-bg); color: var(--utility-foreground);
+}
+.app-artifact-toolbar-button:hover:not(:disabled) { background: var(--app-control-hover); }
+.app-artifact-toolbar-button:disabled { opacity: .5; }
+
+/* Dense on purpose: small cards, many per row, so a chat's artifacts read at a glance. */
+.app-artifact-card-layout { padding: 1px 1px 16px; }
+.app-artifact-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 12px 10px; }
+
+.app-artifact-card {
+  display: flex; flex-direction: column; min-width: 0; padding: 0; border: 0; background: none; color: var(--utility-foreground);
+  text-align: left; cursor: pointer;
+}
+.app-artifact-card-thumb {
+  position: relative; display: grid; place-items: center; aspect-ratio: 4 / 3; overflow: hidden;
+  border: 1px solid var(--artifact-card-border); border-radius: 7px; background: var(--artifact-card-backdrop);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.app-artifact-card:hover .app-artifact-card-thumb,
+.app-artifact-card[aria-current='true'] .app-artifact-card-thumb {
+  border-color: var(--artifact-card-border-hover); box-shadow: 0 2px 8px rgb(0 0 0 / 7%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-artifact-card-thumb { transition: none; }
+}
+
+/* The thumbnail page: a sheet inset from the top that runs off the bottom edge. */
+.app-artifact-card-page {
+  position: absolute; inset: 6px 7px -1px; overflow: hidden; border-radius: 3px 3px 0 0; pointer-events: none;
+  box-shadow: 0 0 0 1px var(--artifact-card-border);
+}
+.app-artifact-card-paper {
+  --utility-foreground: var(--artifact-card-ink);
+  --utility-muted-text: var(--artifact-card-muted-ink);
+  background: var(--artifact-card-paper); color: var(--artifact-card-ink);
+}
+.app-artifact-card-paper > div { padding: 18px 20px; }
+.app-artifact-card-markdown { font-size: 15px; line-height: 1.5; }
+.app-artifact-card-web { inset: 0; border-radius: 0; box-shadow: none; background: #fff; }
+.app-artifact-card-code { background: var(--app-code-bg); }
+.app-artifact-card-code pre {
+  margin: 0; padding: 14px 16px; white-space: pre; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--utility-foreground); opacity: .85;
+}
+.app-artifact-card-table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.35; }
+.app-artifact-card-table td {
+  max-width: 0; overflow: hidden; padding: 6px 6px; border-bottom: 1px solid var(--artifact-card-border);
+  text-overflow: ellipsis; white-space: nowrap; color: var(--artifact-card-muted-ink);
+}
+.app-artifact-card-table tr:first-child td { font-weight: 600; color: var(--artifact-card-ink); }
+
+.app-artifact-card-glyph { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; }
+.app-artifact-card-type,
+.app-artifact-card-live,
+.app-artifact-card-pinned {
+  position: absolute; z-index: 1; height: 15px; padding: 0 4px; border-radius: 4px;
+  font-size: 9px; font-weight: 600; line-height: 15px; letter-spacing: .02em;
+}
+/* The type pill sits on the sheet, so it gets an opaque base under its tint. */
+.app-artifact-card-type { left: 5px; bottom: 5px; box-shadow: 0 0 0 1.5px var(--artifact-card-backdrop); background-color: var(--artifact-card-paper); }
+.app-artifact-card-live {
+  top: 4px; right: 4px; display: inline-flex; align-items: center; gap: 3px; background: var(--artifact-card-paper);
+  color: rgb(22 163 74); box-shadow: 0 0 0 1px var(--artifact-card-border);
+}
+.app-artifact-card-live::before { width: 5px; height: 5px; border-radius: 50%; background: currentColor; content: ''; }
+.app-artifact-card-pinned { top: 4px; left: 5px; background: rgb(251 191 36 / 22%); color: rgb(180 83 9); }
+
+.app-artifact-card-title {
+  display: block; margin-top: 5px; overflow: hidden; font-size: 12px; font-weight: 500; line-height: 16px;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.app-artifact-card-meta {
+  display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden;
+  font-size: 11px; line-height: 14px; color: var(--utility-muted-text); white-space: nowrap;
+}
+
+/* List layout: compact sections; a section after the first gets a small gap and a label. */
+.app-artifact-list-section + .app-artifact-list-section { margin-top: 12px; }
+.app-artifact-list-section-title {
+  margin: 0 0 2px; padding-left: 9px; font-size: 11.5px; font-weight: 500; line-height: 20px; color: var(--utility-muted-text);
+}
+
+/* Open in default app: a small arrow over the thumbnail, shown on hover or keyboard focus. */
+.app-artifact-card-shell { position: relative; min-width: 0; }
+.app-artifact-card-open {
+  position: absolute; z-index: 2; top: 4px; right: 4px; display: grid; place-items: center; width: 22px; height: 22px;
+  border: 0; border-radius: 5px; background: var(--artifact-card-paper); color: var(--utility-muted-text);
+  box-shadow: 0 0 0 1px var(--artifact-card-border), 0 1px 3px rgb(0 0 0 / 10%); opacity: 0; transition: opacity .12s ease;
+}
+.app-artifact-card-shell:hover .app-artifact-card-open,
+.app-artifact-card-open:focus-visible { opacity: 1; }
+.app-artifact-card-open:hover { color: var(--utility-foreground); }
+/* The arrow takes the Live pill's corner while it shows. */
+.app-artifact-card-shell:has(.app-artifact-card-open:is(:hover, :focus-visible)) .app-artifact-card-live,
+.app-artifact-card-shell:hover:has(.app-artifact-card-open) .app-artifact-card-live { opacity: 0; }
+
+/* The scroll bar gets its own lane, so it never covers the right column of cards. */
+.app-artifact-card-scroll { scrollbar-gutter: stable; }

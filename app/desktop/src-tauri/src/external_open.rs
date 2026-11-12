@@ -9,6 +9,17 @@ pub(crate) fn run_external_command(command: &mut Command) -> Result<(), String> 
     }
 }
 
+/// Opens a file on this machine in the app the system assigns to its type.
+pub(crate) fn open_with_default_app(path: &std::path::Path) -> Result<(), String> {
+    if cfg!(target_os = "macos") {
+        run_external_command(Command::new("open").arg(path))
+    } else if cfg!(target_os = "windows") {
+        run_external_command(Command::new("explorer").arg(path))
+    } else {
+        run_external_command(Command::new("xdg-open").arg(path))
+    }
+}
+
 #[tauri::command]
 pub(crate) fn desktop_open_external_url(url: String) -> Result<String, String> {
     let trimmed = url.trim();

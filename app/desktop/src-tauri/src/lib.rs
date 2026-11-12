@@ -334,6 +334,8 @@ pub fn run() {
             chat::attachments::save_as::desktop_save_attachment_as,
             chat::attachments::cloud_upload::desktop_cloud_attachment_upload,
             chat::attachments::cloud_upload::desktop_cloud_attachment_cancel,
+            chat::artifacts::desktop_chat_artifact_open,
+            chat::artifacts::desktop_chat_artifact_open_copy,
             chat::artifacts::desktop_chat_artifact_preview,
             chat::artifacts::desktop_chat_artifact_directory,
             chat::tool_approval::desktop_tool_approval_respond,

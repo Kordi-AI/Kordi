@@ -1,4 +1,5 @@
-import { Braces, FileText, Globe2, type LucideIcon } from 'lucide-react';
+
+import { ArrowUpRight } from 'lucide-react';
 
 import { fetchDocumentTitleFromServer } from '@/features/documents/documentPreviewTitles';
 import { documentDisplayName, useDocumentTitle, type DocumentTitleFetch } from '@/features/documents/documentTitles';
@@ -6,50 +7,21 @@ import { IdentityAvatar } from '@/kordi-app/components/IdentityAvatar';
 import type { ConversationParticipant, SessionArtifact } from '@/kordi-app/types';
 import { cn } from '@/lib/utils';
 
-type FileBadge = { icon: LucideIcon; label: string; className: string };
+import { artifactFileBadge, artifactPeople } from './artifactRowModel';
 
-function extensionOf(path: string) {
-  const name = path.split('/').filter(Boolean).pop() ?? path;
-  const extension = name.includes('.') ? name.split('.').pop()?.toLowerCase() ?? '' : '';
-  return extension === 'markdown' ? 'md' : extension;
-}
-
-/** The colored file-type mark at the start of a row. */
-function artifactFileBadge(artifact: Pick<SessionArtifact, 'kind' | 'path'>): FileBadge {
-  const extension = extensionOf(artifact.path);
-  if (extension === 'html' || extension === 'htm') return { icon: Globe2, label: 'HTML', className: 'bg-orange-500/15 text-orange-500' };
-  if (extension === 'md' || extension === 'mdx') return { icon: FileText, label: 'Markdown', className: 'bg-sky-500/15 text-sky-500' };
-  if (artifact.kind === 'code') return { icon: Braces, label: 'Code', className: 'bg-violet-500/15 text-violet-500' };
-  return { icon: FileText, label: 'File', className: 'bg-slate-500/15 text-[color:var(--utility-muted-text)]' };
-}
-
-function isPerson(participant: ConversationParticipant) {
-  return participant.kind !== 'agent';
-}
-
-function matchesAccount(participant: ConversationParticipant, accountId: string) {
-  return participant.id === accountId || participant.humanId === accountId || participant.sourceIdentityId === accountId;
-}
-
-/** The creator first, then the other people of the conversation. */
-function artifactPeople(artifact: Pick<SessionArtifact, 'createdByAccountId'>, participants: ConversationParticipant[]) {
-  const people = participants.filter(isPerson);
-  const accountId = artifact.createdByAccountId?.trim();
-  const creator = accountId ? people.find((participant) => matchesAccount(participant, accountId)) ?? null : null;
-  return { creator, others: creator ? people.filter((participant) => participant !== creator) : [] };
-}
-
-function PersonAvatar({ participant, className }: { participant: ConversationParticipant; className: string }) {
+export function PersonAvatar({ participant, className }: { participant: ConversationParticipant; className: string }) {
   const name = participant.publicName?.trim() || participant.name;
   return <IdentityAvatar kind="human" seed={participant.avatarKey ?? participant.humanId ?? participant.id} name={name} imageUrl={participant.profileImageUrl} className={className} />;
 }
 
-export function ArtifactListRow({ artifact, location, isActive, participants, onSelect, fetchTitle = fetchDocumentTitleFromServer }: {
+export function ArtifactListRow({ artifact, location, isActive, participants, onSelect, onOpenExternal, fetchTitle = fetchDocumentTitleFromServer }: {
   artifact: SessionArtifact;
   location: string;
   isActive: boolean;
   participants: ConversationParticipant[];
   onSelect: () => void;
+  /** Opens the file in its default app; the arrow shows on hover when given. */
+  onOpenExternal?: () => void;
   /** Asks the server for the title of a cloud document none of the readers reported yet. */
   fetchTitle?: DocumentTitleFetch;
 }) {
@@ -63,46 +35,60 @@ export function ArtifactListRow({ artifact, location, isActive, participants, on
   // Inside a conversation the creator says more than "Shared in <group>".
   const meta = [location, creator ? null : artifact.summary, artifact.live ? 'Live' : artifact.timeLabel].filter(Boolean).join(' · ');
 
-  // Laid out like a Memory row: the name over one muted line, people on the right.
+  // One compact line: the name, a muted detail line, people on the right. The row fills the
+  // column, so its fill lines up with the toolbar above it.
   return (
-    <button
-      type="button"
-      data-artifact-file-row="true"
-      aria-current={isActive ? 'true' : undefined}
-      onClick={onSelect}
+    <div
+      data-artifact-row-shell=""
       className={cn(
-        'flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors',
+        'group flex min-w-0 items-center rounded-md transition-colors',
         isActive ? 'bg-[color:var(--app-control-bg)]' : 'hover:bg-[color:var(--app-control-hover)]',
       )}
     >
-      <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-md', badge.className)} title={badge.label}>
-        <BadgeIcon className="h-3.5 w-3.5" aria-hidden="true" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-2">
-          <span data-artifact-row-title="" className="min-w-0 truncate text-[13px] font-normal leading-5 text-[color:var(--utility-foreground)]" title={label === artifact.name ? undefined : artifact.name}>{label}</span>
-          {artifact.pinned ? <span className="shrink-0 rounded-md bg-amber-400/15 px-1.5 text-[10.5px] leading-4 text-amber-600">Pinned</span> : null}
+      <button
+        type="button"
+        data-artifact-file-row="true"
+        aria-current={isActive ? 'true' : undefined}
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 items-center gap-2.5 py-1.5 pr-2 pl-[9px] text-left"
+      >
+        <span className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-[5px]', badge.className)} title={badge.label}>
+          <BadgeIcon className="h-3 w-3" aria-hidden="true" />
         </span>
-        {meta ? <span data-artifact-row-meta="" className="mt-0.5 block truncate text-[12px] leading-5 text-[color:var(--utility-muted-text)]">{meta}</span> : null}
-      </span>
-      {creator || others.length > 0 ? (
-        <span className="flex min-w-0 shrink-[2] items-center gap-2 pl-3 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">
-          {creator && creatorName ? (
-            <span className="flex min-w-0 items-center gap-1.5" data-artifact-creator="true" title={`Created by ${creatorName}`}>
-              <PersonAvatar participant={creator} className="h-[18px] w-[18px] shrink-0" />
-              <span className="truncate text-[color:var(--utility-foreground)]">{creatorName}</span>
-            </span>
-          ) : null}
-          {others.length > 0 ? (
-            <span className="flex shrink-0 items-center" data-artifact-participants="true" title={others.map((person) => person.publicName?.trim() || person.name).join(', ')}>
-              {others.slice(0, 3).map((person, index) => (
-                <PersonAvatar key={person.id} participant={person} className={cn('h-4 w-4 opacity-80 ring-2 ring-[color:var(--app-shell-bg,transparent)]', index > 0 && '-ml-1')} />
-              ))}
-              {others.length > 3 ? <span className="pl-1">+{others.length - 3}</span> : null}
-            </span>
-          ) : null}
-        </span>
+        <span data-artifact-row-title="" className="min-w-0 max-w-[60%] shrink-0 truncate text-[13px] leading-5 text-[color:var(--utility-foreground)]" title={label === artifact.name ? undefined : artifact.name}>{label}</span>
+        {artifact.pinned ? <span className="shrink-0 rounded-[4px] bg-amber-400/15 px-1 text-[10.5px] leading-4 text-amber-600">Pinned</span> : null}
+        <span data-artifact-row-meta="" className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[color:var(--utility-muted-text)]">{meta}</span>
+        {creator || others.length > 0 ? (
+          <span className="flex min-w-0 shrink-[2] items-center gap-1.5 pl-2 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">
+            {creator && creatorName ? (
+              <span className="flex min-w-0 items-center gap-1.5" data-artifact-creator="true" title={`Created by ${creatorName}`}>
+                <PersonAvatar participant={creator} className="h-4 w-4 shrink-0" />
+                <span className="truncate">{creatorName}</span>
+              </span>
+            ) : null}
+            {others.length > 0 ? (
+              <span className="flex shrink-0 items-center" data-artifact-participants="true" title={others.map((person) => person.publicName?.trim() || person.name).join(', ')}>
+                {others.slice(0, 3).map((person, index) => (
+                  <PersonAvatar key={person.id} participant={person} className={cn('h-3.5 w-3.5 opacity-80 ring-2 ring-[color:var(--app-shell-bg,transparent)]', index > 0 && '-ml-1')} />
+                ))}
+                {others.length > 3 ? <span className="pl-1">+{others.length - 3}</span> : null}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+      </button>
+      {onOpenExternal ? (
+        <button
+          type="button"
+          data-artifact-open-external=""
+          aria-label={`Open ${label} in its default app`}
+          title="Open in default app"
+          onClick={onOpenExternal}
+          className="mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-[5px] text-[color:var(--utility-muted-text)] opacity-0 transition-opacity hover:bg-[color:var(--app-control-hover)] hover:text-[color:var(--utility-foreground)] focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
       ) : null}
-    </button>
+    </div>
   );
 }

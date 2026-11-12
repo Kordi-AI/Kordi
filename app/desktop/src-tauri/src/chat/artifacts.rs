@@ -115,6 +115,52 @@ fn artifact_file_kind(path: &Path) -> &'static str {
     }
 }
 
+/// Opens an artifact in its default app, such as a Markdown editor or the browser for HTML. The path
+/// resolves like a preview: inside the project root when one is set.
+#[tauri::command]
+pub async fn desktop_chat_artifact_open(
+    path: String,
+    base_root: Option<String>,
+) -> Result<String, String> {
+    let resolved_path = resolve_artifact_preview_path(&path, base_root.as_deref())?;
+    if !resolved_path.is_file() {
+        return Err(format!(
+            "Artifact file not found: {}",
+            resolved_path.display()
+        ));
+    }
+    crate::external_open::open_with_default_app(&resolved_path)?;
+    Ok(resolved_path.display().to_string())
+}
+
+/// The last path segment of `name`, so a copy never lands outside its folder.
+fn open_copy_file_name(name: &str) -> String {
+    Path::new(name.trim())
+        .file_name()
+        .and_then(|value| value.to_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "." && *value != "..")
+        .unwrap_or("Document.md")
+        .to_string()
+}
+
+/// Writes a fresh copy of a shared document to a new temporary folder, under its own file name,
+/// and opens it in its default app. Each open gets its own folder, so the copy is never stale.
+#[tauri::command]
+pub async fn desktop_chat_artifact_open_copy(
+    name: String,
+    contents: String,
+) -> Result<String, String> {
+    let directory = std::env::temp_dir()
+        .join("kordi-open")
+        .join(uuid::Uuid::new_v4().to_string());
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let path = directory.join(open_copy_file_name(&name));
+    std::fs::write(&path, contents.as_bytes()).map_err(|error| error.to_string())?;
+    crate::external_open::open_with_default_app(&path)?;
+    Ok(path.display().to_string())
+}
+
 #[tauri::command]
 pub async fn desktop_chat_artifact_preview(
     path: String,
@@ -263,6 +309,14 @@ mod tests {
             normalize_path_lexically(Path::new("/tmp/project/./src/../README.md")),
             PathBuf::from("/tmp/project/README.md"),
         );
+    }
+
+    #[test]
+    fn open_copy_file_name_keeps_only_the_last_segment() {
+        assert_eq!(open_copy_file_name("notes/plan.md"), "plan.md");
+        assert_eq!(open_copy_file_name("../../etc/passwd"), "passwd");
+        assert_eq!(open_copy_file_name(" .. "), "Document.md");
+        assert_eq!(open_copy_file_name(""), "Document.md");
     }
 
     #[test]
