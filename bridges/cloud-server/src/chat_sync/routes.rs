@@ -13,6 +13,7 @@ use crate::auth::rate_limit::{
     CloudRateLimiter, RateLimitDecision, GROUP_LEAVE_LIMIT, MESSAGE_SEND_LIMIT,
 };
 use crate::auth::routes::{cloud_session_middleware, CloudSession};
+use crate::auth::session_cache::routes::preserve_session;
 use crate::chat_sync::cursor::CursorCodec;
 use crate::chat_sync::models::{
     AddConversationMembersRequest, BootstrapResponse, ConversationPreferencesResponse,
@@ -86,7 +87,7 @@ fn routes_with_runtime(state: Arc<ServerState>, runtime: ChatSyncRuntime) -> Rou
         )
         .route(
             "/v2/chat/conversations/:conversation_id/messages",
-            get(history).post(send_message),
+            preserve_session(post(send_message)).get(history),
         )
         .merge(message_mutations::routes())
         .merge(channels::dissolve_routes())
@@ -102,11 +103,11 @@ fn routes_with_runtime(state: Arc<ServerState>, runtime: ChatSyncRuntime) -> Rou
         )
         .route(
             "/v2/chat/conversations/:conversation_id/delivered",
-            put(receipts::advance_delivery_cursor),
+            preserve_session(put(receipts::advance_delivery_cursor)),
         )
         .route(
             "/v2/chat/conversations/:conversation_id/read",
-            put(receipts::advance_read_cursor),
+            preserve_session(put(receipts::advance_read_cursor)),
         )
         .route(
             "/v2/chat/conversations/:conversation_id/messages/:message_id/readers",
@@ -114,7 +115,10 @@ fn routes_with_runtime(state: Arc<ServerState>, runtime: ChatSyncRuntime) -> Rou
         )
         .route("/v2/chat/sync", get(sync))
         .route("/v2/chat/sync/bootstrap", get(bootstrap))
-        .route("/v2/chat/realtime/ticket", post(issue_realtime_ticket))
+        .route(
+            "/v2/chat/realtime/ticket",
+            preserve_session(post(issue_realtime_ticket)),
+        )
         .layer(Extension(Arc::new(runtime)))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
