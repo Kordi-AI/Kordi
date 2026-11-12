@@ -43,7 +43,7 @@ pub(crate) fn should_update_desktop_session_shell(
         .and_then(|value| value.get("createdFrom"))
         .and_then(|value| value.as_str())
         .unwrap_or_default();
-    if session.id.starts_with("session:bridge:")
+    let has_synced_shell = session.id.starts_with("session:bridge:")
         || created_from == "chat-create-flow"
         || source == "canonical-fork-snapshot"
         || source.starts_with("desktop-bridge")
@@ -51,11 +51,8 @@ pub(crate) fn should_update_desktop_session_shell(
         || matches!(
             session.kind.as_str(),
             "direct-person" | "direct-agent" | "relationship"
-        )
-    {
-        return Ok(false);
-    }
-    Ok(true)
+        );
+    Ok(!has_synced_shell)
 }
 
 pub(crate) fn desktop_session_agent_identity(
