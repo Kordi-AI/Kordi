@@ -91,7 +91,13 @@ export function DocumentReader({ api: apiOverride, dateLabel, onOpenSession, ini
     onRenameAvailable?.(renameTitle);
     return () => onRenameAvailable?.(null);
   }, [onRenameAvailable, renameTitle]);
-  const author = document?.author ?? (mode === 'local' ? host.viewer : null);
+  const documentAuthor = document?.author ?? (mode === 'local' ? host.viewer : null);
+  // Older servers omit uploaded avatar markers from document responses.
+  // Use the signed-in profile only when it belongs to this exact author.
+  const author = documentAuthor?.accountId && documentAuthor.accountId === host.viewer?.accountId
+    && !documentAuthor.avatarUrl && host.viewer.avatarUrl
+    ? { ...documentAuthor, avatarUrl: host.viewer.avatarUrl }
+    : documentAuthor;
   const agentName = document?.agent?.displayName ?? host.agentName;
   const viewerIsOwner = mode === 'local' || document?.viewer === 'owner';
   const badge: DocumentBadge = mode === 'local' ? 'local' : null;

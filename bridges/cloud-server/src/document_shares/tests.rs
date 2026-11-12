@@ -18,6 +18,7 @@ mod agents_desktop_db;
 mod agents_finished_run_db;
 mod agents_fixture;
 mod agents_tools_db;
+mod avatars;
 mod block_ids_tests;
 mod collab_compaction_db;
 mod collab_db;
@@ -326,7 +327,7 @@ fn public_page_carries_the_csp_nonce_author_and_open_action() {
         "default-src 'none'",
         "style-src 'nonce-nonceABC'",
         "script-src 'nonce-nonceABC'",
-        "img-src https: data:",
+        "img-src 'self' https: data:",
         "font-src 'self'",
         "connect-src 'self'",
         "frame-src 'self'",
