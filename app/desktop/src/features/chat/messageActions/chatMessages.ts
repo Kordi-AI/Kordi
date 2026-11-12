@@ -1000,8 +1000,8 @@ export function useChatMessageActions({
             conversationId: activeCloudConversationId,
             messageId: retryMessageId,
           });
-          setCloudCollaborationState(failure.update);
-          setDesktopChatError(failure.detail);
+          if (failure) setCloudCollaborationState(failure.update);
+          if (failure) setDesktopChatError(failure.detail);
         } finally {
           setIsDesktopChatSending(false);
         }

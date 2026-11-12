@@ -1909,13 +1909,6 @@ struct CloudAgentRun: Codable, Hashable {
     var executionBackend: String? = nil
 }
 
-struct CloudSyncResponse: Codable, Hashable {
-    let cursor: String
-    let lastStreamSequence: Int64
-    let hasMore: Bool
-    let events: [CloudSyncEvent]
-}
-
 struct CloudSessionVisibility: Codable, Hashable {
     let hiddenSessionIds: [String]
     let deletedSessionIds: [String]

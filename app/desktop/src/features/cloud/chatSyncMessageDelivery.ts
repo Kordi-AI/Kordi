@@ -6,13 +6,33 @@ import type { ChatSyncMessage } from './chatSyncTypes';
 import { isRetryableCloudDeliveryError } from './cloudAuthError';
 import { completeChatSyncOutbox, dueChatSyncOutbox, enqueueChatSyncOutbox, failChatSyncOutbox } from '@/lib/desktopChatSync';
 import { captureChatDeliveryScope, type ChatDeliveryScope } from './chatDeliveryScope';
+import { chatSendRetryAfterMs, chatSendRetryGate, markChatSendQueuedForRetry, type ChatSendRetryGate } from './chatSendRetry';
 
 const durableOutbox = {
   enqueue: enqueueChatSyncOutbox, due: dueChatSyncOutbox, complete: completeChatSyncOutbox, fail: failChatSyncOutbox,
 };
 
+// Send and drain use separate wrappers around the same client state. A freshly
+// enqueued operation is already due, but its original request still owns it.
+const inFlightSends = new WeakMap<ChatSyncState, Map<string, number>>();
+function activeSends(state: ChatSyncState): Map<string, number> {
+  let active = inFlightSends.get(state);
+  if (!active) {
+    active = new Map();
+    inFlightSends.set(state, active);
+  }
+  return active;
+}
+const sendKey = (accountId: string, organizationId: string | null | undefined, operationId: string) => (
+  JSON.stringify([accountId.trim(), organizationId ?? null, operationId])
+);
+
 export class ChatSyncMessageDelivery {
-  constructor(private readonly state: ChatSyncState, private readonly outbox = durableOutbox) {}
+  constructor(
+    private readonly state: ChatSyncState,
+    private readonly outbox = durableOutbox,
+    private readonly retryGate: ChatSendRetryGate = chatSendRetryGate,
+  ) {}
 
   async sendMessage(
     token: string,
@@ -64,14 +84,17 @@ export class ChatSyncMessageDelivery {
         ?? peerAccountId.trim()
       : peerAccountId.trim();
     const durable = Boolean(accountId) && !options.transient;
-    if (durable) {
-      await this.outbox.enqueue(accountId, clientMessageId, {
-        peerAccountId: durablePeerAccountId,
-        body,
-        options: durableOptions,
-      }, deliveryScope.expectedOrganizationId);
-    }
+    const active = activeSends(this.state);
+    const key = sendKey(accountId, deliveryScope.expectedOrganizationId, clientMessageId);
+    if (durable) active.set(key, (active.get(key) ?? 0) + 1);
     try {
+      if (durable) {
+        await this.outbox.enqueue(accountId, clientMessageId, {
+          peerAccountId: durablePeerAccountId,
+          body,
+          options: durableOptions,
+        }, deliveryScope.expectedOrganizationId);
+      }
       deliveryScope.assertCurrent();
       const conversation = await this.state.ensureConversation(token, {
         peerAccountId,
@@ -124,27 +147,47 @@ export class ChatSyncMessageDelivery {
       );
     } catch (error) {
       deliveryScope.assertCurrent();
+      const retryAfterMs = chatSendRetryAfterMs(error);
+      if (retryAfterMs !== null && accountId) this.retryGate.hold(accountId, retryAfterMs);
       if (durable) {
+        // A transient failure stays pending: the server may have stored the
+        // message, and a repeat with the same client message id returns it.
+        const retryable = isRetryableCloudDeliveryError(error);
         await this.outbox.fail(
           accountId,
           clientMessageId,
           error instanceof Error ? error.message : 'Reliable chat send failed.',
-          isRetryableCloudDeliveryError(error),
+          retryable,
           deliveryScope.expectedOrganizationId,
         ).catch(() => {});
+        if (retryable) markChatSendQueuedForRetry(error);
       }
       throw error;
+    } finally {
+      if (durable) {
+        const remaining = (active.get(key) ?? 1) - 1;
+        if (remaining > 0) active.set(key, remaining);
+        else active.delete(key);
+      }
     }
   }
 
   async drainChatOutbox(token: string, accountId: string): Promise<CloudMessage[]> {
     const deliveryScope = captureChatDeliveryScope(token, accountId);
     this.state.activeAccountId = accountId.trim() || this.state.activeAccountId;
+    // The server asked for a pause (Retry-After); queued sends wait it out.
+    if (this.retryGate.remainingMs(accountId.trim()) > 0) return [];
+    const active = activeSends(this.state);
+    // A storage read can return an old pending snapshot after a send completes.
+    const activeAtRead = new Set(active.keys());
     const pending = await this.outbox.due(accountId, deliveryScope.expectedOrganizationId);
     const delivered: CloudMessage[] = [];
     deliveryScope.assertCurrent();
     for (const operation of pending) {
       deliveryScope.assertCurrent();
+      if (this.retryGate.remainingMs(accountId.trim()) > 0) break;
+      const key = sendKey(accountId, deliveryScope.expectedOrganizationId, operation.operationId);
+      if (activeAtRead.has(key) || active.has(key)) continue;
       const payload = operation.payload;
       if (!payload?.peerAccountId || typeof payload.body !== 'string') {
         await this.outbox.fail(

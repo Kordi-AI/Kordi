@@ -414,6 +414,10 @@ async fn issue_realtime_ticket(
     Extension(session): Extension<CloudSession>,
     headers: HeaderMap,
 ) -> Response {
+    // Reconnect waves are admitted at a bounded rate per process.
+    if !state.realtime_tickets().try_admit() {
+        return realtime::ticket_refusal();
+    }
     if let Err(error) = require_cursor_codec(&runtime) {
         return runtime_requirement_error(error);
     }

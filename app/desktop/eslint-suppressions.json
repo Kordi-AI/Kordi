@@ -276,18 +276,6 @@
     }
   },
   "src/features/cloud/useCloudContacts.ts": {
-    "@typescript-eslint/no-unsafe-argument": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unsafe-call": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
-      "count": 5
-    },
     "no-console": {
       "count": 1
     },
@@ -301,12 +289,6 @@
     }
   },
   "src/features/cloud/useCloudPresence.ts": {
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
-      "count": 2
-    },
     "react-hooks/immutability": {
       "count": 1
     },
@@ -316,15 +298,6 @@
   },
   "src/features/cloud/useCloudSession.ts": {
     "@typescript-eslint/no-misused-promises": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unsafe-argument": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
       "count": 2
     }
   },
