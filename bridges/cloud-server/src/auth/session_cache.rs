@@ -20,6 +20,8 @@
 //! A cached entry is never served past the session's expiry, nor past the
 //! expiry of the organization membership its claim depends on.
 
+pub(crate) mod routes;
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
