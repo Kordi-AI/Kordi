@@ -27,6 +27,8 @@ use std::time::{Duration, Instant};
 use chrono::{DateTime, Utc};
 use sqlx_postgres::PgPool;
 
+use super::session_metrics::{Counter, SessionMetrics};
+
 use super::session::{
     hash_session_token, lookup_session_by_hash, SessionError, SessionLookup, SESSION_TOKEN_PREFIX,
 };
@@ -188,6 +190,7 @@ pub(crate) struct SessionLookupCache {
     capacity: usize,
     liveness_window: Duration,
     state: Mutex<CacheState>,
+    metrics: SessionMetrics,
 }
 
 impl Default for SessionLookupCache {
@@ -203,6 +206,7 @@ impl SessionLookupCache {
             capacity,
             liveness_window,
             state: Mutex::new(CacheState::default()),
+            metrics: SessionMetrics::default(),
         }
     }
 
@@ -223,10 +227,36 @@ impl SessionLookupCache {
         }
         let token_hash = hash_session_token(plaintext_token);
         let ticket = match self.probe(&token_hash, Instant::now(), Utc::now()) {
-            Probe::Hit(lookup) => return Ok(Some((lookup, LookupSource::Cache))),
-            Probe::Miss(ticket) => ticket,
+            Probe::Hit(lookup) => {
+                self.metrics.increment(Counter::Hit);
+                return Ok(Some((lookup, LookupSource::Cache)));
+            }
+            Probe::Miss(ticket) => {
+                self.metrics.increment(if ticket.is_some() {
+                    Counter::Miss
+                } else {
+                    Counter::Bypass
+                });
+                ticket
+            }
         };
-        let found = lookup_session_by_hash(pool, &token_hash, Utc::now()).await?;
+        let wait_started = Instant::now();
+        let connection = pool.acquire().await;
+        self.metrics.pool_wait(wait_started.elapsed());
+        let found = match connection {
+            Ok(mut connection) => {
+                let lookup_started = Instant::now();
+                let result =
+                    lookup_session_by_hash(&mut *connection, &token_hash, Utc::now()).await;
+                self.metrics.lookup(lookup_started.elapsed());
+                result
+            }
+            Err(error) => Err(error.into()),
+        };
+        if found.is_err() {
+            self.metrics.increment(Counter::LookupError);
+        }
+        let found = found?;
         if let (Some(found), Some(ticket)) = (&found, ticket) {
             self.fill(token_hash, found, ticket, Instant::now(), Utc::now());
         }
@@ -295,7 +325,17 @@ impl SessionLookupCache {
     /// Drops every cached lookup of `account_id`, and keeps lookups that
     /// are already in flight from being cached.
     pub(crate) fn evict_account(&self, account_id: &str) {
+        self.metrics.increment(Counter::SignalEviction);
         self.state().evict_account(account_id, Instant::now());
+    }
+
+    pub(crate) fn evict_after_mutation(&self, account_id: &str) {
+        self.metrics.increment(Counter::MutationEviction);
+        self.state().evict_account(account_id, Instant::now());
+    }
+
+    pub(crate) fn metrics(&self) -> &SessionMetrics {
+        &self.metrics
     }
 
     /// The notification listener connected or disconnected. Either way the
@@ -303,6 +343,7 @@ impl SessionLookupCache {
     pub(crate) fn set_listener_connected(&self, connected: bool) {
         let mut state = self.state();
         if state.connected != connected {
+            self.metrics.increment(Counter::ListenerClear);
             state.clear();
         }
         state.connected = connected;
@@ -322,6 +363,7 @@ impl SessionLookupCache {
             .last_notification
             .is_none_or(|at| now.saturating_duration_since(at) > self.liveness_window);
         if gap {
+            self.metrics.increment(Counter::GapClear);
             state.clear();
         }
         state.last_notification = Some(now);

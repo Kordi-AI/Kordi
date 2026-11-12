@@ -22,6 +22,7 @@ const WINDOW: Duration = Duration::from_secs(15);
 
 fn lookup(account_id: &str, token_id: &str, expires_in: chrono::Duration) -> SessionLookup {
     SessionLookup {
+        device_last_seen_at: Some(Utc::now()),
         row: CloudSessionRow {
             token_id: token_id.to_string(),
             account_id: account_id.to_string(),
@@ -318,3 +319,5 @@ fn manually_live() -> SessionLookupCache {
 
 mod database_tests;
 mod replica_tests;
+
+mod metrics;
