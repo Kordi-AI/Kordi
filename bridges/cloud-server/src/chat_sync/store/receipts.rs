@@ -78,9 +78,14 @@ async fn advance_conversation_cursor(
         return Ok(existing);
     }
 
+    // Take the same parent lock that the sync event's foreign key will need,
+    // before locking member/sync-head rows. Group sends can hold FOR UPDATE
+    // on the conversation while waiting for those heads; taking this lock
+    // only during event insertion would reverse that order and deadlock.
+    // KEY SHARE still permits ordinary non-key conversation updates.
     let latest: Option<(i64,)> = query_as(
         "SELECT latest_message_sequence FROM cloud_chat_conversations \
-         WHERE conversation_id = $1",
+         WHERE conversation_id = $1 FOR KEY SHARE",
     )
     .bind(conversation_id)
     .fetch_optional(&mut *transaction)

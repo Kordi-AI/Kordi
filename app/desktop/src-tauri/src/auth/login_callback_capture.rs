@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use kordi_cli::oauth::callback_server::render_auth_response_page;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::sync::{mpsc, oneshot};
@@ -33,7 +34,6 @@ const REBIND_DELAY: Duration = Duration::from_millis(50);
 /// OMP's loopback redirect path when the catalog does not name one.
 const DEFAULT_CALLBACK_PATH: &str = "/auth/callback";
 const MAX_CALLBACK_PATH_BYTES: usize = 256;
-const CALLBACK_PAGE_TEMPLATE: &str = include_str!("login_callback_capture/callback_page.html");
 const NOT_ALLOWED_PAGE: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Kordi</title></head><body><p>Kordi only accepts the sign-in redirect here.</p></body></html>";
 const NOT_FOUND_PAGE: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Kordi</title></head><body><p>Kordi is waiting for the sign-in redirect at another address.</p></body></html>";
 
@@ -261,9 +261,7 @@ fn callback_page(provider_error: bool) -> String {
     } else {
         ("Signed in.", "You can return to Kordi.")
     };
-    CALLBACK_PAGE_TEMPLATE
-        .replace("{{heading}}", heading)
-        .replace("{{description}}", description)
+    render_auth_response_page(heading, description)
 }
 
 async fn read_request_head(stream: &mut TcpStream) -> Option<String> {

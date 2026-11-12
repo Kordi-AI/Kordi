@@ -245,7 +245,7 @@ export function AuthPage({
   const content = (() => {
     if (showNativeNote) {
       return (
-        <div className="app-surface-muted rounded-[28px] px-5 py-5 text-sm text-slate-300">
+        <div className="app-surface-muted rounded-[28px] px-5 py-5 text-sm text-[color:var(--utility-muted-text)]">
           Native desktop sign-in appears here. Open `pnpm dev:desktop` to test provider login, saved accounts, logout, and browser callback flows.
         </div>
       );
@@ -253,7 +253,7 @@ export function AuthPage({
 
     if (isLoading || !ompCatalog) {
       return (
-        <div className="app-surface-muted rounded-[28px] px-5 py-5 text-sm text-slate-300">
+        <div className="app-surface-muted rounded-[28px] px-5 py-5 text-sm text-[color:var(--utility-muted-text)]">
           Loading providers…
         </div>
       );
@@ -420,10 +420,10 @@ export function AuthPage({
             <div className="flex min-h-0 w-full max-w-[600px] flex-col">
               <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.035em] text-white">
+                  <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.035em] text-[color:var(--utility-foreground)]">
                     {configuredCount > 0 ? 'Your providers' : 'Connect a provider'}
                   </h1>
-                  <p className="mt-1.5 text-[13px] leading-5 text-slate-400">
+                  <p className="mt-1.5 text-[13px] leading-5 text-[color:var(--utility-muted-text)]">
                     {configuredCount > 0
                       ? 'Manage your accounts or continue to chat.'
                       : 'Choose a provider to start using models in Kordi.'}
@@ -458,7 +458,7 @@ export function AuthPage({
         <div className="app-auth-settings-page flex h-full min-h-0 w-full flex-col overflow-hidden" style={{ WebkitAppRegion: 'no-drag' as const }}>
           {showSettingsHeader && !showDetailPage ? (
             <div className="mb-5 shrink-0">
-              <div className="text-[18px] font-semibold tracking-tight text-white">Authentication</div>
+              <div className="text-[18px] font-semibold tracking-tight text-[color:var(--utility-foreground)]">Authentication</div>
             </div>
           ) : null}
 

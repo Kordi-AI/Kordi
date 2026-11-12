@@ -49,7 +49,8 @@ test('main app shell and chat transcript contain scroll to the intended axis', (
 
 test('standalone auth popup is viewport-bound and scrolls only inside its panel body', () => {
   const authPopup = readSource('../src/AuthPopup.tsx');
+  const window = readSource('../src/features/auth/StandaloneAuthWindow.tsx');
 
-  assert.match(authPopup, /kordi-app theme-dark flex h-\[100dvh\] w-full overflow-hidden/);
+  assert.match(window, /kordi-app theme-\$\{theme\} flex h-\[100dvh\] w-full overflow-hidden/);
   assert.match(authPopup, /max-h-\[calc\(100dvh-4rem\)\] overflow-y-auto overflow-x-hidden overscroll-contain/);
 });

@@ -301,3 +301,5 @@ mod thread_attention;
 pub use thread_attention::{thread_attention, thread_page};
 
 pub mod attachment_backfill;
+
+pub(crate) use message::send_message_measured;

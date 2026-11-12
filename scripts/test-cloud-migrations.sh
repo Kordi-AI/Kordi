@@ -135,6 +135,9 @@ DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
 # Contact permission tests (docs/contact-permissions.md) use the same fixture.
 DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
   cargo test -p kordi-cloud-server --lib contact_permissions:: -- --test-threads=1
+# Memory category and deduplication regressions must exercise real stored rows.
+DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
+  cargo test -p kordi-cloud-server --lib auth::routes::memory_tests:: -- --test-threads=1
 # Agent avatar tests (docs/avatar-system.md) use the Common ground fixture.
 DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
   cargo test -p kordi-cloud-server --lib avatars::agent_avatar_db_tests:: -- --test-threads=1

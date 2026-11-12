@@ -19,6 +19,49 @@ async fn stored(fx: &Fixture, memory_id: &str) -> (String, Vec<String>) {
 }
 
 #[tokio::test]
+async fn future_categories_do_not_reclassify_an_existing_memory() {
+    let Some(fx) = fixture().await else { return };
+    let text = "Keeps weekly planning notes for the Atlas project";
+    let (status, original) = save(&fx, with(text, json!({ "category": "work_context" }))).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let memory = &original["memory"];
+    let id = memory["memoryId"].as_str().unwrap();
+    let before = stored(&fx, id).await;
+    let categories = json!([
+        "work_context",
+        "education_learner_profile",
+        "hcp-custom:task_lessons"
+    ]);
+
+    let (status, repeated) =
+        save(&fx, with(text, json!({ "categories": categories.clone() }))).await;
+    assert_eq!(status, StatusCode::OK);
+    for field in [
+        "memoryId",
+        "text",
+        "category",
+        "categories",
+        "createdAt",
+        "source",
+    ] {
+        assert_eq!(repeated["memory"][field], memory[field], "{field}");
+    }
+    assert_eq!(stored(&fx, id).await, before);
+
+    let (status, future) = save(
+        &fx,
+        with(
+            "Records new lessons from the Atlas review",
+            json!({ "categories": categories.clone() }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(future["memory"]["categories"], categories);
+    assert_eq!(stored(&fx, id).await, before);
+}
+
+#[tokio::test]
 async fn save_and_edit_several_categories() {
     let Some(fx) = fixture().await else { return };
 
