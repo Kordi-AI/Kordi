@@ -106,7 +106,7 @@ export function AuthProviderDetail({
 
   if (!provider) {
     return (
-      <div className="app-surface-muted rounded-[24px] px-5 py-5 text-sm text-slate-300">
+      <div className="app-surface-muted rounded-[24px] px-5 py-5 text-sm text-[color:var(--utility-muted-text)]">
         Pick a provider to choose how Kordi should sign in.
       </div>
     );
@@ -173,7 +173,7 @@ export function AuthProviderDetail({
     }
     if (method?.hosted) {
       return (
-        <Suspense fallback={<p className="m-0 pt-6 text-[12px] text-slate-500">Loading sign-in…</p>}>
+        <Suspense fallback={<p className="m-0 pt-6 text-[12px] text-[color:var(--utility-meta-text)]">Loading sign-in…</p>}>
         <AuthLoginPage
           key={`${method.key}:${renewedAccount?.value ?? ''}`}
           {...omp}

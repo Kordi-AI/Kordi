@@ -85,13 +85,13 @@ export function AuthProviderList({
       <div className="grid gap-1.5">
         <div className="flex items-center gap-2">
           <label className="relative min-w-0 flex-1">
-            <Search aria-hidden="true" className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <Search aria-hidden="true" className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--utility-meta-text)]" />
             <input
               aria-label="Search providers"
               placeholder={`Search ${providers.length} providers`}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="h-10 w-full rounded-xl border border-transparent bg-white/[0.045] pl-10 pr-3 text-[13px] text-white outline-none placeholder:text-slate-500"
+              className="app-input-shell app-flat-input h-10 w-full rounded-xl pl-10 pr-3 text-[13px] text-[color:var(--utility-foreground)] outline-none placeholder:text-[color:var(--utility-meta-text)]"
             />
           </label>
           {variant === 'settings' ? (
@@ -100,7 +100,7 @@ export function AuthProviderList({
             </Button>
           ) : null}
         </div>
-        {notice ? <p role="note" data-auth-page-notice="" className="m-0 px-1 text-[12px] leading-5 text-slate-400">{notice}</p> : null}
+        {notice ? <p role="note" data-auth-page-notice="" className="m-0 px-1 text-[12px] leading-5 text-[color:var(--utility-muted-text)]">{notice}</p> : null}
       </div>
 
       <div className={variant === 'gate' ? 'flex min-h-[240px] flex-1 gap-3' : 'flex min-h-0 flex-1 gap-3'}>
@@ -117,7 +117,7 @@ export function AuthProviderList({
               </SettingsSection>
             ))}
             {connected.length === 0 && groups.length === 0 ? (
-              <p className="px-4 py-6 text-center text-[12px] text-slate-400">
+              <p className="px-4 py-6 text-center text-[12px] text-[color:var(--utility-muted-text)]">
                 {query.trim() ? <>No providers match “{query.trim()}”.</> : 'No providers to show yet.'}
               </p>
             ) : null}
@@ -129,7 +129,7 @@ export function AuthProviderList({
             <button
               key={letter}
               type="button"
-              className="h-5 w-5 rounded text-[10px] font-medium text-slate-500 hover:bg-white/10 hover:text-white"
+              className="h-5 w-5 rounded text-[10px] font-medium text-[color:var(--utility-meta-text)] hover:bg-[color:var(--app-control-hover)] hover:text-[color:var(--utility-foreground)]"
               onClick={() => document.getElementById(`provider-index-${variant}-${letter}`)?.scrollIntoView({ block: 'start' })}
               aria-label={`Jump to ${letter} providers`}
             >

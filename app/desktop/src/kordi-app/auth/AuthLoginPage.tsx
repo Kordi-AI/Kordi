@@ -10,8 +10,8 @@ import type { AuthAddMethod } from './authAddMethods';
 import { loginMethodVerbs } from './providerCopy';
 import { useProviderLogin } from './useProviderLogin';
 
-const inputClass = 'app-input-shell app-flat-input h-8 w-[240px] max-w-full rounded-lg px-3 text-[13px] text-white outline-none placeholder:text-slate-500 disabled:opacity-60';
-const linkClass = 'text-[12px] font-medium text-[color:var(--app-sidebar-accent)] underline-offset-2 hover:underline';
+const inputClass = 'app-input-shell app-flat-input h-8 w-[240px] max-w-full rounded-lg px-3 text-[13px] text-[color:var(--utility-foreground)] outline-none placeholder:text-[color:var(--utility-meta-text)] disabled:opacity-60';
+const linkClass = 'app-auth-provider-link text-[12px] font-medium text-[color:var(--app-accent)] underline-offset-2 hover:underline';
 /** How long the signed-in result shows before the provider page returns. */
 const LOGIN_RETURN_DELAY_MS = 2000;
 
@@ -220,7 +220,7 @@ export function AuthLoginPage({ method, suggestedAccountName, renew = null, clie
               />
               {view.userCode ? (
                 <SettingsRow
-                  title={<code className="font-mono text-[22px] font-semibold tracking-[0.1em] text-white">{view.userCode}</code>}
+                  title={<code className="font-mono text-[22px] font-semibold tracking-[0.1em] text-[color:var(--utility-foreground)]">{view.userCode}</code>}
                   control={<AuthActionButton key="copy-code" type="button" className={authButtonNeutralClass} onClick={() => copy(view.userCode ?? '', 'code')}>{copied === 'code' ? 'Copied' : 'Copy code'}</AuthActionButton>}
                 />
               ) : null}
@@ -244,7 +244,7 @@ export function AuthLoginPage({ method, suggestedAccountName, renew = null, clie
           {view.transcript.map((entry, index) => (entry.type === 'answer' ? (
             <SettingsRow key={`answer-${index}`} title={entry.label} description={entry.value ?? 'Entered'} />
           ) : (
-            <p key={`progress-${index}`} className="m-0 py-2 text-[12px] text-slate-500">{entry.text}</p>
+            <p key={`progress-${index}`} className="m-0 py-2 text-[12px] text-[color:var(--utility-meta-text)]">{entry.text}</p>
           )))}
           {input && !keyStep ? (
             <SettingsRow
@@ -252,8 +252,8 @@ export function AuthLoginPage({ method, suggestedAccountName, renew = null, clie
               description={(
                 <>
                   {input.kind === 'paste-code' ? pasteDescription : input.message}
-                  {input.kind !== 'paste-code' && input.placeholder ? <span className="block text-[11px] text-slate-500">e.g., {input.placeholder}</span> : null}
-                  {callbackHint && (input.kind !== 'paste-code' || pasteMessage) ? <span data-login-callback-hint="" className="block text-[11px] text-slate-500">{callbackHint}</span> : null}
+                  {input.kind !== 'paste-code' && input.placeholder ? <span className="block text-[11px] text-[color:var(--utility-meta-text)]">e.g., {input.placeholder}</span> : null}
+                  {callbackHint && (input.kind !== 'paste-code' || pasteMessage) ? <span data-login-callback-hint="" className="block text-[11px] text-[color:var(--utility-meta-text)]">{callbackHint}</span> : null}
                   {errorMessage ? <ErrorLine>{errorMessage}</ErrorLine> : null}
                 </>
               )}
@@ -286,9 +286,9 @@ export function AuthLoginPage({ method, suggestedAccountName, renew = null, clie
               )}
             />
           ) : null}
-          {portBusyLine ? <p data-login-callback-hint="" className="m-0 py-2 text-[12px] text-slate-500">{portBusyLine}</p> : null}
+          {portBusyLine ? <p data-login-callback-hint="" className="m-0 py-2 text-[12px] text-[color:var(--utility-meta-text)]">{portBusyLine}</p> : null}
           {running && !input && !view.transcript.some((entry) => entry.type === 'progress' && entry.text === view.statusLine) ? (
-            <p role="status" className="m-0 py-2 text-[12px] text-slate-500">
+            <p role="status" className="m-0 py-2 text-[12px] text-[color:var(--utility-meta-text)]">
               {view.phase === 'starting' ? view.statusLine : view.statusLine && view.statusLine !== view.auth?.instructions ? view.statusLine : 'Waiting for you to finish on the provider page…'}
             </p>
           ) : null}

@@ -249,30 +249,6 @@
   background: var(--app-session-bg);
 }
 
-.kordi-app.theme-light .app-auth-popup-panel {
-  border-color: var(--app-transient-border) !important;
-  background: var(--app-transient-surface-bg) !important;
-  box-shadow: var(--app-transient-shadow) !important;
-}
-
-.kordi-app.theme-light .app-auth-popup-header,
-.kordi-app.theme-light .app-auth-popup-footer {
-  border-color: var(--app-transient-divider) !important;
-  background: var(--app-transient-raised-bg);
-}
-
-.kordi-app.theme-light .app-auth-flow-steps,
-.kordi-app.theme-light .app-auth-popup-info-card,
-.kordi-app.theme-light .app-auth-popup-note {
-  border-color: var(--app-transient-border) !important;
-  background: var(--app-transient-raised-bg) !important;
-  box-shadow: none !important;
-}
-
-.kordi-app.theme-light .app-auth-popup-info-card > div:first-child {
-  color: rgb(15 23 42) !important;
-}
-
 .kordi-app.theme-light .app-agent-shell {
   border-color: transparent;
   background: transparent;

@@ -189,7 +189,7 @@
 
 .app-auth-gate-overlay,
 .app-auth-gate-shell {
-  background: #0f1115;
+  background: var(--app-main-bg);
 }
 
 .app-agents-page {
