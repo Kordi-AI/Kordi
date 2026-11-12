@@ -60,7 +60,13 @@ async fn session_middleware(
             // tokens and sliding sessions already inside the hourly window.
             if source == LookupSource::Database {
                 let _ = bump_expiry(pool, &row, DEFAULT_SESSION_LIFETIME_DAYS).await;
-                let _ = touch_device_activity(pool, &row.account_id, &row.device_id).await;
+                let _ = crate::auth::session::touch_device_activity_if_stale(
+                    pool,
+                    &row.account_id,
+                    &row.device_id,
+                    found.device_last_seen_at,
+                )
+                .await;
             }
             RequestOrganization::attach(&mut req, &row.account_id, &row.organization, &headers);
             let changes_state = !req.method().is_safe();

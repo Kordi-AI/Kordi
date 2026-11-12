@@ -139,6 +139,8 @@ where
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionLookup {
     pub row: CloudSessionRow,
+    /// Device activity read with the session; malformed timestamps stay unknown.
+    pub device_last_seen_at: Option<DateTime<Utc>>,
     /// The browser sign-in that issued this access token, if any.
     pub app_sign_in_id: Option<String>,
     /// The account's primary email and whether it is verified; `None` when
@@ -209,13 +211,14 @@ where
         bool,
         Option<String>,
         bool,
+        String,
     );
     let row: Option<Row> = query_as(
         "SELECT token.token_id, token.account_id, token.device_id, token.expires_at, \
                 token.organization_id, personal.organization_id, \
                 member.account_id IS NOT NULL, member.expires_at, token.app_sign_in_id, \
                 account.account_id IS NOT NULL, account.primary_email, \
-                account.primary_email_verified_at IS NOT NULL \
+                account.primary_email_verified_at IS NOT NULL, device.last_seen_at \
          FROM cloud_refresh_tokens token \
          JOIN cloud_devices device ON device.device_id = token.device_id \
          LEFT JOIN cloud_organizations personal \
@@ -248,6 +251,7 @@ where
             account_found,
             email,
             verified,
+            device_last_seen_at,
         )| SessionLookup {
             row: CloudSessionRow {
                 token_id,
@@ -261,6 +265,9 @@ where
                     claim_active,
                 },
             },
+            device_last_seen_at: DateTime::parse_from_rfc3339(&device_last_seen_at)
+                .ok()
+                .map(|time| time.with_timezone(&Utc)),
             app_sign_in_id,
             account: account_found.then_some((email, verified)),
             membership_expires_at,
@@ -376,6 +383,26 @@ pub async fn session_is_active(
     .fetch_optional(pool)
     .await?;
     Ok(row.is_some())
+}
+
+/// Skip the activity statement when the session lookup already observed a
+/// fresh timestamp. Unknown values take the existing guarded database path.
+/// The UPDATE still checks the current row, so overlapping stale lookups
+/// cannot overwrite a newer touch or update a revoked/reassigned device.
+pub async fn touch_device_activity_if_stale(
+    pool: &PgPool,
+    account_id: &str,
+    device_id: &str,
+    observed: Option<DateTime<Utc>>,
+) -> Result<(), SessionError> {
+    if device_activity_is_fresh(observed, Utc::now()) {
+        return Ok(());
+    }
+    touch_device_activity(pool, account_id, device_id).await
+}
+
+fn device_activity_is_fresh(observed: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
+    observed.is_some_and(|seen| seen >= now - Duration::minutes(1))
 }
 
 /// Refresh non-sensitive activity metadata at most once per minute.

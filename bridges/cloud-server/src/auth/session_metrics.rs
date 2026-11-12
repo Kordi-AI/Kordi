@@ -1,6 +1,15 @@
 //! Aggregate session diagnostics. No account, token, device, or route IDs.
 //!
 //! Reporting is opt-in; operators retain the output in restricted storage.
+//! Set `KORDI_SESSION_METRICS_INTERVAL_SECONDS` before server startup to an
+//! integer from 10 through 86400 to emit cumulative JSON to stderr. Missing
+//! or invalid settings disable reporting. Counters still accumulate locally.
+//! Compare deltas within one process lifetime; restarts reset all counters.
+//! Eviction counters count invalidation events, not removed entry counts.
+//! Request timing covers the authenticated middleware and response creation,
+//! not response-body streaming or WebSocket lifetime. Pool wait and database
+//! timing cover bearer-session lookups only. Buckets have inclusive upper
+//! bounds and are disjoint; concurrent snapshots are approximate.
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
