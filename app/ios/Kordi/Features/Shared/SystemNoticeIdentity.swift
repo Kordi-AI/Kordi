@@ -1,10 +1,9 @@
 import SwiftUI
-import UIKit
 
 /// Server notices, such as a group's introduction and "joined" lines or the
 /// plan card in a direct chat. They carry this message kind and come from the
 /// hidden System account, the plan agent, or a member (a plan card stays the
-/// organizer's); the app shows them from "System" with a gray Kordi bird,
+/// organizer's); the app shows them from "System" with a front-facing Kordi bird,
 /// except a card a person's agent opened (`planCardAgent`). The plan agent's
 /// own messages show the same way.
 enum KordiSystemIdentity {
@@ -96,27 +95,11 @@ struct PlanCardAgentSender: Equatable {
     let ownerName: String?
 }
 
-/// The Kordi bird in gray, matching the development app icon.
+/// The front-facing Kordi bird, shared with the desktop System avatar.
 struct KordiSystemAvatar: View {
-    /// Bird #6e6e73 and beak #a1a1a6, from the shared icon generator.
-    static let tint = KordiBirdTint(
-        body: Color(red: 0x6E / 255, green: 0x6E / 255, blue: 0x73 / 255),
-        beak: Color(red: 0xA1 / 255, green: 0xA1 / 255, blue: 0xA6 / 255)
-    )
-    private static let background = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0x2C / 255, green: 0x2C / 255, blue: 0x2E / 255, alpha: 1)
-            : UIColor(red: 0xE5 / 255, green: 0xE5 / 255, blue: 0xEA / 255, alpha: 1)
-    })
-
     var body: some View {
-        GeometryReader { proxy in
-            let side = min(proxy.size.width, proxy.size.height)
-            ZStack {
-                Self.background
-                KordiMark(size: side * 0.86, tint: Self.tint)
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
-        }
+        Image("KordiSystemAvatar")
+            .resizable()
+            .scaledToFit()
     }
 }
