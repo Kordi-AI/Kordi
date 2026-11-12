@@ -22,7 +22,8 @@ export function stableCloudPinMessageId(
   conversationId: string,
 ) {
   const actionId = chatMessageActionId(message);
-  return collaborationMessageSourceId(actionId, conversationId) ?? actionId;
+  const groupWireId = message.reactionConversationId?.startsWith('session:group:') ? message.reactionTargetMessageId?.trim() : null;
+  return groupWireId || collaborationMessageSourceId(actionId, conversationId) || actionId;
 }
 
 export function pinnedMessageCandidateIds(

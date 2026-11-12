@@ -279,6 +279,7 @@ export function useCloudSelfAgentCanonicalSync({
             mountedRef.current
             && latestInputRef.current.account?.accountId === accountId
           ),
+          conversation => conversation.kind === 'ai',
         );
         if (!conversations) return;
         const initialState = latestInputRef.current.canonicalState;

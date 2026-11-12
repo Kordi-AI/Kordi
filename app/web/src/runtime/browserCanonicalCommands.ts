@@ -42,11 +42,11 @@ export function applyBrowserCanonicalCommand(state: CanonicalSessionState, comma
       const row = state.messages.find(message => message.id === input.messageId && message.sessionId === input.sessionId);
       const session = state.sessions.find(item => item.id === input.sessionId);
       if (!row || !session) return null;
-      row.status = input.status;
-      row.updatedAtMs = now;
-      row.content = { ...(typeof row.content === 'object' && row.content ? row.content : {}),
-        deliveryState: input.deliveryState, deliveredRecipientIds: input.deliveredRecipientIds,
-        pendingRecipientIds: input.pendingRecipientIds, exhaustedRecipientIds: input.exhaustedRecipientIds };
+      const updated = { ...row, status: input.status, updatedAtMs: now,
+        content: { ...(typeof row.content === 'object' && row.content ? row.content : {}),
+          deliveryState: input.deliveryState, deliveredRecipientIds: input.deliveredRecipientIds,
+          pendingRecipientIds: input.pendingRecipientIds, exhaustedRecipientIds: input.exhaustedRecipientIds } };
+      state.messages = state.messages.map(message => message === row ? updated : message);
       session.updatedAtMs = now;
       return { ...input, updatedAtMs: now, contentHash: row.contentHash ?? '',
         sessionUpdatedAtMs: now, sessionLastMessageAtMs: session.lastMessageAtMs ?? null };

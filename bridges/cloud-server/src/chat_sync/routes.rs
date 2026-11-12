@@ -338,11 +338,12 @@ async fn history(
     Path(conversation_id): Path<Uuid>,
     Query(request): Query<HistoryQuery>,
 ) -> Response {
-    match store::history(
+    match store::history_page(
         state.db_pool(),
         &session.account_id,
         conversation_id,
         request.before_sequence,
+        request.around_message_id.as_deref(),
         request.limit,
     )
     .await

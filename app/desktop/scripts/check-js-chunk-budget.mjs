@@ -109,7 +109,8 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The same optimized System portrait adds less than 25 kB to the browser target.
 // The same multi-category memory controls and import preservation add up to 2 kB here.
 // The shared Facilitator cards add the same 7.1 kB to the browser target.
-const MAX_WEB_APP_DIST_BYTES = 5_918_000;
+// Scoped history, indexed browser message storage, and targeted pin loading add up to 12 kB.
+const MAX_WEB_APP_DIST_BYTES = 5_930_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

@@ -4,7 +4,7 @@ import type {
   MutableRefObject,
   SetStateAction,
 } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CanonicalSessionState } from '@/kordi-app/types';
 import type { CloudAccount, CloudAuthClient, CloudMessage } from './authClient';
 import { cloudSessionIdFromConversationId } from '@/features/collaboration/conversationIds';
@@ -25,6 +25,15 @@ import { useCloudGroupReplay } from './useCloudGroupReplay';
 import { useLegacyCloudGroupTitleNoticeRecovery } from './useLegacyCloudGroupTitleNoticeRecovery';
 import { isNativeDesktopShell } from '@/lib/desktop';
 import { applyChatSyncLocalBatch } from '@/lib/desktopChatSync';
+import { useBrowserGroupHistory, type ApplyBrowserGroupHistoryPage } from './useBrowserGroupHistory';
+
+const NO_BROWSER_GROUP_HISTORY: ReturnType<typeof useBrowserGroupHistory> = {
+  actions: undefined, hasOlderBySessionId: {}, hydrationBySessionId: {},
+  loadOlderSessionMessages: () => Promise.resolve(),
+};
+const useGroupHistory = import.meta.env.VITE_KORDI_WEB_APP === '1'
+  ? useBrowserGroupHistory
+  : () => NO_BROWSER_GROUP_HISTORY;
 
 export function useRecoveredCloudGroupReplay({
   account,
@@ -39,6 +48,7 @@ export function useRecoveredCloudGroupReplay({
   coordinator,
   messageIndex,
   applyControl,
+  applyHistoryPage,
   flushCanonicalState,
   onNativeHistorySettled,
   onSessionSettled,
@@ -53,7 +63,7 @@ export function useRecoveredCloudGroupReplay({
   setCanonicalState?: Dispatch<SetStateAction<CanonicalSessionState | null>>;
   hydrateCanonicalSessionPage?: (
     sessionId: string,
-    options?: { beforeSequenceNum?: number | null; force?: boolean },
+    options?: { beforeSequenceNum?: number | null; force?: boolean; page?: Pick<import('@/kordi-app/types').CanonicalMessagePage, 'messages' | 'hasOlder'> },
   ) => Promise<unknown>;
   initialMessagesSettled: boolean;
   processedRequestIdsRef: MutableRefObject<Set<string>>;
@@ -70,13 +80,15 @@ export function useRecoveredCloudGroupReplay({
       catalogGroupOrigin?: string | null;
     },
   ) => Promise<void>;
+  applyHistoryPage: ApplyBrowserGroupHistoryPage;
   flushCanonicalState: () => void;
   onNativeHistorySettled?: () => void;
   onSessionSettled?: (sessionId: string) => void;
   onSettled?: () => void;
   reportWarning: (message: string, error: unknown) => void;
 }) {
-  const nativeShell = isNativeDesktopShell() || isBrowserAppRuntime();
+  const browser = isBrowserAppRuntime();
+  const nativeShell = isNativeDesktopShell() || browser;
   const recoverySettled = useCloudAgentTurnRecovery({
     account,
     canonicalStateRef,
@@ -112,6 +124,7 @@ export function useRecoveredCloudGroupReplay({
     conversations: Map<string, ChatSyncConversation>;
   } | null>(null);
   const [remoteCatalogAccountId, setRemoteCatalogAccountId] = useState<string | null>(null);
+  const [restoredCatalogAccountId, setRestoredCatalogAccountId] = useState<string | null>(null);
   const [activePageKey, setActivePageKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -216,6 +229,7 @@ export function useRecoveredCloudGroupReplay({
         }
       } finally {
         if (active) {
+          setRestoredCatalogAccountId(accountId);
           setRemoteCatalogAccountId(accountId);
         }
       }
@@ -225,7 +239,7 @@ export function useRecoveredCloudGroupReplay({
     };
   }, [accountId, client, humanIdentityId, nativeShell, setCanonicalState]);
 
-  const requestedActivePageKey = accountId && activeSessionId.startsWith('session:')
+  const requestedActivePageKey = (!browser || !activeGroupSessionId) && accountId && activeSessionId.startsWith('session:')
     ? `${accountId}:${activeSessionId}`
     : null;
   useEffect(() => {
@@ -292,8 +306,23 @@ export function useRecoveredCloudGroupReplay({
   }, [accountId, activePageKey, activeSessionId, client, hydrateCanonicalSessionPage, remoteCatalogAccountId, requestedActivePageKey]);
 
   const remoteCatalogReady = !nativeShell || remoteCatalogAccountId === accountId;
+  const findConversation = useCallback((sessionId: string) => {
+    const catalog = bootstrapRef.current;
+    if (catalog?.accountId !== accountId) return undefined;
+    for (const conversation of catalog?.conversations.values() ?? []) {
+      if (conversation.kind === 'group' && (conversation.legacy_session_id ?? conversation.id) === sessionId) return conversation;
+    }
+    return undefined;
+  }, [accountId]);
+  const browserHistory = useGroupHistory({
+    accountId, sessionId: browser ? activeGroupSessionId : '',
+    ready: remoteCatalogReady && Boolean(humanIdentityId && setCanonicalState),
+    client, findConversation, applyPage: applyHistoryPage, hydrate: hydrateCanonicalSessionPage,
+    onSettled: onSessionSettled,
+  });
   const activePageReady = !requestedActivePageKey || activePageKey === requestedActivePageKey;
-  const backgroundReplayEnabled = replayEnabled && remoteCatalogReady && activePageReady;
+  const backgroundReplayEnabled = replayEnabled && remoteCatalogReady && activePageReady
+    && (!browser || restoredCatalogAccountId === accountId);
 
   useLegacyCloudGroupTitleNoticeRecovery({
     enabled: backgroundReplayEnabled,
@@ -319,4 +348,5 @@ export function useRecoveredCloudGroupReplay({
     onSettled,
     reportWarning,
   });
+  return browserHistory;
 }

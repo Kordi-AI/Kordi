@@ -422,7 +422,7 @@ export function useCloudCollaborationState({
     },
   });
 
-  useRecoveredCloudGroupReplay({
+  const groupHistory = useRecoveredCloudGroupReplay({
     account, activeConversationId, client,
     humanIdentityId: canonicalSessionState?.profile.humanIdentityId,
     canonicalStateRef: canonicalSessionStateRef, setCanonicalState: setCanonicalSessionState, hydrateCanonicalSessionPage,
@@ -430,7 +430,7 @@ export function useCloudCollaborationState({
     processedRequestIdsRef: processedCloudAgentMentionIdsRef,
     coordinator: cloudGroupReplayCoordinator,
     messageIndex: cloudMessageIndex,
-    applyControl: cloudGroupControlApplication.apply,
+    applyControl: cloudGroupControlApplication.apply, applyHistoryPage: cloudGroupControlApplication.applyHistoryPage,
     flushCanonicalState: cloudGroupControlApplication.flushCanonicalState,
     onNativeHistorySettled: messageStore.onNativeGroupRecoverySettled, onSessionSettled: messageStore.onGroupSessionRecoverySettled,
     onSettled: messageStore.onGroupRecoverySettled,
@@ -636,7 +636,7 @@ export function useCloudCollaborationState({
   ), [account?.accountId, cloudMessageIndex.allMessages, directHistory.page]);
   const cloudGroupSessionTitles = useMemo(() => cloudGroupSessionTitlesForReadModel(cloudSessionTitlesById), [cloudSessionTitlesById]); const cloudReliableGroupSessionTitleIds = useMemo(() => reliableCloudGroupSessionTitleIds(cloudSessionTitlesById), [cloudSessionTitlesById]); const cloudReliableGroupActivity = useMemo(() => reliableCloudGroupSessionActivityAtMs(cloudMessageIndex.groupRowsBySessionId), [cloudMessageIndex.groupRowsBySessionId]); const pendingReplyNowMs = usePendingSelfAgentReplyClock(canonicalSessionState ?? null); const cloudCanonicalReactionState = useMemo(() => projectPendingSelfAgentReplies(projectCloudSelfAgentLiveTurns(projectCloudGroupLiveTurns(patchCanonicalCloudMessages(patchCanonicalCloudGroupSessionTitles(followRunningForkSnapshots(canonicalSessionState ?? null), cloudSessionTitlesById), cloudMessageIndex.groupRows), localAgentTurnsByRequestId, account?.accountId), localAgentTurnsByRequestId), pendingReplyNowMs, { turns: localAgentTurnsByRequestId, cloudMessages: cloudMessageIndex.byPeerId.get(account?.accountId ?? '') }), [pendingReplyNowMs, cloudMessageIndex.byPeerId, canonicalSessionState, cloudMessageIndex.groupRows, cloudSessionTitlesById, localAgentTurnsByRequestId, account?.accountId]);
   return {
-    cloudAgentRuntimeRouteMessages, directHistory,
+    cloudAgentRuntimeRouteMessages, directHistory, groupHistory,
     cloudCollaborationState,
     setCloudCollaborationState,
     mergedCollaborationState: cloudCollaborationState,

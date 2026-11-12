@@ -1,3 +1,4 @@
+import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
 import {
   attachmentImageDisplaySize,
   attachmentPreviewIdentity,
@@ -126,6 +127,7 @@ export function AttachmentImageCard({
     index,
     event.currentTarget,
   ));
+  const { kind, name, mimeType, sizeBytes, widthPixels, heightPixels, previewAttachmentId, previewUrl: previewHint } = attachment;
   useEffect(() => {
     if (!mediaActive) return;
     if (
@@ -133,13 +135,13 @@ export function AttachmentImageCard({
       || usableRemotePreviewUrl
       || (!isAnimatedGif && usableDirectPreviewUrl)
       || previewUnavailable
-      || attachment.kind !== 'image'
+      || kind !== 'image'
       || !attachmentId
     ) return;
     const controller = new AbortController();
     void (async () => {
-      if (isAnimatedGif || !attachment.previewAttachmentId) {
-        const original = await loadCachedCloudAttachmentLocalPath(attachmentId, attachment.name);
+      if (isAnimatedGif || !previewAttachmentId) {
+        const original = await loadCachedCloudAttachmentLocalPath(attachmentId, name);
         if (controller.signal.aborted) return;
         if (original) {
           setCachedLocalPath(original);
@@ -148,7 +150,7 @@ export function AttachmentImageCard({
         }
       }
       if (!isAnimatedGif && previewCacheId) {
-        const cached = await loadCachedCloudAttachmentLocalPath(previewCacheId, attachment.name);
+        const cached = await loadCachedCloudAttachmentLocalPath(previewCacheId, name);
         if (controller.signal.aborted) return;
         if (cached) {
           setCachedLocalPath(cached);
@@ -161,8 +163,8 @@ export function AttachmentImageCard({
         if (!controller.signal.aborted) setPreviewUnavailable(true);
         return;
       }
-      if (!isAnimatedGif && !attachment.previewAttachmentId) {
-        const recoveredPreview = await recoverAttachmentPreviewOnce(attachment, { signal: controller.signal });
+      if (!isBrowserAppRuntime() && !isAnimatedGif && !previewAttachmentId) {
+        const recoveredPreview = await recoverAttachmentPreviewOnce({ attachmentId, kind, name, mimeType, sizeBytes, widthPixels, heightPixels, previewUrl: previewHint }, { signal: controller.signal });
         if (controller.signal.aborted) return;
         if (recoveredPreview) {
           setRecoveredPreviewUrl(recoveredPreview);
@@ -174,11 +176,11 @@ export function AttachmentImageCard({
         token: session.token,
         client: defaultCloudAuthClient(),
         attachment: {
-          attachmentId: attachment.attachmentId ?? '',
-          previewAttachmentId: attachment.previewAttachmentId ?? null,
-          name: attachment.name,
+          attachmentId,
+          previewAttachmentId,
+          name,
           kind: 'image',
-          mimeType: attachment.mimeType ?? null, sizeBytes: attachment.sizeBytes, widthPixels: attachment.widthPixels, heightPixels: attachment.heightPixels,
+          mimeType: mimeType ?? null, sizeBytes, widthPixels, heightPixels,
         },
         signal: controller.signal,
       });
@@ -201,7 +203,7 @@ export function AttachmentImageCard({
         }
       });
     return () => controller.abort();
-  }, [mediaActive, attachment, attachmentId, isAnimatedGif, previewCacheId, previewUnavailable, usableDirectPreviewUrl, usableRecoveredPreviewUrl, usableRemotePreviewUrl]);
+  }, [mediaActive, attachmentId, kind, name, mimeType, sizeBytes, widthPixels, heightPixels, previewHint, previewAttachmentId, isAnimatedGif, previewCacheId, previewUnavailable, usableDirectPreviewUrl, usableRecoveredPreviewUrl, usableRemotePreviewUrl]);
 
   useEffect(() => {
     return () => {

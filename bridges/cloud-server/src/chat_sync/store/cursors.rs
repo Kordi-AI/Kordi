@@ -27,11 +27,34 @@ pub async fn history(
     before_sequence: Option<i64>,
     limit: Option<i64>,
 ) -> Result<HistoryResponse, StoreError> {
+    history_page(
+        pool,
+        account_id,
+        conversation_id,
+        before_sequence,
+        None,
+        limit,
+    )
+    .await
+}
+
+pub async fn history_page(
+    pool: &PgPool,
+    account_id: &str,
+    conversation_id: Uuid,
+    before_sequence: Option<i64>,
+    around_message_id: Option<&str>,
+    limit: Option<i64>,
+) -> Result<HistoryResponse, StoreError> {
+    if before_sequence.is_some() && around_message_id.is_some() {
+        return Err(StoreError::InvalidInput(
+            "Choose either a history cursor or a message.",
+        ));
+    }
     let limit = limit
         .unwrap_or(DEFAULT_HISTORY_LIMIT)
         .clamp(1, MAX_HISTORY_LIMIT);
-    let before = before_sequence.unwrap_or(i64::MAX);
-    if before <= 0 {
+    if before_sequence.is_some_and(|before| before <= 0) {
         return Err(StoreError::InvalidInput("before_sequence must be positive"));
     }
     let mut transaction = pool.begin().await?;
@@ -39,6 +62,35 @@ pub async fn history(
         .execute(&mut *transaction)
         .await?;
     require_active_member(&mut transaction, conversation_id, account_id).await?;
+    let anchor = if let Some(reference) = around_message_id {
+        let reference = reference.trim();
+        if reference.is_empty() || reference.len() > 512 {
+            return Err(StoreError::InvalidInput(
+                "The history message ID is invalid.",
+            ));
+        }
+        let message_id = Uuid::parse_str(reference).map_err(|_| StoreError::NotFound)?;
+        let anchor: Option<(Uuid, i64)> = query_as(
+            "SELECT message.message_id, message.conversation_sequence FROM cloud_chat_messages message \
+             WHERE message.conversation_id = $1 AND (message.message_id = $2 OR message.client_message_id = $2) \
+               AND message.deleted_at IS NULL AND NOT EXISTS ( \
+                 SELECT 1 FROM cloud_chat_message_visibility visibility \
+                 WHERE visibility.account_id = $3 AND visibility.message_id = message.message_id \
+               ) ORDER BY (message.message_id = $2) DESC, message.conversation_sequence DESC LIMIT 1",
+        )
+        .bind(conversation_id)
+        .bind(message_id)
+        .bind(account_id)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        Some(anchor.ok_or(StoreError::NotFound)?)
+    } else {
+        None
+    };
+    let before = anchor
+        .map(|(_, sequence)| sequence.saturating_add((limit - 1) / 2 + 1))
+        .or(before_sequence)
+        .unwrap_or(i64::MAX);
     let rows: Vec<MessageRow> = query_as(
         "SELECT message.message_id, message.client_message_id, message.conversation_id, message.conversation_sequence, \
                 message.sender_account_id, message.message_kind, message.content, message.reply_to_message_id, message.version, \
@@ -68,13 +120,15 @@ pub async fn history(
         .map(|row| row.0)
         .collect::<Vec<_>>();
     let mut reactions = reactions_by_message(&mut transaction, &message_ids).await?;
+    let mut attachments_by_message = history_attachment_ids(&mut transaction, &message_ids).await?;
     let mut messages = Vec::with_capacity(rows.len().min(limit as usize));
     for row in rows.into_iter().take(limit as usize) {
         let message_id = row.0;
-        let attachments = attachment_ids(&mut transaction, row.0).await?;
         messages.push(message_from_row(
             row,
-            attachments,
+            attachments_by_message
+                .remove(&message_id)
+                .unwrap_or_default(),
             reactions.remove(&message_id).unwrap_or_default(),
         ));
     }
@@ -86,10 +140,32 @@ pub async fn history(
     };
     transaction.commit().await?;
     Ok(HistoryResponse {
+        anchor_message_id: anchor.map(|(id, _)| id),
         messages,
         next_before_sequence,
         has_more,
     })
+}
+
+async fn history_attachment_ids(
+    transaction: &mut Transaction<'_, Postgres>,
+    message_ids: &[Uuid],
+) -> Result<HashMap<Uuid, Vec<String>>, StoreError> {
+    let attachment_rows: Vec<(Uuid, String)> = query_as(
+        "SELECT message_id, attachment_id FROM cloud_chat_message_attachments \
+         WHERE message_id = ANY($1) ORDER BY message_id, position",
+    )
+    .bind(message_ids)
+    .fetch_all(&mut **transaction)
+    .await?;
+    let mut attachments_by_message: HashMap<Uuid, Vec<String>> = HashMap::new();
+    for (message_id, attachment_id) in attachment_rows {
+        attachments_by_message
+            .entry(message_id)
+            .or_default()
+            .push(attachment_id);
+    }
+    Ok(attachments_by_message)
 }
 
 pub async fn sync_batch(
@@ -301,20 +377,7 @@ pub async fn bootstrap(pool: &PgPool, account_id: &str) -> Result<BootstrapSnaps
     .fetch_all(&mut *transaction)
     .await?;
     let message_ids = latest_rows.iter().map(|row| row.0).collect::<Vec<_>>();
-    let attachment_rows: Vec<(Uuid, String)> = query_as(
-        "SELECT message_id, attachment_id FROM cloud_chat_message_attachments \
-         WHERE message_id = ANY($1) ORDER BY message_id ASC, position ASC",
-    )
-    .bind(&message_ids)
-    .fetch_all(&mut *transaction)
-    .await?;
-    let mut attachments_by_message = HashMap::<Uuid, Vec<String>>::new();
-    for (message_id, attachment_id) in attachment_rows {
-        attachments_by_message
-            .entry(message_id)
-            .or_default()
-            .push(attachment_id);
-    }
+    let mut attachments_by_message = history_attachment_ids(&mut transaction, &message_ids).await?;
     let mut reactions_by_message = reactions_by_message(&mut transaction, &message_ids).await?;
     let mut latest_messages: Vec<MessageSnapshot> = latest_rows
         .into_iter()

@@ -171,6 +171,7 @@ export type KordiShellCompositionArgs = {
     | 'handleRenameDesktopSession'
     | 'chatTranscriptScrollRef'
     | 'canonicalHasOlderBySessionId'
+    | 'browserGroupHistory'
     | 'loadOlderCanonicalSessionMessages'
     | 'onProjectTranscriptScroll'
     | 'onChatTranscriptScroll'

@@ -10,16 +10,16 @@ test('cursor and history repair reads stay bounded as unrelated history grows', 
   const repairEnd = sync.indexOf('const runCoordinatedSync', repairStart);
   assert.notEqual(repairStart, -1);
   assert.notEqual(repairEnd, -1);
-  const repair = sync.slice(repairStart, repairEnd);
+  const repair = source('../src/features/cloud/cloudHistoryRepair.ts');
+  const repairCaller = sync.slice(repairStart, repairEnd);
 
   assert.match(sync, /const local = await loadChatSyncCursor\(account\.accountId\)/);
   assert.match(sync, /local\.changedConversationHeads\.map/);
-  assert.match(repair, /loadChatSyncConversations\(account\.accountId\)/);
-  assert.match(repair, /loadChatSyncCoverage\(account\.accountId\)/);
-  assert.ok(
-    repair.indexOf('if (!page.hasMore) break')
-      < repair.indexOf('pruneMissingCanonicalCloudMessages(account.accountId)'),
-  );
+  assert.match(repair, /loadChatSyncConversations\(accountId\)/);
+  assert.match(repair, /loadChatSyncCoverage\(accountId\)/);
+  assert.match(repair, /if \(!page\.hasMore\) break/);
+  assert.ok(repairCaller.indexOf('await hydrateCloudHistory') >= 0
+    && repairCaller.indexOf('await hydrateCloudHistory') < repairCaller.indexOf('await pruneMissingCanonicalCloudMessages'));
   assert.doesNotMatch(repair, /hydrateChatLocalState|loadChatSyncLocalState|storedSequences|local\.messages/);
 });
 

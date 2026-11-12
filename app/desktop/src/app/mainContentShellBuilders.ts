@@ -55,6 +55,7 @@ export function buildChatsPageProps(args: MainContentShellArgs): ComponentProps<
     transcript: {
     chatTranscriptScrollRef: args.chatTranscriptScrollRef,
     canonicalHasOlderBySessionId: args.canonicalHasOlderBySessionId,
+    browserGroupHistory: args.browserGroupHistory,
     onLoadOlderCanonicalSessionMessages: args.loadOlderCanonicalSessionMessages,
     onTranscriptScroll: args.onChatTranscriptScroll,
     onCompanionReadPresentationChange: args.onCompanionReadPresentationChange,

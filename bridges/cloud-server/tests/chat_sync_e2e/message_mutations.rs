@@ -81,9 +81,46 @@ async fn message_edits_and_both_deletion_scopes_converge() {
         Err(StoreError::MessageVersionConflict(_))
     ));
 
+    for target in [message.id, message.client_message_id] {
+        let page = store::history_page(
+            &pool,
+            &peer,
+            conversation.id,
+            None,
+            Some(&target.to_string()),
+            Some(1),
+        )
+        .await
+        .expect("resolve server and client message IDs");
+        assert_eq!(page.anchor_message_id, Some(message.id));
+        assert_eq!(page.messages[0].id, message.id);
+    }
+
     store::delete_message(&pool, &peer, conversation.id, message.id, false)
         .await
         .expect("delete for peer only");
+    assert!(matches!(
+        store::history_page(
+            &pool,
+            &peer,
+            conversation.id,
+            None,
+            Some(&message.id.to_string()),
+            Some(15)
+        )
+        .await,
+        Err(StoreError::NotFound)
+    ));
+    assert!(store::history_page(
+        &pool,
+        &owner,
+        conversation.id,
+        None,
+        Some(&message.id.to_string()),
+        Some(15)
+    )
+    .await
+    .is_ok());
     assert!(store::history(&pool, &peer, conversation.id, None, None)
         .await
         .expect("peer history")

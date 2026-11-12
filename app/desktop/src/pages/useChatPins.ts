@@ -1,8 +1,9 @@
+import { cloudMessageDeletions } from '@/features/cloud/cloudMessageDeletions';
 import { MAX_PINNED_MESSAGES, sessionPinMessageIds } from '@/features/cloud/cloudSessionPinTypes';
 import { cloudOperationUuid } from '@/features/cloud/chatSyncMapping';
 import { mergePinHistory, type CloudPinHistoryEvent } from '@/features/cloud/cloudPinHistory';
 import { remainingPendingPinActions, resolvePendingPinActions, type PendingPinAction } from '@/pages/pendingPinActions';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { createPinActivity, type PinActivity } from '@/pages/chatsPage.pinActivity';
 
@@ -55,6 +56,7 @@ type UseChatPinsInput = {
     scope: 'private' | 'shared';
   }) => Promise<CloudSessionPin>;
   onNavigateToMessage: (messageId: string) => void;
+  loadBrowserPin?: (messageId: string, open?: boolean) => Promise<Message | null>;
 };
 
 export function useChatPins({
@@ -66,6 +68,7 @@ export function useChatPins({
   cloudPin,
   onUpdateCloudPin,
   onNavigateToMessage,
+  loadBrowserPin,
 }: UseChatPinsInput) {
   const [pendingCloudActions, setPendingCloudActions] = useState<Record<string, PendingPinAction[]>>({});
   const [localPinIds, setLocalPinIds] = useState<Record<string, string[]>>({});
@@ -91,25 +94,47 @@ export function useChatPins({
   const pinScopeKey = JSON.stringify([currentAccountId ?? null, sessionId, conversation.id]);
   const optimisticCloudPin = optimisticCloudPins[pinScopeKey] ?? null;
   const activeCloudPin = usesCloudPins ? optimisticCloudPin ?? cloudPin ?? null : null;
-  const pinnedMessages = useMemo<PinnedMessageItem[]>(() => {
-    const pins: Array<{ messageId: string; scope: PinnedMessageScope }> = usesCloudPins
+  const pinTargets = useMemo<Array<{ messageId: string; scope: PinnedMessageScope }>>(() => usesCloudPins
       ? (['shared', 'private'] as const).flatMap(scope => sessionPinMessageIds(activeCloudPin, scope).map(messageId => ({ messageId, scope })))
-      : (localPinIds[pinScopeKey] ?? []).map(messageId => ({ messageId, scope: 'private' }));
+      : (localPinIds[pinScopeKey] ?? []).map(messageId => ({ messageId, scope: 'private' })),
+  [activeCloudPin, localPinIds, pinScopeKey, usesCloudPins]);
+  const [browserPreviews, setBrowserPreviews] = useState<{ scope: string; messages: Map<string, Message | null> } | null>(null);
+  const [navigationFailure, setNavigationFailure] = useState<{ scope: string; text: string } | null>(null);
+  const pinMessage = useCallback((messageId: string) => messages.find(candidate => (
+    usesCloudPins ? pinnedMessageCandidateIds(candidate, conversation.id).includes(messageId)
+      : chatMessageActionId(candidate) === messageId
+  )), [conversation.id, messages, usesCloudPins]);
+  const unresolvedPins = JSON.stringify(loadBrowserPin
+    ? [...new Set(pinTargets.map(pin => pin.messageId.trim()).filter(id => id && !pinMessage(id)))].sort()
+    : []);
+  useEffect(() => {
+    if (!loadBrowserPin) return;
+    let active = true;
+    const ids = JSON.parse(unresolvedPins) as string[];
+    if (ids.length) {
+      void Promise.all(ids.map(async id => [id, await loadBrowserPin(id).catch(() => null)] as const))
+        .then(entries => {
+          if (active) setBrowserPreviews({ scope: pinScopeKey, messages: new Map(entries) });
+        });
+    }
+    return () => { active = false; };
+  }, [loadBrowserPin, pinScopeKey, unresolvedPins]);
+  const pinnedMessages = useMemo<PinnedMessageItem[]>(() => {
     const seen = new Set<string>();
-    return pins.flatMap(({ messageId, scope }) => {
+    const deleted = cloudMessageDeletions.ids(currentAccountId ?? null);
+    return pinTargets.flatMap(({ messageId, scope }) => {
       const normalizedId = messageId?.trim();
       if (!normalizedId || seen.has(normalizedId)) return [];
       seen.add(normalizedId);
-      const message = messages.find((candidate) => (
-        usesCloudPins
-          ? pinnedMessageCandidateIds(candidate, conversation.id).includes(normalizedId)
-          : chatMessageActionId(candidate) === normalizedId
-      ));
-      // The pin exists independently of whether its target is in the loaded page.
-      // Keep the shelf and navigation available while that older message hydrates.
-      return [{ message: message ?? { id: normalizedId, role: 'system', sender: '', text: 'Pinned message', time: '' }, scope }];
+      const message = pinMessage(normalizedId);
+      const cached = browserPreviews?.scope === pinScopeKey ? browserPreviews.messages.get(normalizedId) : undefined;
+      const preview = deleted.has(cached?.reactionTargetMessageId ?? normalizedId) ? null : cached;
+      const text = loadBrowserPin
+        ? preview === null || deleted.has(normalizedId) ? 'Pinned message unavailable' : 'Loading pinned message…'
+        : 'Pinned message';
+      return [{ message: message ?? preview ?? { id: normalizedId, role: 'system', sender: '', text, time: '' }, scope }];
     });
-  }, [activeCloudPin, conversation.id, localPinIds, messages, pinScopeKey, usesCloudPins]);
+  }, [browserPreviews, currentAccountId, loadBrowserPin, pinMessage, pinScopeKey, pinTargets]);
   const pinnedMessageIds = useMemo(
     () => [...new Set(pinnedMessages.map(({ message }) => chatMessageActionId(message)).filter(Boolean))],
     [pinnedMessages],
@@ -146,8 +171,17 @@ export function useChatPins({
   }, [pinScopeKey]);
   const openPinnedMessage = useCallback((message: Message) => {
     const messageId = chatMessageActionId(message);
-    if (messageId) onNavigateToMessage(messageId);
-  }, [onNavigateToMessage]);
+    if (!messageId) return;
+    setNavigationFailure(null);
+    const loaded = pinMessage(messageId) ?? (message.entryId ? pinMessage(message.entryId) : undefined);
+    if (!loadBrowserPin || loaded) {
+      onNavigateToMessage(loaded ? chatMessageActionId(loaded) : messageId);
+      return;
+    }
+    void loadBrowserPin(messageId, true).then(target => {
+      if (target) onNavigateToMessage(target.entryId ?? messageId);
+    }).catch(() => setNavigationFailure({ scope: pinScopeKey, text: 'Could not open the pinned message. Select it to try again.' }));
+  }, [loadBrowserPin, onNavigateToMessage, pinMessage, pinScopeKey]);
 
   const confirmDialog = useCallback(() => {
     if (!dialog) return;
@@ -290,6 +324,7 @@ export function useChatPins({
     requestPin,
     requestUnpin,
     openPinnedMessage,
+    navigationError: navigationFailure?.scope === pinScopeKey ? navigationFailure.text : null,
     dialog: {
       value: dialog?.contextKey === pinScopeKey ? dialog : null,
       error: error?.contextKey === pinScopeKey ? error.message : null,

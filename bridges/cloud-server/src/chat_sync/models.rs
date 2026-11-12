@@ -255,6 +255,7 @@ pub struct MessageReader {
 #[derive(Debug, Deserialize)]
 pub struct HistoryQuery {
     pub before_sequence: Option<i64>,
+    pub around_message_id: Option<String>,
     pub limit: Option<i64>,
 }
 
@@ -301,6 +302,8 @@ pub struct CursorResponse {
 
 #[derive(Debug, Serialize)]
 pub struct HistoryResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor_message_id: Option<Uuid>,
     pub messages: Vec<MessageSnapshot>,
     pub next_before_sequence: Option<i64>,
     pub has_more: bool,

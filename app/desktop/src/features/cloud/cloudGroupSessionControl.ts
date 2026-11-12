@@ -71,6 +71,7 @@ export type ApplyCloudGroupSessionControlInput = {
   cloudMessage: CloudGroupControlContext['cloudMessage'];
   envelope: CloudGroupControlEnvelope;
   historyReplay?: boolean;
+  useCatalogProfiles?: boolean;
   catalogGroupTitle?: string | null;
   catalogGroupAvatar?: CloudGroupControlEnvelope['groupAvatar'];
   /** `grounding` marks a group started from a Grounding room. */
@@ -99,6 +100,7 @@ export async function applyCloudGroupSessionControl({
   cloudMessage,
   envelope,
   historyReplay,
+  useCatalogProfiles,
   catalogGroupTitle,
   catalogGroupAvatar,
   catalogGroupOrigin,
@@ -144,7 +146,7 @@ export async function applyCloudGroupSessionControl({
     rawParticipants.map((participant) => participant.accountId.trim()).filter(Boolean),
   )];
   const missingProfileAccountIds = profileAccountIds.filter((accountId) => !profileCache.has(accountId));
-  if (missingProfileAccountIds.length > 0) {
+  if (!useCatalogProfiles && missingProfileAccountIds.length > 0) {
     const session = await loadSession();
     if (session?.token) {
       await Promise.all(missingProfileAccountIds.map(async (accountId) => {

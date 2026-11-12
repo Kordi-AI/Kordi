@@ -35,14 +35,15 @@ export function useKordiAppShellComposition({
     cloudAgentActions,
   } = foundation;
   const historyHasOlder = useMemo(() => ({
-    ...canonical.canonicalStore.hasOlderBySessionId, ...cloud.directHistory.hasOlderBySessionId,
-  }), [canonical.canonicalStore.hasOlderBySessionId, cloud.directHistory.hasOlderBySessionId]);
+    ...canonical.canonicalStore.hasOlderBySessionId, ...cloud.directHistory.hasOlderBySessionId, ...cloud.groupHistory.hasOlderBySessionId,
+  }), [canonical.canonicalStore.hasOlderBySessionId, cloud.directHistory.hasOlderBySessionId, cloud.groupHistory.hasOlderBySessionId]);
   const loadCanonicalOlder = canonical.loadOlderCanonicalSessionMessages;
-  const loadOlderHistory = useCallback((sessionId: string) => (
-    sessionId in cloud.directHistory.hasOlderBySessionId
+  const loadOlderHistory = useCallback((sessionId: string) => {
+    if (sessionId in cloud.groupHistory.hasOlderBySessionId) return cloud.groupHistory.loadOlderSessionMessages(sessionId);
+    return sessionId in cloud.directHistory.hasOlderBySessionId
       ? cloud.directHistory.loadOlderSessionMessages(sessionId)
-      : loadCanonicalOlder(sessionId)
-  ), [loadCanonicalOlder, cloud.directHistory]);
+      : loadCanonicalOlder(sessionId);
+  }, [loadCanonicalOlder, cloud.directHistory, cloud.groupHistory]);
   const {
     conversations,
     directory,
@@ -296,6 +297,7 @@ export function useKordiAppShellComposition({
       chatTranscriptScrollRef: refs.chatTranscriptScrollRef,
       canonicalHasOlderBySessionId:
         historyHasOlder,
+      browserGroupHistory: cloud.groupHistory.actions,
       loadOlderCanonicalSessionMessages:
         loadOlderHistory,
       onProjectTranscriptScroll,

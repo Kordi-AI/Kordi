@@ -218,7 +218,7 @@ export type AssembleKordiShellSlotsArgs = KordiShellComposerRouteArgs & KordiShe
   setIsEditingDesktopSessionTitle: Dispatch<SetStateAction<boolean>>;
   handleRenameDesktopSession: (fallbackName?: string) => Promise<void>;
   chatTranscriptScrollRef: MutableRefObject<HTMLDivElement | null>;
-  canonicalHasOlderBySessionId: Record<string, boolean>;
+  canonicalHasOlderBySessionId: Record<string, boolean>; browserGroupHistory?: import('@/features/cloud/useBrowserGroupHistory').BrowserGroupHistoryActions;
   loadOlderCanonicalSessionMessages: (sessionId: string) => Promise<void>;
   onProjectTranscriptScroll: () => void;
   onChatTranscriptScroll: () => void;
@@ -482,7 +482,7 @@ export type MainContentShellArgs = Pick<AssembleKordiShellSlotsArgs,
   | 'setIsEditingDesktopSessionTitle'
   | 'handleRenameDesktopSession'
   | 'chatTranscriptScrollRef'
-  | 'canonicalHasOlderBySessionId'
+  | 'canonicalHasOlderBySessionId' | 'browserGroupHistory'
   | 'loadOlderCanonicalSessionMessages'
   | 'onProjectTranscriptScroll'
   | 'setActiveSourcePreview'
