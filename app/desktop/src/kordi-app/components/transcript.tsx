@@ -43,6 +43,7 @@ import { MessageDeliveryStatusSlot,TranscriptMessageTransferActions } from './tr
 import { RequestReplyLine,SourceMessageQuoteRow,ThreadReplyLine } from './transcriptReplyAttribution';
 import { TranscriptSystemNoticeContent } from './transcriptSystemNoticeContent';
 import { VoiceMessageContent } from './voiceMessage';
+import { FacilitatorCardContent } from './facilitatorCard';
 import { PlanCardContent } from './planCard';
 import { CompactionSummaryMessage } from './transcriptCompactionSummary';
 import { isCompactionSummaryMessage } from './transcriptCompactionSummaryEligibility';
@@ -611,7 +612,7 @@ function MessageBubbleView({
   const deliveryStatus = primaryMessageStatus(msg);
   const deliveryVisual = deliveryStatus ? messageDeliveryVisual(deliveryStatus) : null;
   const showCompactFooter = isOwnHumanMessage || isPeerHumanMessage; const showHeaderMeta = Boolean(isAgentMessage && msg.sender);
-  const hasVoice = Boolean(msg.voiceMessage); const hasPlanCard = Boolean(msg.planCard); const hasText = Boolean(msg.callActivity) || (!hasVoice && msg.text.trim().length > 0); const planCardOnly = showCompactFooter && hasPlanCard && !hasText && !hasVoice && !((msg.attachments?.length ?? 0) > 0) && !msg.supportContactTyping && !msg.supportContactResponse;
+  const hasVoice = Boolean(msg.voiceMessage); const hasPlanCard = Boolean(msg.planCard); const hasText = Boolean(msg.callActivity) || (!hasVoice && !msg.facilitatorCard && msg.text.trim().length > 0); const planCardOnly = showCompactFooter && hasPlanCard && !hasText && !hasVoice && !((msg.attachments?.length ?? 0) > 0) && !msg.supportContactTyping && !msg.supportContactResponse;
   const { hasAttachments, hasOnlyBorderlessMediaAttachments, hasGroupedImageAttachments,
     hasDetachedImageGroup, hasBubbleAttachments } = transcriptAttachmentLayout(msg, hasText, hasVoice);
   const showsExternalRetry = isOwnHumanMessage && deliveryVisual?.tone === 'red' && Boolean(onRetryMessage); const bubbleDeliveryStatus = showsExternalRetry ? null : deliveryStatus; const hasLinkPreview = (isOwnHumanMessage || isPeerHumanMessage) && hasText && !msg.callActivity && !hasVoice && !hasPlanCard && !hasAttachments && Boolean(standaloneExternalMessageLink(msg.text)); const bareSurface = hasOnlyBorderlessMediaAttachments || planCardOnly;
@@ -635,7 +636,7 @@ function MessageBubbleView({
   const canOpenSenderProfile = Boolean(isPeerHumanMessage && onOpenSenderProfile && !selectionMode && !isSystemAvatarUrl(msg.senderProfileImageUrl)); const isForwardedMessage = msg.messageAction?.kind === 'forward';
   const standaloneEmojiItem = isForwardedMessage ? null : standaloneEmojiItemForMessage(msg, { isHuman: showCompactFooter, showsSender: showInlineHumanSender, footerDetail });
   const bubbleAttachmentPreview = hasBubbleAttachments ? <AttachmentPreview msg={msg} scope={hasDetachedImageGroup ? 'non-images' : 'all'} imageGallery={imageGallery} imageDeliveryStatus={hasOnlyBorderlessMediaAttachments && isOwnHumanMessage ? bubbleDeliveryStatus : null} /> : null;
-  const planCardContent = msg.planCard ? <PlanCardContent card={msg.planCard} conversationId={msg.reactionConversationId} /> : null;
+  const planCardContent = msg.facilitatorCard ? <FacilitatorCardContent snapshot={msg.facilitatorCard} /> : msg.planCard ? <PlanCardContent card={msg.planCard} conversationId={msg.reactionConversationId} /> : null;
   const messageSurfaceContent = (
     <>
       {threadLayout && (!isGroupedWithPrevious || msg.sourceMessage) ? <ThreadMessageHeader msg={msg} name={avatarName} ownerName={agentOwnerName} /> : null}{showHeaderMeta && groupChatAgentAvatar ? <AgentHeaderMeta sender={msg.sender} ownerName={agentOwnerName} highlightName className="mb-1 px-0" /> : null}

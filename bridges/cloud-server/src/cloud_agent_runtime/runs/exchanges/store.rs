@@ -91,6 +91,10 @@ pub(crate) async fn authorize(
     )).bind(run).bind(who).bind(account).fetch_optional(pool).await?;
     let (session, owner, requester, agent, conversation, kind, root, original_request, child) =
         row.ok_or(RunError::NotFound)?;
+    if original_request.starts_with(super::super::facilitator_handoff::REQUEST_PREFIX) {
+        // A Facilitator approval covers this assignment, not a chain of agents.
+        return Err(RunError::NotFound);
+    }
     // A deleted source request cannot authorize new work or restored context.
     if super::super::request_identity(pool, &session, &original_request)
         .await?

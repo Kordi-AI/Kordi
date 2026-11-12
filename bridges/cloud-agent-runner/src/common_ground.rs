@@ -67,6 +67,8 @@ where
                 resume: false,
                 tools: vec![],
                 timeout_ms: (TIMEOUT_SECONDS - 10) * 1000,
+                model_step_limit: None,
+                tool_call_limit: None,
             };
             let result = crate::omp_job::run(job, &NoTools, &|_| async { Ok(()) })
                 .await
@@ -87,7 +89,7 @@ where
             match provider.next_response(&auth, &messages, &[]).await {
                 Ok(ModelProviderResponse::FinalText(text)) => text,
                 Ok(ModelProviderResponse::ToolCalls(_)) => {
-                    return Err("unexpected tool call".into())
+                    return Err("unexpected tool call".into());
                 }
                 Err(error) => return Err(error.to_string()),
             }

@@ -127,13 +127,11 @@ async fn persona(
     ))
 }
 
-async fn plan_run(
+async fn proactive_prompt(
     pool: &PgPool,
     proposal: &super::proposal::Proposal,
-) -> Result<Option<RunPlan>, sqlx_core::Error> {
-    let Some((owner_name, system_prompt, routing)) = persona(pool, proposal).await? else {
-        return Ok(None);
-    };
+    owner_name: &str,
+) -> Result<String, sqlx_core::Error> {
     let snapshot: Option<(String,)> = query_as(
         "SELECT run.prompt FROM cloud_agent_proactive_proposals p
          JOIN cloud_agent_fallback_runs run ON run.run_id = p.evaluation_run_id
@@ -190,13 +188,30 @@ async fn plan_run(
             )
         })
         .collect();
-    let prompt = approved_prompt(&ApprovedRequest {
-        owner_name: &owner_name,
+    Ok(approved_prompt(&ApprovedRequest {
+        owner_name,
         person_name: &person_name,
         problem: &proposal.problem,
         plan: &proposal.plan,
         evidence: &evidence,
-    });
+    }))
+}
+
+async fn plan_run(
+    pool: &PgPool,
+    proposal: &super::proposal::Proposal,
+) -> Result<Option<RunPlan>, sqlx_core::Error> {
+    let Some((owner_name, system_prompt, routing)) = persona(pool, proposal).await? else {
+        return Ok(None);
+    };
+    let prompt = if proposal.proposal_id.starts_with("facilitator-task-") {
+        format!(
+            "{} approved this group assignment. Deliver {} to this group. Work only on the assignment described below. If an input or permission is missing, ask for it.\n\nAssignment: {}",
+            owner_name, proposal.problem, proposal.plan
+        )
+    } else {
+        proactive_prompt(pool, proposal, &owner_name).await?
+    };
     let owner = &proposal.owner_account_id;
     let route = serde_json::from_value::<AgentRuntimeRoute>(routing).unwrap_or_default();
     let route = fill_cloud_route(pool, owner, &proposal.session_id, route).await?;
@@ -253,14 +268,19 @@ pub async fn decide(
     let mut tx = pool.begin().await?;
     let (pending, expired, allowed): (bool, bool, bool) = query_as(concat!(
         "SELECT p.status = 'pending', p.expires_at <= now(),
-                EXISTS (SELECT 1 FROM ",
+                ((p.facilitator_task AND p.agent_id = 'cloud-agent:' || p.owner_account_id
+                    AND EXISTS (SELECT 1 FROM cloud_accounts account
+                        JOIN cloud_chat_conversation_members member ON member.account_id = account.account_id
+                         AND member.conversation_id = p.conversation_id AND member.membership_state = 'active'
+                        WHERE account.account_id = p.owner_account_id AND account.ai_consent_status = 'allowed'))
+                 OR EXISTS (SELECT 1 FROM ",
         super::agents::watchers_sql!(),
         " agent
                         JOIN cloud_chat_conversation_members member
                           ON member.account_id = agent.owner_account_id
                          AND member.conversation_id = p.conversation_id
                          AND member.membership_state = 'active'
-                        WHERE agent.agent_id = p.agent_id)
+                        WHERE agent.agent_id = p.agent_id AND NOT p.facilitator_task))
          FROM cloud_agent_proactive_proposals p WHERE p.proposal_id = $1 FOR UPDATE OF p"
     ))
     .bind(proposal_id)
@@ -297,6 +317,14 @@ pub async fn decide(
             let preferred_until = plan
                 .prefer_desktop
                 .then(|| Utc::now() + crate::presence::presence_timeout());
+            let request_message_id = if proposal.proposal_id.starts_with("facilitator-task-") {
+                crate::cloud_agent_runtime::runs::facilitator_handoff::post(
+                    &mut tx, &proposal, &run_id,
+                )
+                .await?
+            } else {
+                proposal.trigger_message_id.clone()
+            };
             let inserted = query(
                 "INSERT INTO cloud_agent_fallback_runs (
                      run_id, idempotency_key, request_message_id, session_id, owner_account_id,
@@ -308,7 +336,7 @@ pub async fn decide(
                  ON CONFLICT DO NOTHING",
             )
             .bind(&run_id)
-            .bind(&proposal.trigger_message_id)
+            .bind(&request_message_id)
             .bind(&proposal.session_id)
             .bind(&proposal.owner_account_id)
             .bind(&plan.prompt)
@@ -381,12 +409,15 @@ pub async fn sync_runs(pool: &PgPool, run_id: Option<&str>) -> Result<usize, sql
     .await?;
     let moved: Vec<String> = moved.into_iter().map(|(id,)| id).collect();
     super::proposal::hint(&mut tx, &moved).await?;
-    let mut changed = moved.len();
+    let mut changed = moved;
     if run_id.is_none() {
-        changed += super::proposal::expire_due(&mut tx, None).await?.len();
+        changed.extend(super::proposal::expire_due(&mut tx, None).await?);
     }
     tx.commit().await?;
-    Ok(changed)
+    if let Err(error) = crate::system_agent::workflows::refresh_tasks(pool, &changed).await {
+        eprintln!("[facilitator] Could not refresh an assignment card: {error}");
+    }
+    Ok(changed.len())
 }
 
 /// The agent an approved run answers as, so group delivery names it as the

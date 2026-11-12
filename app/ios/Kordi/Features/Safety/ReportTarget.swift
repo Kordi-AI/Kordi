@@ -76,6 +76,7 @@ struct ReportTarget: Identifiable, Hashable {
         guard message.author != .me,
               !message.isSystemNotice,
               !KordiSystemIdentity.isSystemNotice(message),
+              message.messageKind != KordiSystemAgentIdentity.messageKind,
               conversation.subsessionId == nil,
               !conversation.isLocalDraft,
               !conversation.representsKordiSupport,

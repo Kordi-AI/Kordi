@@ -170,6 +170,8 @@ where
                 resume: false,
                 tools: evaluation_tools(run),
                 timeout_ms: (TIMEOUT_SECONDS - 10) * 1000,
+                model_step_limit: None,
+                tool_call_limit: None,
             };
             let host = SearchTools {
                 client,

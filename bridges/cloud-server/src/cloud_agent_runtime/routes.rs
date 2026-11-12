@@ -255,12 +255,15 @@ async fn complete_runner_run(
             StatusCode::BAD_REQUEST,
         );
     };
+    let response =
+        crate::system_agent::draft::prepare(&state, &run_id, &runner_id, &input.response_text)
+            .await;
     let pools = pool_snapshot(&state);
     match super::runs::completion::complete_run_with_service_auth(
         state.db_pool(),
         &run_id,
         &runner_id,
-        &input.response_text,
+        &response,
         input.omp_state.as_ref(),
         &service_provider_auths(&state, pools.as_deref()),
     )

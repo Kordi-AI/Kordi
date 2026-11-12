@@ -133,13 +133,21 @@ pub(super) async fn process<P: CloudModelProvider + Sync>(
     let plane = &worker.plane;
     let provider = &worker.provider;
     let run = cloud_run(&lease, &worker.pool_id, &worker.model);
-    let work = async {
+    let usage =
+        (lease.feature == "system_agent").then(crate::usage_meter::FacilitatorUsage::default);
+    let generate = async {
         let material = worker
             .credentials
             .material()
             .await
             .map_err(|error| error.to_string())?;
         generate(plane, provider, &lease, &run, material).await
+    };
+    let work = async {
+        match &usage {
+            Some(usage) => usage.measure(generate).await,
+            None => generate.await,
+        }
     };
     tokio::pin!(work);
     let mut heartbeat = tokio::time::interval(worker.heartbeat_interval);

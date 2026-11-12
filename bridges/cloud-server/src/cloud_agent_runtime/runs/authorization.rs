@@ -81,6 +81,13 @@ pub async fn requester_may_use_owner_agents(
 }
 
 pub async fn validate_group_agent_claim(pool: &PgPool, input: &ClaimRunRequest) -> RunResult<bool> {
+    // The assignee's approval owns the run for a Facilitator handoff.
+    if input
+        .request_message_id
+        .starts_with(super::facilitator_handoff::REQUEST_PREFIX)
+    {
+        return Ok(false);
+    }
     // Neither side of a block can use the other's agents, in any chat.
     let (requester, owner) = (
         input.requester_account_id.trim(),

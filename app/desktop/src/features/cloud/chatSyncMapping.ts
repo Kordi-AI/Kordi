@@ -1,7 +1,8 @@
 import { cloudVoiceMessageMetadataOnly } from './cloudVoiceMessage';
 import type { MessagePlanCard } from '@/kordi-app/types/message';
+import { normalizeFacilitatorCard } from './facilitatorCard';
 import { normalizePlanCardSnapshot } from './planCardSnapshot';
-import { isBuiltInAccountId, isSystemAccountId, KORDI_SYSTEM_NOTICE_KIND } from '@/features/systemAgent/systemAgentIdentity';
+import { isBuiltInAccountId, isSystemAccountId, isSystemAgentAccountId, KORDI_SYSTEM_NOTICE_KIND } from '@/features/systemAgent/systemAgentIdentity';
 import { normalizedLivePhoto } from '@/features/chat/livePhotos';
 import type { CloudMessage, CloudMessageAttachment, CloudVoiceMessage, SendCloudMessageAttachmentInput } from './authClient';
 import type { ChatSyncConversation, ChatSyncMessage } from './chatSyncTypes';
@@ -117,6 +118,18 @@ function planCardFromChatContent(content: unknown): MessagePlanCard | null {
     if (!value || typeof value !== 'object') continue;
     if ((value as { type?: unknown }).type !== 'plan_card') continue;
     const card = normalizePlanCardSnapshot(value);
+    if (card) return card;
+  }
+  return null;
+}
+
+function facilitatorCardFromChatContent(content: unknown) {
+  const blocks = (content as { blocks?: unknown } | null)?.blocks;
+  if (!Array.isArray(blocks)) return null;
+  for (const value of blocks) {
+    if (!value || typeof value !== 'object') continue;
+    if ((value as { type?: unknown }).type !== 'facilitator_card') continue;
+    const card = normalizeFacilitatorCard(value);
     if (card) return card;
   }
   return null;
@@ -381,6 +394,9 @@ export function cloudMessageFromChatSync(
     attachments: attachmentsFromChatContent(message.content, message.kind),
     voiceMessage: voiceMessageFromChatContent(message.content),
     planCard: planCardFromChatContent(message.content),
+    ...(isSystemAgentAccountId(message.sender_account_id) ? {
+      facilitatorCard: facilitatorCardFromChatContent(message.content),
+    } : {}),
     conversationId: conversation.id,
     conversationSequence: message.conversation_sequence,
     clientMessageId: message.client_message_id,

@@ -1,6 +1,8 @@
 use super::*;
 use std::collections::HashMap;
 
+const MODEL: (&str, &str) = ("KORDI_SYSTEM_AGENT_OPENAI_MODEL", "synthetic-model");
+
 #[test]
 fn self_hosted_model_defaults_work_without_google_credentials() {
     let mut values = HashMap::from([
@@ -53,8 +55,8 @@ fn system_agent_is_off_without_a_key() {
 }
 
 #[test]
-fn system_agent_is_on_whenever_a_key_is_configured_unless_switched_off() {
-    let on = HashMap::from([("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-test")]);
+fn system_agent_is_on_with_a_key_and_model_unless_switched_off() {
+    let on = HashMap::from([("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-test"), MODEL]);
     assert!(PendingSystemAgentConfig::from_lookup(|key| on
         .get(key)
         .map(|value| value.to_string()))
@@ -79,6 +81,7 @@ fn grounding_credentials_can_be_enabled_without_group_chat_automation() {
     ] {
         let config = configured(&[
             ("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "synthetic-key"),
+            MODEL,
             (name, "false"),
         ])
         .expect("Grounding service remains available");
@@ -87,6 +90,7 @@ fn grounding_credentials_can_be_enabled_without_group_chat_automation() {
     }
     let config = configured(&[
         ("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "synthetic-key"),
+        MODEL,
         ("KORDI_SYSTEM_AGENT_GROUP_CHAT_ENABLED", "true"),
         ("KORDI_PIP_GROUP_CHAT_ENABLED", "false"),
     ])
@@ -107,10 +111,21 @@ fn enabled_system_agent_requires_its_own_api_key() {
 }
 
 #[test]
-fn defaults_fill_everything_but_the_key() {
+fn a_facilitator_key_alone_does_not_select_a_model() {
+    let error = PendingSystemAgentConfig::from_lookup(|key| {
+        (key == "KORDI_SYSTEM_AGENT_OPENAI_API_KEY").then(|| "synthetic-key".to_string())
+    })
+    .unwrap_err();
+    assert!(matches!(error, SystemAgentConfigError::Invalid(message)
+        if message == "KORDI_SYSTEM_AGENT_OPENAI_MODEL is required"));
+}
+
+#[test]
+fn identity_defaults_are_independent_of_model_selection() {
     let values = HashMap::from([
         ("KORDI_SYSTEM_AGENT_ENABLED", "yes"),
         ("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", " sk-test "),
+        MODEL,
     ]);
     let config =
         PendingSystemAgentConfig::from_lookup(|key| values.get(key).map(|value| value.to_string()))
@@ -119,17 +134,14 @@ fn defaults_fill_everything_but_the_key() {
     assert!(config.group_chat_enabled);
     assert_eq!(config.account_id, DEFAULT_SYSTEM_AGENT_ACCOUNT_ID);
     assert_eq!(config.agent_id, DEFAULT_SYSTEM_AGENT_ID);
-    assert_eq!(config.name, "System");
+    assert_eq!(config.name, "Facilitator");
     assert_eq!(config.provider_auth.api_key(), "sk-test");
-    assert_eq!(
-        config.provider_auth.model(),
-        DEFAULT_SYSTEM_AGENT_OPENAI_MODEL
-    );
+    assert_eq!(config.provider_auth.model(), MODEL.1);
     assert!(!format!("{:?}", config.provider_auth).contains("sk-test"));
 }
 
 fn lookup(extra: Option<&'static str>) -> Result<PendingSystemAgentConfig, SystemAgentConfigError> {
-    let mut values = HashMap::from([("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-test")]);
+    let mut values = HashMap::from([("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-test"), MODEL]);
     if let Some(url) = extra {
         values.insert("KORDI_SYSTEM_AGENT_OPENAI_BASE_URL", url);
     }
@@ -188,6 +200,7 @@ fn the_new_setting_name_wins_over_the_old_one() {
     let config = configured(&[
         ("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-new"),
         ("KORDI_PIP_OPENAI_API_KEY", "sk-old"),
+        MODEL,
         ("KORDI_SYSTEM_AGENT_AGENT_NAME", " "),
         ("KORDI_PIP_AGENT_NAME", "Old name"),
     ])
@@ -196,6 +209,7 @@ fn the_new_setting_name_wins_over_the_old_one() {
     assert_eq!(config.name, "Old name", "a blank new value falls back");
     let on = [
         ("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-new"),
+        MODEL,
         ("KORDI_SYSTEM_AGENT_ENABLED", "true"),
         ("KORDI_PIP_ENABLED", "false"),
     ];
@@ -280,17 +294,17 @@ fn service_rejects_unknown_provider() {
 #[test]
 fn stall_minutes_default_to_ten_and_reject_nonsense() {
     let key = ("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-test");
-    let default = configured(&[key]).unwrap();
+    let default = configured(&[key, MODEL]).unwrap();
     assert_eq!(default.stall_minutes, super::DEFAULT_STALL_MINUTES);
     assert_eq!(default.stall_minutes, 10);
-    let custom = configured(&[key, ("KORDI_SYSTEM_AGENT_STALL_MINUTES", "3")]).unwrap();
+    let custom = configured(&[key, MODEL, ("KORDI_SYSTEM_AGENT_STALL_MINUTES", "3")]).unwrap();
     assert_eq!(custom.stall_minutes, 3);
     assert_eq!(
         custom.unprovisioned().stall_window(),
         chrono::Duration::minutes(3)
     );
     for bad in ["0", "-1", "soon", "1441"] {
-        let values = HashMap::from([key, ("KORDI_SYSTEM_AGENT_STALL_MINUTES", bad)]);
+        let values = HashMap::from([key, MODEL, ("KORDI_SYSTEM_AGENT_STALL_MINUTES", bad)]);
         assert!(
             PendingSystemAgentConfig::from_lookup(|key| values.get(key).map(|v| v.to_string()))
                 .is_err(),
@@ -302,16 +316,16 @@ fn stall_minutes_default_to_ten_and_reject_nonsense() {
 #[test]
 fn silence_minutes_default_to_ten_and_reject_nonsense() {
     let key = ("KORDI_SYSTEM_AGENT_OPENAI_API_KEY", "sk-test");
-    let default = configured(&[key]).unwrap();
+    let default = configured(&[key, MODEL]).unwrap();
     assert_eq!(default.silence_minutes, super::DEFAULT_SILENCE_MINUTES);
     assert_eq!(default.silence_minutes, 10);
-    let custom = configured(&[key, ("KORDI_SYSTEM_AGENT_SILENCE_MINUTES", "4")]).unwrap();
+    let custom = configured(&[key, MODEL, ("KORDI_SYSTEM_AGENT_SILENCE_MINUTES", "4")]).unwrap();
     assert_eq!(
         custom.unprovisioned().silence_window(),
         chrono::Duration::minutes(4)
     );
     for bad in ["0", "later", "1441"] {
-        let values = HashMap::from([key, ("KORDI_SYSTEM_AGENT_SILENCE_MINUTES", bad)]);
+        let values = HashMap::from([key, MODEL, ("KORDI_SYSTEM_AGENT_SILENCE_MINUTES", bad)]);
         assert!(
             PendingSystemAgentConfig::from_lookup(|key| values.get(key).map(|v| v.to_string()))
                 .is_err(),

@@ -130,8 +130,22 @@ pub struct Turn {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "action", rename_all = "camelCase", deny_unknown_fields)]
 pub enum CardAction {
-    Vote { by: String, option: usize },
-    Rsvp { by: String, rsvp: String },
+    Vote {
+        by: String,
+        option: usize,
+    },
+    Rsvp {
+        by: String,
+        rsvp: String,
+    },
+    Confirm {
+        by: String,
+        #[serde(default)]
+        option: Option<usize>,
+    },
+    Cancel {
+        by: String,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -150,6 +164,9 @@ pub struct Expect {
     pub required_actions: Vec<String>,
     #[serde(default)]
     pub card: Option<ExpectCard>,
+    /// Facilitator workflow published by this turn: decision, memory, or task.
+    #[serde(default)]
+    pub workflow_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -353,6 +370,11 @@ fn validate(fixture: &Fixture) -> Result<()> {
         let expect = &turn.expect;
         if !["silent", "message", "any"].contains(&expect.reply.as_str()) {
             bail!("reply must be silent, message, or any");
+        }
+        if let Some(kind) = expect.workflow_kind.as_deref() {
+            if !["decision", "memory", "task"].contains(&kind) {
+                bail!("unknown Facilitator workflow kind {kind}");
+            }
         }
         for action in expect
             .allowed_actions

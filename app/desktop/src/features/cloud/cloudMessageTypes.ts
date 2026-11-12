@@ -1,3 +1,4 @@
+import type { FacilitatorCard } from './facilitatorCard';
 import type { MessagePlanCard } from '@/kordi-app/types/message';
 import type { CloudMessageAttachment, CloudVoiceMessage } from './cloudAttachmentTypes';
 
@@ -16,6 +17,7 @@ export type CloudMessage = {
   sessionId?: string | null;
   attachments?: CloudMessageAttachment[]; voiceMessage?: CloudVoiceMessage | null;
   planCard?: MessagePlanCard | null;
+  facilitatorCard?: FacilitatorCard | null;
   conversationId?: string | null;
   conversationSequence?: number | null;
   clientMessageId?: string | null;

@@ -33,7 +33,7 @@ Release notes are in the [changelog](CHANGELOG.md).
 - **Your Mac runs your agent first.** When your Mac is online, your agent runs there with your tools and model sign-ins. When it is offline, the cloud runner takes over in a sandbox.
 - **Cooperative and personal agents.** A cooperative agent follows your groups and asks you before it helps. A personal agent can message you first with updates.
 - **Memory and connectors you control.** Memories are sorted by category and card, the Mac can import your `AGENTS.md` and `CLAUDE.md` files, and agents can use Google Calendar, Gmail, GitHub, Slack, and your Mac calendars and contacts.
-- **Digests and plans.** Each chat becomes a digest of decisions and next steps, and the System agent keeps group plans and reminders.
+- **Digests and plans.** Each chat becomes a digest of decisions and next steps, and the Facilitator helps groups agree on plans and keeps track of reminders.
 - **Grounding.** Build profile cards from sources you choose, then find shared interests by tapping phones, joining a room code, or Nearby.
 
 ## Repository

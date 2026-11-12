@@ -1,4 +1,5 @@
 import type { CloudMessage, CloudSyncEvent } from './authClient';
+import { normalizeFacilitatorCard } from './facilitatorCard';
 import { normalizePlanCardSnapshot } from './planCardSnapshot';
 import { cloudMessageMetadataOnly } from './cloudMessageCache';
 import { cloudVoiceMessageMetadataOnly } from './cloudVoiceMessage';
@@ -34,6 +35,7 @@ function normalizeCloudMessage(value: unknown): CloudMessage | null {
     : undefined;
   const voiceMessage = cloudVoiceMessageMetadataOnly(record.voiceMessage);
   const planCard = normalizePlanCardSnapshot(record.planCard);
+  const facilitatorCard = normalizeFacilitatorCard(record.facilitatorCard);
   const conversationSequence = Number.isSafeInteger(record.conversationSequence)
     && Number(record.conversationSequence) > 0
     ? Number(record.conversationSequence)
@@ -65,6 +67,7 @@ function normalizeCloudMessage(value: unknown): CloudMessage | null {
     ...(attachments ? { attachments } : {}),
     ...(voiceMessage ? { voiceMessage } : {}),
     ...(planCard ? { planCard } : {}),
+    ...(facilitatorCard ? { facilitatorCard } : {}),
     ...(reactions ? { reactions } : {}),
   });
 }

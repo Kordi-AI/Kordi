@@ -13,17 +13,17 @@ use super::RunResult;
 
 /// `yielding`: the run is a person's chat run that yields to wait right now,
 /// so its slot is created in progress before it shows whom it waits for.
-pub(super) async fn show(pool: &PgPool, run_id: &str, yielding: bool) -> RunResult<()> {
-    // Only a chat request's run (`car_`); exchange runs have their own rows,
-    // and feature and scheduled runs post their own replies.
+pub(crate) async fn show(pool: &PgPool, run_id: &str, yielding: bool) -> RunResult<()> {
+    // Chat requests and approved Facilitator handoffs share a durable reply slot.
     let row: Option<(String, String, String)> = query_as(
         "SELECT owner_account_id,session_id,request_message_id FROM cloud_agent_fallback_runs \
-         WHERE run_id=$1 AND ($2 OR (execution_backend='cloud' AND starts_with(run_id,'car_') \
-           AND NOT starts_with(run_id,'car_exchange_'))) AND subsession_id IS NULL \
+         WHERE run_id=$1 AND ($2 OR starts_with(request_message_id,$3) OR (execution_backend='cloud' \
+           AND starts_with(run_id,'car_') AND NOT starts_with(run_id,'car_exchange_'))) AND subsession_id IS NULL \
            AND response_message_id IS NULL AND NOT starts_with(request_message_id,'agent-exchange:')",
     )
     .bind(run_id)
     .bind(yielding)
+    .bind(super::facilitator_handoff::REQUEST_PREFIX)
     .fetch_optional(pool)
     .await?;
     let Some((owner, session, request)) = row else {

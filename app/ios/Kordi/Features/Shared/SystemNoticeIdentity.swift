@@ -3,9 +3,8 @@ import SwiftUI
 /// Server notices, such as a group's introduction and "joined" lines or the
 /// plan card in a direct chat. They carry this message kind and come from the
 /// hidden System account, the plan agent, or a member (a plan card stays the
-/// organizer's); the app shows them from "System" with a front-facing Kordi bird,
-/// except a card a person's agent opened (`planCardAgent`). The plan agent's
-/// own messages show the same way.
+/// organizer's). Platform notices show as System. Facilitator and personal
+/// agents have their own author labels for messages and cards.
 enum KordiSystemIdentity {
     static let messageKind = "system-notice"
     static let displayName = "System"

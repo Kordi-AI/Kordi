@@ -25,4 +25,5 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "session lookup cache signals",
         "0197_session_lookup_cache_signals.sql"
     ),
+    migration!(198, "facilitator cards", "0198_facilitator_cards.sql"),
 ];

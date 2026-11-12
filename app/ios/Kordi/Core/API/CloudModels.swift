@@ -1308,6 +1308,7 @@ struct CloudMessageDTO: Codable, Hashable, Identifiable {
     let messageKind: String?
     let voiceMessage: VoiceMessage?
     var planCard: PlanCard? = nil
+    var facilitatorCard: FacilitatorCard? = nil
     let conversationId: String?
     let conversationSequence: Int64?
     let version: Int?
@@ -1333,6 +1334,7 @@ struct CloudMessageDTO: Codable, Hashable, Identifiable {
         messageKind: String? = nil,
         voiceMessage: VoiceMessage? = nil,
         planCard: PlanCard? = nil,
+        facilitatorCard: FacilitatorCard? = nil,
         conversationId: String? = nil,
         conversationSequence: Int64? = nil,
         version: Int? = nil,
@@ -1356,6 +1358,7 @@ struct CloudMessageDTO: Codable, Hashable, Identifiable {
         self.messageKind = messageKind
         self.voiceMessage = voiceMessage
         self.planCard = planCard
+        self.facilitatorCard = facilitatorCard
         self.conversationId = conversationId
         self.conversationSequence = conversationSequence
         self.version = version
@@ -1367,7 +1370,7 @@ struct CloudMessageDTO: Codable, Hashable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case messageId, clientMessageId, fromAccountId, toAccountId, body, createdAt, editedAt, deliveredAt, readAt, readByAccountIds, direction, sessionId, attachments
         case messageKind = "kind"
-        case voiceMessage
+        case voiceMessage, facilitatorCard
         case conversationId, conversationSequence, version, reactions, attachmentReactions
         case canonicalHistoryLocalMessageId
     }
@@ -1389,6 +1392,7 @@ struct CloudMessageDTO: Codable, Hashable, Identifiable {
         attachments = try container.decodeIfPresent([CloudMessageAttachment].self, forKey: .attachments) ?? []
         messageKind = try container.decodeIfPresent(String.self, forKey: .messageKind)
         voiceMessage = try container.decodeIfPresent(VoiceMessage.self, forKey: .voiceMessage)
+        facilitatorCard = try? container.decodeIfPresent(FacilitatorCard.self, forKey: .facilitatorCard)
         conversationId = try container.decodeIfPresent(String.self, forKey: .conversationId)
         conversationSequence = try container.decodeIfPresent(Int64.self, forKey: .conversationSequence)
         version = try container.decodeIfPresent(Int.self, forKey: .version)
@@ -1460,6 +1464,7 @@ struct CloudChatBlock: Codable, Hashable {
     /// `plan_card` blocks carry a card snapshot. Decoded leniently so an
     /// unexpected card never fails the surrounding message.
     var planCardSnapshot: PlanCard? = nil
+    var facilitatorCard: FacilitatorCard? = nil
 
     enum CodingKeys: String, CodingKey {
         case type, text, mediaId, mimeType, durationMs, waveformSamples, transcript, transcription
@@ -1476,6 +1481,7 @@ struct CloudChatBlock: Codable, Hashable {
         transcript = try container.decodeIfPresent(String.self, forKey: .transcript)
         transcription = try container.decodeIfPresent(VoiceTranscription.self, forKey: .transcription)
         planCardSnapshot = type == "plan_card" ? try? PlanCard(from: decoder) : nil
+        facilitatorCard = type == "facilitator_card" ? try? FacilitatorCard(from: decoder) : nil
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1488,6 +1494,7 @@ struct CloudChatBlock: Codable, Hashable {
         try container.encodeIfPresent(waveformSamples, forKey: .waveformSamples)
         try container.encodeIfPresent(transcript, forKey: .transcript)
         try container.encodeIfPresent(transcription, forKey: .transcription)
+        try facilitatorCard?.encode(to: encoder)
     }
 
     init(text: String) {
@@ -1594,6 +1601,7 @@ struct CloudChatContent: Codable, Hashable {
     var body: String { blocks.compactMap(\.text).joined() }
     var voiceMessage: VoiceMessage? { blocks.lazy.compactMap(\.voiceMessage).first }
     var planCard: PlanCard? { blocks.lazy.compactMap(\.planCard).first }
+    var facilitatorCard: FacilitatorCard? { blocks.lazy.compactMap(\.facilitatorCard).first }
 }
 
 struct CloudChatReaction: Codable, Hashable {

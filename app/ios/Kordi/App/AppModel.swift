@@ -2827,6 +2827,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func facilitatorCard(id: UUID, action: FacilitatorCardAction?) async throws -> FacilitatorCard {
+        guard !previewMode, let token else {
+            throw CloudAPIError(code: "no_session", message: "Sign in to update the card.", statusCode: 401)
+        }
+        let card = try await api.facilitatorCard(token: token, id: id, action: action)
+        guard sessionIdentity.contains(token) else { throw CancellationError() }
+        if action != nil { cloudSyncPasses.wake() }
+        return card
+    }
+
     func toggleReaction(
         _ reaction: String,
         on message: ChatMessage,
@@ -6548,7 +6558,14 @@ final class AppModel: ObservableObject {
         for wire in messages {
             guard let envelope = CloudGroupMessageCodec.parse(wire.body) else {
                 guard ChatCallActivity(messageKind: wire.messageKind) == nil else { continue }
+                if let current = canonicalMessagesByID[wire.messageId]?.cloudMessageVersion,
+                   let incoming = wire.version, current > incoming { continue }
                 let cardAgent = KordiSystemIdentity.planCardAgent(wire, ownAccountId: ownAccountId)
+                let fromFacilitator = KordiSystemAgentIdentity.isSystemAgent(accountId: wire.fromAccountId)
+                    && (!KordiSystemIdentity.isSystemNotice(kind: wire.messageKind)
+                        || wire.planCard != nil || wire.facilitatorCard != nil)
+                let facilitatorCard = fromFacilitator ? wire.facilitatorCard : nil
+                let facilitatorName = fromFacilitator ? KordiSystemAgentIdentity.displayName : nil
                 let author: MessageAuthor = cardAgent != nil ? .agent : KordiSystemIdentity.author(
                     messageKind: wire.messageKind, fromAccountId: wire.fromAccountId, ownAccountId: ownAccountId)
                 canonicalMessagesByID[wire.messageId] = ChatMessage(
@@ -6557,7 +6574,7 @@ final class AppModel: ObservableObject {
                     conversationId: conversation.id,
                     conversationSequence: wire.conversationSequence,
                     author: author,
-                    authorName: cardAgent?.authorName ?? (author == .me ? "You" : KordiSystemIdentity.groupAuthorName(
+                    authorName: cardAgent?.authorName ?? facilitatorName ?? (author == .me ? "You" : KordiSystemIdentity.groupAuthorName(
                         messageKind: wire.messageKind, fromAccountId: wire.fromAccountId,
                         participantNames: participantNames, fallback: conversation.displayName)),
                     senderOwnerName: cardAgent?.ownerName,
@@ -6577,9 +6594,11 @@ final class AppModel: ObservableObject {
                         $0.chatAttachment(messageKind: wire.messageKind)
                     },
                     reactionTargetMessageId: wire.messageId,
-                    messageKind: cardAgent == nil ? wire.messageKind : PlanCardAgentSender.messageKind,
+                    messageKind: fromFacilitator ? KordiSystemAgentIdentity.messageKind
+                        : (cardAgent == nil ? wire.messageKind : PlanCardAgentSender.messageKind),
                     voiceMessage: wire.voiceMessage,
                     planCard: wire.planCard,
+                    facilitatorCard: facilitatorCard,
                     reactions: wire.reactions,
                     attachmentReactions: wire.attachmentReactions
                 )
@@ -6643,9 +6662,14 @@ final class AppModel: ObservableObject {
             guard envelope.kind == "group-message", let payload = envelope.message else { continue }
             rowsByMessageId[payload.id, default: []].append((wire, payload))
         }
-        let representativePayloads = rowsByMessageId.values.compactMap { rows in
-            rows.max(by: { $0.1.createdAtMs < $1.1.createdAtMs })?.1
+        let representatives = rowsByMessageId.compactMapValues { rows in
+            rows.max {
+                let left = $0.0.version ?? 0
+                let right = $1.0.version ?? 0
+                return left == right ? $0.1.createdAtMs < $1.1.createdAtMs : left < right
+            }
         }
+        let representativePayloads = representatives.values.map { $0.1 }
         let visibleMessageIds = CloudGroupAgentLifecycleProjector.visibleMessageIds(
             in: representativePayloads
         )
@@ -6657,9 +6681,11 @@ final class AppModel: ObservableObject {
                 rows.map { (sequence: $0.0.conversationSequence, payload: $0.1) }
             }
         )
-        var chatMessages = rowsByMessageId.compactMap { messageId, rows -> ChatMessage? in
+        var chatMessages = representatives.compactMap { messageId, representative -> ChatMessage? in
             guard visibleMessageIds.contains(messageId) else { return nil }
-            guard let (wire, payload) = rows.max(by: { $0.1.createdAtMs < $1.1.createdAtMs }) else { return nil }
+            let (wire, payload) = representative
+            let fromFacilitator = KordiSystemAgentIdentity.isSystemAgent(accountId: wire.fromAccountId)
+                && payload.senderAccountId == wire.fromAccountId
             let author: MessageAuthor = payload.senderKind == "agent"
                 ? .agent
                 : payload.senderAccountId == ownAccountId ? .me : .person
@@ -6686,8 +6712,9 @@ final class AppModel: ObservableObject {
                 author: author,
                 authorName: author == .me
                     ? "You"
+                    : fromFacilitator ? KordiSystemAgentIdentity.displayName
                     : author == .agent ? agentName : payload.senderDisplayName?.nonEmpty ?? participantNames[payload.senderAccountId] ?? "Participant",
-                senderOwnerName: author == .agent ? (payload.senderAccountId == ownAccountId ? "You" : ownerName) : nil,
+                senderOwnerName: author == .agent && !fromFacilitator ? (payload.senderAccountId == ownAccountId ? "You" : ownerName) : nil,
                 // Only the agent's owner reads why a reply failed.
                 text: author == .agent && payload.deliveryState == "failed"
                     ? AgentFailurePresentation.text(
@@ -6724,17 +6751,19 @@ final class AppModel: ObservableObject {
                 reactionTargetMessageId: wire.messageId,
                 messageAction: payload.messageAction,
                 mentions: MessageMention.rebased(payload.mentions ?? [], in: payload.text),
-                messageKind: payload.messageKind,
+                messageKind: fromFacilitator ? KordiSystemAgentIdentity.messageKind : payload.messageKind,
                 voiceMessage: payload.voiceMessage ?? wire.voiceMessage,
                 planCard: wire.planCard,
+                facilitatorCard: fromFacilitator ? wire.facilitatorCard : nil,
                 agentExecution: author == .agent ? CloudMessageCodec.agentWaitingExecution(
                     deliveryState: payload.deliveryState == "processing" ? .processing : nil,
-                    updatedAtMs: payload.createdAtMs
+                    updatedAtMs: payload.createdAtMs,
+                    queued: payload.deliveryState == "queued" && payload.requestId?.hasPrefix("facilitator-handoff:") == true
                 ) : nil,
                 backgroundAgentSessions: BackgroundAgentSession.fromTaskOperatorTools(
                     payload.structuredContent?.tools ?? []
                 ),
-                reactions: Self.mergedReactions(rows.map { $0.0.reactions }),
+                reactions: Self.mergedReactions((rowsByMessageId[messageId] ?? []).map { $0.0.reactions }),
                 attachmentReactions: wire.attachmentReactions
             )
         }
@@ -7353,6 +7382,7 @@ final class AppModel: ObservableObject {
 
         for message in messages {
             if let index = indices[message.messageId] {
+                if let incoming = message.version, let current = existing[index].version, incoming < current { continue }
                 guard existing[index] != message else { continue }
                 existing[index] = message
                 changed = true
@@ -7677,6 +7707,7 @@ final class AppModel: ObservableObject {
                     messageKind: message.messageKind,
                     voiceMessage: message.voiceMessage,
                     planCard: message.planCard,
+                    facilitatorCard: message.facilitatorCard,
                     conversationId: message.conversationId,
                     conversationSequence: message.conversationSequence,
                     version: message.version,

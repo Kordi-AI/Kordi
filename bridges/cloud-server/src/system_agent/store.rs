@@ -245,9 +245,8 @@ async fn enqueue(
     // A person's agent owns its task: its messages stay context until it
     // replies, or come back as new here once it stalls.
     let (prepared, input, gate) = super::ownership_store::prepare(pool, config, candidate).await?;
-    // The System agent acts only on a trigger: plan talk waits for silence,
-    // and loops, conflicts and stalls step in once. Small talk, and messages
-    // for an agent or already answered by one, never reach the model.
+    // Batch ordinary conversation until it is quiet. The model decides
+    // whether it warrants an intervention; another agent's tasks stay context.
     let planned = super::triggers_store::plan(pool, config, prepared, input, gate).await?;
     let Some((candidate, input)) = planned else {
         // Nothing to react to now. Advance the cursor so the row stops
@@ -314,7 +313,7 @@ async fn enqueue(
     .bind(&candidate.legacy_session_id)
     .bind(&config.account_id)
     .bind(input.to_string())
-    .bind(&config.system_prompt)
+    .bind(super::prompt::for_trigger(&config.system_prompt, &input))
     .bind(resource_pool.routing(Feature::SystemAgent))
     .bind(&now)
     .bind(organization_id)
@@ -327,20 +326,21 @@ async fn enqueue(
     Ok(true)
 }
 
-struct ActiveRun {
-    conversation_id: Uuid,
-    owner_account_id: String,
+pub(super) struct ActiveRun {
+    pub(super) conversation_id: Uuid,
+    pub(super) owner_account_id: String,
+    pub(super) session_id: String,
     created_at: String,
-    input: Value,
+    pub(super) input: Value,
 }
 
-async fn active_run(
+pub(super) async fn active_run(
     pool: &PgPool,
     run_id: &str,
     runner_id: &str,
 ) -> Result<Option<ActiveRun>, sqlx_core::Error> {
-    let row: Option<(String, Uuid, String, String)> = query_as(
-        "SELECT run.prompt, state.conversation_id, run.owner_account_id, run.created_at
+    let row: Option<(String, Uuid, String, String, String)> = query_as(
+        "SELECT run.prompt, state.conversation_id, run.owner_account_id, run.created_at, run.session_id
          FROM cloud_agent_fallback_runs run
          JOIN cloud_pip_conversation_state state ON state.active_run_id = run.run_id
          WHERE run.run_id = $1 AND run.claimed_by = $2 AND run.status IN ('leased', 'running')",
@@ -350,9 +350,10 @@ async fn active_run(
     .fetch_optional(pool)
     .await?;
     Ok(row.map(
-        |(prompt, conversation_id, owner_account_id, created_at)| ActiveRun {
+        |(prompt, conversation_id, owner_account_id, created_at, session_id)| ActiveRun {
             conversation_id,
             owner_account_id,
+            session_id,
             created_at,
             input: serde_json::from_str(&prompt).unwrap_or(Value::Null),
         },
@@ -390,6 +391,7 @@ pub async fn complete(
         return Ok(());
     };
     let output = parse_run_output(response_text);
+    let workflow_posted = super::workflows::publish(pool, run_id, &run, response_text).await?;
     // A card the run touched gets its card message first (a new vote or
     // calendar card, or an in-place refresh); the System agent's words follow
     // as their own message.
@@ -410,7 +412,17 @@ pub async fn complete(
             }
         }
     }
-    let response_message_id = match output.message.as_deref().map(str::trim) {
+    use crate::document_shares::agents::create::reply;
+    let documents = reply::pending_for_run(&mut *pool.acquire().await?, run_id).await?;
+    let message = output
+        .message
+        .as_deref()
+        .filter(|_| !workflow_posted)
+        .map(str::trim)
+        .filter(|text| !text.is_empty());
+    let response_message_id = match message
+        .or_else(|| (!documents.is_empty()).then_some("I drafted a document for the group."))
+    {
         Some(text) if !text.is_empty() => {
             let (sender, conversation) = (&run.owner_account_id, run.conversation_id);
             post_text(
@@ -421,6 +433,7 @@ pub async fn complete(
                 &run.input,
                 text,
                 card_touched,
+                &documents,
             )
             .await?
         }
@@ -443,6 +456,9 @@ pub async fn complete(
     .execute(&mut *tx)
     .await?;
     settle(&mut tx, run_id, Settlement::Consumed).await?;
+    if response_message_id.is_some() {
+        reply::mark_attached(&mut tx, &documents).await?;
+    }
     // The System agent saw the card as its input showed it; its own tool calls
     // are recorded as they happen, so votes cast during the run still wake the
     // next sweep.
