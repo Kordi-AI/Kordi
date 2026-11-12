@@ -9,7 +9,7 @@ export function useBrowserGroupHistoryReplay(
   flush: () => void,
 ): ApplyBrowserGroupHistoryPage {
   return useCallback(async (rows, session, isCurrent, conversation) => {
-    if (import.meta.env.VITE_KORDI_WEB_APP !== '1') return [];
+    if (import.meta.env?.VITE_KORDI_WEB_APP !== '1') return [];
     const { replayBrowserGroupHistory } = await import('@web/runtime/browserGroupHistoryReplay');
     const result = await replayBrowserGroupHistory(rows, session, isCurrent, conversation, apply);
     if (!isCurrent() || !result) return [];

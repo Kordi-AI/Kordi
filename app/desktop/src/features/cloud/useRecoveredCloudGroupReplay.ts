@@ -31,7 +31,7 @@ const NO_BROWSER_GROUP_HISTORY: ReturnType<typeof useBrowserGroupHistory> = {
   actions: undefined, hasOlderBySessionId: {}, hydrationBySessionId: {},
   loadOlderSessionMessages: () => Promise.resolve(),
 };
-const useGroupHistory = import.meta.env.VITE_KORDI_WEB_APP === '1'
+const useGroupHistory = import.meta.env?.VITE_KORDI_WEB_APP === '1'
   ? useBrowserGroupHistory
   : () => NO_BROWSER_GROUP_HISTORY;
 
