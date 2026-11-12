@@ -2,7 +2,7 @@
 
 The System agent is the agent Kordi runs for everyone in a conversation. It
 runs on a Kordi-operated provider credential, never on a member's key, and people see
-it as System with the gray Kordi bird (#2029). It used to be called PiP; the
+it as System with the front-facing Kordi bird. It used to be called PiP; the
 stored identifiers below keep that name.
 
 Kordi runs two agents on its own service credentials: the System agent described here, and

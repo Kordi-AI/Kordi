@@ -135,7 +135,7 @@ struct AvatarActionPill: View {
 }
 
 /// The System agent, the built-in plan agent. Its account still posts plans, but
-/// the app shows it as System with the gray Kordi bird, like every server notice.
+/// the app shows it as System with the front-facing Kordi bird, like every server notice.
 enum KordiSystemAgentIdentity {
     // The stored ids keep the agent's old name.
     static let accountId = "acct_kordi_pip"
