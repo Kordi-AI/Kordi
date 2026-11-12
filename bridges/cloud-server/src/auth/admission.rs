@@ -205,9 +205,23 @@ impl AdmissionPolicy {
         }
         let row: Option<(Option<String>, bool)> = query_as("SELECT primary_email, primary_email_verified_at IS NOT NULL FROM cloud_accounts WHERE account_id = $1")
             .bind(account_id).fetch_optional(pool).await.map_err(|_| AdmissionError::Unavailable)?;
-        let (email, verified) = row.ok_or(AdmissionError::VerificationRequired)?;
+        self.authorize_facts(
+            row.as_ref()
+                .map(|(email, verified)| (email.as_deref(), *verified)),
+        )
+    }
+    /// [`Self::authorize_account`] for account facts already read with the
+    /// session: `(primary email, verified)`, or `None` for a missing account.
+    pub fn authorize_facts(
+        &self,
+        account: Option<(Option<&str>, bool)>,
+    ) -> Result<(), AdmissionError> {
+        if !self.requires_verified_email() {
+            return Ok(());
+        }
+        let (email, verified) = account.ok_or(AdmissionError::VerificationRequired)?;
         // Existing tokens cannot create waitlist entries or grant themselves access.
-        self.check(email.as_deref(), verified)
+        self.check(email, verified)
     }
 }
 fn valid_binding(v: &str) -> bool {

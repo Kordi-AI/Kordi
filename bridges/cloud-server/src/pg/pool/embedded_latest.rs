@@ -20,4 +20,9 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "memory categories multi",
         "0196_memory_categories_multi.sql"
     ),
+    migration!(
+        197,
+        "session lookup cache signals",
+        "0197_session_lookup_cache_signals.sql"
+    ),
 ];

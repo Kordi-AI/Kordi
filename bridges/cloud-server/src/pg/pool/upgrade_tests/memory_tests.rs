@@ -187,6 +187,48 @@ type Categories = (String, String, Vec<String>);
 
 #[tokio::test]
 #[ignore = "requires a dedicated PostgreSQL fixture; run scripts/test-cloud-migrations.sh"]
+async fn upgrade_after_197_backfills_missing_memory_categories() {
+    let pool = fixture(195).await;
+    // Session caching can be installed while the earlier memory migration is pending.
+    let migration = EMBEDDED_MIGRATIONS
+        .iter()
+        .find(|m| m.version == 197)
+        .unwrap();
+    execute(&pool, migration.sql).await;
+    query("INSERT INTO cloud_schema_versions(version,description) VALUES($1,$2)")
+        .bind(migration.version)
+        .bind(migration.description)
+        .execute(&pool)
+        .await
+        .unwrap();
+    execute(
+        &pool,
+        "INSERT INTO cloud_account_memories \
+           (memory_id, owner_account_id, scope, scope_id, source, text, category) VALUES \
+           ('mem_after_cache', 'fixture-owner', 'global', 'account', 'manual', \
+            'Keep project review notes', 'work_context')",
+    )
+    .await;
+    let recorded = "SELECT applied_at::text FROM cloud_schema_versions WHERE version=197";
+    let before: (String,) = query_as(recorded).fetch_one(&pool).await.unwrap();
+    let (a, b) = tokio::join!(apply_migrations(&pool), apply_migrations(&pool));
+    a.unwrap();
+    b.unwrap();
+    latest_version(&pool).await;
+    let (category, categories): (String, Vec<String>) = query_as(
+        "SELECT category, categories FROM cloud_account_memories WHERE memory_id='mem_after_cache'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(category, "work_context");
+    assert_eq!(categories, ["work_context"]);
+    let after: (String,) = query_as(recorded).fetch_one(&pool).await.unwrap();
+    assert_eq!(before, after, "the newer migration is not reapplied");
+}
+
+#[tokio::test]
+#[ignore = "requires a dedicated PostgreSQL fixture; run scripts/test-cloud-migrations.sh"]
 async fn upgrade_from_195_adds_several_categories_per_memory() {
     let pool = fixture(195).await;
     execute(

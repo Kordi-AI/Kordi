@@ -5,6 +5,9 @@
 //! same transaction before the rows disappear so an old cursor fails with an
 //! explicit bootstrap requirement. Read marks, which give the read times in a
 //! message's readers list, are kept for seven days.
+//!
+//! The same worker clears the frozen inputs of agent runs that finished more
+//! than 30 days ago; see `cloud_agent_runtime::runs::retention`.
 
 use chrono::{DateTime, Utc};
 use sqlx_core::query::query;
@@ -85,6 +88,7 @@ pub fn spawn_retention_worker(pool: PgPool) {
             if let Err(error) = sweep_expired_read_marks(&pool, marks_cutoff).await {
                 eprintln!("[chat-sync] read mark retention sweep: {error}");
             }
+            crate::cloud_agent_runtime::runs::retention::run_payload_retention_sweep(&pool).await;
         }
     });
 }
