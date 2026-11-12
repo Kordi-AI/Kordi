@@ -69,7 +69,7 @@ test('a direct-chat plan card notice from the organizer shows as System, not an 
 
   const markup = renderToStaticMarkup(createElement(MessageBubble, { msg: message, onOpenSenderProfile: () => {} }));
   assert.match(markup, />System</);
-  assert.match(markup, /kordi-system-avatar\.svg/);
+  assert.match(markup, /kordi-system-avatar\.jpg/);
   assert.match(markup, /app-plan-card/);
   assert.doesNotMatch(markup, /app-chat-bubble-user/);
 });

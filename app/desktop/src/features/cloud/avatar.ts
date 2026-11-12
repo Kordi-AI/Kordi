@@ -14,7 +14,7 @@ export function cloudAvatarImageUrl(avatarUrl: string | null | undefined): strin
   const trimmed = avatarUrl?.trim();
   if (!trimmed || trimmed.startsWith(CLOUD_PIXEL_AVATAR_URL_PREFIX)) return null;
   // The System agent and the system account carry generated human markers on the server;
-  // both show as System's gray bird instead of a generated face.
+  // both show as System's front-facing bird instead of a generated face.
   if (isBuiltInAccountId(cloudAvatarSeedFromUrl(trimmed))) return KORDI_SYSTEM_AVATAR_URL;
   return canonicalAvatarImageUrl(trimmed);
 }
