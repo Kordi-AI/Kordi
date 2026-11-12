@@ -125,10 +125,17 @@ async fn a_closed_room_keeps_its_results_for_members() {
     assert_eq!(body["topics"], open_body["topics"], "stored themes");
     assert_eq!(body["people"].as_array().unwrap().len(), 2);
     assert_eq!(body["topics"][0]["label"], "Agent memory");
-    // Priya never asked: nothing stored for her, and nothing is queued.
+    // Priya never asked: she sees what Alex's run stored for both of them,
+    // nothing with Sam, and nothing is queued.
     let (status, body) = call(&app, "POST", &results, &priya_token).await;
     assert_eq!((status, &body["status"]), (200, &json!("ready")), "{body}");
-    assert_eq!(body["people"], json!([]));
+    let seen: Vec<&Value> = body["people"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| &p["person"]["accountId"])
+        .collect();
+    assert_eq!(seen, [&json!(alex)], "{body}");
     assert_eq!(body["topics"][0]["label"], "Agent memory");
     let after = (
         runs(&pool, &alex, &code).await,
@@ -285,12 +292,10 @@ async fn closed_room_members_see_each_other_until_one_leaves() {
     let (status, body) = call(&app, "GET", &format!("people/{priya}/match"), &alex_token).await;
     assert_eq!((status, &body["status"]), (200, &json!("ready")), "{body}");
     assert!(body["score"].is_i64());
-    // Priya never matched: nothing stored, and nothing runs for her.
+    // Priya never asked: she sees the match Alex's run stored for both of
+    // them, and nothing runs for her.
     let (status, body) = call(&app, "GET", &format!("people/{alex}/match"), &priya_token).await;
-    assert_eq!(
-        (status, &body["errorCode"]),
-        (404, &json!("common_ground_match_not_found"))
-    );
+    assert_eq!((status, &body["status"]), (200, &json!("ready")), "{body}");
     assert_eq!(runs(&pool, &priya, &code).await, before, "no run");
 
     let (status, _) = call(&app, "POST", &format!("rooms/{code}/leave"), &priya_token).await;

@@ -53,15 +53,14 @@ struct CommonGroundLobbyView: View {
         .refreshable { _ = await model.refreshRoom(code) }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
-            while !Task.isCancelled {
+            await model.follow(.lobby(code), every: { CommonGroundModel.lobbyPollInterval }) {
                 let exists = await model.refreshRoom(code)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else { return false }
                 guard exists else {
                     path = []
-                    return
+                    return false
                 }
-                guard !Task.isCancelled, !model.isClosed(code) else { return }
-                try? await Task.sleep(for: CommonGroundModel.lobbyPollInterval)
+                return !model.isClosed(code)
             }
         }
     }

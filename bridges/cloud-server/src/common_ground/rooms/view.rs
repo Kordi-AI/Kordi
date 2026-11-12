@@ -223,13 +223,16 @@ pub(in crate::common_ground) async fn view(
 /// True once someone asked for the room's common ground: a match or theme
 /// run was queued for it, or themes were stored. Lobbies then open the
 /// results for everyone, where each member's own matching runs.
-async fn matching_started(pool: &PgPool, room_id: Uuid) -> sqlx_core::Result<bool> {
+pub(super) async fn matching_started<'e, E>(executor: E, room_id: Uuid) -> sqlx_core::Result<bool>
+where
+    E: sqlx_core::executor::Executor<'e, Database = sqlx_postgres::Postgres>,
+{
     let (started,): (bool,) = query_as(
         "SELECT EXISTS (SELECT 1 FROM cloud_common_ground_match_runs WHERE room_id = $1)
              OR EXISTS (SELECT 1 FROM cloud_common_ground_room_themes WHERE room_id = $1)",
     )
     .bind(room_id)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await?;
     Ok(started)
 }

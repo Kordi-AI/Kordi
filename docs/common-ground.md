@@ -137,6 +137,14 @@ Routes under `/v1/cloud/common-ground/`. Every person returned in Common ground 
 - `POST rooms/:code/group`: Start group; adds your contacts and invites the other room members. An optional `topic` records the room topic the group is for.
 - `POST rooms/:code/invitations/:ref/join`: Join; accepts a room group invitation addressed to you.
 
+### Matching
+
+- A `cg_match_` run matches one viewer with up to 8 people; a `cg_room_` run finds a room's themes. Results are stored per pair of profiles and count only while both cards are at the revisions they were computed from.
+- **Each pair runs once.** A finding is also stored, reversed, for the other person when both cards are still current, the viewer and the other person both allowed AI, and every reason and the next step read the same to either person: no "you" or "your" (whole words) and neither display name. The prompt asks for reasons and next steps written that way. The reversed result swaps the shared pairs and the trade lists, keeps the next step, and is scored and headlined for the other side. It never replaces a result already computed for the same two revisions and never sets `opened_at`, so it reaches Recent only once opened. Otherwise the other person runs their own match.
+- **A pair being matched is not queued again.** A viewer who allowed AI leaves out everyone whose own open match run (unfinished, under 15 minutes old) already read the viewer's current card. When that leaves nobody, results say `matching` without queueing or charging; when some remain, only they are queued. Room requests take a room lock first, so members who ask at once queue a pair once.
+- Room results read every member's shared card in one query.
+- **Hints.** `common_ground.room.updated` (`{code}`) goes to every member of a room when someone joins, leaves or switches profile (deleting a card or profile leaves its rooms); when the room's first match or theme run is queued (`matchingStarted` turns true); when a theme run finishes or fails; and, in every open room a member is in, when their shared card changes: a build or automatic update lands, topics or hidden topics are edited, or sharing is turned on or off. `common_ground.matches.updated` goes to everyone a match run read when it finishes or fails, with the recipient's own `profileId` (`{}` to the viewer of a failed run), so a person waiting on another's run refetches. It also marks Nearby participants for the next sweep.
+
 ### Nearby
 
 Nearby people (#2100) sits under Pair. The contract is [development/grounding-nearby.md](development/grounding-nearby.md); the capability is `commonGroundNearbyVersion`, present with `commonGroundVersion`.

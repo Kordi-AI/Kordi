@@ -29,12 +29,13 @@ extension CommonGroundModel {
         }
     }
 
-    /// Polls a match while the server is still finding it.
-    func waitForMatch(_ accountId: String, every interval: Duration = matchPollInterval) async {
-        while matches[accountId]?.isMatching == true, !Task.isCancelled {
-            try? await Task.sleep(for: interval)
-            guard !Task.isCancelled else { return }
+    /// Polls a match while the server is still finding it, and looks at
+    /// once when a hint says a match finished.
+    func waitForMatch(_ accountId: String, every interval: Duration? = nil) async {
+        guard matches[accountId]?.isMatching == true else { return }
+        await follow(.match(accountId), immediately: false, every: { interval ?? matchingPollInterval }) {
             await loadMatch(accountId)
+            return matches[accountId]?.isMatching == true
         }
     }
 

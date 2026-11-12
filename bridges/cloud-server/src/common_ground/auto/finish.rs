@@ -105,7 +105,9 @@ pub(in crate::common_ground) async fn complete(
         json!({ "built": true, "profileId": profile_id, "automatic": true }),
     )
     .await?;
-    tx.commit().await
+    tx.commit().await?;
+    crate::common_ground::rooms::announce_profile(pool, &profile_id).await;
+    Ok(())
 }
 
 /// Completes a run the card no longer waits for, keeping its reply out.

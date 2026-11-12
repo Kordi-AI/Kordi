@@ -237,7 +237,8 @@ async fn room_results_match_detail_and_recent() {
         "only people who may see each other are matched"
     );
 
-    // Each viewer gets their own match; a failure is reported, then retried.
+    // The reply speaks to Alex ("You need compute"), so it was not stored
+    // for Priya: she gets her own match; a failure is reported, then retried.
     let detail = format!("/v1/cloud/common-ground/people/{alex}/match");
     let (status, body) = send(&app, "GET", &detail, &priya_token, None).await;
     assert_eq!((status, body["status"].as_str()), (202, Some("matching")));

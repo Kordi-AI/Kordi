@@ -2793,6 +2793,7 @@ actor CloudAPIClient {
                 occurredAt: event.occurredAt
             )]
         }
+        if CommonGroundSyncHint.eventTypes.contains(event.eventType) { CommonGroundSyncHint.publish(event); return [] }
         if knownNonChatEvents.contains(event.eventType) { CloudDocumentEvents.publish(event); return [] }
         if event.critical {
             throw CloudAPIError(code: "CLIENT_UPDATE_REQUIRED", message: "Update Kordi to continue reliable chat sync.", statusCode: 0)

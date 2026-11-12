@@ -2,7 +2,8 @@
 //! room. A background run on the Kordi key reads the shared cards and names
 //! topic pairs; the server checks every pair against the cards, scores it,
 //! and keeps the result for the pair of profiles and the card revisions it
-//! was computed from.
+//! was computed from. A finding that reads the same to either person is
+//! kept for both of them, so each pair runs once.
 
 mod finish;
 pub(super) mod prompt;
@@ -16,6 +17,7 @@ pub(super) use routes::{match_detail, results};
 pub(super) use store::{fresh_results, queue_matches, stored_results, Pending, Queued};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 
@@ -60,67 +62,83 @@ impl SharedCard {
     }
 }
 
+type SharedRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    i64,
+    Value,
+    Value,
+);
+
 /// The shared cards of these (account, profile) pairs that exist and are
-/// shared, in the order given.
+/// shared, in the order given. One query, however many members a room has.
 pub(super) async fn shared_cards(
     pool: &PgPool,
     members: &[(String, String)],
 ) -> sqlx_core::Result<Vec<SharedCard>> {
-    let mut out = Vec::new();
-    for (account, profile_id) in members {
-        let Some(row) = card::load(pool, profile_id).await? else {
-            continue;
-        };
-        if !row.has_card() || !row.sharing {
-            continue;
-        }
-        type Found = (
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-        );
-        let found: Option<Found> = query_as(
-            "SELECT account.display_name, COALESCE(account.public_handle, account.public_account_number::TEXT), account.avatar_url,
-                    profile.kind, profile.name, profile.design, profile.icon
-             FROM cloud_accounts account
-             JOIN cloud_common_ground_profiles profile ON profile.account_id = account.account_id
-             WHERE account.account_id = $1 AND profile.profile_id = $2",
+    let (accounts, profiles): (Vec<&str>, Vec<&str>) = members
+        .iter()
+        .map(|(account, profile)| (account.as_str(), profile.as_str()))
+        .unzip();
+    let rows: Vec<SharedRow> = query_as(
+        "SELECT account.account_id, profile.profile_id, account.display_name,
+                COALESCE(account.public_handle, account.public_account_number::TEXT),
+                account.avatar_url, profile.kind, profile.name, profile.design, profile.icon,
+                card.revision, card.topics_json, card.hidden_json
+         FROM unnest($1::text[], $2::text[]) WITH ORDINALITY AS member(account_id, profile_id, ord)
+         JOIN cloud_accounts account ON account.account_id = member.account_id
+         JOIN cloud_common_ground_profiles profile
+           ON profile.profile_id = member.profile_id AND profile.account_id = account.account_id
+         JOIN cloud_common_ground_cards card ON card.profile_id = profile.profile_id
+         WHERE card.built_at IS NOT NULL AND card.sharing_enabled
+         ORDER BY member.ord",
+    )
+    .bind(&accounts)
+    .bind(&profiles)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(
+                account_id,
+                profile_id,
+                name,
+                handle,
+                avatar_url,
+                profile_kind,
+                profile_name,
+                profile_design,
+                profile_icon,
+                revision,
+                topics,
+                hidden,
+            )| {
+                let topics: Topics = serde_json::from_value(topics).unwrap_or_default();
+                let hidden: Vec<String> = serde_json::from_value(hidden).unwrap_or_default();
+                SharedCard {
+                    account_id,
+                    profile_id,
+                    profile_kind,
+                    profile_name,
+                    profile_design,
+                    profile_icon,
+                    name: crate::document_shares::access::clean_display_name(name.as_deref()),
+                    handle,
+                    avatar_url,
+                    revision,
+                    topics: card::shared_topics(&topics, &hidden),
+                }
+            },
         )
-        .bind(account)
-        .bind(profile_id)
-        .fetch_optional(pool)
-        .await?;
-        let Some((
-            name,
-            handle,
-            avatar_url,
-            profile_kind,
-            profile_name,
-            profile_design,
-            profile_icon,
-        )) = found
-        else {
-            continue;
-        };
-        out.push(SharedCard {
-            account_id: account.clone(),
-            profile_id: profile_id.clone(),
-            profile_kind,
-            profile_name,
-            profile_design,
-            profile_icon,
-            name: crate::document_shares::access::clean_display_name(name.as_deref()),
-            handle,
-            avatar_url,
-            revision: row.revision,
-            topics: row.shared_topics(),
-        });
-    }
-    Ok(out)
+        .collect())
 }
 
 /// A topic pair you share, with a short reason.
@@ -224,6 +242,65 @@ pub(super) fn result(viewer: &SharedCard, other: &SharedCard, found: prompt::Fou
         they_bring: found.they_bring,
         next_step: found.next_step,
     }
+}
+
+/// The same finding from the other person's side: each shared pair and the
+/// two trade lists change sides, and the next step stays. Score it with
+/// [`result`] and the cards swapped.
+pub(super) fn reversed(found: &prompt::Found) -> prompt::Found {
+    prompt::Found {
+        shared: found
+            .shared
+            .iter()
+            .map(|reason| Reason {
+                topic: reason.their_topic.clone(),
+                their_topic: reason.topic.clone(),
+                why: reason.why.clone(),
+            })
+            .collect(),
+        you_bring: found.they_bring.clone(),
+        they_bring: found.you_bring.clone(),
+        next_step: found.next_step.clone(),
+    }
+}
+
+/// Words that address the reader. Text is split at anything but letters
+/// and digits, so "you're" and "you'll" count through "you".
+const SECOND_PERSON: [&str; 5] = ["you", "your", "yours", "yourself", "yourselves"];
+
+/// The lower-case words of `text`.
+fn words(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+}
+
+/// Whether `text` addresses the reader or names one of `names`. A name
+/// counts by any word of it longer than one letter, as a whole word, or
+/// anywhere for a word with letters beyond ASCII (some scripts put no
+/// spaces between words). Extra matches only cost a second run.
+fn addresses_someone(text: &str, names: &[&str]) -> bool {
+    let found: std::collections::HashSet<String> = words(text).collect();
+    if SECOND_PERSON.iter().any(|word| found.contains(*word)) {
+        return true;
+    }
+    let lower = text.to_lowercase();
+    names.iter().flat_map(|name| words(name)).any(|word| {
+        word.chars().count() > 1
+            && (found.contains(&word) || (!word.is_ascii() && lower.contains(&word)))
+    })
+}
+
+/// Whether every reason and the next step read the same to either person:
+/// no "you" and neither person's name. Only then is one run's finding also
+/// stored for the other person.
+pub(super) fn reads_for_either(found: &prompt::Found, names: &[&str]) -> bool {
+    let reasons = found.shared.iter().map(|reason| &reason.why);
+    let trades = found.you_bring.iter().chain(&found.they_bring);
+    !reasons
+        .chain(trades.map(|trade| &trade.why))
+        .chain(std::iter::once(&found.next_step))
+        .any(|text| addresses_someone(text, names))
 }
 
 /// Themes with only the people in `cards`, the cards the viewer sees. A

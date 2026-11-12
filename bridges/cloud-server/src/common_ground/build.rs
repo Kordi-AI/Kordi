@@ -264,6 +264,7 @@ pub(super) async fn complete(
     )
     .await?;
     tx.commit().await?;
+    super::rooms::announce_profile(pool, &profile_id).await;
     related::audit(pool, &account, &profile_id, added).await;
     Ok(())
 }
