@@ -25,4 +25,9 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "session lookup cache signals",
         "0197_session_lookup_cache_signals.sql"
     ),
+    migration!(
+        198,
+        "agent exchange wait limit",
+        "0198_agent_exchange_wait_limit.sql"
+    ),
 ];

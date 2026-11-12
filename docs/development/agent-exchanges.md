@@ -12,12 +12,11 @@ completion. Both publishers consume it before storing a terminal synchronization
 event: the message text is empty and the outcome lives in metadata. The read
 model retires progress without rendering a bubble, including replay and legacy
 records whose transport status is received, delivered, or read.
-On resumption, `{"agentExchangeOutcome":"silent"}` acknowledges that no
-additional work is needed. The server accepts it only for a continuation with
-a public reply, atomically completes the run and exchange, and creates no
-message. An empty answer, failed provider, silent recipient, or timeout without
-a public reply is not a successful silent completion. Retries retain the same
-lease checks and idempotency as a visible result.
+On resumption, `{"agentExchangeOutcome":"silent"}` closes an asking agent's
+continuation when there is no useful new result to publish. The server
+atomically completes the run and exchange, preserves earlier messages and
+artifacts, and creates no message. Retries retain the same lease checks and
+idempotency as a visible result.
 
 Streaming snapshots buffer reserved outcome prefixes before they can render.
 Owner-local overlays, peer progress, and stored progress use the same rule; a
@@ -83,9 +82,13 @@ fixed size.
 - Duplicate completion is idempotent. A single exchange can create only one
   recipient run and one continuation run. Model/tool execution is at least
   once after a crash; external side effects still need their own idempotency.
-- An unavailable recipient or a ten-minute deadline produces an explicit
-  failure result for the original agent. It is never presented as a reply
-  from the recipient. Cancelling the root prevents its continuation.
+- An expired deadline or unavailable recipient lets the original agent skip
+  the missing reply and continue with confirmed information. The agent can
+  use a reversible default for an optional choice, publish useful partial
+  work, or close quietly if the existing result stands. Steps that require
+  missing facts or explicit approval remain open. The usual agent-to-agent
+  deadline is ten minutes, with a maximum of two hours from the first
+  question. Cancelling the root prevents its continuation.
 
 The design borrows SwarmChat's separation of durable message delivery from
 independent agent execution and its recovery through rereading pending work.
@@ -167,16 +170,16 @@ never count. With several open questions to the same person, a reply
 to one question answers that question; any other message answers the newest.
 A new question to a person ends older open questions to them in the same
 conversation from other tasks at once: those tasks resume as unanswered
-(`personSuperseded`) instead of waiting 24 hours or taking the new answer.
+(`personSuperseded`) without waiting for the earlier deadline.
 The question always addresses the person by name with a mention by account
 id, in a direct chat too.
 Matching runs when the message is stored and again in the reconcile sweep, so
 a missed hook is recovered from durable records. The answer then resumes the
 asking agent through the ordinary continuation, with person-specific wording.
 
-People get 24 hours. When the deadline passes, the continuation states that
-no answer arrived and the agent says so instead of inventing one. Each
-question counts toward the task's budget of eight. Targets are active
+People get up to two hours. On expiry, the continuation keeps any confirmed
+results and skips the unanswered question without starting another wait.
+Each question counts toward the task's budget of eight. Targets are active
 members, not service accounts, and not blocked either way. Leaving the
 conversation cancels a pending question.
 
@@ -231,11 +234,12 @@ run history.
 
 A run answering another agent's request may ask its own owner, and nobody
 else, through a person exchange (for example to confirm what it may share).
-It ends its turn with `waiting`; the asking agent's request then waits for
-that owner (its deadline extends past the owner's 24 hours and its question
-shows who it waits for). The owner's reply continues the answering agent,
-and its answer is published as the reply to the asking agent, which resumes
-as usual. When an agent cannot answer, the asking agent's continuation asks
+It ends its turn with `waiting`. The asking agent's request then shows
+that it is waiting for the owner and expires two hours after the original
+agent question. The owner's question expires 15 minutes earlier to allow
+time for the answering agent's continuation. The owner's reply continues the
+answering agent, and its answer is published as the reply to the asking agent,
+which resumes as usual. When an agent cannot answer, the asking agent's continuation asks
 that agent's owner directly as a person instead of posting open questions.
 
 ## One row per agent task

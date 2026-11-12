@@ -31,7 +31,8 @@ pub(super) async fn earlier(
     let rows: Vec<(String, String)> = query_as(
         "SELECT request_text,response_text FROM (
            SELECT request_text,response_text,created_at FROM cloud_agent_exchanges
-           WHERE root_run_id=$1 AND exchange_id<>$2 AND response_text IS NOT NULL
+           WHERE root_run_id=$1 AND exchange_id<>$2
+             AND response_message_id IS NOT NULL AND response_text IS NOT NULL
              AND ($3::text IS NULL OR target_agent_id=$3)
            ORDER BY created_at DESC LIMIT $4) recent ORDER BY created_at",
     )

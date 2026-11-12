@@ -346,7 +346,7 @@ async fn exchange_in_a_secondary_group_channel_preserves_its_group_identity() {
 }
 
 #[tokio::test]
-async fn useful_follow_up_is_public_and_timeout_cannot_disappear_silently() {
+async fn useful_follow_up_is_public() {
     let Some(f) = Fixture::new().await else {
         return;
     };
@@ -368,40 +368,65 @@ async fn useful_follow_up_is_public_and_timeout_cannot_disappear_silently() {
     let texts = f.public_texts().await;
     assert_eq!(texts.len(), 3);
     assert_eq!(texts[2], "The requested total is 19.");
+}
 
-    let Some(f) = Fixture::new().await else {
+#[tokio::test]
+async fn a_timeout_can_finish_quietly_and_preserve_the_earlier_result() {
+    let Some(mut f) = Fixture::new().await else {
         return;
     };
-    f.send("timeout", 1).await;
+    let root = f.root.clone();
+    f.send("compute", 1).await;
     f.complete_parent(false).await;
+    let target = f.pending(1).await.remove(0);
+    let claim = f.claim(1, &target).await;
+    f.finish(
+        1,
+        target["runId"].as_str().unwrap(),
+        claim,
+        "The confirmed total is 15.",
+    )
+    .await;
+    let follow_up = f.pending(0).await.remove(0);
+    f.claim = f.claim(0, &follow_up).await;
+    f.root = follow_up["runId"].as_str().unwrap().into();
+    f.send("second-opinion", 2).await;
+    f.finish(0, &f.root, f.claim, WAITING).await;
+    let prior_results = f.public_texts().await;
+    assert!(prior_results
+        .iter()
+        .any(|text| text == "The confirmed total is 15."));
+
     query("UPDATE cloud_agent_exchanges SET deadline_at=now()-interval '1 second' WHERE parent_run_id=$1").bind(&f.root).execute(&f.pool).await.unwrap();
     let resume = f.pending(0).await.remove(0);
+    let (rules, context) = resume["prompt"].as_str().unwrap().split_once('\n').unwrap();
+    let data: Value = serde_json::from_str(context).unwrap();
+    assert!(rules.contains("Skip the missing input"));
+    assert!(data["agentReply"].is_null());
+    assert_eq!(
+        data["earlierRounds"][0]["agentReply"],
+        "The confirmed total is 15."
+    );
+    assert_eq!(data["remainingRequests"], 0);
     let (_, _, retired) = f.recipient_row().await;
     assert_eq!(retired["deliveryState"], "cancelled");
     assert_eq!(retired["structuredContent"]["synchronizationOnly"], true);
+    let run = resume["runId"].as_str().unwrap();
     let claim = f.claim(0, &resume).await;
     let response = f
         .router
         .clone()
         .oneshot(post_json_with_token(
-            &format!(
-                "/v1/cloud/agent-exchanges/desktop/{}/complete",
-                resume["runId"].as_str().unwrap()
-            ),
+            &format!("/v1/cloud/agent-runs/desktop/{run}/agent-exchange"),
             &f.people[0].token,
-            json!({"claimId":claim,"text":SILENT}),
+            json!({"claimId":claim,"toolCallId":"try-again","arguments":{"target":format!("cloud-agent:{}",f.people[2].account_id),"message":"Any updates?"}}),
         ))
         .await
         .unwrap();
     assert_ne!(response.status(), StatusCode::OK);
-    f.finish(
-        0,
-        resume["runId"].as_str().unwrap(),
-        claim,
-        "The agent did not reply before the deadline.",
-    )
-    .await;
-    assert_eq!(f.public_texts().await.len(), 2);
+    f.finish(0, run, claim, SILENT).await;
+    assert_eq!(f.slot(&root).await.1["synchronizationOnly"], true);
+    assert_eq!(f.public_texts().await, prior_results);
 }
 
 #[tokio::test]
