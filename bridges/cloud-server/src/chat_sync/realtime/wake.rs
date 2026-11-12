@@ -121,6 +121,7 @@ pub(crate) fn spawn_wake_listener(
 ) {
     rooms.start();
     spawn_session_heartbeat(&database_url);
+    crate::auth::session_metrics::spawn_reporter(sessions.clone());
     tokio::spawn(async move {
         loop {
             let result: Result<(), sqlx_core::Error> = async {

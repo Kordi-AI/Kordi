@@ -1,8 +1,26 @@
 use super::*;
 use crate::auth::session_cache::LookupSource;
+use crate::auth::session_metrics::RequestKind;
 use crate::organizations::requests::RequestOrganization;
 
 pub async fn cloud_session_middleware(
+    State(state): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    req: Request,
+    next: Next,
+) -> Response {
+    let kind = RequestKind::from_path(req.uri().path());
+    let started = std::time::Instant::now();
+    let response = session_middleware(State(state.clone()), headers, req, next).await;
+    state
+        .session_signals()
+        .lookup_cache()
+        .metrics()
+        .request(kind, started.elapsed());
+    response
+}
+
+async fn session_middleware(
     State(state): State<Arc<ServerState>>,
     headers: HeaderMap,
     mut req: Request,
@@ -42,7 +60,13 @@ pub async fn cloud_session_middleware(
             // tokens and sliding sessions already inside the hourly window.
             if source == LookupSource::Database {
                 let _ = bump_expiry(pool, &row, DEFAULT_SESSION_LIFETIME_DAYS).await;
-                let _ = touch_device_activity(pool, &row.account_id, &row.device_id).await;
+                let _ = crate::auth::session::touch_device_activity_if_stale(
+                    pool,
+                    &row.account_id,
+                    &row.device_id,
+                    found.device_last_seen_at,
+                )
+                .await;
             }
             RequestOrganization::attach(&mut req, &row.account_id, &row.organization, &headers);
             let changes_state = !req.method().is_safe();
@@ -58,7 +82,7 @@ pub async fn cloud_session_middleware(
             // every replica's cache, but this one drops the caller's cached
             // sessions now, so the caller's next request sees the change.
             if changes_state {
-                cache.evict_account(&account_id);
+                cache.evict_after_mutation(&account_id);
             }
             response
         }
