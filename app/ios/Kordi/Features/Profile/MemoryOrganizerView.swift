@@ -82,6 +82,8 @@ struct MemoryOrganizerSection: View {
             }
         }
         .padding(.vertical, 10)
+        // The lifted context-menu preview must cover the rows behind it.
+        .background(.background)
         .contentShape(Rectangle())
         .contextMenu { actions(memory, organizer.actions(for: memory), organizer: organizer) }
         .disabled(model.isMutating)
