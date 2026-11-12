@@ -188,11 +188,14 @@ pub async fn lookup_session(
 /// account's admission facts are joined in, so this is a single statement;
 /// the results match [`SESSION_ORGANIZATION_COLUMNS`] and
 /// `AdmissionPolicy::authorize_account`.
-pub(crate) async fn lookup_session_by_hash(
-    pool: &PgPool,
+pub(crate) async fn lookup_session_by_hash<'e, E>(
+    executor: E,
     token_hash: &str,
     now: DateTime<Utc>,
-) -> Result<Option<SessionLookup>, SessionError> {
+) -> Result<Option<SessionLookup>, SessionError>
+where
+    E: Executor<'e, Database = Postgres>,
+{
     type Row = (
         String,
         String,
@@ -228,7 +231,7 @@ pub(crate) async fn lookup_session_by_hash(
     )
     .bind(token_hash)
     .bind(now.to_rfc3339())
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await?;
 
     Ok(row.map(
