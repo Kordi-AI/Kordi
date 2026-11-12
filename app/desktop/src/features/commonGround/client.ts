@@ -135,10 +135,12 @@ function roomSummary(entry: Partial<CgRoomSummary> & { code: string }): CgRoomSu
 
 /** A routed memory from the server; missing fields read as empty. */
 export function routedMemoryOf(entry: Partial<CgRoutedMemory>): CgRoutedMemory {
+  const categories = Array.isArray(entry.categories) ? entry.categories.filter((category): category is string => typeof category === 'string' && category.length > 0) : [];
   return {
     memoryId: entry.memoryId ?? '',
     text: entry.text ?? '',
     category: typeof entry.category === 'string' ? entry.category : null,
+    ...(categories.length > 0 ? { categories } : {}),
     updatedAt: entry.updatedAt ?? '',
     profileId: typeof entry.profileId === 'string' && entry.profileId ? entry.profileId : null,
     profileIds: Array.isArray(entry.profileIds) ? entry.profileIds.filter((id): id is string => typeof id === 'string' && id.length > 0) : [],

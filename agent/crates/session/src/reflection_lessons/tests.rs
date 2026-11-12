@@ -270,7 +270,7 @@ fn category_declaration_and_confidence_round_trip() {
     save_reflection_lesson(
         &conn,
         NewReflectionLesson {
-            category: Some("health_context".to_string()),
+            categories: vec!["health_context".to_string()],
             declaration_type: Some("model-inferred".to_string()),
             confidence: Some("high".to_string()),
             ..lesson("s-cat", "Runs 5k every Tuesday.", false)
@@ -284,14 +284,56 @@ fn category_declaration_and_confidence_round_trip() {
         .iter()
         .find(|row| row.lesson_text.as_deref() == Some("Runs 5k every Tuesday."))
         .unwrap();
-    assert_eq!(health.category.as_deref(), Some("health_context"));
+    assert_eq!(health.category(), Some("health_context"));
+    assert_eq!(health.categories, vec!["health_context"]);
     assert_eq!(health.declaration_type.as_deref(), Some("model-inferred"));
     assert_eq!(health.confidence.as_deref(), Some("high"));
     let plain = rows
         .iter()
         .find(|row| row.lesson_text.as_deref() == Some("Answer briefly."))
         .unwrap();
-    assert_eq!(plain.category, None);
+    assert_eq!(plain.category(), None);
+    assert!(plain.categories.is_empty());
     assert_eq!(plain.declaration_type, None);
     assert_eq!(plain.confidence, None);
+}
+
+#[test]
+fn several_categories_round_trip_and_keep_the_main_one_in_category() {
+    let conn = crate::store::open_memory().expect("memory db");
+    save_reflection_lesson(
+        &conn,
+        NewReflectionLesson {
+            categories: vec!["values_and_ethics".to_string(), "work_context".to_string()],
+            ..lesson("s-multi", "Won't work for tobacco companies.", false)
+        },
+    )
+    .expect("save");
+    let rows = list_reflection_lessons(&conn, ReflectionScope::Conversation, "s-multi").unwrap();
+    assert_eq!(
+        rows[0].categories,
+        vec!["values_and_ethics", "work_context"]
+    );
+    assert_eq!(rows[0].category(), Some("values_and_ethics"));
+    let (category, categories): (Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT category, categories FROM reflection_lessons WHERE scope_id = 's-multi'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(category.as_deref(), Some("values_and_ethics"));
+    assert_eq!(
+        categories.as_deref(),
+        Some(r#"["values_and_ethics","work_context"]"#)
+    );
+
+    // A row an older build wrote has only `category`.
+    conn.execute(
+        "UPDATE reflection_lessons SET categories = NULL, category = 'work_context' WHERE scope_id = 's-multi'",
+        [],
+    )
+    .unwrap();
+    let rows = list_reflection_lessons(&conn, ReflectionScope::Conversation, "s-multi").unwrap();
+    assert_eq!(rows[0].categories, vec!["work_context"]);
 }

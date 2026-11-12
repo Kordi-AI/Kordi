@@ -1,4 +1,4 @@
-import { isMemoryCategory, type MemoryCategory } from './memoryCategory';
+import { isMemoryCategory, normalizeMemoryCategories, type MemoryCategory } from './memoryCategory';
 import { validateLessonText, type MemoryLessonScope } from './memoryModel';
 
 /** An agent instruction file this Mac found (`desktop_memory_import_discover`). */
@@ -45,6 +45,7 @@ export function withChosenFiles(files: ReadonlyArray<AgentInstructionFile>, chos
 export type ImportedMemory = {
   text: string;
   category: MemoryCategory;
+  categories?: MemoryCategory[];
   scope: 'project' | 'global';
   file: string;
 };
@@ -57,6 +58,7 @@ export type MemoryImportSave = {
   source: 'import';
   text: string;
   category: MemoryCategory;
+  categories?: MemoryCategory[];
 };
 
 export const MAX_MEMORIES_PER_FILE = 12;
@@ -96,10 +98,14 @@ export function parseMemoryImportReply(reply: string, files: ReadonlyArray<Pick<
     if (count >= MAX_MEMORIES_PER_FILE) continue;
     perFile.set(file, count + 1);
     const scope = record.scope === 'global' ? 'global' : 'project';
-    const category = isMemoryCategory(record.category)
+    const fallback = isMemoryCategory(record.category)
       ? record.category
       : scope === 'global' ? 'general_preferences' : 'hcp-custom:task_lessons';
-    memories.push({ text: validation.text, category, scope, file });
+    const categories = normalizeMemoryCategories(record.categories, fallback);
+    const category = categories[0] ?? fallback;
+    memories.push({ text: validation.text, category, scope, file,
+      ...(Array.isArray(record.categories) ? { categories: categories.length ? categories : [category] } : {}),
+    });
   }
   return memories;
 }
@@ -137,6 +143,7 @@ export function memoryImportSaves(
         source: 'import',
         text: memory.text,
         category: memory.category,
+        ...(memory.categories ? { categories: memory.categories } : {}),
       },
     });
   }

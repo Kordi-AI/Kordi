@@ -212,3 +212,65 @@ async fn group_memories_refuse_every_card_change() {
     }
     g.cleanup().await;
 }
+
+#[tokio::test]
+async fn several_categories_reach_every_card_any_of_them_routes_to() {
+    let Some(fx) = fixture().await else { return };
+    let work = insert_profile(&fx, "work", 0).await;
+    let health = insert_profile(&fx, "health", 1).await;
+    let daily = insert_profile(&fx, "daily", 2).await;
+    let custom = insert_profile(&fx, "custom", 3).await;
+
+    let (_, saved) = save(
+        &fx,
+        with(
+            "Runs the clinic's data pipeline",
+            json!({ "categories": ["work_context", "health_context"] }),
+        ),
+    )
+    .await;
+    let memory = &saved["memory"];
+    let id = memory["memoryId"].as_str().unwrap().to_string();
+    assert_eq!(
+        cards(memory),
+        (json!([work, health]), json!([]), Value::Null)
+    );
+
+    // Removing one routed card keeps the other; adding it back undoes it.
+    let (status, edited) = patch(&fx, &id, json!({ "removeProfileId": health })).await;
+    assert_eq!(status, StatusCode::OK, "{edited}");
+    assert_eq!(
+        cards(&edited["memory"]),
+        (json!([work]), json!([health]), Value::Null)
+    );
+    let (_, edited) = patch(&fx, &id, json!({ "addProfileId": health })).await;
+    assert_eq!(
+        cards(&edited["memory"]),
+        (json!([work, health]), json!([]), Value::Null)
+    );
+
+    // The legacy pin removes every other card any category routes to.
+    let (_, edited) = patch(&fx, &id, json!({ "profileId": custom })).await;
+    assert_eq!(
+        cards(&edited["memory"]),
+        (json!([custom]), json!([work, health]), json!(custom))
+    );
+    let (_, edited) = patch(&fx, &id, json!({ "profileId": null })).await;
+    assert_eq!(
+        cards(&edited["memory"]),
+        (json!([work, health]), json!([]), Value::Null)
+    );
+
+    // New categories move the routed cards with them.
+    let (_, edited) = patch(
+        &fx,
+        &id,
+        json!({ "categories": ["location_context", "work_context"] }),
+    )
+    .await;
+    assert_eq!(
+        cards(&edited["memory"]),
+        (json!([work, daily]), json!([]), Value::Null)
+    );
+    fx.cleanup().await;
+}

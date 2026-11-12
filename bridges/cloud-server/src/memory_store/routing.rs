@@ -1,10 +1,13 @@
 //! Memory categories, declaration types and profile routing (#1977).
 //!
-//! Every memory carries one HCP category that says what kind of information
-//! it is. The category decides which Grounding profile kind the memory is
-//! filed to by default; an explicit `profile_id` the person chose wins.
-//! Group memories describe the group, so they never route to a profile and
-//! may not use the categories that describe one person.
+//! Every memory carries one to three HCP categories that say what kind of
+//! information it is, in the order given; the first is the primary category.
+//! The categories decide which Grounding profile kinds the memory is filed
+//! to by default (every kind any of them routes to); an explicit card the
+//! person chose wins. Group memories describe the group, so they never route
+//! to a profile and may not use the categories that describe one person.
+//! Each category has a sensitivity level, and a memory's sensitivity is the
+//! highest of its categories (metadata only for now).
 
 use axum::http::StatusCode;
 
@@ -24,6 +27,10 @@ pub(crate) const MEMORY_CATEGORIES: [&str; 10] = [
 ];
 /// The category of a memory saved without one.
 pub(crate) const DEFAULT_CATEGORY: &str = "general_preferences";
+/// The most categories one memory may carry.
+pub(crate) const MAX_CATEGORIES: usize = 3;
+/// Sensitivity levels, lowest first.
+pub(crate) const SENSITIVITY_LEVELS: [&str; 3] = ["low", "medium", "high"];
 pub(crate) const MEMORY_CONFIDENCES: [&str; 3] = ["low", "medium", "high"];
 /// The confidence of an inferred memory saved without one.
 pub(crate) const DEFAULT_CONFIDENCE: &str = "medium";
@@ -45,10 +52,11 @@ pub(crate) fn profile_kind_for(category: &str) -> Option<&'static str> {
 /// Profile kinds that receive memories by category.
 pub(crate) const FIXED_PROFILE_KINDS: [&str; 3] = ["work", "health", "daily"];
 
-/// SQL that is true when a memory of category `category` reaches a profile
-/// of kind `kind` through its category: the profile is of a fixed kind and
-/// the category routes to that kind or to every fixed kind.
-pub(crate) fn routed_card_sql(category: &str, kind: &str) -> String {
+/// SQL that is true when a memory with the categories array `categories`
+/// reaches a profile of kind `kind` through its categories: the profile is
+/// of a fixed kind and any of the categories routes to that kind or to every
+/// fixed kind.
+pub(crate) fn routed_card_sql(categories: &str, kind: &str) -> String {
     let arms: String = MEMORY_CATEGORIES
         .iter()
         .filter_map(|c| profile_kind_for(c).map(|k| format!(" WHEN '{c}' THEN '{k}'")))
@@ -58,14 +66,26 @@ pub(crate) fn routed_card_sql(category: &str, kind: &str) -> String {
         .map(|k| format!("'{k}'"))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("({kind} IN ({fixed}) AND (CASE {category}{arms} END) IN ({kind}, 'all'))")
+    format!(
+        "({kind} IN ({fixed}) AND EXISTS (SELECT 1 FROM unnest({categories}) AS routed(category) \
+         WHERE (CASE routed.category{arms} END) IN ({kind}, 'all')))"
+    )
 }
 
-/// Whether a memory of `category` reaches a profile of `kind` through its
-/// category (the Rust twin of [`routed_card_sql`]).
-pub(crate) fn routed_to_kind(category: &str, kind: &str) -> bool {
+/// Whether a memory with `categories` reaches a profile of `kind` through
+/// any of its categories (the Rust twin of [`routed_card_sql`]).
+pub(crate) fn routed_to_kind<S: AsRef<str>>(categories: &[S], kind: &str) -> bool {
     FIXED_PROFILE_KINDS.contains(&kind)
-        && matches!(profile_kind_for(category), Some(k) if k == kind || k == "all")
+        && categories.iter().any(|category| {
+            matches!(profile_kind_for(category.as_ref()), Some(k) if k == kind || k == "all")
+        })
+}
+
+/// Whether any of the categories routes to every fixed profile kind.
+pub(crate) fn routes_to_every_kind<S: AsRef<str>>(categories: &[S]) -> bool {
+    categories
+        .iter()
+        .any(|category| profile_kind_for(category.as_ref()) == Some("all"))
 }
 
 /// Whether a group memory may use the category. Health, location, purchases
@@ -78,6 +98,41 @@ pub(crate) fn category_allowed_in_group(category: &str) -> bool {
             | "purchase_history_preferences"
             | "values_and_ethics"
     )
+}
+
+/// Whether a group memory may use every one of the categories.
+pub(crate) fn categories_allowed_in_group<S: AsRef<str>>(categories: &[S]) -> bool {
+    categories
+        .iter()
+        .all(|category| category_allowed_in_group(category.as_ref()))
+}
+
+/// Whether any of the categories is health: such a memory is treated as a
+/// health memory everywhere health is special-cased.
+pub(crate) fn is_health<S: AsRef<str>>(categories: &[S]) -> bool {
+    categories
+        .iter()
+        .any(|category| category.as_ref() == "health_context")
+}
+
+/// How sensitive information of the category is. A custom category is
+/// never low.
+pub(crate) fn category_sensitivity(category: &str) -> &'static str {
+    match category {
+        "general_preferences" | "goals_and_constraints" | "purchase_history_preferences" => "low",
+        "health_context" => "high",
+        _ => "medium",
+    }
+}
+
+/// A memory's sensitivity: the highest of its categories' levels. A memory
+/// with no categories is low.
+pub(crate) fn memory_sensitivity<S: AsRef<str>>(categories: &[S]) -> &'static str {
+    categories
+        .iter()
+        .map(|category| category_sensitivity(category.as_ref()))
+        .max_by_key(|level| SENSITIVITY_LEVELS.iter().position(|known| known == level))
+        .unwrap_or("low")
 }
 
 /// The profile kind a memory is effectively filed to: the explicit
@@ -97,7 +152,7 @@ pub(crate) fn effective_profile_kind(
 pub(crate) fn invalid_category() -> MemoryError {
     MemoryError::bad_request(
         "invalid_category",
-        "category must be one of the memory categories.",
+        "category must be one of the memory categories, and categories one to three of them.",
     )
 }
 
@@ -115,7 +170,7 @@ pub(crate) fn invalid_declared_by() -> MemoryError {
 pub(crate) fn invalid_update() -> MemoryError {
     MemoryError::bad_request(
         "invalid_update",
-        "Send at least one of text, category, profileId, addProfileId, or removeProfileId.",
+        "Send at least one of text, categories, category, profileId, addProfileId, or removeProfileId.",
     )
 }
 
@@ -165,10 +220,68 @@ pub(crate) fn check_category(value: Option<&str>, default: bool) -> MemoryResult
     }
 }
 
-/// The checked category, declaration type and confidence of a save.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Checked categories: each trimmed and known, repeats removed keeping the
+/// first occurrence, in the order given, one to three of them.
+pub(crate) fn check_categories<S: AsRef<str>>(values: &[S]) -> MemoryResult<Vec<&'static str>> {
+    let mut categories: Vec<&'static str> = Vec::new();
+    for value in values {
+        let category = check_category(Some(value.as_ref()), false)?;
+        if !categories.contains(&category) {
+            categories.push(category);
+        }
+    }
+    if categories.is_empty() || categories.len() > MAX_CATEGORIES {
+        return Err(invalid_category());
+    }
+    Ok(categories)
+}
+
+/// The categories of a save: `categories` when sent, else the legacy single
+/// `category`, else the default.
+pub(crate) fn save_categories(
+    categories: Option<&[String]>,
+    category: Option<&str>,
+) -> MemoryResult<Vec<&'static str>> {
+    match categories {
+        Some(categories) => check_categories(categories),
+        None => Ok(vec![check_category(category, true)?]),
+    }
+}
+
+/// The categories after an edit, or `None` when the edit leaves them alone.
+/// `categories` replaces the whole set; the legacy `category` replaces only
+/// the primary and keeps the others (a repeat of the new primary is
+/// dropped). `categories` wins when both are sent.
+pub(crate) fn edited_categories<S: AsRef<str>>(
+    current: &[S],
+    categories: Option<&[String]>,
+    category: Option<&str>,
+) -> MemoryResult<Option<Vec<&'static str>>> {
+    if let Some(categories) = categories {
+        return check_categories(categories).map(Some);
+    }
+    let Some(category) = category else {
+        return Ok(None);
+    };
+    let primary = check_category(Some(category), false)?;
+    let mut next = vec![primary];
+    for existing in current.iter().skip(1) {
+        // Stored values are already checked; an unknown one is dropped.
+        let Ok(existing) = check_category(Some(existing.as_ref()), false) else {
+            continue;
+        };
+        if !next.contains(&existing) && next.len() < MAX_CATEGORIES {
+            next.push(existing);
+        }
+    }
+    Ok(Some(next))
+}
+
+/// The checked categories, declaration type and confidence of a save.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SaveFields {
-    pub category: &'static str,
+    /// One to three categories; the first is the primary.
+    pub categories: Vec<&'static str>,
     pub declaration_type: &'static str,
     pub confidence: Option<&'static str>,
 }
@@ -178,8 +291,8 @@ pub(crate) struct SaveFields {
 /// `import` are the person's own). Inferred memories default to medium confidence; declared
 /// ones carry none.
 pub(crate) fn save_fields(input: &SaveMemoryRequest, scope: &str) -> MemoryResult<SaveFields> {
-    let category = check_category(input.category.as_deref(), true)?;
-    if scope == "group" && !category_allowed_in_group(category) {
+    let categories = save_categories(input.categories.as_deref(), input.category.as_deref())?;
+    if scope == "group" && !categories_allowed_in_group(&categories) {
         return Err(category_not_shared());
     }
     let declaration_type = match input.declared_by.as_deref().map(str::trim) {
@@ -205,143 +318,11 @@ pub(crate) fn save_fields(input: &SaveMemoryRequest, scope: &str) -> MemoryResul
         None
     };
     Ok(SaveFields {
-        category,
+        categories,
         declaration_type,
         confidence,
     })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn request(source: &str) -> SaveMemoryRequest {
-        SaveMemoryRequest {
-            scope: "conversation".into(),
-            scope_id: "s".into(),
-            scope_label: None,
-            source: source.into(),
-            text: "t".into(),
-            client_memory_id: None,
-            category: None,
-            confidence: None,
-            declared_by: None,
-        }
-    }
-
-    #[test]
-    fn profile_kinds_follow_the_plan() {
-        assert_eq!(profile_kind_for("work_context"), Some("work"));
-        assert_eq!(profile_kind_for("education_learner_profile"), Some("work"));
-        assert_eq!(profile_kind_for("health_context"), Some("health"));
-        assert_eq!(profile_kind_for("location_context"), Some("daily"));
-        assert_eq!(
-            profile_kind_for("purchase_history_preferences"),
-            Some("daily")
-        );
-        assert_eq!(profile_kind_for("coordination_context"), Some("all"));
-        for category in [
-            "general_preferences",
-            "goals_and_constraints",
-            "values_and_ethics",
-            "hcp-custom:task_lessons",
-        ] {
-            assert_eq!(profile_kind_for(category), None, "{category}");
-        }
-        assert_eq!(effective_profile_kind("group", "work_context", None), None);
-        assert_eq!(
-            effective_profile_kind("global", "work_context", Some("custom".into())),
-            Some("custom".into())
-        );
-    }
-
-    #[test]
-    fn routed_to_kind_matches_the_routing_table() {
-        assert!(routed_to_kind("work_context", "work"));
-        assert!(!routed_to_kind("work_context", "health"));
-        assert!(routed_to_kind("coordination_context", "daily"));
-        assert!(!routed_to_kind("coordination_context", "custom"));
-        assert!(!routed_to_kind("general_preferences", "work"));
-        let sql = routed_card_sql("m.category", "p.kind");
-        assert!(
-            sql.contains("WHEN 'coordination_context' THEN 'all'"),
-            "{sql}"
-        );
-        assert!(
-            sql.starts_with("(p.kind IN ('work', 'health', 'daily')"),
-            "{sql}"
-        );
-    }
-
-    #[test]
-    fn group_categories_exclude_personal_ones() {
-        let refused: Vec<_> = MEMORY_CATEGORIES
-            .iter()
-            .filter(|category| !category_allowed_in_group(category))
-            .collect();
-        assert_eq!(
-            refused,
-            [
-                &"health_context",
-                &"purchase_history_preferences",
-                &"values_and_ethics",
-                &"location_context"
-            ]
-        );
-    }
-
-    #[test]
-    fn save_fields_derive_declaration_and_confidence() {
-        let fields = save_fields(&request("manual"), "global").unwrap();
-        assert_eq!(fields.category, DEFAULT_CATEGORY);
-        assert_eq!(fields.declaration_type, USER_DECLARED);
-        assert_eq!(fields.confidence, None);
-
-        let imported = save_fields(&request("import"), "global").unwrap();
-        assert_eq!(imported.declaration_type, USER_DECLARED);
-        assert_eq!(imported.confidence, None);
-        let digest = save_fields(&request("digest"), "global").unwrap();
-        assert_eq!(digest.declaration_type, MODEL_INFERRED);
-        assert_eq!(digest.confidence, Some(DEFAULT_CONFIDENCE));
-
-        let mut agent = request("user_correction");
-        agent.confidence = Some("high".into());
-        agent.category = Some(" work_context ".into());
-        let fields = save_fields(&agent, "conversation").unwrap();
-        assert_eq!(fields.category, "work_context");
-        assert_eq!(fields.declaration_type, MODEL_INFERRED);
-        assert_eq!(fields.confidence, Some("high"));
-
-        let mut declared = request("outcome");
-        declared.declared_by = Some("user".into());
-        declared.confidence = Some("low".into());
-        let fields = save_fields(&declared, "conversation").unwrap();
-        assert_eq!(fields.declaration_type, USER_DECLARED);
-        assert_eq!(fields.confidence, None);
-
-        let mut bad = request("manual");
-        bad.category = Some("diary".into());
-        assert_eq!(
-            save_fields(&bad, "global").unwrap_err().code,
-            "invalid_category"
-        );
-        let mut bad = request("manual");
-        bad.confidence = Some("certain".into());
-        assert_eq!(
-            save_fields(&bad, "global").unwrap_err().code,
-            "invalid_confidence"
-        );
-        let mut bad = request("manual");
-        bad.declared_by = Some("robot".into());
-        assert_eq!(
-            save_fields(&bad, "global").unwrap_err().code,
-            "invalid_declared_by"
-        );
-        let mut health = request("manual");
-        health.category = Some("health_context".into());
-        assert_eq!(
-            save_fields(&health, "group").unwrap_err().code,
-            "memory_category_not_shared"
-        );
-    }
-}
+mod tests;

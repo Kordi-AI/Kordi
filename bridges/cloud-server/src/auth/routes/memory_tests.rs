@@ -300,6 +300,7 @@ async fn memory_save_edit_delete_and_forget_all() {
             "scope": "conversation",
             "source": "user_correction",
             "category": "general_preferences",
+            "categories": ["general_preferences"],
             "declarationType": "model-inferred",
         })
     );
@@ -467,12 +468,12 @@ fn capabilities_report_memory_version() {
         password: true,
         oauth_providers: Vec::new(),
         connectors_version: None,
-        memory_version: 3,
+        memory_version: 4,
         common_ground: Default::default(),
         contact_profile_version: CONTACT_PROFILE_VERSION,
         contact_permissions_version: 1,
     })
     .unwrap();
-    assert_eq!(value["memoryVersion"], 3);
+    assert_eq!(value["memoryVersion"], 4);
     assert_eq!(value["contactProfileVersion"], 1);
 }

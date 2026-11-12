@@ -1,6 +1,6 @@
 import type { CloudMemoryImportExtract, CloudMemoryImportExtraction } from '@/features/cloud/cloudMemoryClient';
 import { createAccountMemoryClient } from './accountMemoryClient';
-import { isMemoryCategory, type MemoryCategory } from './memoryCategory';
+import { MAX_MEMORY_CATEGORIES, isMemoryCategory, normalizeMemoryCategories, type MemoryCategory } from './memoryCategory';
 import type { MemoryImportSave } from './memoryImport';
 import type { MemoryOriginSources } from './memoryOrigin';
 import type { MemoryCard } from './memoryOrganizerModel';
@@ -27,6 +27,8 @@ export type MemoryClient = {
   archiveLesson(lessonId: string): Promise<void>;
   /** Changes a memory's category (`memoryVersion` 2). */
   updateMemoryCategory?(lessonId: string, category: MemoryCategory): Promise<MemoryLesson>;
+  /** Replaces a memory's categories with one to three, main one first (`memoryVersion` 4). */
+  updateMemoryCategories?(lessonId: string, categories: readonly MemoryCategory[]): Promise<MemoryLesson>;
   /** Adds a memory to one more Grounding card (`memoryVersion` 3). */
   addMemoryToCard?(lessonId: string, profileId: string): Promise<MemoryLesson>;
   /** Removes a memory from one Grounding card (`memoryVersion` 3). */
@@ -217,7 +219,15 @@ export function createPreviewMemoryClient(options: PreviewMemoryClientOptions = 
     async updateMemoryCategory(lessonId, category) {
       await wait();
       if (!isMemoryCategory(category)) throw new Error('Could not change this memory.');
-      return replaceLesson({ ...findLesson(lessonId), category, updatedAt: new Date(now()).toISOString() });
+      return replaceLesson({ ...findLesson(lessonId), category, categories: [category], updatedAt: new Date(now()).toISOString() });
+    },
+    async updateMemoryCategories(lessonId, categories) {
+      await wait();
+      const known = normalizeMemoryCategories(categories);
+      if (known.length === 0 || known.length !== categories.length || categories.length > MAX_MEMORY_CATEGORIES) {
+        throw new Error('Could not change this memory.');
+      }
+      return replaceLesson({ ...findLesson(lessonId), category: known[0], categories: known, updatedAt: new Date(now()).toISOString() });
     },
     async addMemoryToCard(lessonId, profileId) {
       await wait();
@@ -297,6 +307,11 @@ export function memorySectionAvailable(memoryVersion: number | null | undefined)
 /** Category changes need `memoryVersion` 2. */
 export function memoryCategoriesEditable(memoryVersion: number | null | undefined): boolean {
   return (memoryVersion ?? 0) >= 2 || isPreviewFlag(memoryPreviewFlag());
+}
+
+/** Up to three categories per memory need `memoryVersion` 4; older servers keep one. */
+export function memoryCategoriesMultiEditable(memoryVersion: number | null | undefined): boolean {
+  return (memoryVersion ?? 0) >= 4 || isPreviewFlag(memoryPreviewFlag());
 }
 
 /** Card labels and their controls need `memoryVersion` 3 (several cards per memory). */

@@ -85,15 +85,25 @@ impl MemoryRemote for FakeRemote {
         }
         let n = self.counter.fetch_add(1, Ordering::SeqCst);
         let stamp = format!("2026-10-07T10:00:{:02}+00:00", n % 60);
-        // Like the server: a missing category is the default one, and an
-        // explicit `declaredBy` wins over the source.
+        // Like the server: `categories` wins over `category`, a missing
+        // category is the default one, and an explicit `declaredBy` wins
+        // over the source.
         let declaration_type = match memory.declared_by.as_deref() {
             Some("user") => "user-declared",
             Some(_) => "model-inferred",
             None => kordi_tools::memory_categories::declaration_for_source(&memory.source),
         };
+        let mut categories = if memory.categories.is_empty() {
+            memory.category.into_iter().collect::<Vec<_>>()
+        } else {
+            memory.categories
+        };
+        if categories.is_empty() {
+            categories.push("general_preferences".to_string());
+        }
         let saved = RemoteMemory {
-            category: memory.category.or(Some("general_preferences".to_string())),
+            category: categories.first().cloned(),
+            categories,
             declaration_type: Some(declaration_type.to_string()),
             confidence: memory.confidence,
             memory_id,
@@ -161,6 +171,7 @@ impl Harness {
             scope_id: "/work/acme-app".to_string(),
             source: "user_correction".to_string(),
             lesson: lesson.to_string(),
+            categories: None,
             category: None,
             confidence: None,
         })
@@ -193,14 +204,14 @@ fn parses_lesson_lines_and_scope_header() {
             crate::reflection_runtime::ParsedLessonLine {
                 created_at: "2026-10-01T09:00:00+00:00".to_string(),
                 source: "manual".to_string(),
-                category: None,
+                categories: Vec::new(),
                 declaration_type: "user-declared".to_string(),
                 text: "Use pnpm, not npm.".to_string(),
             },
             crate::reflection_runtime::ParsedLessonLine {
                 created_at: "2026-10-01T09:00:01Z".to_string(),
                 source: "outcome".to_string(),
-                category: None,
+                categories: Vec::new(),
                 declaration_type: "model-inferred".to_string(),
                 text: "Run the visual job serially.".to_string(),
             },

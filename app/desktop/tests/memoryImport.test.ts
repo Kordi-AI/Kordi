@@ -146,3 +146,19 @@ test('the import tree skips the project level for a one-project app and rolls re
   assert.equal(rollUpLabel(claude.files, { '/a/one.md': saved, '/b/two.md': failed }, 'app'), 'Imported 2 memories · Some failed');
   assert.equal(rollUpLabel(claude.files, { '/a/one.md': failed }, 'app'), 'Could not import');
 });
+
+test('import keeps every HCP category through extraction and saving', () => {
+  const memories = parseMemoryImportReply(JSON.stringify({ memories: [
+    { text: 'Prioritizes ethical work.', category: 'general_preferences', categories: ['values_and_ethics', 'work_context', 'values_and_ethics'], scope: 'global' },
+    { text: 'Studies sustainable design.', categories: ['unknown', 'education_learner_profile', 'work_context', 'values_and_ethics', 'health_context'] },
+    { text: 'Uses short replies.', category: 'general_preferences', categories: ['unknown'], scope: 'global' },
+  ] }), [homeFile]);
+  assert.deepEqual(memories.map(({ category, categories }) => ({ category, categories })), [
+    { category: 'values_and_ethics', categories: ['values_and_ethics', 'work_context'] },
+    { category: 'education_learner_profile', categories: ['education_learner_profile', 'work_context', 'values_and_ethics'] },
+    { category: 'general_preferences', categories: ['general_preferences'] },
+  ]);
+  const saves = memoryImportSaves(memories, [homeFile], []);
+  assert.deepEqual(saves.map(({ save }) => save.categories), memories.map((memory) => memory.categories));
+  assert.equal(saves[0].save.category, 'values_and_ethics');
+});

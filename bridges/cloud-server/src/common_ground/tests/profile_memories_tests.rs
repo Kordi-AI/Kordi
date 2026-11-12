@@ -18,6 +18,7 @@ const COORDINATION: &str = "Free on Tuesday mornings";
 const PREFERENCE: &str = "Prefers short replies";
 const GROUP: &str = "The crew ships the Atlas demo on Friday";
 const PINNED: &str = "Reviews papers for the KAUST lab";
+const STUDY: &str = "Runs the sleep study data pipeline";
 
 pub(super) async fn save(app: &axum::Router, token: &str, body: Value) -> String {
     let (status, saved) = send(app, "POST", "/v1/cloud/memory", token, Some(body)).await;
@@ -155,6 +156,10 @@ async fn memories_route_to_profiles_and_builds() {
     save(&app, &token, own(LOCATION, "location_context")).await;
     let coordination = save(&app, &token, own(COORDINATION, "coordination_context")).await;
     save(&app, &token, own(PREFERENCE, "general_preferences")).await;
+    // Several categories reach every card any of them routes to.
+    let mut both = own(STUDY, "work_context");
+    both["categories"] = json!(["work_context", "health_context"]);
+    save(&app, &token, both).await;
     let group_id = group_of(&pool, &alex).await;
     save(
         &app,
@@ -177,11 +182,11 @@ async fn memories_route_to_profiles_and_builds() {
 
     assert_eq!(
         listed(&app, &token, &work).await,
-        pairs(&[(WORK, false), (COORDINATION, true)])
+        pairs(&[(WORK, false), (COORDINATION, true), (STUDY, false)])
     );
     assert_eq!(
         listed(&app, &token, &health).await,
-        pairs(&[(HEALTH, false), (COORDINATION, true)])
+        pairs(&[(HEALTH, false), (COORDINATION, true), (STUDY, false)])
     );
     assert_eq!(
         listed(&app, &token, &daily).await,
@@ -199,12 +204,12 @@ async fn memories_route_to_profiles_and_builds() {
     assert_eq!(status, 404, "{body}");
 
     // Never built: every routed memory counts.
-    assert_eq!(since_build(&app, &token, &work).await, (2, 2));
+    assert_eq!(since_build(&app, &token, &work).await, (3, 3));
 
     let evidence = build(&app, &pool, (&alex, &token), &work).await;
     assert_texts(
         &evidence,
-        &[WORK, COORDINATION],
+        &[WORK, COORDINATION, STUDY],
         &[LOCATION, HEALTH, GROUP, PINNED, PREFERENCE],
     );
     assert_eq!(since_build(&app, &token, &work).await, (0, 0));
@@ -214,7 +219,7 @@ async fn memories_route_to_profiles_and_builds() {
     let evidence = build(&app, &pool, (&alex, &token), &health).await;
     assert_texts(
         &evidence,
-        &[HEALTH, COORDINATION],
+        &[HEALTH, COORDINATION, STUDY],
         &[WORK, LOCATION, GROUP, PINNED, PREFERENCE],
     );
 
@@ -238,7 +243,7 @@ async fn memories_route_to_profiles_and_builds() {
     assert_eq!(status, 200, "{body}");
     assert_eq!(
         listed(&app, &token, &health).await,
-        pairs(&[(HEALTH, false), (COORDINATION, false)])
+        pairs(&[(HEALTH, false), (COORDINATION, false), (STUDY, false)])
     );
     let work_list = listed(&app, &token, &work).await;
     assert!(

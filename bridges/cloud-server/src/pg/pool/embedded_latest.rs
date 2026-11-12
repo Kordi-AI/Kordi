@@ -16,6 +16,11 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
     ),
     migration!(195, "agent plan cards", "0195_agent_plan_cards.sql"),
     migration!(
+        196,
+        "memory categories multi",
+        "0196_memory_categories_multi.sql"
+    ),
+    migration!(
         197,
         "session lookup cache signals",
         "0197_session_lookup_cache_signals.sql"

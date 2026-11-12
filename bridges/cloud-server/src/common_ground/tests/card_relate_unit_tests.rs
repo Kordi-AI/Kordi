@@ -50,13 +50,21 @@ fn related_memories_are_capped() {
 
 #[test]
 fn offered_memories_are_listed_with_their_ids() {
-    let block = user_block(&[Candidate {
-        id: "mem_a".into(),
-        text: "Prefers short replies".into(),
-        category: "general_preferences".into(),
-    }]);
+    let block = user_block(&[
+        Candidate {
+            id: "mem_a".into(),
+            text: "Prefers short replies".into(),
+            categories: vec!["general_preferences".into()],
+        },
+        Candidate {
+            id: "mem_b".into(),
+            text: "Lives near the lab".into(),
+            categories: vec!["location_context".into(), "work_context".into()],
+        },
+    ]);
     assert_eq!(
         block,
-        "\nOther memories:\n[mem_a] general_preferences · Prefers short replies\n"
+        "\nOther memories:\n[mem_a] general_preferences · Prefers short replies\n\
+         [mem_b] location_context, work_context · Lives near the lab\n"
     );
 }

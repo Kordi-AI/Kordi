@@ -97,6 +97,8 @@ tests=(
   apple_token_tests::upgrade_from_184_adds_apple_token_revocations
   profile_mode_tests::upgrade_from_187_adds_profile_field_modes
   read_outbox_tests::upgrade_from_191_backfills_read_watermarks
+  memory_tests::upgrade_from_195_adds_several_categories_per_memory
+  memory_tests::upgrade_after_197_backfills_missing_memory_categories
 )
 index=0
 for test_name in "${tests[@]}"; do
@@ -133,6 +135,9 @@ DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
 # Contact permission tests (docs/contact-permissions.md) use the same fixture.
 DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
   cargo test -p kordi-cloud-server --lib contact_permissions:: -- --test-threads=1
+# Memory category and deduplication regressions must exercise real stored rows.
+DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
+  cargo test -p kordi-cloud-server --lib auth::routes::memory_tests:: -- --test-threads=1
 # Agent avatar tests (docs/avatar-system.md) use the Common ground fixture.
 DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
   cargo test -p kordi-cloud-server --lib avatars::agent_avatar_db_tests:: -- --test-threads=1

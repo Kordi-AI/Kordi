@@ -2,7 +2,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 use std::time::Duration;
 
-const CURRENT_VERSION: i32 = 13;
+const CURRENT_VERSION: i32 = 14;
 pub(crate) const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 const SCHEMA_V1: &str = r#"
@@ -209,6 +209,15 @@ ALTER TABLE reflection_lessons ADD COLUMN declaration_type TEXT;
 ALTER TABLE reflection_lessons ADD COLUMN confidence TEXT;
 "#;
 
+/// Several categories per memory: a JSON array, main category first. The
+/// `category` column keeps the main one for older readers.
+const MIGRATION_V14: &str = r#"
+ALTER TABLE reflection_lessons ADD COLUMN categories TEXT;
+UPDATE reflection_lessons
+SET categories = json_array(TRIM(category))
+WHERE category IS NOT NULL AND TRIM(category) <> '';
+"#;
+
 /// Initialize database schema, applying migrations as needed.
 pub fn init_schema(conn: &Connection) -> Result<()> {
     conn.busy_timeout(SQLITE_BUSY_TIMEOUT)?;
@@ -305,6 +314,11 @@ fn apply_pending_migrations(conn: &Connection) -> Result<()> {
     if current < 13 {
         conn.execute_batch(MIGRATION_V13)?;
         set_version(conn, 13)?;
+    }
+
+    if current < 14 {
+        conn.execute_batch(MIGRATION_V14)?;
+        set_version(conn, 14)?;
     }
 
     Ok(())

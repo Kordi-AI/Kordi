@@ -21,8 +21,13 @@ pub(crate) struct MemoryResponse {
     pub owner_account_id: String,
     /// The owner's display name, when the owner has one.
     pub owner_name: Option<String>,
-    /// The HCP category: what kind of information the memory is.
+    /// The primary HCP category: the first of `categories`.
     pub category: String,
+    /// One to three HCP categories, in the order given: what kind of
+    /// information the memory is.
+    pub categories: Vec<String>,
+    /// `low`, `medium` or `high`: the highest sensitivity of the categories.
+    pub sensitivity: &'static str,
     /// `user-declared` or `model-inferred`.
     pub declaration_type: String,
     /// How sure the agent was, for inferred memories.
@@ -31,12 +36,13 @@ pub(crate) struct MemoryResponse {
     /// when there is exactly one.
     pub profile_id: Option<String>,
     /// The profile kind the memory is filed to: the chosen profile's kind,
-    /// else the category's default (`all` means every fixed-kind profile).
+    /// else the primary category's default (`all` means every fixed-kind
+    /// profile). `profileIds` lists every card the categories reach.
     /// Always null for group memories.
     pub profile_kind: Option<String>,
-    /// The cards the memory feeds, in profile order: the ones its category
-    /// routes to, minus `excluded_profile_ids`, plus the cards the person
-    /// added it to. Empty for group memories.
+    /// The cards the memory feeds, in profile order: the ones any of its
+    /// categories routes to, minus `excluded_profile_ids`, plus the cards
+    /// the person added it to. Empty for group memories.
     pub profile_ids: Vec<String>,
     /// The cards the person removed the memory from.
     pub excluded_profile_ids: Vec<String>,
@@ -81,9 +87,14 @@ pub(crate) struct SaveMemoryRequest {
     pub text: String,
     #[serde(default)]
     pub client_memory_id: Option<String>,
-    /// Missing or empty uses `general_preferences`.
+    /// The legacy single category; ignored when `categories` is sent.
+    /// Missing or empty, with no `categories`, uses `general_preferences`.
     #[serde(default)]
     pub category: Option<String>,
+    /// One to three categories, in order; the first is the primary.
+    /// Repeats are dropped.
+    #[serde(default)]
+    pub categories: Option<Vec<String>>,
     #[serde(default)]
     pub confidence: Option<String>,
     /// `user` or `agent`; overrides the declaration derived from `source`.
@@ -91,9 +102,11 @@ pub(crate) struct SaveMemoryRequest {
     pub declared_by: Option<String>,
 }
 
-/// A memory edit. At least one field must be present. `profileId` replaces
-/// every card choice with that one card (`null` clears every choice);
-/// `addProfileId` and `removeProfileId` change one card.
+/// A memory edit. At least one field must be present. `categories` replaces
+/// every category; the legacy `category` replaces only the primary one and
+/// is ignored when `categories` is sent. `profileId` replaces every card
+/// choice with that one card (`null` clears every choice); `addProfileId`
+/// and `removeProfileId` change one card.
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct UpdateMemoryRequest {
@@ -101,6 +114,8 @@ pub(crate) struct UpdateMemoryRequest {
     pub text: Option<String>,
     #[serde(default)]
     pub category: Option<String>,
+    #[serde(default)]
+    pub categories: Option<Vec<String>>,
     #[serde(default, deserialize_with = "present")]
     pub profile_id: Option<Option<String>>,
     /// Adds the memory to one of the owner's cards.

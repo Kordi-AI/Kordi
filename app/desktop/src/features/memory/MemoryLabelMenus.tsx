@@ -1,16 +1,17 @@
 import { Check, ChevronDown, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
-
-import { memoryCategoryLabel, type MemoryCategory } from './memoryCategory';
+import { memoryCategoriesOf, memoryCategoryLabel, type MemoryCategory } from './memoryCategory';
 import type { MemoryLesson } from './memoryModel';
 import type { MemoryOrigin } from './memoryOrigin';
 import {
   EVERY_CARD,
   addableCards,
   cardLabel,
+  categoryChecklist,
   categoryChoices,
   memoryRowCards,
+  toggleMemoryCategory,
   type MemoryCard,
   type MemoryFilterLayer,
 } from './memoryOrganizerModel';
@@ -55,33 +56,39 @@ export type MemoryLabelsProps = {
   cards: readonly MemoryCard[];
   origin: MemoryOrigin;
   onToggleFilter: (layer: MemoryFilterLayer, value: string) => void;
-  /** The category menu; false shows the category as a plain label. */
+  /** The category menu; false shows the categories as plain labels. */
   categoryEditable: boolean;
+  /** Up to three categories, chosen from a checklist (`memoryVersion` 4); false keeps one, chosen from a list. */
+  multiCategory?: boolean;
   /** Card labels and their controls (`memoryVersion` 3). */
   cardsEnabled: boolean;
   busy: boolean;
   onChangeCategory: (category: MemoryCategory) => void;
+  /** The whole new set of categories after one is ticked or unticked (`multiCategory`). */
+  onChangeCategories?: (categories: MemoryCategory[]) => void;
   onAddCard: (profileId: string) => void;
   onRemoveCard: (profileId: string) => void;
 };
 
-/** The labels under a memory: its category, its cards and where it came from. Each label toggles its filter. */
+/** The labels under a memory: its categories, its cards and where it came from. Each label toggles its filter. */
 export function MemoryLabels({
   lesson,
   cards,
   origin,
   onToggleFilter,
   categoryEditable,
+  multiCategory = false,
   cardsEnabled,
   busy,
   onChangeCategory,
+  onChangeCategories,
   onAddCard,
   onRemoveCard,
 }: MemoryLabelsProps) {
   const [menu, setMenu] = useState<OpenMenu>(null);
   const close = () => setMenu(null);
   const toggleMenu = (next: Exclude<OpenMenu, null>) => setMenu((current) => (current === next ? null : next));
-  const category = lesson.category && memoryCategoryLabel(lesson.category) ? lesson.category : null;
+  const categories = memoryCategoriesOf(lesson);
   const row = cardsEnabled ? memoryRowCards(lesson, cards) : { every: false, cards: [] };
   const addable = cardsEnabled ? addableCards(lesson, cards) : [];
   const filterPart = (layer: MemoryFilterLayer, value: string, label: string) => (
@@ -89,55 +96,77 @@ export function MemoryLabels({
       {label}
     </button>
   );
+  const categoryChip = (category: MemoryCategory, menuButton?: ReactNode) => (
+    <span key={category} data-memory-label="category" data-memory-category={category} className="mo-chip">
+      {filterPart('category', category, memoryCategoryLabel(category) ?? '')}
+      {menuButton}
+    </span>
+  );
 
-  const categoryLabel = category ? (
-    categoryEditable ? (
-      <MenuWrap
-        open={menu === 'category'}
-        onClose={close}
-        trigger={(
-          <span data-memory-label="category" className="mo-chip">
-            {filterPart('category', category, memoryCategoryLabel(category) ?? '')}
-            <button
-              type="button"
-              className="mo-icon"
-              aria-label="Change category"
-              aria-haspopup="menu"
-              aria-expanded={menu === 'category'}
-              disabled={busy}
-              onClick={() => toggleMenu('category')}
-            >
-              <ChevronDown aria-hidden="true" strokeWidth={2.4} />
-            </button>
-          </span>
-        )}
-      >
-        {categoryChoices(lesson).map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            role="menuitemradio"
-            aria-checked={choice === category}
-            onClick={() => {
-              close();
-              if (choice !== category) onChangeCategory(choice);
-            }}
-          >
-            <span className="mo-check">{choice === category ? <Check aria-hidden="true" /> : null}</span>
-            {memoryCategoryLabel(choice)}
-          </button>
-        ))}
-      </MenuWrap>
-    ) : (
-      <span data-memory-label="category" className="mo-chip">
-        {filterPart('category', category, memoryCategoryLabel(category) ?? '')}
-      </span>
-    )
-  ) : null;
+  // Single choice (older servers): pick one category; the menu closes.
+  const radioItems = () => categoryChoices(lesson).map((choice) => (
+    <button
+      key={choice}
+      type="button"
+      role="menuitemradio"
+      aria-checked={choice === categories[0]}
+      onClick={() => {
+        close();
+        if (choice !== categories[0]) onChangeCategory(choice);
+      }}
+    >
+      <span className="mo-check">{choice === categories[0] ? <Check aria-hidden="true" /> : null}</span>
+      {memoryCategoryLabel(choice)}
+    </button>
+  ));
+  // Checklist (`memoryVersion` 4): each tick saves at once and the menu stays open.
+  const checkItems = () => categoryChecklist(lesson).map(({ category, checked, disabled }) => (
+    <button
+      key={category}
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={checked}
+      disabled={disabled || busy}
+      onClick={() => {
+        const next = toggleMemoryCategory(categories, category);
+        if (next) onChangeCategories?.(next);
+      }}
+    >
+      <span className="mo-check">{checked ? <Check aria-hidden="true" /> : null}</span>
+      {memoryCategoryLabel(category)}
+    </button>
+  ));
+
+  const leading = categories.slice(0, -1);
+  const last = categories.length > 0 ? categories[categories.length - 1] : undefined;
+  // The chevron sits on the last category chip and opens the menu for all of them.
+  const lastLabel = last === undefined ? null : categoryEditable ? (
+    <MenuWrap
+      key="category-menu"
+      open={menu === 'category'}
+      onClose={close}
+      trigger={categoryChip(last, (
+        <button
+          type="button"
+          className="mo-icon"
+          aria-label={multiCategory ? 'Change categories' : 'Change category'}
+          aria-haspopup="menu"
+          aria-expanded={menu === 'category'}
+          disabled={busy && menu !== 'category'}
+          onClick={() => toggleMenu('category')}
+        >
+          <ChevronDown aria-hidden="true" strokeWidth={2.4} />
+        </button>
+      ))}
+    >
+      {multiCategory ? checkItems() : radioItems()}
+    </MenuWrap>
+  ) : categoryChip(last);
 
   return (
     <span className="mo-labels" data-memory-labels="">
-      {categoryLabel}
+      {leading.map((category) => categoryChip(category))}
+      {lastLabel}
       {row.every ? (
         <span data-memory-label="every" className="mo-chip is-card">
           {filterPart('card', EVERY_CARD, 'Every card')}

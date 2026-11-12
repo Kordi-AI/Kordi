@@ -22,13 +22,14 @@ fn memory_exists() -> MemoryError {
     )
 }
 
-/// Changes a memory's text, category, or cards. New text passes the same
+/// Changes a memory's text, categories, or cards. New text passes the same
 /// guard as a save and may not repeat another live memory in the same scope
 /// (any member's, for a group); a person's edit makes the memory
-/// user-declared. Group memories keep to the shared categories and have no
-/// cards; a named card must be one of the owner's profiles. Every edit
-/// touches `updated_at` and keeps the legacy `profile_id` column equal to
-/// the one added card, or null.
+/// user-declared. `categories` replaces every category; the legacy
+/// `category` replaces only the primary. Group memories keep to the shared
+/// categories and have no cards; a named card must be one of the owner's
+/// profiles. Every edit touches `updated_at` and keeps the legacy
+/// `profile_id` column equal to the one added card, or null.
 pub(crate) async fn update_memory(
     pool: &PgPool,
     account_id: &str,
@@ -36,6 +37,7 @@ pub(crate) async fn update_memory(
     input: &UpdateMemoryRequest,
 ) -> MemoryResult<MemoryResponse> {
     if input.text.is_none()
+        && input.categories.is_none()
         && input.category.is_none()
         && input.profile_id.is_none()
         && input.add_profile_id.is_none()
@@ -45,20 +47,19 @@ pub(crate) async fn update_memory(
     }
     let (owner, scope, scope_id) =
         authorize_change(pool, account_id, memory_id, Change::Edit).await?;
-    let category = match input.category.as_deref() {
-        Some(category) => Some(routing::check_category(Some(category), false)?),
-        None => None,
-    };
-    if scope == "group" {
-        if category.is_some_and(|category| !routing::category_allowed_in_group(category)) {
-            return Err(routing::category_not_shared());
-        }
-        if input.profile_id.is_some()
+    // Refuse malformed categories before any write; the legacy category is
+    // merged into the stored ones under the row lock below.
+    routing::edited_categories::<&str>(
+        &[],
+        input.categories.as_deref(),
+        input.category.as_deref(),
+    )?;
+    if scope == "group"
+        && (input.profile_id.is_some()
             || input.add_profile_id.is_some()
-            || input.remove_profile_id.is_some()
-        {
-            return Err(routing::profile_not_allowed());
-        }
+            || input.remove_profile_id.is_some())
+    {
+        return Err(routing::profile_not_allowed());
     }
     let card_edit = card_edit(pool, &owner, input).await?;
     let text = match input.text.as_deref() {
@@ -94,10 +95,23 @@ pub(crate) async fn update_memory(
         }
     }
     // The row lock comes after the scope lock, in the order saves take them.
-    let current_category = cards::lock_category(&mut transaction, memory_id).await?;
+    let current = cards::lock_categories(&mut transaction, memory_id).await?;
+    let categories: Option<Vec<String>> = routing::edited_categories(
+        &current,
+        input.categories.as_deref(),
+        input.category.as_deref(),
+    )?
+    .map(|categories| categories.into_iter().map(str::to_owned).collect());
+    if scope == "group"
+        && categories
+            .as_deref()
+            .is_some_and(|categories| !routing::categories_allowed_in_group(categories))
+    {
+        return Err(routing::category_not_shared());
+    }
     if !card_edit.is_empty() {
-        let category = category.unwrap_or(current_category.as_str());
-        cards::apply(&mut transaction, &owner, memory_id, category, &card_edit).await?;
+        let after = categories.as_deref().unwrap_or(&current);
+        cards::apply(&mut transaction, &owner, memory_id, after, &card_edit).await?;
     }
     // A text edit is the person's own words, so it carries no confidence.
     let row: Option<MemoryRow> = query_as(&format!(
@@ -105,7 +119,8 @@ pub(crate) async fn update_memory(
            text = COALESCE($2, text), \
            declaration_type = CASE WHEN $2 IS NULL THEN declaration_type ELSE '{USER_DECLARED}' END, \
            confidence = CASE WHEN $2 IS NULL THEN confidence ELSE NULL END, \
-           category = COALESCE($3, category), \
+           category = COALESCE(($3::text[])[1], category), \
+           categories = COALESCE($3::text[], categories), \
            profile_id = {LEGACY_PIN_SQL}, \
            updated_at = now() \
          WHERE memory_id = $1 AND archived_at IS NULL \
@@ -113,7 +128,7 @@ pub(crate) async fn update_memory(
     ))
     .bind(memory_id)
     .bind(text)
-    .bind(category)
+    .bind(categories)
     .fetch_optional(&mut *transaction)
     .await?;
     transaction.commit().await?;

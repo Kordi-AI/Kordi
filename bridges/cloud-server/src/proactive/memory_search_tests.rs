@@ -17,12 +17,16 @@ fn on() -> MemorySettings {
     }
 }
 
+fn categories(values: &[&str]) -> &'static [String] {
+    Vec::leak(values.iter().map(|value| value.to_string()).collect())
+}
+
 fn memory<'a>(scope: &'a str, scope_id: &'a str, text: &'a str, at: &'a str) -> SearchMemory<'a> {
     SearchMemory {
         scope,
         scope_id,
         text,
-        category: "work_context",
+        categories: categories(&["work_context"]),
         created_at: at,
         updated_at: at,
     }
@@ -53,7 +57,7 @@ fn matches_rank_by_shared_words_then_by_recency() {
         "2026-10-02T00:00:00Z",
     );
     let style = SearchMemory {
-        category: "general_preferences",
+        categories: categories(&["general_preferences", "location_context"]),
         ..memory(
             "global",
             "account",
@@ -78,9 +82,14 @@ fn matches_rank_by_shared_words_then_by_recency() {
         ],
         "three shared words first, then the newest of the ties; no match is left out"
     );
-    // The category counts too: `preferences` finds `general_preferences`.
+    // The categories count too: `preferences` finds `general_preferences`,
+    // and `location` finds the second category, `location_context`.
     assert_eq!(
         texts(&search(&run(true), on(), &all, "preferences", 5)),
+        vec![style.text.to_string()]
+    );
+    assert_eq!(
+        texts(&search(&run(true), on(), &all, "location", 5)),
         vec![style.text.to_string()]
     );
     // A query with no words returns the newest memories.

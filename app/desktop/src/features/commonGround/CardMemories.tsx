@@ -2,7 +2,7 @@ import { useId, useRef, useState } from 'react';
 import { Check, Minus, Plus, Trash2 } from 'lucide-react';
 
 import { AppDialog, AppDialogActions, AppDialogDescription, AppDialogTitle } from '@/components/ui/dialog';
-import { MemoryCategoryChip } from '@/features/memory/MemoryCategoryChip';
+import { MemoryCategoryChips } from '@/features/memory/MemoryCategoryChip';
 import { lessonDateLabel } from '@/features/memory/memoryModel';
 import { CgButton } from './parts';
 import { cardChoices, type CgCardChoice } from './storeMemories';
@@ -77,7 +77,7 @@ export function CardMemories({ memories, profiles, profileId, cardsEnabled = fal
               <span className="cg-mem-text">
                 <span className="cg-mem-title">{memory.text}</span>
                 <span className="cg-mem-sub">
-                  <MemoryCategoryChip category={memory.category} className="ml-0" />
+                  <MemoryCategoryChips memory={memory} className="ml-0" />
                   {date ? <span>{date}</span> : null}
                   {memory.everyProfile ? <span>· Every card</span> : null}
                 </span>
