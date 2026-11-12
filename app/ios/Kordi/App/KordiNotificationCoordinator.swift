@@ -307,6 +307,9 @@ final class KordiNotificationCoordinator: ObservableObject {
         guard payload.accountID == model?.account?.accountId else {
             return []
         }
+        // A message push reaches the app only in the foreground or when tapped: the
+        // payload has no content-available flag. Either way, catch up now.
+        model?.catchUpAfterPush()
         if model?.isMessageNotificationFromBlockedAccount(payload) == true { return [] }
         if model?.isMessageNotificationRead(payload) == true {
             scheduleNotificationCleanup()
@@ -327,6 +330,8 @@ final class KordiNotificationCoordinator: ObservableObject {
     }
 
     func handleNotificationResponse(_ notification: UNNotification) {
+        if let payload = KordiMessageNotificationPayload(notification.request.content.userInfo),
+           payload.accountID == model?.account?.accountId { model?.catchUpAfterPush() }
         pendingNotificationPayload = notification.request.content.userInfo
         routePendingNotificationIfPossible()
     }

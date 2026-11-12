@@ -5,6 +5,7 @@ import { ChatSyncState } from './chatSyncState';
 import { applyChatSyncCursorEvent, chatSyncCursorEventTouches } from './chatSyncReadReceipts';
 import { ACCOUNT_HINT_EVENT_TYPES } from './accountHintEvents';
 import { requireCloudSessionVisibility } from './cloudSessionListClient';
+import { chatSyncCursorExpired } from './cloudSyncCursorProgress';
 import type { ChatSyncBootstrapResponse, ChatSyncConversation, ChatSyncEvent, ChatSyncMessage, ChatSyncPreferences, ChatSyncSyncResponse } from './chatSyncTypes';
 
 export class ChatSyncSyncClient {
@@ -60,7 +61,7 @@ export class ChatSyncSyncClient {
         'Could not sync reliable chat changes.',
       );
     } catch (error) {
-      if (this.state.errorStatus(error) === 409) {
+      if (chatSyncCursorExpired(error, this.state.errorStatus(error))) {
         return this.syncCloudEvents(token, '0', limit);
       }
       throw error;

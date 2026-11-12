@@ -37,8 +37,9 @@ use crate::auth::oauth::{
     redirect_with_oauth_error_code, targets_public_server, OAuthProfile, OAuthProvider,
 };
 use crate::auth::password::{
-    hash_password, validate_email, validate_password_strength, verify_password, EmailFormatError,
-    PasswordHasherConfig, PasswordPolicyError, PASSWORD_ALGORITHM_ID,
+    hash_password_queued, validate_email, validate_password_strength, verify_password_queued,
+    EmailFormatError, PasswordHasherConfig, PasswordPolicyError, PasswordWorkError,
+    PASSWORD_ALGORITHM_ID,
 };
 use crate::auth::rate_limit::{
     CloudRateLimiter, RateLimitDecision, APP_AUTHORIZE_ADDRESS_LIMIT, APP_INVITATION_CREATE_LIMIT,
