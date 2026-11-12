@@ -3,6 +3,7 @@
 use super::http_stub::HttpStub;
 use super::service_fixture::{connect_service, service_runtime, stored_events, unique_number};
 use super::*;
+use crate::connectors::providers::github;
 use crate::connectors::{digest_input, polling, refresh, ConnectorHooks};
 
 /// Connects GitHub for a new account; the access token is `gh-<label>`.
@@ -193,6 +194,101 @@ async fn a_401_refreshes_once_and_retries() {
     )
     .await;
     assert!(matches!(again, Err(providers::ProviderError::Unauthorized)));
+}
+
+/// Stores an expired credential so the next poll must refresh first.
+async fn expire_secret(pool: &PgPool, connector_id: &str, refresh_token: &str) {
+    let sealed = broker::seal_secret(
+        &TestCipher,
+        &ConnectorSecret {
+            access_token: "expired-access".into(),
+            refresh_token: Some(refresh_token.into()),
+            expires_at: Some(Utc::now() - ChronoDuration::minutes(5)),
+        },
+    )
+    .unwrap();
+    store::write_secret(pool, connector_id, &sealed)
+        .await
+        .unwrap();
+}
+
+async fn connector_status(pool: &PgPool, connector_id: &str) -> String {
+    let (status,): (String,) =
+        query_as("SELECT status FROM cloud_connectors WHERE connector_id = $1")
+            .bind(connector_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    status
+}
+
+#[tokio::test]
+async fn polling_marks_a_token_from_another_client_for_reconnect() {
+    let Some(pool) = pool().await else { return };
+    let _turn = super::sweep_tests::POLL_LOCK.lock().await;
+    let stub = HttpStub::start().await;
+    let (runtime, _owner, connector_id) = connect_github(&pool, &stub, "moved_client").await;
+    query("UPDATE cloud_connectors SET last_polled_at = now() WHERE connector_id <> $1")
+        .bind(&connector_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    expire_secret(&pool, &connector_id, "old-client-refresh").await;
+    stub.respond_status(
+        "POST",
+        "/token",
+        401,
+        json!({ "error": "unauthorized_client", "error_description": "Unauthorized" }),
+    );
+    let report = polling::poll_due_connectors(&pool, &runtime, Utc::now())
+        .await
+        .unwrap();
+    // Other tests' connectors may share the sweep, so at least this one.
+    assert!(report.failed >= 1, "{report:?}");
+    assert_eq!(connector_status(&pool, &connector_id).await, "needs_reauth");
+
+    // A connector that needs a new sign-in is no longer polled.
+    query("UPDATE cloud_connectors SET last_polled_at = NULL WHERE connector_id = $1")
+        .bind(&connector_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let refreshes_before = stub.requests_to("POST", "/token").len();
+    polling::poll_due_connectors(&pool, &runtime, Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(stub.requests_to("POST", "/token").len(), refreshes_before);
+}
+
+#[tokio::test]
+async fn polling_skips_a_provider_without_a_client() {
+    let Some(pool) = pool().await else { return };
+    if std::env::var_os("KORDI_CONNECTOR_GITHUB_CLIENT_ID").is_some() {
+        return;
+    }
+    let _turn = super::sweep_tests::POLL_LOCK.lock().await;
+    let stub = HttpStub::start().await;
+    let (_, _owner, connector_id) = connect_github(&pool, &stub, "no_client").await;
+    query("UPDATE cloud_connectors SET last_polled_at = now() WHERE connector_id <> $1")
+        .bind(&connector_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    expire_secret(&pool, &connector_id, "gh-refresh").await;
+    // The same provider, but this server has no GitHub OAuth client.
+    let mut registry = ProviderRegistry::default();
+    registry.insert(Arc::new(github::provider(
+        reqwest::Client::new(),
+        Some(stub.base.clone()),
+    )));
+    let unconfigured = ConnectorRuntime::new(Some(Arc::new(TestCipher)), registry);
+    let refreshes_before = stub.requests_to("POST", "/token").len();
+    let report = polling::poll_due_connectors(&pool, &unconfigured, Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(report.failed, 0, "{report:?}");
+    assert_eq!(connector_status(&pool, &connector_id).await, "connected");
+    assert_eq!(stub.requests_to("POST", "/token").len(), refreshes_before);
 }
 
 #[tokio::test]
