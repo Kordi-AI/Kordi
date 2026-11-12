@@ -1,8 +1,8 @@
 // Sample Grounding cards and chat names for the preview memory client. The card rule follows the
-// server (#2035): a memory's cards are the ones its category routes to, minus the cards the person
+// server (#2035): a memory's cards are the ones its categories route to, minus the cards the person
 // removed it from, plus the cards they added it to. Group memories have no cards.
 
-import type { MemoryCategory } from './memoryCategory';
+import { memoryCategoriesOf, type MemoryCategory } from './memoryCategory';
 import type { MemoryLesson } from './memoryModel';
 import type { MemoryOriginSources } from './memoryOrigin';
 import type { MemoryCard } from './memoryOrganizerModel';
@@ -44,7 +44,7 @@ export function createPreviewCardRouting() {
   /** The lesson with its effective cards. */
   const route = (lesson: MemoryLesson): MemoryLesson => {
     if (lesson.scope === 'group') return { ...lesson, profileIds: [], excludedProfileIds: [] };
-    const kinds = (lesson.category && ROUTES[lesson.category]) || [];
+    const kinds = memoryCategoriesOf(lesson).flatMap((category) => ROUTES[category] ?? []);
     const plus = added.get(lesson.lessonId) ?? new Set<string>();
     const minus = removed.get(lesson.lessonId) ?? new Set<string>();
     const profileIds = PREVIEW_CARDS

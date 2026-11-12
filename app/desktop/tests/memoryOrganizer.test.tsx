@@ -13,13 +13,17 @@ import {
   NO_FILTERS,
   addableCards,
   cardLabel,
+  categoryChecklist,
+  filterCounts,
   matchesFilters,
   memoryChangeErrorMessage,
   memoryRowCards,
   rowKeys,
   toggleFilter,
+  toggleMemoryCategory,
   type MemoryCard,
 } from '../src/features/memory/memoryOrganizerModel';
+import { memoryCategoriesOf, normalizeMemoryCategories, type MemoryCategory } from '../src/features/memory/memoryCategory';
 import { PREVIEW_VIEWER_ACCOUNT_ID } from '../src/features/memory/memoryClient';
 
 import { withJsdomRoot } from './helpers/mountWithJsdom';
@@ -267,4 +271,176 @@ test('account memory client: cards and origin names load only for a signed-in ac
   assert.equal(memoryChangeErrorMessage(failure('profile_not_found', 404)), 'That card no longer exists.');
   assert.equal(memoryChangeErrorMessage(failure('memory_profile_not_found', 404)), 'This memory is not on that card.');
   assert.equal(memoryChangeErrorMessage(failure('something_else', 500)), 'server text');
+});
+
+test('memory categories: categories fall back to the single category, drop unknown ones and repeats, and stop at three', () => {
+  assert.deepEqual(normalizeMemoryCategories(undefined, 'work_context'), ['work_context']);
+  assert.deepEqual(normalizeMemoryCategories([], 'work_context'), ['work_context']);
+  assert.deepEqual(normalizeMemoryCategories(['values_and_ethics', 'work_context'], 'values_and_ethics'), ['values_and_ethics', 'work_context']);
+  assert.deepEqual(normalizeMemoryCategories(['something_new', 'work_context', 'work_context']), ['work_context']);
+  assert.deepEqual(normalizeMemoryCategories(['work_context', 'health_context', 'goals_and_constraints', 'values_and_ethics']), ['work_context', 'health_context', 'goals_and_constraints']);
+  assert.deepEqual(normalizeMemoryCategories(undefined, 'something_new'), []);
+  assert.deepEqual(memoryCategoriesOf(lesson('a')), []);
+  assert.deepEqual(memoryCategoriesOf(lesson('a', { category: 'health_context' })), ['health_context']);
+});
+
+test('organizer model: the checklist keeps one to three categories and new ones go last', () => {
+  const state = (categories: MemoryCategory[], scope: MemoryLesson['scope'] = 'global') => Object.fromEntries(
+    categoryChecklist(lesson('a', { scope, category: categories[0], categories })).map((choice) => [choice.category, [choice.checked, choice.disabled]]),
+  );
+  // The only category cannot be unticked; the others can be ticked.
+  let one = state(['work_context']);
+  assert.deepEqual(one.work_context, [true, true]);
+  assert.deepEqual(one.values_and_ethics, [false, false]);
+  // With three, the unticked ones are disabled and the ticked ones can be unticked.
+  one = state(['work_context', 'values_and_ethics', 'health_context']);
+  assert.deepEqual(one.work_context, [true, false]);
+  assert.deepEqual(one.goals_and_constraints, [false, true]);
+  // Group memories offer only the shared categories.
+  assert.deepEqual(Object.keys(state(['work_context'], 'group')), [
+    'general_preferences', 'goals_and_constraints', 'education_learner_profile', 'work_context', 'coordination_context', 'hcp-custom:task_lessons',
+  ]);
+  assert.deepEqual(toggleMemoryCategory(['work_context'], 'values_and_ethics'), ['work_context', 'values_and_ethics']);
+  assert.deepEqual(toggleMemoryCategory(['work_context', 'values_and_ethics'], 'work_context'), ['values_and_ethics']);
+  assert.equal(toggleMemoryCategory(['work_context'], 'work_context'), null);
+  assert.equal(toggleMemoryCategory(['work_context', 'values_and_ethics', 'health_context'], 'goals_and_constraints'), null);
+});
+
+test('organizer model: a memory counts toward and matches every one of its categories', () => {
+  const both = rowKeys(lesson('a', { category: 'values_and_ethics', categories: ['values_and_ethics', 'work_context'] }), cards, 'global', true);
+  const work = rowKeys(lesson('b', { category: 'work_context' }), cards, 'global', true);
+  assert.deepEqual(both.category, ['values_and_ethics', 'work_context']);
+  const counts = filterCounts([both, work]);
+  assert.equal(counts.category.get('work_context'), 2);
+  assert.equal(counts.category.get('values_and_ethics'), 1);
+  assert.equal(matchesFilters(both, toggleFilter(NO_FILTERS, 'category', 'work_context')), true);
+  assert.equal(matchesFilters(both, toggleFilter(NO_FILTERS, 'category', 'values_and_ethics')), true);
+  assert.equal(matchesFilters(work, toggleFilter(NO_FILTERS, 'category', 'values_and_ethics')), false);
+  // Schedule as a second category still reaches every card.
+  assert.equal(memoryRowCards(lesson('c', { category: 'work_context', categories: ['work_context', 'coordination_context'], profileIds: ['w', 'h', 'd'] }), cards).every, true);
+});
+
+type CategoryCalls = Array<[string, string, MemoryCategory | readonly MemoryCategory[]]>;
+
+function categorySpyingClient(): { client: MemoryClient; calls: CategoryCalls } {
+  const client = createPreviewMemoryClient({ latencyMs: 0 });
+  const calls: CategoryCalls = [];
+  const single = client.updateMemoryCategory!.bind(client);
+  const multiple = client.updateMemoryCategories!.bind(client);
+  client.updateMemoryCategory = async (lessonId, category) => {
+    calls.push(['updateMemoryCategory', lessonId, category]);
+    return single(lessonId, category);
+  };
+  client.updateMemoryCategories = async (lessonId, categories) => {
+    calls.push(['updateMemoryCategories', lessonId, [...categories]]);
+    return multiple(lessonId, categories);
+  };
+  return { client, calls };
+}
+
+const menuItems = (host: ParentNode, id: string) => [...(row(host, id)?.querySelectorAll('[role="menu"] button') ?? [])] as HTMLButtonElement[];
+const menuItem = (host: ParentNode, id: string, label: string) => menuItems(host, id).find((item) => item.textContent === label);
+const status = (host: ParentNode) => host.querySelector('[data-memory-organizer] > [aria-live="polite"]')?.textContent;
+
+test('settings organizer: with memoryVersion 4 a row shows every category and the checklist saves each tick, staying open', async () => {
+  const { client, calls } = categorySpyingClient();
+  await withOrganizer(client, 4, async (host) => {
+    const chevrons = () => [...(row(host, 'lesson-1')?.querySelectorAll('[data-memory-label="category"] .mo-icon') ?? [])];
+    assert.equal(host.querySelector('[aria-label="Change category"]'), null);
+    assert.equal(chevrons()[0]?.getAttribute('aria-label'), 'Change categories');
+    await click(chevrons()[0]);
+    assert.ok(menuItems(host, 'lesson-1').every((item) => item.getAttribute('role') === 'menuitemcheckbox'));
+    // The only category cannot be unticked.
+    assert.equal(menuItem(host, 'lesson-1', 'Preference')?.getAttribute('aria-checked'), 'true');
+    assert.equal(menuItem(host, 'lesson-1', 'Preference')?.disabled, true);
+    assert.equal(menuItem(host, 'lesson-1', 'Work')?.disabled, false);
+    assert.doesNotMatch(host.textContent ?? '', /primary/i);
+
+    await click(menuItem(host, 'lesson-1', 'Work'));
+    assert.deepEqual(labels(host, 'lesson-1', 'category'), ['Preference', 'Work']);
+    assert.deepEqual(labels(host, 'lesson-1', 'card'), ['Work card']);
+    assert.equal(status(host), 'Categories set to Preference, Work.');
+    // One chevron, on the last category chip; the menu stays open.
+    assert.equal(chevrons().length, 1);
+    assert.equal(chevrons()[0].closest('[data-memory-label="category"]')?.getAttribute('data-memory-category'), 'work_context');
+    assert.ok(row(host, 'lesson-1')?.querySelector('[role="menu"]'));
+    assert.equal(menuItem(host, 'lesson-1', 'Preference')?.disabled, false);
+
+    await click(menuItem(host, 'lesson-1', 'Goal'));
+    assert.deepEqual(labels(host, 'lesson-1', 'category'), ['Preference', 'Work', 'Goal']);
+    assert.equal(status(host), 'Categories set to Preference, Work, Goal.');
+    // With three chosen the others are disabled.
+    assert.equal(menuItem(host, 'lesson-1', 'Health')?.disabled, true);
+    assert.equal(menuItem(host, 'lesson-1', 'Goal')?.disabled, false);
+    // The row counts toward every category filter.
+    assert.equal(filterChip(host, 'category', 'Goal')?.querySelector('.mo-count')?.textContent, '2');
+
+    await click(menuItem(host, 'lesson-1', 'Preference'));
+    await click(menuItem(host, 'lesson-1', 'Goal'));
+    assert.deepEqual(labels(host, 'lesson-1', 'category'), ['Work']);
+    assert.equal(status(host), 'Category set to Work.');
+    assert.equal(menuItem(host, 'lesson-1', 'Work')?.disabled, true);
+    await click(menuItem(host, 'lesson-1', 'Work'));
+
+    assert.deepEqual(calls, [
+      ['updateMemoryCategories', 'lesson-1', ['general_preferences', 'work_context']],
+      ['updateMemoryCategories', 'lesson-1', ['general_preferences', 'work_context', 'goals_and_constraints']],
+      ['updateMemoryCategories', 'lesson-1', ['work_context', 'goals_and_constraints']],
+      ['updateMemoryCategories', 'lesson-1', ['work_context']],
+    ]);
+
+    // Group memories the viewer saved offer only the shared categories.
+    await click(row(host, 'lesson-7')?.querySelector('[aria-label="Change categories"]'));
+    const groupChoices = menuItems(host, 'lesson-7').map((item) => item.textContent);
+    assert.ok(groupChoices.includes('Schedule'));
+    assert.equal(groupChoices.includes('Health'), false);
+    assert.equal(groupChoices.includes('Values'), false);
+  });
+});
+
+test('settings organizer: before memoryVersion 4 the category menu keeps a single choice', async () => {
+  const { client, calls } = categorySpyingClient();
+  await withOrganizer(client, 3, async (host) => {
+    assert.equal(host.querySelector('[aria-label="Change categories"]'), null);
+    await click(row(host, 'lesson-1')?.querySelector('[aria-label="Change category"]'));
+    assert.ok(menuItems(host, 'lesson-1').every((item) => item.getAttribute('role') === 'menuitemradio'));
+    await click(menuItem(host, 'lesson-1', 'Work'));
+    assert.equal(row(host, 'lesson-1')?.querySelector('[role="menu"]'), null);
+    assert.deepEqual(labels(host, 'lesson-1', 'category'), ['Work']);
+    assert.deepEqual(calls, [['updateMemoryCategory', 'lesson-1', 'work_context']]);
+  });
+});
+
+test('account memory client: reads every category and replaces them with one PATCH', async () => {
+  const calls: unknown[][] = [];
+  const wire = (patch: Record<string, unknown>) => ({
+    memoryId: 'mem-1', scope: 'global', scopeId: 'account', scopeLabel: null, source: 'outcome', text: 'No tobacco projects.', createdAt: at, updatedAt: at, ...patch,
+  });
+  const routes = {
+    list: async () => ({
+      memories: [
+        wire({ category: 'values_and_ethics', categories: ['values_and_ethics', 'work_context'], sensitivity: 'personal' }),
+        wire({ memoryId: 'mem-2', category: 'health_context' }),
+      ],
+      settings: { memoryEnabled: true, excludeSensitive: true },
+    }),
+    patch: async (token: string, memoryId: string, patch: unknown) => {
+      calls.push([token, memoryId, patch]);
+      return wire({ memoryId, category: 'work_context', categories: ['work_context', 'goals_and_constraints'] });
+    },
+  } as unknown as AccountMemoryRoutes;
+  const client = createAccountMemoryClient({
+    authClient: {} as AccountMemoryAuthClient,
+    memoryRoutes: routes,
+    loadSession: async () => ({ token: 'tok', accountId: 'acct', expiresAt: '2099-01-01T00:00:00Z' }),
+    desktop: { isNativeShell: () => false } as never,
+  });
+  const [first, second] = await client.listLessons();
+  assert.equal(first.category, 'values_and_ethics');
+  assert.deepEqual(memoryCategoriesOf(first), ['values_and_ethics', 'work_context']);
+  assert.equal('sensitivity' in first, false);
+  assert.deepEqual(memoryCategoriesOf(second), ['health_context']);
+  const changed = await client.updateMemoryCategories!('mem-1', ['work_context', 'goals_and_constraints']);
+  assert.deepEqual(calls, [['tok', 'mem-1', { categories: ['work_context', 'goals_and_constraints'] }]]);
+  assert.deepEqual(memoryCategoriesOf(changed), ['work_context', 'goals_and_constraints']);
 });

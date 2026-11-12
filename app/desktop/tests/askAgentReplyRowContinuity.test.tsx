@@ -133,6 +133,11 @@ function installDom() {
 }
 
 let ChatSessionPane: typeof import('../src/pages/chatsPage.sessionPane').ChatSessionPane;
+test.beforeEach((context) => {
+  // Recorded events must not age while the full suite imports and renders the pane.
+  context.mock.timers.enable({ apis: ['Date'], now: sentAtMs + 5_000 });
+});
+
 test.before(async () => {
   installDom();
   ({ ChatSessionPane } = await import('../src/pages/chatsPage.sessionPane'));

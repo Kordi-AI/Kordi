@@ -5,7 +5,7 @@ import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import type { CloudMemory } from '../src/features/cloud/cloudMemoryClient';
-import { memoryRoutingAvailable } from '../src/features/cloud/memoryCapability';
+import { memoryCategoriesMultiSupported, memoryRoutingAvailable } from '../src/features/cloud/memoryCapability';
 import { CardMemories } from '../src/features/commonGround/CardMemories';
 import { CardScreen } from '../src/features/commonGround/CardScreen';
 import { routedMemoryOf } from '../src/features/commonGround/client';
@@ -38,6 +38,9 @@ test('memory routing: available from memoryVersion 2', () => {
   assert.equal(memoryRoutingAvailable({ memoryVersion: 1 }), false);
   assert.equal(memoryRoutingAvailable({ memoryVersion: 2 }), true);
   assert.equal(memoryRoutingAvailable({ memoryVersion: 3 }), true);
+  assert.equal(memoryCategoriesMultiSupported({ memoryVersion: 3 }), false);
+  assert.equal(memoryCategoriesMultiSupported({ memoryVersion: 4 }), true);
+  assert.equal(memoryCategoriesMultiSupported(null), false);
 });
 
 const at = '2026-10-01T00:00:00.000Z';
@@ -232,4 +235,23 @@ test('card page: the new-memories line shows with routing and a count, never at 
   assert.match(render(true, 1), /<span data-cg-new-memories=""> · 1 new memory<\/span>/);
   assert.doesNotMatch(render(true, 0), /data-cg-new-memories/);
   assert.doesNotMatch(render(false, 4), /data-cg-new-memories/);
+});
+
+test('memory chips: every category of a memory shows, in order, on Memory rows and card pages', async () => {
+  const html = renderToStaticMarkup(createElement(MemoryList, {
+    client: createPreviewMemoryClient({ latencyMs: 0 }),
+    lessons: [lesson('a', { category: 'values_and_ethics', categories: ['values_and_ethics', 'work_context'] })],
+    onLessonsChange: () => undefined,
+    emptyLabel: 'No memories yet.',
+  }));
+  assert.deepEqual([...html.matchAll(/data-memory-category="([^"]+)"/g)].map((match) => match[1]), ['values_and_ethics', 'work_context']);
+
+  const parsed = routedMemoryOf({ memoryId: 'm9', text: 'No tobacco projects.', category: 'values_and_ethics', categories: ['values_and_ethics', 'work_context'], profileIds: ['cgp_work'] });
+  assert.deepEqual(parsed.categories, ['values_and_ethics', 'work_context']);
+  assert.equal('categories' in routedMemoryOf({ memoryId: 'm8', category: 'work_context' }), false);
+  const card = renderToStaticMarkup(createElement(CardMemories, {
+    memories: [parsed, memories[0]], profiles, profileId: 'cgp_work',
+    onAddToCard: () => undefined, onRemoveFromCard: () => undefined, onDelete: () => undefined,
+  }));
+  assert.deepEqual([...card.matchAll(/data-memory-category="([^"]+)"/g)].map((match) => match[1]), ['values_and_ethics', 'work_context', 'work_context']);
 });

@@ -1,9 +1,9 @@
-// Settings › Memory organizer: the labels of each memory row (category, cards, origin) and the
+// Settings › Memory organizer: the labels of each memory row (categories, cards, origin) and the
 // filters built from them. Within a layer any chosen label matches; across layers all must match.
 
 import { CloudAuthError } from '@/features/cloud/cloudAuthError';
 
-import { MEMORY_CATEGORIES, memoryCategoryLabel, type MemoryCategory } from './memoryCategory';
+import { MAX_MEMORY_CATEGORIES, MEMORY_CATEGORIES, memoryCategoriesOf, type MemoryCategory } from './memoryCategory';
 import { isOwnMemory, type MemoryLesson } from './memoryModel';
 
 /** One of the owner's Grounding profiles, shown as a card label. */
@@ -35,7 +35,7 @@ export function memoryRowCards(lesson: MemoryLesson, cards: readonly MemoryCard[
   const on = new Set(lesson.profileIds);
   const listed = cards.filter((card) => on.has(card.profileId));
   const fixed = cards.filter((card) => FIXED_KINDS.has(card.kind));
-  const every = lesson.category === EVERY_CARD_CATEGORY && fixed.length > 0 && fixed.every((card) => on.has(card.profileId));
+  const every = memoryCategoriesOf(lesson).includes(EVERY_CARD_CATEGORY) && fixed.length > 0 && fixed.every((card) => on.has(card.profileId));
   return { every, cards: every ? listed.filter((card) => !FIXED_KINDS.has(card.kind)) : listed };
 }
 
@@ -55,6 +55,27 @@ export function canChangeCategory(lesson: MemoryLesson, viewerAccountId: string 
 /** The categories the category menu offers; group memories cannot use the private ones. */
 export function categoryChoices(lesson: Pick<MemoryLesson, 'scope'>): MemoryCategory[] {
   return lesson.scope === 'group' ? MEMORY_CATEGORIES.filter((category) => !PRIVATE_CATEGORIES.has(category)) : [...MEMORY_CATEGORIES];
+}
+
+export type MemoryCategoryChoice = { category: MemoryCategory; checked: boolean; disabled: boolean };
+
+/**
+ * The category checklist (`memoryVersion` 4): every choice with its check. The only chosen category
+ * cannot be unticked, and with three chosen the others cannot be ticked.
+ */
+export function categoryChecklist(lesson: Pick<MemoryLesson, 'scope' | 'category' | 'categories'>): MemoryCategoryChoice[] {
+  const chosen = memoryCategoriesOf(lesson);
+  return categoryChoices(lesson).map((category) => {
+    const checked = chosen.includes(category);
+    const disabled = checked ? chosen.length <= 1 : chosen.length >= MAX_MEMORY_CATEGORIES;
+    return { category, checked, disabled };
+  });
+}
+
+/** The categories after ticking or unticking one, in order (a new one goes last); null when the rules forbid it. */
+export function toggleMemoryCategory(current: readonly MemoryCategory[], category: MemoryCategory): MemoryCategory[] | null {
+  if (current.includes(category)) return current.length <= 1 ? null : current.filter((entry) => entry !== category);
+  return current.length >= MAX_MEMORY_CATEGORIES ? null : [...current, category];
 }
 
 export type MemoryFilterLayer = 'card' | 'category' | 'from';
@@ -80,7 +101,7 @@ export function rowKeys(lesson: MemoryLesson, cards: readonly MemoryCard[], orig
   const row = withCards ? memoryRowCards(lesson, cards) : { every: false, cards: [] };
   return {
     card: [...(row.every ? [EVERY_CARD] : []), ...row.cards.map((card) => card.profileId)],
-    category: memoryCategoryLabel(lesson.category) && lesson.category ? [lesson.category] : [],
+    category: memoryCategoriesOf(lesson),
     from: [originKey],
   };
 }

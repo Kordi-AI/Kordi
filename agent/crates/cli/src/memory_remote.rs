@@ -47,7 +47,7 @@ pub use allowed_scopes::{AllowedMemoryScopes, set_allowed_memory_scopes};
 pub(crate) use allowed_scopes::{check_memory_scope, project_scope_id_for_cwd};
 
 use kordi_tools::memory_categories::{
-    DEFAULT_MEMORY_CATEGORY, USER_DECLARED, declaration_for_source, is_memory_category,
+    DEFAULT_MEMORY_CATEGORY, USER_DECLARED, declaration_for_source,
 };
 
 use crate::reflection_runtime::{
@@ -142,7 +142,7 @@ pub(crate) fn import_unlisted_artifact_lines(
                 created_at: Some(line.created_at),
                 updated_at: None,
                 owner_account_id: None,
-                category: line.category,
+                categories: line.categories,
                 declaration_type: Some(line.declaration_type),
                 confidence: None,
             },
@@ -232,6 +232,10 @@ fn remote_rows(artifacts_dir: &Path, memories: Vec<RemoteMemory>) -> Vec<NewRefl
             }
             let artifact_path =
                 reflection_lesson_artifact_path(artifacts_dir, &memory.scope, &memory.scope_id);
+            let mut categories = memory.memory_categories();
+            if categories.is_empty() {
+                categories.push(DEFAULT_MEMORY_CATEGORY.to_string());
+            }
             Some(NewReflectionLesson {
                 scope,
                 scope_id: memory.scope_id,
@@ -251,12 +255,7 @@ fn remote_rows(artifacts_dir: &Path, memories: Vec<RemoteMemory>) -> Vec<NewRefl
                         .filter(|value| !value.trim().is_empty())
                         .unwrap_or_else(|| declaration_for_source(&memory.source).to_string()),
                 ),
-                category: Some(
-                    memory
-                        .category
-                        .filter(|category| is_memory_category(category))
-                        .unwrap_or_else(|| DEFAULT_MEMORY_CATEGORY.to_string()),
-                ),
+                categories,
                 confidence: memory.confidence,
             })
         })
@@ -354,10 +353,11 @@ pub async fn sync_memories_with_remote(
             source: row.source.as_str().to_string(),
             text,
             client_memory_id: Some(row.lesson_id.clone()),
-            category: row.category.clone(),
             confidence: row.confidence.clone(),
             declared_by: Some(declared_by_for(lesson_declaration(&row)).to_string()),
-        };
+            ..NewRemoteMemory::default()
+        }
+        .with_categories(row.categories.clone());
         match remote.save(request).await {
             Ok(memory) => {
                 let conn = conn.lock().await;

@@ -27,6 +27,7 @@ export default defineConfig({
     reducedMotion: 'reduce',
   },
   projects: [
+    { name: 'webkit-memory', testMatch: '**/memoryCategories.spec.ts', use: { ...devices['Desktop Safari'] } },
     { name: 'webkit-forwarded-content', testMatch: '**/forwardedContent.spec.ts', use: { ...devices['Desktop Safari'] } },
     { name: 'webkit-document-tabs', testMatch: '**/companionDocuments.spec.ts', use: { ...devices['Desktop Safari'] } },
     { name: 'webkit-text-selection', testMatch: '**/textSelection.spec.ts', use: { ...devices['Desktop Safari'] } },

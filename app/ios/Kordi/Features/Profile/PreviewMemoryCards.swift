@@ -1,7 +1,7 @@
 import Foundation
 
 /// Card choices for `--preview-data`, following the server's rules (#2035):
-/// a memory's cards are the cards its category routes to, minus the ones the
+/// a memory's cards are the cards its categories route to, minus the ones the
 /// person removed it from, plus the ones the person added it to.
 struct PreviewMemoryCards {
     static let samples = [
@@ -26,6 +26,11 @@ struct PreviewMemoryCards {
         }
     }
 
+    /// Whether any of a memory's categories routes to the card kind.
+    static func routed(_ memory: CloudMemory, kind: String) -> Bool {
+        memory.allCategories.contains { routed(category: $0, kind: kind) }
+    }
+
     /// The memory with its `profileIds` and `excludedProfileIds` filled in.
     func filled(_ memory: CloudMemory) -> CloudMemory {
         var memory = memory
@@ -36,7 +41,7 @@ struct PreviewMemoryCards {
         }
         let added = added[memory.memoryId] ?? [], removed = removed[memory.memoryId] ?? []
         memory.profileIds = cards.filter {
-            added.contains($0.profileId) || (!removed.contains($0.profileId) && Self.routed(category: memory.category, kind: $0.kind))
+            added.contains($0.profileId) || (!removed.contains($0.profileId) && Self.routed(memory, kind: $0.kind))
         }.map(\.profileId)
         memory.excludedProfileIds = cards.filter { removed.contains($0.profileId) }.map(\.profileId)
         return memory
@@ -58,7 +63,7 @@ struct PreviewMemoryCards {
                 throw CloudAPIError(code: "memory_profile_not_found", message: "This memory is not on that card.", statusCode: 404)
             }
             if added[id]?.remove(card) == nil { removed[id, default: []].insert(card) }
-            if let kind = cards.first(where: { $0.profileId == card })?.kind, Self.routed(category: memory.category, kind: kind) {
+            if let kind = cards.first(where: { $0.profileId == card })?.kind, Self.routed(memory, kind: kind) {
                 removed[id, default: []].insert(card)
             }
         }

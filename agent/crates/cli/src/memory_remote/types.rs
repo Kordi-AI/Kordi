@@ -27,8 +27,16 @@ pub struct RemoteMemory {
     /// That account's display name, when it has one.
     #[serde(default)]
     pub owner_name: Option<String>,
+    /// The main category; equals `categories[0]` on servers that send both.
     #[serde(default)]
     pub category: Option<String>,
+    /// 1 to 3 categories, main one first. Older servers send only
+    /// `category`; read both through [`RemoteMemory::memory_categories`].
+    #[serde(default)]
+    pub categories: Vec<String>,
+    /// `low`, `medium` or `high`, derived by the server from the categories.
+    #[serde(default)]
+    pub sensitivity: Option<String>,
     #[serde(default)]
     pub declaration_type: Option<String>,
     #[serde(default)]
@@ -37,6 +45,18 @@ pub struct RemoteMemory {
     pub profile_id: Option<String>,
     #[serde(default)]
     pub profile_kind: Option<String>,
+}
+
+impl RemoteMemory {
+    /// The known categories, main one first: `categories`, else the single
+    /// `category` an older server sends. Empty when neither names a known
+    /// category.
+    pub fn memory_categories(&self) -> Vec<String> {
+        kordi_tools::memory_categories::stored_memory_categories(
+            &self.categories,
+            self.category.as_deref(),
+        )
+    }
 }
 
 /// Body of `POST /v1/cloud/memory`.
@@ -51,13 +71,29 @@ pub struct NewRemoteMemory {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_memory_id: Option<String>,
+    /// The main category, sent next to `categories` so an older server that
+    /// reads only this field still files the memory. Set both through
+    /// [`NewRemoteMemory::with_categories`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
+    /// 1 to 3 categories, main one first; wins over `category` on servers
+    /// that read it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<String>,
     /// `user` or `agent`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_by: Option<String>,
+}
+
+impl NewRemoteMemory {
+    /// Set `categories` and `category` (the first of them) together.
+    pub fn with_categories(mut self, categories: Vec<String>) -> Self {
+        self.category = categories.first().cloned();
+        self.categories = categories;
+        self
+    }
 }
 
 /// Account memory switches as the server returns them.

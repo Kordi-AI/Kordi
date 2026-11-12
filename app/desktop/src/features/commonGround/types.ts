@@ -146,6 +146,8 @@ export type CgRoutedMemory = {
   memoryId: string;
   text: string;
   category: string | null;
+  /** Every category, main one first (`memoryVersion` 4); older servers send only `category`. */
+  categories?: string[];
   updatedAt: string;
   profileId: string | null;
   /** The cards the memory feeds, in profile order (`memoryVersion` 3); empty from older servers. */
