@@ -10,7 +10,7 @@ import { LobbyScreen } from './LobbyScreen';
 import { MatchScreen } from './MatchScreen';
 import { NearbyPersonScreen } from './NearbyPersonScreen';
 import { NearbyScreen } from './NearbyScreen';
-import { CgNotice, CgProgress } from './parts';
+import { CgNotice, CgProgress, CgSignedInAccount } from './parts';
 import { PersonScreen } from './PersonScreen';
 import { ResultsScreen } from './ResultsScreen';
 import { currentProfile, hasAnyCard, type CommonGroundStore } from './store';
@@ -20,6 +20,14 @@ import { WalletShell } from './WalletShell';
 
 /** Common ground in the Contacts detail pane. Navigation lives in the store. */
 export function CommonGroundPage({ store, host }: { store: CommonGroundStore; host: CgHost }) {
+  return (
+    <CgSignedInAccount account={host.self}>
+      <CommonGroundPageBody store={store} host={host} />
+    </CgSignedInAccount>
+  );
+}
+
+function CommonGroundPageBody({ store, host }: { store: CommonGroundStore; host: CgHost }) {
   const state = useCommonGround(store);
   const tour = useHelpTourLocation();
   const demo = Boolean(tour?.groundingScreen && state.loaded && state.owner && !state.owner.card);

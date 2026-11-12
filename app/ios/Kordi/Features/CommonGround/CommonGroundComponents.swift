@@ -28,7 +28,30 @@ struct CommonGroundSection<Content: View>: View {
     }
 }
 
+private struct CommonGroundSignedInKey: EnvironmentKey {
+    static let defaultValue: CommonGroundPerson? = nil
+}
+
+extension EnvironmentValues {
+    /// The signed-in account, set once at the Common ground root. Avatars drawn for this
+    /// account use its own photo instead of a copy inside a server list.
+    var commonGroundSignedIn: CommonGroundPerson? {
+        get { self[CommonGroundSignedInKey.self] }
+        set { self[CommonGroundSignedInKey.self] = newValue }
+    }
+}
+
+private extension CommonGroundPerson {
+    /// Own avatar for the signed-in account when it has one; everyone else is unchanged.
+    func avatarSource(signedIn: CommonGroundPerson?) -> String? {
+        guard let signedIn, signedIn.accountId == accountId,
+              let own = signedIn.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !own.isEmpty else { return avatarUrl }
+        return own
+    }
+}
+
 struct CommonGroundAvatar: View {
+    @Environment(\.commonGroundSignedIn) private var signedIn
     let person: CommonGroundPerson
     var size: CGFloat = 40
     /// Opaque backing and a ring, for avatars that overlap.
@@ -36,7 +59,7 @@ struct CommonGroundAvatar: View {
 
     var body: some View {
         let shape = Circle()
-        IdentityAvatar(name: person.displayName, imageSource: person.avatarUrl, kind: .person, size: size, seed: person.accountId)
+        IdentityAvatar(name: person.displayName, imageSource: person.avatarSource(signedIn: signedIn), kind: .person, size: size, seed: person.accountId)
             .clipShape(shape)
             .background(Color(uiColor: .systemBackground), in: shape)
             .overlay { if ringed { shape.stroke(Color(uiColor: .systemBackground), lineWidth: 3) } }
@@ -45,6 +68,7 @@ struct CommonGroundAvatar: View {
 
 /// The room's would-be group: member avatars as circles in a grid.
 struct CommonGroundStack: View {
+    @Environment(\.commonGroundSignedIn) private var signedIn
     let people: [CommonGroundPerson]
     var size: CGFloat = 36
 
@@ -57,7 +81,7 @@ struct CommonGroundStack: View {
             ForEach(0..<((shown.count + columns - 1) / columns), id: \.self) { row in
                 HStack(spacing: gap) {
                     ForEach(shown[(row * columns)..<min(shown.count, row * columns + columns)]) { person in
-                        IdentityAvatar(name: person.displayName, imageSource: person.avatarUrl, kind: .person, size: tile, seed: person.accountId)
+                        IdentityAvatar(name: person.displayName, imageSource: person.avatarSource(signedIn: signedIn), kind: .person, size: tile, seed: person.accountId)
                             .clipShape(Circle())
                     }
                 }

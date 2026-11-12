@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { CgAvatar, CgAvatarGrid } from '../src/features/commonGround/parts';
+import { CgAvatar, CgAvatarGrid, CgSignedInAccount } from '../src/features/commonGround/parts';
 import { ResultsScreen } from '../src/features/commonGround/ResultsScreen';
 import { CommonGroundStore } from '../src/features/commonGround/store';
 import type { CgHost } from '../src/features/commonGround/host';
@@ -63,4 +63,28 @@ test('visual fixture identities use stable canonical avatars instead of uploaded
   for (const member of [light.self, ...light.room.members]) {
     assert.match(canonicalAvatarImageUrl(member.avatarUrl) ?? '', new RegExp(`boring-marble-v1/${member.accountId}\\.png`));
   }
+});
+
+test('the signed-in account avatar replaces its own entry only, and only inside the provider', () => {
+  const account = { accountId: 'acct_me', avatarUrl: 'https://images.example.test/me-now.png' };
+  const people = [
+    { ...person('acct_me'), avatarUrl: null },
+    { ...person('acct_hana'), avatarUrl: 'https://images.example.test/hana.png' },
+    person('acct_ravi'),
+  ];
+  const wrapped = renderToStaticMarkup(createElement(CgSignedInAccount, { account }, createElement(CgAvatarGrid, { people, size: 72 })));
+  assert.match(wrapped, /me-now\.png/);
+  assert.match(wrapped, /hana\.png/);
+  assert.match(wrapped, /boring-marble-v1\/acct_ravi\.png/);
+  assert.doesNotMatch(wrapped, /boring-marble-v1\/acct_me\.png/);
+  const single = renderToStaticMarkup(createElement(CgSignedInAccount, { account }, createElement(CgAvatar, { person: { ...person('acct_me'), avatarUrl: 'https://images.example.test/old.png' }, size: 40 })));
+  assert.match(single, /me-now\.png/);
+  assert.doesNotMatch(single, /old\.png/);
+  const other = renderToStaticMarkup(createElement(CgSignedInAccount, { account }, createElement(CgAvatar, { person: person('acct_ravi'), size: 40 })));
+  assert.match(other, /boring-marble-v1\/acct_ravi\.png/);
+  const bare = renderToStaticMarkup(createElement(CgAvatarGrid, { people, size: 72 }));
+  assert.doesNotMatch(bare, /me-now\.png/);
+  assert.match(bare, /boring-marble-v1\/acct_me\.png/);
+  const noPhoto = renderToStaticMarkup(createElement(CgSignedInAccount, { account: { accountId: 'acct_me', avatarUrl: null } }, createElement(CgAvatarGrid, { people, size: 72 })));
+  assert.match(noPhoto, /boring-marble-v1\/acct_me\.png/);
 });

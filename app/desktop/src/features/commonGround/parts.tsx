@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { ChevronLeft } from 'lucide-react';
 
 import { ErrorLine } from '@/components/ui/ErrorLine';
@@ -12,7 +12,21 @@ import type { CgPerson, CgUnreadLink } from './types';
 
 type AvatarPerson = Pick<CgPerson, 'accountId' | 'name' | 'avatarUrl'>;
 
+type SignedInAccount = { accountId: string; avatarUrl: string | null };
+
+const SignedInAccountContext = createContext<SignedInAccount | null>(null);
+
+/** Names the signed-in account so its own avatar wins over any older copy inside a server list. */
+export function CgSignedInAccount({ account, children }: { account: SignedInAccount; children: ReactNode }) {
+  return <SignedInAccountContext.Provider value={account}>{children}</SignedInAccountContext.Provider>;
+}
+
+function ownAvatarUrl(account: SignedInAccount | null, person: AvatarPerson) {
+  return account?.avatarUrl && account.accountId === person.accountId ? account.avatarUrl : person.avatarUrl;
+}
+
 export function CgAvatar({ person, size, ring = false, isSelf = false }: { person: AvatarPerson; size: number; ring?: boolean; isSelf?: boolean }) {
+  const account = useContext(SignedInAccountContext);
   return (
     <span className={cn('cg-avatar', ring && 'is-ring')} style={{ width: size, height: size }}>
       <IdentityAvatar
@@ -20,7 +34,7 @@ export function CgAvatar({ person, size, ring = false, isSelf = false }: { perso
         seed={person.accountId}
         isSelf={isSelf}
         name={person.name}
-        imageUrl={person.avatarUrl}
+        imageUrl={ownAvatarUrl(account, person)}
         cornerRadius="50%"
         className="h-full w-full"
       />
@@ -30,10 +44,11 @@ export function CgAvatar({ person, size, ring = false, isSelf = false }: { perso
 
 /** Use the same square member collage as the main conversation and Contacts lists. */
 export function CgAvatarGrid({ people, size }: { people: AvatarPerson[]; size: number }) {
+  const account = useContext(SignedInAccountContext);
   return (
     <span className="cg-avatar-grid" style={{ width: size, height: size }} aria-hidden="true">
       <GroupAvatar
-        avatars={people.map((person) => ({ kind: 'human', seed: person.accountId, imageUrl: person.avatarUrl }))}
+        avatars={people.map((person) => ({ kind: 'human', seed: person.accountId, imageUrl: ownAvatarUrl(account, person) }))}
         className="h-full w-full"
       />
     </span>
