@@ -1,8 +1,29 @@
 //! The background workers the server starts once its state exists.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use super::ServerState;
+
+impl ServerState {
+    /// Starts this replica's notification listener (chat wakes, session
+    /// signals, and collaboration rooms) and waits up to `within` for it to
+    /// listen; returns whether it is listening. [`super::run`] starts it with
+    /// the other workers. Tests that serve a router with open sockets start
+    /// it themselves, since sign-out reaches those sockets through it.
+    pub async fn start_notification_listener(&self, database_url: &str, within: Duration) -> bool {
+        crate::chat_sync::realtime::spawn_wake_listener(
+            database_url.to_string(),
+            self.chat_sync_wakes().clone(),
+            self.session_signals().clone(),
+            self.document_rooms().clone(),
+        );
+        let mut status = self.chat_sync_wakes().listener_status();
+        tokio::time::timeout(within, status.wait_for(|status| status.connected))
+            .await
+            .is_ok_and(|listening| listening.is_ok())
+    }
+}
 
 /// Starts every periodic worker: realtime wakes, support tickets, abuse
 /// report notices and retention, scheduled

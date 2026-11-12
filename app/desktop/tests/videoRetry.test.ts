@@ -17,5 +17,5 @@ test('direct video retry restarts native transfer and surfaces terminal failure'
     conversationId: 'conversation-1',
     messageId: 'message-1',
   });
-  assert.equal(failure.detail, 'Video source is unavailable.');
+  assert.equal(failure?.detail, 'Video source is unavailable.');
 });

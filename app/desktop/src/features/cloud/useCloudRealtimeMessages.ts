@@ -21,20 +21,22 @@ import type {
 import {
   loadSession,
 } from './session';
+import { createReconnectLoop } from './reconnectLoop';
 import { loadChatSyncCursor } from '@/lib/desktopChatSync';
 
 type SyncCloudCollaborationDiff =
   CloudMessageSyncController['syncCloudCollaborationDiff'];
 
-export const CLOUD_REALTIME_RECONNECT_INITIAL_MS = 1_000;
-export const CLOUD_REALTIME_RECONNECT_MAX_MS = 15_000;
+/** How long a liveness heartbeat sent on wake or reconnect waits for its ack. */
+export const CLOUD_REALTIME_PROBE_ACK_MS = 10_000;
+const HEARTBEAT_ACK_MS = 45_000;
 
-export function cloudRealtimeReconnectDelayMs(attempt: number): number {
-  const safeAttempt = Math.max(0, Math.floor(attempt));
-  return Math.min(
-    CLOUD_REALTIME_RECONNECT_INITIAL_MS * (2 ** safeAttempt),
-    CLOUD_REALTIME_RECONNECT_MAX_MS,
-  );
+/**
+ * The position a heartbeat reports: what the local store applied, but never
+ * past the last event this socket delivered, which the server refuses.
+ */
+export function realtimeHeartbeatAppliedSeq(appliedSeq: number, receivedSeq: number): number {
+  return Math.min(appliedSeq, receivedSeq);
 }
 
 export function realtimeCallSyncEvent(event: ChatSyncEvent | undefined): CloudSyncEvent | null {
@@ -112,14 +114,13 @@ export function useCloudRealtimeMessages({
     // frequently change callback identities; refs keep the socket stable.
     if (!cloudRealtimeWebSocketEnabled()) return;
     let ws: WebSocket | null = null;
-    let cancelled = false;
-    let reconnectAttempt = 0;
-    let reconnectTimer: number | null = null;
+    let helloReceived = false;
     let heartbeatTimer: number | null = null;
     let heartbeatDeadlineTimer: number | null = null;
     let initialHeartbeatTimer: number | null = null;
     let heartbeatAwaitingAck = false;
     let lastAppliedSeq = 0;
+    let receivedSeq = 0;
     const accountIdAtOpen = accountId;
     setRealtimeConnected(false);
 
@@ -133,7 +134,7 @@ export function useCloudRealtimeMessages({
       heartbeatAwaitingAck = false;
     };
 
-    const sendHeartbeat = (socket: WebSocket) => {
+    const sendHeartbeat = (socket: WebSocket, ackWithinMs = HEARTBEAT_ACK_MS) => {
       if (socket.readyState !== WebSocket.OPEN) return;
       if (heartbeatAwaitingAck) {
         socket.close();
@@ -142,38 +143,43 @@ export function useCloudRealtimeMessages({
       heartbeatAwaitingAck = true;
       socket.send(JSON.stringify({
         type: 'heartbeat',
-        last_applied_seq: lastAppliedSeq,
+        last_applied_seq: realtimeHeartbeatAppliedSeq(lastAppliedSeq, receivedSeq),
       }));
-      heartbeatDeadlineTimer = window.setTimeout(() => socket.close(), 45_000);
+      heartbeatDeadlineTimer = window.setTimeout(() => socket.close(), ackWithinMs);
     };
 
-    const scheduleReconnect = () => {
-      if (cancelled || reconnectTimer !== null) return;
-      const delay = cloudRealtimeReconnectDelayMs(reconnectAttempt);
-      reconnectAttempt += 1;
-      reconnectTimer = window.setTimeout(() => {
-        reconnectTimer = null;
-        void open();
-      }, delay);
-    };
-
-    const open = async () => {
-      try {
+    const loop = createReconnectLoop({
+      setTimer: (callback, ms) => window.setTimeout(callback, ms),
+      clearTimer: (timer) => window.clearTimeout(timer as number),
+      onError: (error) => reportWarning('[cloud-collaboration-ws] connection failed', error),
+      // Back from sleep or offline, an open-looking socket may be dead: ask for an ack now.
+      onResume: () => {
+        if (ws && helloReceived && !heartbeatAwaitingAck) sendHeartbeat(ws, CLOUD_REALTIME_PROBE_ACK_MS);
+      },
+      connect: async (attempt) => {
         const session = await loadSession();
-        if (!session?.token || session.accountId !== accountIdAtOpen || cancelled) return;
+        if (!attempt.current) return;
+        if (!session?.token || session.accountId !== accountIdAtOpen) {
+          attempt.idle();
+          return;
+        }
+        // Catch up from the saved cursor first; a failure waits for the next attempt.
         await syncCloudCollaborationDiffRef.current();
         const local = await loadChatSyncCursor(accountIdAtOpen);
-        if (!local?.cursor || cancelled) {
+        if (!attempt.current) return;
+        if (!local?.cursor) {
           throw new Error('Reliable chat cursor is unavailable after bootstrap.');
         }
         lastAppliedSeq = local.lastStreamSeq;
+        receivedSeq = local.lastStreamSeq;
         const realtime = await client.issueChatSyncRealtimeTicket(session.token);
-        if (cancelled) return;
+        if (!attempt.current) return;
         const socket = new WebSocket(chatSyncWebSocketUrl(realtime.ticket));
         ws = socket;
+        helloReceived = false;
         socket.onopen = () => {
-          if (cancelled || ws !== socket) return;
-          reconnectAttempt = 0;
+          if (ws !== socket) return;
+          attempt.opened();
           socket.send(JSON.stringify({
             type: 'connect',
             protocol_version: 2,
@@ -182,7 +188,7 @@ export function useCloudRealtimeMessages({
           }));
         };
         socket.onmessage = (event) => {
-          if (cancelled || ws !== socket) return;
+          if (ws !== socket) return;
           try {
             const frame = JSON.parse(typeof event.data === 'string' ? event.data : '') as {
               type?: string;
@@ -191,6 +197,7 @@ export function useCloudRealtimeMessages({
               event?: ChatSyncEvent;
             };
             if (frame.type === 'hello') {
+              helloReceived = true;
               setRealtimeConnected(true);
               const interval = Math.max(5_000, frame.heartbeat_interval_ms ?? 30_000);
               clearHeartbeatTimers();
@@ -208,17 +215,20 @@ export function useCloudRealtimeMessages({
               return;
             }
             if (frame.type === 'resync_required') {
+              // The catch-up decides: it resumes from the cursor and reloads only
+              // when the server says the cursor expired.
               setRealtimeConnected(false);
               void syncCloudCollaborationDiffRef.current().catch(() => {}).finally(() => socket.close());
               return;
             }
             if (frame.type !== 'event' || typeof frame.stream_seq !== 'number') return;
+            receivedSeq = Math.max(receivedSeq, frame.stream_seq);
             const callEvent = realtimeCallSyncEvent(frame.event);
             if (callEvent) publishCloudCallEvents([callEvent], accountIdAtOpen);
             void syncCloudCollaborationDiffRef.current()
               .then(async () => {
                 const applied = await loadChatSyncCursor(accountIdAtOpen);
-                if (applied) lastAppliedSeq = applied.lastStreamSeq;
+                if (applied) lastAppliedSeq = Math.max(lastAppliedSeq, applied.lastStreamSeq);
               })
               .catch(() => socket.close());
           } catch (error) {
@@ -229,37 +239,28 @@ export function useCloudRealtimeMessages({
           }
         };
         socket.onclose = () => {
-          if (cancelled || ws !== socket) return;
+          if (ws !== socket) return;
           setRealtimeConnected(false);
           ws = null;
+          helloReceived = false;
           clearHeartbeatTimers();
-          scheduleReconnect();
+          attempt.closed();
         };
         socket.onerror = () => {
-          if (cancelled || ws !== socket) return;
+          if (ws !== socket) return;
           setRealtimeConnected(false);
           socket.close();
         };
-      } catch (error) {
-        if (!cancelled) {
-          reportWarning(
-            '[cloud-collaboration-ws] connection failed',
-            error,
-          );
-          scheduleReconnect();
-        }
-      }
-    };
-    void open();
+      },
+    });
+    loop.start();
     return () => {
-      cancelled = true;
+      loop.stop();
       setRealtimeConnected(false);
-      if (reconnectTimer !== null) {
-        window.clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
       clearHeartbeatTimers();
-      ws?.close();
+      const socket = ws;
+      ws = null;
+      socket?.close();
     };
   }, [accountId, client, reportWarning, setRealtimeConnected]);
 }

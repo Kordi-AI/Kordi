@@ -24,6 +24,7 @@ mod admission_state;
 mod logging;
 mod rate_limiter;
 mod readiness;
+mod realtime_tickets;
 mod workers;
 
 pub struct ServerState {
@@ -33,6 +34,7 @@ pub struct ServerState {
     events: EventBus,
     chat_sync_wakes: Arc<crate::chat_sync::realtime::ChatSyncWakeHub>,
     session_signals: Arc<crate::auth::session_signals::SessionSignalHub>,
+    realtime_tickets: crate::chat_sync::realtime::TicketAdmission,
     s3: Option<S3Config>,
     release_store: Option<ReleaseCatalogStore>,
     support: Option<SupportService>,
@@ -55,6 +57,7 @@ impl ServerState {
             events,
             chat_sync_wakes: crate::chat_sync::realtime::ChatSyncWakeHub::new(),
             session_signals: crate::auth::session_signals::SessionSignalHub::new(),
+            realtime_tickets: crate::chat_sync::realtime::TicketAdmission::from_env(),
             s3: None,
             release_store: None,
             support: None,

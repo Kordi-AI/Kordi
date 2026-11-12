@@ -90,14 +90,10 @@ pub(super) async fn add_password_to_existing_account(
         verification_code,
     } = request;
     let pool = state.db_pool();
-    let password_hash = match tokio::task::spawn_blocking({
-        let plaintext = password.to_string();
-        move || hash_password(&plaintext, hasher_config)
-    })
-    .await
-    {
-        Ok(Ok(hash)) => hash,
-        _ => {
+    let password_hash = match hash_password_queued(password.to_string(), hasher_config).await {
+        Ok(hash) => hash,
+        Err(PasswordWorkError::Busy) => return password_busy_response(),
+        Err(PasswordWorkError::Failed) => {
             return err(
                 "server_error",
                 "Could not hash password.",

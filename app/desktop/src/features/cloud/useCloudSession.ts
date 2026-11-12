@@ -12,8 +12,6 @@ import {
   CloudAuthClient,
   CloudAuthError,
   cloudApiBaseUrl,
-  cloudRealtimeWebSocketEnabled,
-  cloudWebSocketUrl,
   defaultCloudAuthClient,
   parseCloudOAuthHashResult,
   type CloudAccount,
@@ -26,6 +24,7 @@ import {
 import type { AppSignInResult } from './appSignIn/appSignInClient';
 import { useCloudBrowserSignInSession, useCloudSessionKeepAlive, type CloudBrowserSignInSession } from './appSignIn/cloudBrowserSignInSession';
 import { carryCloudAccountEmailVerification, cloudAccountsEqual } from './cloudAccountState';
+import { openCloudEventSocket } from './cloudEventSocket';
 import { endCloudSessionIfRejected } from './cloudSessionRejection';
 import { isCloudOAuthCancelled } from './cloudOAuthCancellation';
 import { startCloudOAuthSignIn } from './cloudOAuthSignIn';
@@ -209,38 +208,20 @@ export function useCloudSession({
   }, [account?.accountId, authClient, enabled, setAuthenticated, status]);
 
   useEffect(() => {
-    if (!enabled || status !== 'authenticated' || !account?.accountId || typeof WebSocket === 'undefined' || !cloudRealtimeWebSocketEnabled()) return;
+    if (!enabled || status !== 'authenticated' || !account?.accountId) return;
     let cancelled = false;
-    let ws: WebSocket | null = null;
-
-    void loadSession()
-      .then((stored) => {
-        if (cancelled || !stored?.token) return;
-        ws = new WebSocket(cloudWebSocketUrl(stored.token));
-        ws.onmessage = (event) => {
-          try {
-            const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
-            const subject = typeof frame?.subject === 'string' ? frame.subject : '';
-            if (!shouldRefreshCloudSessionProfileForWsSubject(subject, account.accountId)) return;
-            void authClient.me(stored.token).then((next) => {
-              if (!cancelled && next.accountId === account.accountId) setAuthenticated(next);
-            }).catch(() => undefined);
-          } catch {
-            // Ignore malformed frames. The polling fallback will repair stale profile state.
-          }
-        };
-        ws.onclose = () => {
-          if (ws) ws = null;
-        };
-        ws.onerror = () => {
-          ws?.close();
-        };
-      })
-      .catch(() => undefined);
-
+    // Malformed frames are ignored; the profile poll repairs stale state.
+    const socket = openCloudEventSocket({
+      onFrame: ({ subject }, token) => {
+        if (!shouldRefreshCloudSessionProfileForWsSubject(subject, account.accountId)) return;
+        void authClient.me(token).then((next) => {
+          if (!cancelled && next.accountId === account.accountId) setAuthenticated(next);
+        }).catch(() => undefined);
+      },
+    });
     return () => {
       cancelled = true;
-      ws?.close();
+      socket?.close();
     };
   }, [account?.accountId, authClient, enabled, setAuthenticated, status]);
 

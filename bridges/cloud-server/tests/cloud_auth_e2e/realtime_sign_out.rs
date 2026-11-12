@@ -1,6 +1,7 @@
 //! Open v1 gateway and v2 realtime sockets over a loopback listener, sign
 //! one session out over HTTP, and check that only that session's sockets
-//! close.
+//! close. Sign-out reaches both kinds of socket as a session signal through
+//! the notification listener; their backstop rechecks run only every ~30 s.
 
 use super::*;
 
@@ -16,7 +17,8 @@ type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 /// Synthetic cursor secret for this test process only.
 const TEST_CURSOR_SECRET: &str = "realtime-sign-out-test-cursor-secret-0123456789";
-/// Sockets re-check their session every 2 seconds; allow scheduling slack.
+/// A session signal arrives within milliseconds; allow scheduling slack.
+/// This is well below the ~30 s backstop recheck, so only the signal passes.
 const CLOSE_DEADLINE: Duration = Duration::from_secs(6);
 
 async fn serve(router: axum::Router) -> SocketAddr {
@@ -119,6 +121,13 @@ async fn signing_out_closes_that_sessions_v1_and_v2_sockets() {
     let Some(pool) = try_pool().await else { return };
     std::env::set_var("KORDI_CHAT_SYNC_CURSOR_SECRET", TEST_CURSOR_SECRET);
     let state = Arc::new(signup_email_fixture::state(pool));
+    let database_url = std::env::var("DATABASE_URL").unwrap();
+    assert!(
+        state
+            .start_notification_listener(&database_url, Duration::from_secs(10))
+            .await,
+        "the notification listener connects"
+    );
     let router = router_with_rate_limiter(
         state,
         CloudRateLimiter::memory(CloudRateLimitConfig::production()).with_budget_overrides(
@@ -157,7 +166,7 @@ async fn signing_out_closes_that_sessions_v1_and_v2_sockets() {
         "the v2 realtime socket must close after its session signs out"
     );
 
-    // Another revalidation cycle passes without closing the other session.
+    // A while later the other session's sockets are still open.
     let (control_v1_closed, control_v2_closed) = tokio::join!(
         wait_for_close(&mut control_v1, Duration::from_millis(2_500)),
         wait_for_close(&mut control_v2, Duration::from_millis(2_500)),
