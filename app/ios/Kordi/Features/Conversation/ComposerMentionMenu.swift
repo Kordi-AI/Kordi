@@ -364,49 +364,59 @@ struct ComposerMentionPicker: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(ComposerMentionMenuSection.allCases) { section in
                     let sectionItems = items.filter { $0.section == section }
                     if !sectionItems.isEmpty {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(section == .contacts ? peopleTitle : section.title)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 12)
-                            ForEach(sectionItems) { item in
-                                Button { onSelect(item) } label: {
-                                    HStack(spacing: 10) {
-                                        itemIcon(item)
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            Text(item.label)
-                                                .font(.subheadline.weight(.semibold))
-                                                .foregroundStyle(.primary)
-                                                .lineLimit(1)
-                                            Text(item.detail(for: currentAccountID))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                        Spacer(minLength: 8)
-                                    }
-                                    .frame(minHeight: 44)
-                                    .padding(.horizontal, 12)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityLabel(item.accessibilityLabel(for: currentAccountID))
-                                .accessibilityHint(item.kind == .pickFile
-                                    ? "Opens the Files picker"
-                                    : "Adds this item to the message")
+                        Text(section == .contacts ? peopleTitle : section.title)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 2)
+                            .accessibilityAddTraits(.isHeader)
+                        ForEach(sectionItems) { item in
+                            itemRow(item)
+                            if item.id != sectionItems.last?.id {
+                                Divider().opacity(0.55).padding(.leading, 46)
                             }
                         }
                     }
                 }
             }
-            .padding(.vertical, 10)
+            .padding(.top, 4)
         }
         .scrollIndicators(items.count > 5 ? .visible : .hidden)
+    }
+
+    private func itemRow(_ item: ComposerMentionMenuItem) -> some View {
+        Button { onSelect(item) } label: {
+            HStack(spacing: 8) {
+                itemIcon(item)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(item.label)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if item.section != .contacts {
+                        Text(item.detail(for: currentAccountID))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 2)
+            .frame(minHeight: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(item.accessibilityLabel(for: currentAccountID))
+        .accessibilityHint(item.kind == .pickFile
+            ? "Opens the Files picker"
+            : "Adds this item to the message")
     }
 
     @ViewBuilder
@@ -416,14 +426,14 @@ struct ComposerMentionPicker: View {
                 name: target.displayName,
                 imageSource: target.avatarSource,
                 kind: target.kind == .agent ? .agent : .person,
-                size: 30,
+                size: 26,
                 seed: target.agentId ?? target.accountId
             )
         } else {
             Image(systemName: systemImage(for: item))
                 .font(.body.weight(.medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
+                .frame(width: 26, height: 26)
                 .accessibilityHidden(true)
         }
     }
@@ -435,4 +445,39 @@ struct ComposerMentionPicker: View {
         case .target: "person.2"
         }
     }
+}
+
+/// A restrained blur lets the conversation remain visible behind suggestions.
+struct ComposerMentionPanelSurface: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+                if reduceTransparency {
+                    shape.fill(Color(uiColor: .secondarySystemBackground))
+                } else {
+                    ComposerMentionBackdropBlur()
+                        .clipShape(shape)
+                }
+            }
+            .clipShape(.rect(cornerRadius: 20))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(.white.opacity(colorScheme == .dark ? 0.16 : 0.45), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.08), radius: 12, y: 3)
+    }
+}
+
+private struct ComposerMentionBackdropBlur: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        let view = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: UIVisualEffectView, context: Context) {}
 }

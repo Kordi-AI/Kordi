@@ -1304,6 +1304,43 @@ struct ConversationView: View {
         .onChange(of: messages.last?.id) { _, _ in synchronizeReadPresentation() }
         .onChange(of: hasRevealedInitialViewport) { _, _ in
             synchronizeReadPresentation()
+            #if DEBUG
+            if model.isPreviewMode, hasRevealedInitialViewport, draft.isEmpty {
+                let arguments = ProcessInfo.processInfo.arguments
+                if arguments.contains("--preview-composer-mentions") {
+                    draft = "@"
+                    isComposerFocused = true
+                } else if arguments.contains("--preview-composer-stop") {
+                    draft = "Please include the accessibility review."
+                    isComposerFocused = true
+                }
+            }
+            #endif
+        }
+        .task(id: hasRevealedInitialViewport) {
+            #if DEBUG
+            guard model.isPreviewMode, hasRevealedInitialViewport,
+                  ProcessInfo.processInfo.arguments.contains("--preview-composer-typing") else { return }
+            // Drive the real composer with synthetic text for the local motion preview.
+            do {
+                try await Task.sleep(for: .seconds(1))
+                isComposerFocused = true
+                try await Task.sleep(for: .seconds(1))
+                for character in "Can you review the release checklist and include the accessibility checks?" {
+                    draft.append(character)
+                    try await Task.sleep(for: .milliseconds(65))
+                }
+                try await Task.sleep(for: .seconds(2))
+                while !draft.isEmpty {
+                    draft.removeLast()
+                    try await Task.sleep(for: .milliseconds(30))
+                }
+                try await Task.sleep(for: .seconds(1))
+                isComposerFocused = false
+            } catch {
+                // View disappearance cancels the scripted preview.
+            }
+            #endif
         }
         .onChange(of: scenePhase) { _, _ in
             if scenePhase == .background {
