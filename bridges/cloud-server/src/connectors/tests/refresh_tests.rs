@@ -114,13 +114,27 @@ async fn disconnect_during_refresh_leaves_no_secret() {
 }
 
 #[test]
-fn only_invalid_grant_needs_a_new_sign_in() {
+fn only_a_dead_grant_needs_a_new_sign_in() {
     use providers::ProviderError;
     let now = Utc::now();
-    let invalid = providers::token_grant_from_json(&json!({"error":"invalid_grant"}), None, now);
-    assert!(matches!(invalid, Err(ProviderError::Unauthorized)));
+    // OAuth 2 and Google, Slack, and GitHub name a dead refresh token
+    // differently.
+    for code in [
+        "invalid_grant",
+        "invalid_refresh_token",
+        "bad_refresh_token",
+    ] {
+        let dead = providers::token_grant_from_json(&json!({ "error": code }), None, now);
+        assert!(
+            matches!(dead, Err(ProviderError::Unauthorized)),
+            "{code} needs a new sign-in"
+        );
+    }
+    // `unauthorized_client` is decided by the refresh, which knows whether
+    // this client has worked here.
     for code in [
         "invalid_client",
+        "unauthorized_client",
         "invalid_request",
         "temporarily_unavailable",
     ] {
@@ -162,5 +176,71 @@ fn audit_phrases_never_carry_provider_text() {
     ];
     for (error, phrase) in cases {
         assert_eq!(error.audit_phrase(), phrase);
+    }
+}
+
+fn stub_oauth_client(client_id: &str) -> providers::ConnectorOAuthClient {
+    providers::ConnectorOAuthClient {
+        client_id: client_id.into(),
+        client_secret: "test-client-secret".into(),
+        redirect_uri: providers::connector_callback_url("https://kordi.test"),
+    }
+}
+
+#[tokio::test]
+async fn token_endpoint_401_maps_by_error_code() {
+    use super::http_stub::HttpStub;
+    use providers::{ConnectorProvider, ProviderError};
+    let stub = HttpStub::start().await;
+    // A client ID no other test uses, so no earlier success confirms it.
+    let client = stub_oauth_client(&format!("moved-client-{}", Uuid::new_v4()));
+    let mut provider = providers::gmail::provider(reqwest::Client::new(), Some(stub.base.clone()));
+    provider.oauth = provider
+        .oauth
+        .with_test_endpoints(stub.url("/token"), client.clone());
+    let secret = ConnectorSecret {
+        access_token: "expired-access".into(),
+        refresh_token: Some("old-client-refresh".into()),
+        expires_at: Some(Utc::now() - ChronoDuration::minutes(5)),
+    };
+    let other_client =
+        json!({ "error": "unauthorized_client", "error_description": "Unauthorized" });
+
+    // Before this client has worked here, `unauthorized_client` may mean the
+    // server runs a wrong client: retryable, so fixing the deploy recovers.
+    stub.respond_status("POST", "/token", 401, other_client.clone());
+    let unconfirmed = provider.refresh(&client, &secret).await;
+    match unconfirmed {
+        Err(ProviderError::Rejected(detail)) => assert_eq!(detail, "HTTP 401 unauthorized_client"),
+        other => panic!("expected a retryable rejection, got {other:?}"),
+    }
+
+    // Once a refresh with this client succeeds, the client is right and the
+    // token was issued to another one: reconnect.
+    stub.respond(
+        "POST",
+        "/token",
+        json!({ "access_token": "fresh-access", "expires_in": 3600 }),
+    );
+    provider.refresh(&client, &secret).await.unwrap();
+    stub.respond_status("POST", "/token", 401, other_client);
+    let moved = provider.refresh(&client, &secret).await;
+    assert!(
+        matches!(moved, Err(ProviderError::Unauthorized)),
+        "{moved:?}"
+    );
+
+    // Our own client settings are wrong: retryable, and the code is kept
+    // for the log without the provider's description.
+    stub.respond_status(
+        "POST",
+        "/token",
+        401,
+        json!({ "error": "invalid_client", "error_description": "The OAuth client was not found." }),
+    );
+    let misconfigured = provider.refresh(&client, &secret).await;
+    match misconfigured {
+        Err(ProviderError::Rejected(detail)) => assert_eq!(detail, "HTTP 401 invalid_client"),
+        other => panic!("expected a retryable rejection, got {other:?}"),
     }
 }
