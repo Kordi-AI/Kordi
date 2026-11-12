@@ -5,12 +5,12 @@ use super::subtyped_attachment_validation::{
 use super::support::*;
 use super::*;
 use crate::auth::session_metrics::send::{measure, SendStage, SendTimings};
-use sqlx_core::acquire::Acquire;
 
 mod fanout;
 mod group_avatar;
 mod group_identity;
 mod mutations;
+mod send;
 mod server_refresh;
 mod server_replace;
 mod voice;
@@ -21,6 +21,8 @@ use group_identity::{
     normalize_group_envelope,
 };
 pub use mutations::{delete_message, edit_message};
+pub use send::send_message;
+pub(crate) use send::{send_message_in_transaction, send_message_measured};
 pub use server_refresh::refresh_server_message_content;
 pub(crate) use server_replace::replace_server_message_in_transaction;
 pub use voice::{update_voice_transcript, UpdateVoiceTranscriptRequest};
@@ -33,56 +35,6 @@ pub async fn load_message_snapshot(
     let message = load_message(&mut transaction, message_id).await?;
     transaction.commit().await?;
     Ok(message)
-}
-
-pub async fn send_message(
-    pool: &PgPool,
-    account_id: &str,
-    conversation_id: Uuid,
-    request: SendMessageRequest,
-) -> Result<InsertOutcome<MessageSnapshot>, StoreError> {
-    send_message_with_metrics(pool, account_id, conversation_id, request, None).await
-}
-
-pub(crate) async fn send_message_measured(
-    pool: &PgPool,
-    account_id: &str,
-    conversation_id: Uuid,
-    request: SendMessageRequest,
-    metrics: &SendTimings,
-) -> Result<InsertOutcome<MessageSnapshot>, StoreError> {
-    send_message_with_metrics(pool, account_id, conversation_id, request, Some(metrics)).await
-}
-
-async fn send_message_with_metrics(
-    pool: &PgPool,
-    account_id: &str,
-    conversation_id: Uuid,
-    request: SendMessageRequest,
-    metrics: Option<&SendTimings>,
-) -> Result<InsertOutcome<MessageSnapshot>, StoreError> {
-    let mut connection = measure(metrics, SendStage::PoolWait, pool.acquire()).await?;
-    let mut transaction = measure(metrics, SendStage::Begin, connection.begin()).await?;
-    let outcome = send_message_in_transaction_measured(
-        &mut transaction,
-        account_id,
-        conversation_id,
-        request,
-        metrics,
-    )
-    .await?;
-    measure(metrics, SendStage::Commit, transaction.commit()).await?;
-    Ok(outcome)
-}
-
-pub(crate) async fn send_message_in_transaction(
-    transaction: &mut Transaction<'_, Postgres>,
-    account_id: &str,
-    conversation_id: Uuid,
-    request: SendMessageRequest,
-) -> Result<InsertOutcome<MessageSnapshot>, StoreError> {
-    send_message_in_transaction_measured(transaction, account_id, conversation_id, request, None)
-        .await
 }
 
 async fn send_message_in_transaction_measured(
