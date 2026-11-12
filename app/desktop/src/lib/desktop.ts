@@ -938,16 +938,6 @@ export async function fetchDesktopChatArtifactPreview(path: string, baseRoot?: s
   return invokeDesktop<DesktopArtifactPreview>('desktop_chat_artifact_preview', { path, baseRoot });
 }
 
-/** Opens an artifact file in its default app; the path resolves like a preview. */
-export async function openDesktopChatArtifact(path: string, baseRoot?: string | null) {
-  return invokeDesktop<string>('desktop_chat_artifact_open', { path, baseRoot });
-}
-
-/** Opens a fresh copy of a shared document's text, under `name`, in its default app. */
-export async function openDesktopChatArtifactCopy(name: string, contents: string) {
-  return invokeDesktop<string>('desktop_chat_artifact_open_copy', { name, contents });
-}
-
 export async function fetchDesktopChatArtifactDirectory(path?: string | null, baseRoot?: string | null) {
   return invokeDesktop<DesktopArtifactDirectory>('desktop_chat_artifact_directory', { path, baseRoot });
 }

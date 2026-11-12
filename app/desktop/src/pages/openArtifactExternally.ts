@@ -1,7 +1,9 @@
+import { useCallback, useState } from 'react';
+
 import type { DocumentShareApi } from '@/features/documents/documentShareApi';
 import { documentFormatForPath } from '@/features/documents/documentReaderModel';
 import type { SessionArtifact } from '@/kordi-app/types';
-import { openDesktopChatArtifact, openDesktopChatArtifactCopy } from '@/lib/desktop';
+import { openDesktopChatArtifact, openDesktopChatArtifactCopy } from '@/lib/desktopArtifactOpen';
 
 import { fileNameFromPath } from './artifactPreviewFormat';
 import { artifactDocumentApi } from './artifactThumbnail';
@@ -42,4 +44,17 @@ export async function openArtifactExternally(
     }
   }
   await open(artifact.path, root);
+}
+
+/**
+ * The open-in-default-app action for the Artifacts list and cards, and the error it last reported.
+ * Absent outside the desktop app, which is the only place that can reach the files.
+ */
+export function useOpenArtifactExternally(isNativeShell: boolean, baseRoot: string | null | undefined) {
+  const [error, setError] = useState<string | null>(null);
+  const openFile = useCallback((artifact: SessionArtifact) => {
+    setError(null);
+    openArtifactExternally(artifact, baseRoot).catch(() => setError(OPEN_ARTIFACT_FAILED));
+  }, [baseRoot]);
+  return { open: isNativeShell ? openFile : undefined, error };
 }

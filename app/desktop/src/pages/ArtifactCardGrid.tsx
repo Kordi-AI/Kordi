@@ -10,7 +10,7 @@ import { ArtifactPreviewWindow } from './ArtifactInspector';
 import { artifactPreviewKind, fileNameFromPath } from './artifactPreviewFormat';
 import { loadArtifactPreview } from './artifactPreviewLoader';
 import type { ArtifactThumbnailContext } from './artifactThumbnail';
-import { OPEN_ARTIFACT_FAILED, openArtifactExternally } from './openArtifactExternally';
+import { useOpenArtifactExternally } from './openArtifactExternally';
 
 type ArtifactCardGridProps = {
   isNativeShell: boolean;
@@ -41,7 +41,7 @@ export function ArtifactCardGrid({
 }: ArtifactCardGridProps) {
   const documentsInCompanion = Boolean(useDocumentReaderHost().opensDocumentsInCompanion);
   const [picked, setPicked] = useState<string | null>(null);
-  const [openError, setOpenError] = useState<string | null>(null);
+  const { open: openExternally, error: openError } = useOpenArtifactExternally(isNativeShell, previewBaseRoot);
   const [previewing, setPreviewing] = useState<{ artifact: SessionArtifact; preview: DesktopArtifactPreview } | null>(null);
   const ordered = useMemo(() => [
     ...artifacts.filter((artifact) => (artifact.category ?? 'artifact') === 'artifact'),
@@ -70,10 +70,7 @@ export function ArtifactCardGrid({
       participants={participants}
       thumbnailContext={thumbnailContext}
       onOpen={() => open(artifact)}
-      onOpenExternal={isNativeShell ? () => {
-        setOpenError(null);
-        openArtifactExternally(artifact, previewBaseRoot).catch(() => setOpenError(OPEN_ARTIFACT_FAILED));
-      } : undefined}
+      onOpenExternal={openExternally ? () => openExternally(artifact) : undefined}
     />
   );
 

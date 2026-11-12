@@ -14,8 +14,9 @@ import { openArtifactInCompanion } from '@/features/documents/companionDocument'
 import { useDocumentReaderHost } from '@/features/documents/documentReaderHost';
 import { artifactPreviewDocumentSource, type ArtifactPreviewMode } from './artifactPreviewDocument';
 import { ArtifactDataTable } from './artifactDataTable';
-import { ArtifactListRow } from './ArtifactListRow';
-import { OPEN_ARTIFACT_FAILED, openArtifactExternally } from './openArtifactExternally';
+import { ArtifactListSection } from './ArtifactListSection';
+import { compactArtifactLocation } from './artifactRowModel';
+import { useOpenArtifactExternally } from './openArtifactExternally';
 import { ARTIFACT_MARKDOWN_PREVIEW_CLASS, artifactFromDirectoryEntry, formattedJsonSource, formatFileSize } from './artifactPreviewText';
 
 type ArtifactInspectorProps = {
@@ -30,21 +31,6 @@ type ArtifactInspectorProps = {
   /** People of the conversation, to show who created an artifact. */
   participants?: ConversationParticipant[];
 };
-
-function parentPathFromPath(path: string) {
-  const parts = path.split('/').filter(Boolean);
-  parts.pop();
-  return parts;
-}
-
-function compactArtifactLocation(path: string, fileName = fileNameFromPath(path)) {
-  const parts = parentPathFromPath(path);
-  if (parts.length === 0) return '';
-  const visibleCount = path.startsWith('/') ? 1 : 2;
-  const visibleParts = parts.slice(-visibleCount).filter((part) => part !== fileName);
-  if (visibleParts.length === 0) return '';
-  return parts.length > visibleParts.length ? `…/${visibleParts.join('/')}` : visibleParts.join('/');
-}
 
 function artifactIcon(kind: SessionArtifact['kind'], path = '') {
   const extension = extensionLabel(path, kind);
@@ -145,42 +131,6 @@ function artifactCategory(artifact: SessionArtifact): NonNullable<SessionArtifac
   return artifact.category ?? 'artifact';
 }
 
-type ArtifactListSectionProps = {
-  title: string;
-  section: 'generated' | 'related' | 'memory';
-  description?: string;
-  artifacts: SessionArtifact[];
-  activeArtifact: SessionArtifact | null;
-  onSelect: (artifactId: string) => void;
-  onOpenExternal?: (artifact: SessionArtifact) => void;
-  participants?: ConversationParticipant[];
-};
-
-function ArtifactListSection({ title, section, description, artifacts, activeArtifact, onSelect, onOpenExternal, participants }: ArtifactListSectionProps) {
-  if (artifacts.length === 0) return null;
-
-  // Rows fill the column, so a filled row lines up with the toolbar edges above the list.
-  return (
-    <section className="app-artifact-list-section" data-artifact-section={section}>
-      {title ? <h3 className="app-artifact-list-section-title">{title}</h3> : null}
-      {description ? <div className="mb-2 text-[11px] leading-5 text-[color:var(--utility-muted-text)]">{description}</div> : null}
-      <div className="flex flex-col gap-px">
-        {artifacts.map((artifact) => (
-          <ArtifactListRow
-            key={artifact.id}
-            artifact={{ ...artifact, name: artifact.name || fileNameFromPath(artifact.path) }}
-            location={compactArtifactLocation(artifact.path, artifact.name || fileNameFromPath(artifact.path))}
-            isActive={activeArtifact?.id === artifact.id}
-            participants={participants ?? []}
-            onSelect={() => onSelect(artifact.id)}
-            onOpenExternal={onOpenExternal ? () => onOpenExternal(artifact) : undefined}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export function ArtifactPreviewWindow({
   preview,
   title,
@@ -251,14 +201,7 @@ export function ArtifactInspector({
   const [browserSelectedArtifact, setBrowserSelectedArtifact] = useState<SessionArtifact | null>(null);
   const [previewWindowOpen, setPreviewWindowOpen] = useState(false);
   const [pickedArtifactId, setPickedArtifactId] = useState<string | null>(null);
-  const [openError, setOpenError] = useState<string | null>(null);
-  // Files open in their default app only from the desktop app, which can reach them.
-  const openExternally = isNativeShell
-    ? (artifact: SessionArtifact) => {
-      setOpenError(null);
-      openArtifactExternally(artifact, previewBaseRoot).catch(() => setOpenError(OPEN_ARTIFACT_FAILED));
-    }
-    : undefined;
+  const { open: openExternally, error: openError } = useOpenArtifactExternally(isNativeShell, previewBaseRoot);
 
   const folderBrowserRootPath = folderBrowserRoot?.trim() ?? '';
   const effectiveBrowserPath = useMemo(() => {
