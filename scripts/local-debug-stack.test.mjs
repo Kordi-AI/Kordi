@@ -362,6 +362,7 @@ test('remote development launcher binds the IAP tunnel and desktop to one verifi
   const allowlistPath = join(tempRoot, 'operator-github-allowlist.txt');
   const tunnelReadyPath = join(tempRoot, 'tunnel-ready');
   const tunnelAttemptPath = join(tempRoot, 'tunnel-attempt');
+  const desktopStartedPath = join(tempRoot, 'desktop-started');
   const gcloudCapturePath = join(tempRoot, 'gcloud.txt');
   const desktopCapturePath = join(tempRoot, 'desktop.txt');
   const scriptPath = join(repoRoot, 'scripts', 'dev-cloud-remote.sh');
@@ -370,7 +371,7 @@ test('remote development launcher binds the IAP tunnel and desktop to one verifi
     writeFileSync(join(binDir, 'gh'), '#!/bin/sh\nprintf \'%s\\n\' "$TEST_GITHUB_LOGIN"\n');
     writeFileSync(
       join(binDir, 'gcloud'),
-      '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" > "$TEST_GCLOUD_CAPTURE"\n: > "$TEST_TUNNEL_READY"\nif [[ -n "${TEST_TUNNEL_ATTEMPT_FILE:-}" ]]; then\n  attempt=1\n  if [[ -f "$TEST_TUNNEL_ATTEMPT_FILE" ]]; then attempt=$(( $(cat "$TEST_TUNNEL_ATTEMPT_FILE") + 1 )); fi\n  printf \'%s\\n\' "$attempt" > "$TEST_TUNNEL_ATTEMPT_FILE"\n  if (( attempt == 1 )); then sleep 0.2; rm -f "$TEST_TUNNEL_READY"; exit 255; fi\nfi\ntrap \'exit 0\' TERM INT\nwhile true; do sleep 1; done\n',
+      '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" > "$TEST_GCLOUD_CAPTURE"\n: > "$TEST_TUNNEL_READY"\nif [[ -n "${TEST_TUNNEL_ATTEMPT_FILE:-}" ]]; then\n  attempt=1\n  if [[ -f "$TEST_TUNNEL_ATTEMPT_FILE" ]]; then attempt=$(( $(cat "$TEST_TUNNEL_ATTEMPT_FILE") + 1 )); fi\n  printf \'%s\\n\' "$attempt" > "$TEST_TUNNEL_ATTEMPT_FILE"\n  if (( attempt == 1 )); then\n    for _wait in $(seq 1 80); do\n      [[ -f "$TEST_DESKTOP_STARTED" ]] && break\n      sleep 0.1\n    done\n    rm -f "$TEST_TUNNEL_READY"; exit 255\n  fi\nfi\ntrap \'exit 0\' TERM INT\nwhile true; do sleep 1; done\n',
     );
     writeFileSync(
       join(binDir, 'curl'),
@@ -378,7 +379,7 @@ test('remote development launcher binds the IAP tunnel and desktop to one verifi
     );
     writeFileSync(
       join(binDir, 'pnpm'),
-      '#!/usr/bin/env bash\nif [[ -n "${TEST_TUNNEL_ATTEMPT_FILE:-}" ]]; then\n  for _attempt in $(seq 1 80); do\n    if [[ -f "$TEST_TUNNEL_ATTEMPT_FILE" ]] && (( $(cat "$TEST_TUNNEL_ATTEMPT_FILE") >= 2 )); then break; fi\n    sleep 0.1\n  done\nfi\nprintf \'%s\\n\' "$*|$VITE_KORDI_CLOUD_API_BASE|$VITE_KORDI_DEV_PROFILE|${DATABASE_URL:-}|${KORDI_OAUTH_GOOGLE_CLIENT_SECRET:-}|${KORDI_CLOUD_GCP_PROJECT:-}|$VITE_KORDI_ENABLE_LOOPBACK_REALTIME" > "$TEST_DESKTOP_CAPTURE"\n',
+      '#!/usr/bin/env bash\nif [[ -n "${TEST_TUNNEL_ATTEMPT_FILE:-}" ]]; then\n  : > "$TEST_DESKTOP_STARTED"\n  for _attempt in $(seq 1 80); do\n    if [[ -f "$TEST_TUNNEL_ATTEMPT_FILE" ]] && (( $(cat "$TEST_TUNNEL_ATTEMPT_FILE") >= 2 )); then break; fi\n    sleep 0.1\n  done\nfi\nprintf \'%s\\n\' "$*|$VITE_KORDI_CLOUD_API_BASE|$VITE_KORDI_DEV_PROFILE|${DATABASE_URL:-}|${KORDI_OAUTH_GOOGLE_CLIENT_SECRET:-}|${KORDI_CLOUD_GCP_PROJECT:-}|$VITE_KORDI_ENABLE_LOOPBACK_REALTIME" > "$TEST_DESKTOP_CAPTURE"\n',
     );
     writeFileSync(
       join(binDir, 'nc'),
@@ -404,6 +405,7 @@ test('remote development launcher binds the IAP tunnel and desktop to one verifi
       KORDI_DEV_DESKTOP_PORT: '1498',
       TEST_GITHUB_LOGIN: 'example-maintainer',
       TEST_TUNNEL_READY: tunnelReadyPath,
+      TEST_DESKTOP_STARTED: desktopStartedPath,
       TEST_GCLOUD_CAPTURE: gcloudCapturePath,
       TEST_DESKTOP_CAPTURE: desktopCapturePath,
       DATABASE_URL: 'postgresql://must-not-reach-desktop',
@@ -441,6 +443,7 @@ test('remote development launcher binds the IAP tunnel and desktop to one verifi
     assert.match(previewLaunched.stdout, /login-free fixture preview/);
 
     rmSync(tunnelReadyPath);
+    // Drop the fixture tunnel only after startup so this tests reconnection, not an initial health-check race.
     const recovered = spawnSync('bash', [scriptPath], {
       cwd: repoRoot,
       env: { ...env, TEST_TUNNEL_ATTEMPT_FILE: tunnelAttemptPath },
