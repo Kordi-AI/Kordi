@@ -114,11 +114,19 @@ async fn disconnect_during_refresh_leaves_no_secret() {
 }
 
 #[test]
-fn only_invalid_grant_needs_a_new_sign_in() {
+fn only_a_dead_grant_needs_a_new_sign_in() {
     use providers::ProviderError;
     let now = Utc::now();
-    let invalid = providers::token_grant_from_json(&json!({"error":"invalid_grant"}), None, now);
-    assert!(matches!(invalid, Err(ProviderError::Unauthorized)));
+    // `unauthorized_client`: the refresh token belongs to another OAuth
+    // client, as after a server moves to a new client. Only a new sign-in
+    // helps.
+    for code in ["invalid_grant", "unauthorized_client"] {
+        let dead = providers::token_grant_from_json(&json!({ "error": code }), None, now);
+        assert!(
+            matches!(dead, Err(ProviderError::Unauthorized)),
+            "{code} needs a new sign-in"
+        );
+    }
     for code in [
         "invalid_client",
         "invalid_request",
@@ -162,5 +170,56 @@ fn audit_phrases_never_carry_provider_text() {
     ];
     for (error, phrase) in cases {
         assert_eq!(error.audit_phrase(), phrase);
+    }
+}
+
+fn stub_oauth_client() -> providers::ConnectorOAuthClient {
+    providers::ConnectorOAuthClient {
+        client_id: "test-client".into(),
+        client_secret: "test-client-secret".into(),
+        redirect_uri: providers::connector_callback_url("https://kordi.test"),
+    }
+}
+
+#[tokio::test]
+async fn token_endpoint_401_maps_by_error_code() {
+    use super::http_stub::HttpStub;
+    use providers::{ConnectorProvider, ProviderError};
+    let stub = HttpStub::start().await;
+    let mut provider = providers::gmail::provider(reqwest::Client::new(), Some(stub.base.clone()));
+    provider.oauth = provider
+        .oauth
+        .with_test_endpoints(stub.url("/token"), stub_oauth_client());
+    let secret = ConnectorSecret {
+        access_token: "expired-access".into(),
+        refresh_token: Some("old-client-refresh".into()),
+        expires_at: Some(Utc::now() - ChronoDuration::minutes(5)),
+    };
+
+    // A refresh token issued to a different client: reconnect.
+    stub.respond_status(
+        "POST",
+        "/token",
+        401,
+        json!({ "error": "unauthorized_client", "error_description": "Unauthorized" }),
+    );
+    let moved = provider.refresh(&stub_oauth_client(), &secret).await;
+    assert!(
+        matches!(moved, Err(ProviderError::Unauthorized)),
+        "{moved:?}"
+    );
+
+    // Our own client settings are wrong: retryable, and the code is kept
+    // for the log without the provider's description.
+    stub.respond_status(
+        "POST",
+        "/token",
+        401,
+        json!({ "error": "invalid_client", "error_description": "The OAuth client was not found." }),
+    );
+    let misconfigured = provider.refresh(&stub_oauth_client(), &secret).await;
+    match misconfigured {
+        Err(ProviderError::Rejected(detail)) => assert_eq!(detail, "HTTP 401 invalid_client"),
+        other => panic!("expected a retryable rejection, got {other:?}"),
     }
 }

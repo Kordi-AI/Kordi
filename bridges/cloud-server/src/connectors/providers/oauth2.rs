@@ -38,13 +38,31 @@ struct RawSlackUser {
     scope: Option<String>,
 }
 
-/// Maps a token endpoint error code. Only `invalid_grant` means the grant
-/// is gone; anything else is a retryable provider error.
+/// Maps a token endpoint error code. `invalid_grant` (the grant was revoked
+/// or expired) and `unauthorized_client` (the refresh token was issued to a
+/// different OAuth client, for example after the server moved to a new
+/// client) mean only a new sign-in helps. Anything else, including
+/// `invalid_client` (our own client settings), is a retryable provider error.
 fn token_error(code: Option<&str>) -> ProviderError {
     match code {
-        Some("invalid_grant") => ProviderError::Unauthorized,
-        Some(code) => ProviderError::Rejected(code.chars().take(80).collect()),
+        Some("invalid_grant" | "unauthorized_client") => ProviderError::Unauthorized,
+        Some(code) => ProviderError::Rejected(safe_error_code(code)),
         None => ProviderError::Rejected("provider error".to_string()),
+    }
+}
+
+/// An OAuth error code reduced to the characters RFC 6749 allows in codes we
+/// expect, so it can be logged without carrying provider text.
+fn safe_error_code(code: &str) -> String {
+    let code: String = code
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .take(40)
+        .collect();
+    if code.is_empty() {
+        "provider error".to_string()
+    } else {
+        code
     }
 }
 
@@ -137,6 +155,9 @@ impl OAuth2ConnectorProvider {
                 .and_then(Value::as_str);
             return Err(match token_error(code) {
                 ProviderError::Unauthorized => ProviderError::Unauthorized,
+                ProviderError::Rejected(code) if body.is_some() => {
+                    ProviderError::Rejected(format!("HTTP {} {code}", status.as_u16()))
+                }
                 _ => ProviderError::Rejected(format!("HTTP {}", status.as_u16())),
             });
         }

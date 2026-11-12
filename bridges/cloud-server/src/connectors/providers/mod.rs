@@ -250,14 +250,15 @@ pub enum ProviderError {
     NotConfigured(String),
     #[error("unknown connector tool")]
     UnknownTool,
-    /// The credential is gone for good (`invalid_grant`, or a 401 from a
-    /// tool call). The connector needs a new sign-in.
+    /// The credential is gone for good (`invalid_grant` or
+    /// `unauthorized_client` from the token endpoint, or a 401 from a tool
+    /// call). The connector needs a new sign-in.
     #[error("the provider rejected the credential")]
     Unauthorized,
     /// The provider could not be reached. Retryable.
     #[error("provider request failed: {0}")]
     Request(String),
-    /// The provider answered with an error other than `invalid_grant`.
+    /// The provider answered with an error that a new sign-in does not fix.
     /// Retryable; the connector stays connected.
     #[error("provider rejected the request: {0}")]
     Rejected(String),
