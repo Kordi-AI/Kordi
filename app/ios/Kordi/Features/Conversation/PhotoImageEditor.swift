@@ -68,14 +68,14 @@ struct CameraPhotoSendReviewSheet: View {
                 Button(action: send) {
                     Group {
                         if isSending {
-                            ProgressView().tint(.white)
+                            ProgressView().tint(chatTheme.accentForeground)
                         } else {
                             Image(systemName: "arrow.up")
                                 .font(.body.weight(.bold))
                         }
                     }
                     .frame(width: 44, height: 44)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(chatTheme.accentForeground)
                     .background(chatTheme.accent, in: Circle())
                 }
                 .buttonStyle(.plain)

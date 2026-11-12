@@ -33,7 +33,7 @@ struct GroupAvatarPicker: View {
                                 .font(.system(size: 10, weight: .semibold))
                         }
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(chatTheme.accentForeground)
                     .frame(width: 21, height: 21)
                     .background(chatTheme.accent, in: .rect(cornerRadius: 6))
                     .overlay {
