@@ -26,7 +26,17 @@ export async function refreshScreen(store: CommonGroundStore, screen: CgScreen):
   try {
     switch (screen.name) {
       case 'home': return store.loadHome();
-      case 'lobby': cache('rooms', screen.code, await store.client.room(screen.code)); break;
+      case 'lobby': {
+        const room = await store.client.room(screen.code);
+        cache('rooms', screen.code, room);
+        // Someone found common ground: every lobby moves on to Results.
+        if (room.matchingStarted && snapshot() === before && store.top() === screen) {
+          store.set(patch);
+          store.replace({ name: 'results', code: screen.code });
+          return;
+        }
+        break;
+      }
       case 'results': {
         const room = store.client.room(screen.code).catch(() => null);
         cache('results', screen.code, await store.client.results(screen.code));

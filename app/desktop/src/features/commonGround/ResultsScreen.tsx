@@ -17,6 +17,11 @@ function names(people: CgPerson[], selfId: string) {
   return `You, ${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}`;
 }
 
+/** Your own entry drawn with your account avatar, which is current even when a list was built earlier. */
+function withSelf(people: CgPerson[], self: CgHost['self']): CgPerson[] {
+  return people.map((person) => (person.accountId === self.accountId && self.avatarUrl ? { ...person, avatarUrl: self.avatarUrl } : person));
+}
+
 function candidates(results: CgResults, members: CgPerson[], selfId: string): CgPerson[] {
   const byId = new Map<string, CgPerson>();
   for (const person of [...results.people.map((entry) => entry.person), ...members]) {
@@ -35,7 +40,7 @@ function GroupsSection({ code, results, state, store, host }: { code: string; re
         {groups.map((group) => (
           <CgRow
             key={group.groupSpaceId}
-            lead={<CgAvatarGrid people={group.members ?? []} size={30} />}
+            lead={<CgAvatarGrid people={withSelf(group.members ?? [], host.self)} size={30} />}
             title={group.name}
             sub={groupLine(group) || undefined}
             trailing={group.joined ? <CgButton onClick={() => host.openGroup(group.groupSpaceId)}>Open</CgButton> : null}
@@ -101,7 +106,7 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
         <CgSection title="Suggested">
           <CgGroup>
             <CgRow
-              lead={<CgAvatarGrid people={suggestion.people} size={36} />}
+              lead={<CgAvatarGrid people={withSelf(suggestion.people, host.self)} size={36} />}
               title={suggestion.label}
               sub={names(suggestion.people, selfId)}
               trailing={canGroup ? <CgButton onClick={() => startGroup(suggestion)}>Start group</CgButton> : null}
@@ -131,7 +136,7 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
                 sub={peopleCount(theme.people.length)}
                 trailing={(
                   <span className="cg-row-actions">
-                    <CgAvatarGrid people={theme.people} size={30} />
+                    <CgAvatarGrid people={withSelf(theme.people, host.self)} size={30} />
                     {canGroup ? <CgButton onClick={() => startGroup(theme)} label={`Start a group for ${theme.label}`}>Start</CgButton> : null}
                   </span>
                 )}

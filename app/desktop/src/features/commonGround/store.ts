@@ -361,8 +361,11 @@ export class CommonGroundStore {
     try {
       this.set({ busy: 'join', notice: null });
       const room = await this.client.joinRoom(code, input);
-      this.set({ rooms: { ...this.state.rooms, [code]: room }, stack: [...this.state.stack, { name: 'lobby', code }] });
-      void this.loadRooms();
+      // A room where common ground was already found opens on its results.
+      const screen: CgScreen = room.matchingStarted ? { name: 'results', code } : { name: 'lobby', code };
+      this.set({ busy: null, rooms: { ...this.state.rooms, [code]: room }, stack: [...this.state.stack, screen] });
+      // Results load after the rooms list, which would otherwise land over them.
+      void this.loadRooms().finally(() => { if (screen.name === 'results' && this.top() === screen) void this.loadScreen(screen); });
       return true;
     } catch (error) {
       const code = commonGroundErrorCode(error);

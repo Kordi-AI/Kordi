@@ -71,6 +71,9 @@ async fn room_results_match_detail_and_recent() {
         assert_eq!(status, 200);
     }
     let results = format!("/v1/cloud/common-ground/rooms/{code}/results");
+    let room = format!("/v1/cloud/common-ground/rooms/{code}");
+    let (_, body) = send(&app, "GET", &room, &priya_token, None).await;
+    assert_eq!(body["matchingStarted"], false, "nobody asked yet");
 
     // The first request queues one match run for alex and one theme run for
     // the room; polling while they work queues nothing more.
@@ -89,6 +92,11 @@ async fn room_results_match_detail_and_recent() {
     );
     let (status, _) = send(&app, "POST", &results, &outsider_token, None).await;
     assert_eq!(status, 404, "results are for members");
+    let (_, body) = send(&app, "GET", &room, &priya_token, None).await;
+    assert_eq!(
+        body["matchingStarted"], true,
+        "everyone's lobby learns that matching started"
+    );
 
     let (run_id, cards) = claim_open(&pool, "match", Some(&alex)).await;
     let (owner,): (String,) =

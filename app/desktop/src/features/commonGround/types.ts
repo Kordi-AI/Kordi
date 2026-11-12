@@ -243,6 +243,8 @@ export type CgRoom = {
   members: CgPerson[];
   groups?: CgGroup[];
   invitations?: CgInvitation[];
+  /** True once anyone in the room asked for its results; absent on older servers. */
+  matchingStarted?: boolean;
 };
 
 /** A room the viewer joined and has not left, open or closed. */

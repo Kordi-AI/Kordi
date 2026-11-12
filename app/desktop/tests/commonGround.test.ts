@@ -107,6 +107,44 @@ test('store: join, lobby polling, results polling until ready', async () => {
   assert.equal(calls.filter((call) => call.url.endsWith('/results')).length, 2);
 });
 
+test('store: a lobby moves to Results once anyone found common ground', async () => {
+  const room = { roomId: 'r', code: '4821', name: '', openedByYou: false, expiresAt: '', members: [person('a'), person('b')] };
+  const { calls, client } = mockServer({
+    'POST rooms/4821/join': { status: 200, body: room },
+    'GET rooms/4821': [
+      { status: 200, body: room },
+      { status: 200, body: { ...room, matchingStarted: true } },
+    ],
+    'POST rooms/4821/results': { status: 200, body: { status: 'matching', people: [], topics: [], suggestion: null } },
+  });
+  const store = new CommonGroundStore(client);
+  assert.equal(await store.joinRoom('4821'), true);
+  assert.equal(await store.poll(), LOBBY_POLL_MS);
+  assert.deepEqual(store.top(), { name: 'lobby', code: '4821' });
+  assert.equal(await store.poll(), null);
+  assert.deepEqual(store.top(), { name: 'results', code: '4821' });
+  assert.equal(store.getSnapshot().stack.length, 2, 'Results replaces the lobby');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(store.getSnapshot().results['4821'].status, 'matching');
+  assert.equal(await store.poll(), MATCH_POLL_MS);
+  assert.ok(calls.some((call) => call.url.endsWith('/results')), 'each member asks for their own results');
+});
+
+test('store: joining a room that was already matched opens Results', async () => {
+  const room = { roomId: 'r', code: '4821', name: '', openedByYou: false, expiresAt: '', members: [person('a')], matchingStarted: true };
+  const { client } = mockServer({
+    'POST rooms/4821/join': { status: 200, body: room },
+    'GET rooms/4821': { status: 200, body: room },
+    'POST rooms/4821/results': { status: 200, body: { status: 'ready', people: [], topics: [], suggestion: null } },
+  });
+  const store = new CommonGroundStore(client);
+  assert.equal(await store.joinRoom('4821'), true);
+  assert.deepEqual(store.top(), { name: 'results', code: '4821' });
+  assert.equal(store.getSnapshot().stack.length, 2);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(store.getSnapshot().results['4821'].status, 'ready');
+});
+
 test('store: joining without a card opens the build screen', async () => {
   const { client } = mockServer({ 'POST rooms/4821/join': { status: 409, body: { errorCode: 'common_ground_no_card', message: 'Build your card first.' } } });
   const store = new CommonGroundStore(client);
