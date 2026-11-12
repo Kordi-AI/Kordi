@@ -58,6 +58,7 @@ export function useBrowserGroupHistory({
   const [result, setResult] = useState<{ scope: typeof scope; page?: GroupPage; latest?: GroupPage; error: BrowserGroupHistoryActions['error'] } | null>(null);
   const current = result?.scope === scope ? result : null;
   const page = current?.page;
+  const latestPage = current?.latest;
   const error = current?.error ?? null;
 
   const fetchPage = useCallback(async (before?: number, around?: string, limit = PAGE_SIZE, persist = true) => {
@@ -157,12 +158,12 @@ export function useBrowserGroupHistory({
   }, [error, load, page]);
   const returnToLatest = useCallback(() => {
     viewRevision.current++;
-    if (current?.latest) setResult({ scope, page: current.latest, latest: current.latest, error: null });
+    if (latestPage) setResult({ scope, page: latestPage, latest: latestPage, error: null });
     else {
       const pending = flight.current?.scope === scope ? flight.current.task : Promise.resolve();
       void pending.then(() => load());
     }
-  }, [current?.latest, load, scope]);
+  }, [latestPage, load, scope]);
   const loadPin = useCallback(async (messageId: string, open = false) => {
     if (open && flight.current?.scope === scope) await flight.current.task;
     const revision = open ? ++viewRevision.current : undefined;
