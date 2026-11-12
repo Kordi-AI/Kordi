@@ -4,7 +4,7 @@ import { stringValue } from './messageContent';
 function safeToolArguments(rawArguments: string) {
   if (!rawArguments.trim()) return {};
   try {
-    const parsed = JSON.parse(rawArguments);
+    const parsed: unknown = JSON.parse(rawArguments);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
   } catch {
     return {};

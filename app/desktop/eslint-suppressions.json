@@ -91,11 +91,6 @@
       "count": 1
     }
   },
-  "src/features/canonical/readModel/messageMapping.ts": {
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 1
-    }
-  },
   "src/features/canonical/sessionReadModel.ts": {
     "@typescript-eslint/no-unnecessary-type-assertion": {
       "count": 2
