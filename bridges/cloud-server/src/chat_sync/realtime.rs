@@ -9,6 +9,8 @@
 //! session signal and close it at once. A jittered ~30 s recheck backs that
 //! up, the socket closes at its session's known expiry, and short database
 //! outages delay work instead of closing sockets.
+//!
+//! Every socket ends with one log line naming why it closed (see [`close`]).
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,7 +21,7 @@ use axum::http::{header::ORIGIN, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use futures_util::stream::{SplitSink, SplitStream};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde::Deserialize;
 use tokio::sync::watch;
 use tokio::time::Instant;
@@ -30,6 +32,8 @@ use crate::chat_sync::cursor::CursorCodec;
 use crate::chat_sync::PROTOCOL_VERSION;
 use crate::server::ServerState;
 
+mod admission;
+mod close;
 mod delivery;
 mod frames;
 pub(crate) mod retry;
@@ -37,16 +41,25 @@ mod session;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_admission;
+#[cfg(test)]
+mod tests_close;
+#[cfg(test)]
 mod tests_session;
+#[cfg(test)]
+mod tests_socket;
 mod ticket;
 mod wake;
 
+pub(crate) use admission::ticket_refusal;
+pub use admission::{TicketAdmission, REALTIME_TICKETS_PER_SECOND_ENV, REALTIME_TICKET_BURST_ENV};
+use close::{log_close, CloseReason, CloseRecord};
 use delivery::{
     persist_device_ack, Delivery, DeliveryEnd, CATCH_UP_SPREAD, REPAIR_WITHOUT_LISTENER,
 };
 use frames::{
-    receive_connect, resync_and_close, send_json, send_socket_json, ClientFrame, ErrorFrame,
-    HeartbeatAckFrame, HelloFrame,
+    receive_connect, reject_connect, resync_and_close, send_close, send_json, send_message,
+    ClientFrame, HeartbeatAckFrame, HelloFrame,
 };
 use session::{check_connection, GuardStep, SessionCheck, SessionGuard};
 use ticket::{consume_ticket, ConsumedRealtimeTicket};
@@ -161,29 +174,51 @@ async fn listener_changed(status: &mut watch::Receiver<ListenerStatus>) -> Liste
 }
 
 async fn run_socket(
-    mut socket: WebSocket,
+    socket: WebSocket,
     state: Arc<ServerState>,
     auth: SocketAuth,
     codec: CursorCodec,
 ) {
+    let opened_at = Instant::now();
+    let connection_id = Uuid::now_v7();
+    let mut events_sent = 0;
+    let reason = serve_socket(
+        socket,
+        &state,
+        auth,
+        &codec,
+        connection_id,
+        &mut events_sent,
+    )
+    .await;
+    log_close(CloseRecord {
+        connection_id,
+        reason,
+        lived: opened_at.elapsed(),
+        events_sent,
+    });
+}
+
+/// Runs one socket until it closes and returns why. `events_sent` follows
+/// every event frame the socket delivers.
+async fn serve_socket(
+    mut socket: WebSocket,
+    state: &ServerState,
+    auth: SocketAuth,
+    codec: &CursorCodec,
+    connection_id: Uuid,
+    events_sent: &mut u64,
+) -> CloseReason {
     let SocketAuth {
         ticket,
         mut guard,
         mut signals,
     } = auth;
-    let connect_stream_seq = match receive_connect(&mut socket, &ticket, &codec).await {
+    let connect_stream_seq = match receive_connect(&mut socket, &ticket, codec).await {
         Ok(sequence) => sequence,
-        Err(()) => {
-            let _ = send_socket_json(
-                &mut socket,
-                &ErrorFrame {
-                    frame_type: "error",
-                    code: "INVALID_CONNECT_FRAME",
-                },
-            )
-            .await;
-            let _ = socket.send(Message::Close(None)).await;
-            return;
+        Err(reason) => {
+            reject_connect(&mut socket).await;
+            return reason;
         }
     };
     let pool = state.db_pool();
@@ -193,27 +228,22 @@ async fn run_socket(
     let mut listener = state.chat_sync_wakes().listener_status();
     let mut status = *listener.borrow_and_update();
     let mut delivery = Delivery::new(Instant::now(), connect_stream_seq, status.connected);
-    if send_json(
-        &mut sender,
-        &HelloFrame {
-            frame_type: "hello",
-            connection_id: Uuid::now_v7(),
-            protocol_version: PROTOCOL_VERSION,
-            heartbeat_interval_ms: HEARTBEAT_INTERVAL.as_millis() as u64,
-            max_frame_bytes: MAX_SERVER_FRAME_BYTES,
-        },
-    )
-    .await
-    .is_err()
-    {
-        return;
+    let hello = HelloFrame {
+        frame_type: "hello",
+        connection_id,
+        protocol_version: PROTOCOL_VERSION,
+        heartbeat_interval_ms: HEARTBEAT_INTERVAL.as_millis() as u64,
+        max_frame_bytes: MAX_SERVER_FRAME_BYTES,
+    };
+    if let Err(error) = send_json(&mut sender, &hello).await {
+        return error.reason();
     }
-    if let DeliveryEnd::Resync(reason) = delivery
-        .deliver(pool, account_id, &codec, &mut sender, status.connected)
-        .await
-    {
-        resync_and_close(&mut sender, reason).await;
-        return;
+    let end = delivery
+        .deliver(pool, account_id, codec, &mut sender, status.connected)
+        .await;
+    *events_sent = delivery.events_sent();
+    if let DeliveryEnd::Resync(reason) = end {
+        return resync_and_close(&mut sender, reason).await;
     }
 
     let mut heartbeat_check = tokio::time::interval(HEARTBEAT_INTERVAL);
@@ -224,40 +254,37 @@ async fn run_socket(
         let deliver = tokio::select! {
             incoming = receiver.next() => match incoming {
                 Some(Ok(Message::Text(body))) => {
-                    let Ok(ClientFrame::Heartbeat { last_applied_seq: applied }) =
+                    let Ok(ClientFrame::Heartbeat { last_applied_seq }) =
                         serde_json::from_str::<ClientFrame>(&body)
                     else {
-                        resync_and_close(&mut sender, "INVALID_CLIENT_FRAME").await;
-                        return;
+                        return resync_and_close(&mut sender, CloseReason::InvalidFrame).await;
                     };
-                    if applied < delivery.last_applied_seq || applied > delivery.sent_stream_seq {
-                        resync_and_close(&mut sender, "INVALID_CLIENT_SEQUENCE").await;
-                        return;
-                    }
-                    let advanced = applied > delivery.last_applied_seq;
-                    delivery.last_applied_seq = applied;
+                    let Some(advanced) = delivery.acknowledge(last_applied_seq) else {
+                        return resync_and_close(&mut sender, CloseReason::InvalidSequence).await;
+                    };
                     last_liveness = Instant::now();
+                    let applied = delivery.last_applied_seq;
                     match persist_device_ack(pool, account_id, &ticket.device_id, applied).await {
                         Ok(true) => {}
                         Ok(false) => {
-                            let _ = sender.send(Message::Close(None)).await;
-                            return;
+                            send_close(&mut sender).await;
+                            return CloseReason::SessionEnded;
                         }
                         // The ack is monotonic, so the next heartbeat stores it.
                         Err(error) => eprintln!("[chat-realtime] persist device ack: {error}"),
                     }
-                    if send_json(&mut sender, &HeartbeatAckFrame {
+                    if let Err(error) = send_json(&mut sender, &HeartbeatAckFrame {
                         frame_type: "heartbeat_ack",
                         server_time: Utc::now(),
-                    }).await.is_err() {
-                        return;
+                    }).await {
+                        return error.reason();
                     }
                     advanced && delivery.paused()
                 }
                 Some(Ok(Message::Ping(payload))) => {
                     last_liveness = Instant::now();
-                    if sender.send(Message::Pong(payload)).await.is_err() {
-                        return;
+                    if let Err(error) = send_message(&mut sender, Message::Pong(payload)).await {
+                        return error.reason();
                     }
                     false
                 }
@@ -265,28 +292,28 @@ async fn run_socket(
                     last_liveness = Instant::now();
                     false
                 }
-                Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return,
+                Some(Ok(Message::Close(_))) => return CloseReason::ClientClosed,
+                None | Some(Err(_)) => return CloseReason::ClientGone,
                 Some(Ok(_)) => {
-                    resync_and_close(&mut sender, "INVALID_CLIENT_FRAME").await;
-                    return;
+                    return resync_and_close(&mut sender, CloseReason::InvalidFrame).await;
                 }
             },
             _ = event_wake.recv() => true,
             _ = tokio::time::sleep_until(delivery.repair_deadline()) => true,
             _ = heartbeat_check.tick() => {
                 if last_liveness.elapsed() > HEARTBEAT_TIMEOUT {
-                    let _ = sender.send(Message::Close(None)).await;
-                    return;
+                    send_close(&mut sender).await;
+                    return CloseReason::HeartbeatTimeout;
                 }
-                if sender.send(Message::Ping(Vec::new())).await.is_err() {
-                    return;
+                if let Err(error) = send_message(&mut sender, Message::Ping(Vec::new())).await {
+                    return error.reason();
                 }
                 false
             }
             verdict = signals.recv() => match verdict {
                 SignalVerdict::Close => {
-                    let _ = sender.send(Message::Close(None)).await;
-                    return;
+                    send_close(&mut sender).await;
+                    return CloseReason::SessionEnded;
                 }
                 SignalVerdict::Recheck => {
                     guard.recheck_within(Instant::now(), Duration::ZERO);
@@ -296,14 +323,14 @@ async fn run_socket(
             _ = tokio::time::sleep_until(guard.deadline()) => {
                 let now = Instant::now();
                 let step = if guard.must_close(now) {
-                    GuardStep::Close
+                    GuardStep::Close(CloseReason::LegacyTicketLifetime)
                 } else {
                     let check = check_connection(pool, &ticket, state.admission()).await;
                     guard.record(Instant::now(), check)
                 };
-                if step == GuardStep::Close {
-                    let _ = sender.send(Message::Close(None)).await;
-                    return;
+                if let GuardStep::Close(reason) = step {
+                    send_close(&mut sender).await;
+                    return reason;
                 }
                 false
             }
@@ -322,12 +349,12 @@ async fn run_socket(
             }
         };
         if deliver {
-            if let DeliveryEnd::Resync(reason) = delivery
-                .deliver(pool, account_id, &codec, &mut sender, status.connected)
-                .await
-            {
-                resync_and_close(&mut sender, reason).await;
-                return;
+            let end = delivery
+                .deliver(pool, account_id, codec, &mut sender, status.connected)
+                .await;
+            *events_sent = delivery.events_sent();
+            if let DeliveryEnd::Resync(reason) = end {
+                return resync_and_close(&mut sender, reason).await;
             }
         }
     }

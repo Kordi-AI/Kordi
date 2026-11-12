@@ -7,6 +7,9 @@ use rand::Rng;
 /// How long a socket keeps running while every database check fails before
 /// it closes. Shorter outages no longer turn into reconnect storms.
 pub(crate) const FAILURE_GRACE: Duration = Duration::from_secs(120);
+/// Chat sockets add a random part of this window to [`FAILURE_GRACE`], so
+/// sockets that started failing together do not all resync at one instant.
+pub(crate) const FAILURE_GRACE_SPREAD: Duration = Duration::from_secs(30);
 const RETRY_FIRST: Duration = Duration::from_secs(1);
 const RETRY_MAX: Duration = Duration::from_secs(30);
 
@@ -19,6 +22,12 @@ pub(crate) fn jittered(interval: Duration) -> Duration {
 /// A random delay in [0, `within`].
 pub(crate) fn spread(within: Duration) -> Duration {
     within.mul_f64(rand::thread_rng().gen_range(0.0..=1.0))
+}
+
+/// One socket's failure grace, in [`FAILURE_GRACE`, `FAILURE_GRACE` +
+/// [`FAILURE_GRACE_SPREAD`]], drawn once when the socket opens.
+pub(crate) fn socket_failure_grace() -> Duration {
+    FAILURE_GRACE + spread(FAILURE_GRACE_SPREAD)
 }
 
 /// Exponential retry delays (1 s, 2 s, 4 s, ... capped at 30 s), jittered.

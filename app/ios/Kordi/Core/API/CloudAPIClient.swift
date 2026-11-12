@@ -2874,9 +2874,9 @@ actor CloudAPIClient {
                 query: [URLQueryItem(name: "cursor", value: cursor)],
                 fallback: "Could not sync reliable chat changes."
             )
-        } catch let error as CloudAPIError where error.code == "SYNC_CURSOR_EXPIRED" {
+        } catch let error as CloudAPIError where CloudSyncReloadPolicy.requiresFullReload(error) {
             resetChatCache()
-            return try await sync(token: token, cursor: "0")
+            return try await sync(token: token, cursor: "0").markingFullReload()
         }
         guard response.protocolVersion == 2 else {
             throw CloudAPIError(code: "unsupported_protocol", message: "This Kordi version cannot read the reliable chat stream.", statusCode: 0)

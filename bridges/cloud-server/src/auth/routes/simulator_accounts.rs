@@ -122,14 +122,10 @@ async fn create(
     let mut random = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut random);
     let password = URL_SAFE_NO_PAD.encode(random);
-    let hash = match tokio::task::spawn_blocking({
-        let password = password.clone();
-        move || hash_password(&password, service.hasher)
-    })
-    .await
-    {
-        Ok(Ok(hash)) => hash,
-        _ => return unavailable(),
+    let hash = match hash_password_queued(password.clone(), service.hasher).await {
+        Ok(hash) => hash,
+        Err(PasswordWorkError::Busy) => return password_busy_response(),
+        Err(PasswordWorkError::Failed) => return unavailable(),
     };
     let id = uuid::Uuid::new_v4().simple().to_string();
     let account_id = format!("acct_{id}");

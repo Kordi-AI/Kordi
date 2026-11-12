@@ -28,6 +28,15 @@ pub(super) fn limited_response(retry_after: std::time::Duration) -> Response {
     crate::auth::rate_limit::rate_limited_response(retry_after)
 }
 
+/// Every password hashing slot stayed busy for the whole wait. The same 429
+/// shape as a rate limit, with a short random wait so refused clients do
+/// not all retry together.
+pub(super) fn password_busy_response() -> Response {
+    use rand::Rng;
+    let wait = std::time::Duration::from_secs(rand::thread_rng().gen_range(2..=6));
+    crate::auth::rate_limit::rate_limited_response_with(wait, "The server is busy.")
+}
+
 pub(super) fn map_password_policy(err_value: PasswordPolicyError) -> Response {
     err(
         "weak_password",

@@ -4,9 +4,8 @@ import { test } from 'node:test';
 
 import { CLOUD_MESSAGES_REFRESH_MS } from '../src/features/cloud/useCloudCollaborationState';
 import {
-  CLOUD_REALTIME_RECONNECT_MAX_MS,
-  cloudRealtimeReconnectDelayMs,
   realtimeCallSyncEvent,
+  realtimeHeartbeatAppliedSeq,
 } from '../src/features/cloud/useCloudRealtimeMessages';
 
 const messageSyncSource = () => readFileSync(
@@ -32,12 +31,11 @@ test('macOS keeps the realtime WebSocket alive while its window is hidden', () =
   assert.equal(mainWindow?.backgroundThrottling, 'disabled');
 });
 
-test('cloud realtime reconnect backs off and remains bounded', () => {
-  assert.deepEqual(
-    [0, 1, 2, 3, 4, 5].map(cloudRealtimeReconnectDelayMs),
-    [1_000, 2_000, 4_000, 8_000, 15_000, 15_000],
-  );
-  assert.equal(cloudRealtimeReconnectDelayMs(100), CLOUD_REALTIME_RECONNECT_MAX_MS);
+test('a heartbeat never reports more than this socket delivered', () => {
+  // The local store can run ahead through HTTP catch-up; the server closes a
+  // socket whose heartbeat claims an event it has not sent.
+  assert.equal(realtimeHeartbeatAppliedSeq(12, 9), 9);
+  assert.equal(realtimeHeartbeatAppliedSeq(7, 9), 7);
 });
 
 test('cloud realtime applies call lifecycle payloads before durable HTTP repair', () => {

@@ -77,15 +77,10 @@ pub(in crate::auth::routes) async fn login(
         );
     };
 
-    let verified = match tokio::task::spawn_blocking({
-        let hash = password_hash.clone();
-        let plaintext = req.password.clone();
-        move || verify_password(&hash, &plaintext)
-    })
-    .await
-    {
-        Ok(Ok(value)) => value,
-        _ => {
+    let verified = match verify_password_queued(password_hash.clone(), req.password.clone()).await {
+        Ok(value) => value,
+        Err(PasswordWorkError::Busy) => return password_busy_response(),
+        Err(PasswordWorkError::Failed) => {
             return err(
                 "server_error",
                 "Could not verify password.",

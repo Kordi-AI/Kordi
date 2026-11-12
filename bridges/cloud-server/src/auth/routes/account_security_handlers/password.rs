@@ -51,9 +51,10 @@ pub(super) async fn set_password(
     };
     let config = *hasher_config;
     let plaintext = request.new_password.clone();
-    let hash = match tokio::task::spawn_blocking(move || hash_password(&plaintext, config)).await {
-        Ok(Ok(hash)) => hash,
-        _ => return *server_error(),
+    let hash = match hash_password_queued(plaintext, config).await {
+        Ok(hash) => hash,
+        Err(PasswordWorkError::Busy) => return password_busy_response(),
+        Err(PasswordWorkError::Failed) => return *server_error(),
     };
 
     let Ok(mut tx) = caller.pool().begin().await else {
