@@ -592,7 +592,7 @@ struct ComposerView: View {
                 Text(isVoicePressing ? "Release to send" : "Hold to Talk")
                     .font(.body.weight(.semibold))
             }
-            .foregroundStyle(isVoicePressing ? Color.white : Color.primary)
+            .foregroundStyle(isVoicePressing ? chatTheme.accentForeground : Color.primary)
             .frame(maxWidth: .infinity, minHeight: composerControlHeight)
             .background {
                 Capsule()
@@ -923,7 +923,7 @@ struct ComposerView: View {
                             : Color(uiColor: .tertiarySystemFill)
                     )
                 if isSending {
-                    ProgressView().tint(.white).controlSize(.small)
+                    ProgressView().tint(chatTheme.accentForeground).controlSize(.small)
                 } else {
                     Image(systemName: editingMessage != nil
                         ? "checkmark"
@@ -932,7 +932,7 @@ struct ComposerView: View {
                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                         .foregroundStyle(
                             canSend && !isVoiceInputMode
-                                ? .white
+                                ? chatTheme.accentForeground
                                 : chatTheme.accent
                         )
                 }
@@ -1655,11 +1655,11 @@ private struct ComposerDraftPane: View {
                 Circle()
                     .fill(canSend ? chatTheme.accent : Color(uiColor: .tertiarySystemFill))
                 if isSending {
-                    ProgressView().tint(.white).controlSize(.small)
+                    ProgressView().tint(chatTheme.accentForeground).controlSize(.small)
                 } else {
                     Image(systemName: "arrow.up")
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(canSend ? .white : .secondary)
+                        .foregroundStyle(canSend ? chatTheme.accentForeground : .secondary)
                 }
             }
             .frame(width: sendButtonDiameter, height: sendButtonDiameter)

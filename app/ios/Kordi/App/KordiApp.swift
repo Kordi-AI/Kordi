@@ -264,7 +264,7 @@ private struct MinimizedCallBar: View {
             HStack(spacing: 12) {
                 Image(systemName: hasVideo ? "video.fill" : "phone.fill")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(chatTheme.accentForeground)
                     .frame(width: 34, height: 34)
                     .background(chatTheme.accent.gradient, in: Circle())
 
@@ -629,7 +629,6 @@ struct MainTabView: View {
                 .tint(chatTheme.accent)
         }
         .ignoresSafeArea(.container, edges: hasTopAccessory ? .bottom : .vertical)
-        .sensoryFeedback(.selection, trigger: selection)
         .task(id: notificationCoordinator.pendingCalendarEventID) {
             guard notificationCoordinator.pendingCalendarEventID != nil else { return }
             selection = .digest

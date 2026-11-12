@@ -39,7 +39,7 @@ struct ChatHomeView: View {
     @State private var groupManagementDetent: PresentationDetent =
         ProcessInfo.processInfo.arguments.contains("--preview-group-management") ? .large : .medium
     @State private var channelCreationSpace: GroupSpaceSummary?
-    @State private var pullRefreshState: ChatPullRefreshVisualState = .idle
+    @State private var pullRefreshState = ChatPullRefreshState()
     @State private var activeSwipeRowID: String?
     private let onOpenConversation: ((ConversationSummary) -> Void)?
     private let onOpenNewChat: ((NewChatMode) -> Void)?
@@ -60,12 +60,6 @@ struct ChatHomeView: View {
 
     private var searchQuery: String {
         ChatHomeSearch.normalized(searchText)
-    }
-
-    private var pinLayoutIdentity: [String] {
-        (model.pinnedSessionIds.map { "session:\($0)" }
-            + model.pinnedGroupSpaceIds.map { "group:\($0)" }
-        ).sorted()
     }
 
     private var agentSessions: [AgentSessionListItem] {
@@ -156,8 +150,6 @@ struct ChatHomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            chatPageHeader
-
             if channel == .contact {
                 contactPage
             } else {
@@ -165,7 +157,13 @@ struct ChatHomeView: View {
             }
         }
         .background(Color(uiColor: .systemBackground))
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: channel == .contact ? "Search chats" : "Search agent sessions"
+        )
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("--preview-channel-create"),
                channelCreationSpace == nil {
@@ -206,25 +204,21 @@ struct ChatHomeView: View {
             ArchivedChatsView(channel: channel)
         }
         .toolbar {
-            if #available(iOS 26.0, *) {
-                ToolbarItem(placement: .principal) {
-                    MessageSyncStatusView(pullState: pullRefreshState)
-                }
-                .sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItem(placement: .principal) {
-                    MessageSyncStatusView(pullState: pullRefreshState)
-                }
+            ToolbarItem(placement: .topBarLeading) {
+                archivedChatsButton
             }
             if #available(iOS 26.0, *) {
-                ToolbarItem(placement: .topBarTrailing) {
-                    newChatButton
+                ToolbarItem(placement: .principal) {
+                    MessageSyncStatusView(refreshState: pullRefreshState)
                 }
                 .sharedBackgroundVisibility(.hidden)
             } else {
-                ToolbarItem(placement: .topBarTrailing) {
-                    newChatButton
+                ToolbarItem(placement: .principal) {
+                    MessageSyncStatusView(refreshState: pullRefreshState)
                 }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                newChatButton
             }
         }
         .stableNavigationDestination(item: $newChatMode) { mode in
@@ -301,18 +295,20 @@ struct ChatHomeView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if let error = model.errorMessage {
-                ErrorBanner(message: error)
-                    .padding()
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            VStack {
+                if let error = model.errorMessage {
+                    ErrorBanner(message: error)
+                        .padding()
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .animation(.default, value: model.errorMessage)
         }
-        .animation(.default, value: model.errorMessage)
         .task(id: model.errorMessage) {
             guard let shown = model.errorMessage else { return }
             try? await Task.sleep(for: .seconds(6))
             guard !Task.isCancelled, model.errorMessage == shown else { return }
-            withAnimation { model.errorMessage = nil }
+            model.errorMessage = nil
         }
     }
 
@@ -346,55 +342,31 @@ struct ChatHomeView: View {
         }
     }
 
-    private var chatPageHeader: some View {
-        KordiPageSearchHeader(
-            text: $searchText,
-            prompt: channel == .contact ? "Search chats" : "Search agent sessions",
-            accessibilityLabel: channel == .contact
-                ? "Search contact and group chats"
-                : "Search agents, sessions, owners, and messages"
-        ) { EmptyView() }
-    }
-
-    @ViewBuilder
-    private var archivedChatsEntry: some View {
-        if archivedForChannelCount > 0 {
-            Button {
-                if let onOpenArchivedChats {
-                    onOpenArchivedChats()
-                } else {
-                    showingArchivedChats = true
-                }
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "archivebox")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 44)
-                    Text("Archived Chats")
-                        .font(.headline)
-                    Spacer()
-                    Text(archivedForChannelCount, format: .number)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
+    private var archivedChatsButton: some View {
+        Button {
+            if let onOpenArchivedChats {
+                onOpenArchivedChats()
+            } else {
+                showingArchivedChats = true
             }
-            .buttonStyle(.plain)
-            .accessibilityHint("Shows archived chats")
-            .chatHomeRow(separatorLeading: 71)
+        } label: {
+            Image(systemName: "archivebox")
+                .font(.body.weight(.semibold))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
+        .accessibilityLabel("Archived Chats")
+        .accessibilityValue(Text(archivedForChannelCount, format: .number))
+        .accessibilityHint("Shows archived chats")
+        .accessibilityIdentifier("chat-archive")
     }
 
     private var contactPage: some View {
         ChatPullToRefreshScrollView(
             coordinateSpaceName: "contact-chat-refresh",
-            visualState: $pullRefreshState,
+            refreshState: pullRefreshState,
             onRefresh: { await model.refreshWorkspace() }
         ) {
-            archivedChatsEntry
             if contactItems.isEmpty {
                 ContentUnavailableView(
                     searchQuery.isEmpty ? "No contact conversations yet" : "No chats found",
@@ -409,7 +381,6 @@ struct ChatHomeView: View {
                 }
             }
         }
-        .id(pinLayoutIdentity)
         .accessibilityLabel("Contact chats")
     }
 
@@ -517,17 +488,15 @@ struct ChatHomeView: View {
     private var agentPage: some View {
         ChatPullToRefreshScrollView(
             coordinateSpaceName: "agent-chat-refresh",
-            visualState: $pullRefreshState,
+            refreshState: pullRefreshState,
             onRefresh: { await model.refreshWorkspace() }
         ) {
-            archivedChatsEntry
             if model.isPreviewMode && ProcessInfo.processInfo.arguments.contains("--preview-projects") {
                 Text("Design preview · Demo data").font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 16)
             }
             if let error = model.projectError {
                 Text(error).font(.footnote).foregroundStyle(KordiTheme.destructiveText).padding(.horizontal, 16)
             }
-            newAgentSessionButton
             PersonalAgentSection(searchQuery: searchQuery, isCollapsed: sectionCollapsedBinding("personal-agent")) { if !dismissActiveSwipeActions() { openConversation($0) } }
             projectSessionList
             if agentSessions.isEmpty && model.projectDevices.flatMap(\.projects).isEmpty && model.personalAgentRows(searchText: searchQuery).isEmpty {
@@ -539,25 +508,7 @@ struct ChatHomeView: View {
                 .frame(maxWidth: .infinity, minHeight: 360)
             }
         }
-        .id(pinLayoutIdentity)
         .accessibilityLabel("Agent chats")
-    }
-
-    private var newAgentSessionButton: some View {
-        Button {
-            if let onOpenNewChat { onOpenNewChat(.agent) }
-            else { newChatMode = .agent }
-        } label: {
-            HStack(spacing: 7) { Image(systemName: "plus").font(.footnote.weight(.semibold)).foregroundStyle(.tint); Text("New session") }
-                .font(.footnote)
-                .frame(maxWidth: .infinity, minHeight: dynamicTypeSize.isAccessibilitySize ? 44 : 36, alignment: .leading)
-                .padding(.horizontal, 16).padding(.top, 4)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets())
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
     }
 
     private var projectSessionList: some View {
@@ -703,11 +654,28 @@ struct ChatHomeView: View {
                     }
                 }
             } else {
-                HStack(spacing: 0) {
-                    agentSessionButton(item, nested: nested)
+                HStack(alignment: .top, spacing: 8) {
+                    agentSessionButton(item, nested: nested, showsMetadata: false)
                     if item.childCount > 0 {
                         agentForkButton(item)
                     }
+                    Button {
+                        guard !dismissActiveSwipeActions() else { return }
+                        openConversation(item.conversation)
+                    } label: {
+                        AgentSessionMetadata(
+                            conversation: item.conversation,
+                            compact: true,
+                            nested: nested,
+                            isMuted: model.mutedSessionIds.contains(item.conversation.sessionId)
+                        )
+                        .padding(.top, 4)
+                        .frame(minHeight: nested ? 56 : 44, alignment: .topTrailing)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    // The main session button already announces the complete summary.
+                    .accessibilityHidden(true)
                 }
             }
         }
@@ -739,7 +707,7 @@ struct ChatHomeView: View {
         .chatHomeRow(separatorLeading: 16, verticalPadding: 0)
     }
 
-    private func agentSessionButton(_ item: AgentSessionListItem, nested: Bool = false) -> some View {
+    private func agentSessionButton(_ item: AgentSessionListItem, nested: Bool = false, showsMetadata: Bool = true) -> some View {
         Button {
             guard !dismissActiveSwipeActions() else { return }
             openConversation(item.conversation)
@@ -750,7 +718,8 @@ struct ChatHomeView: View {
                 nested: nested,
                 isFork: item.isFork,
                 isPinned: model.pinnedSessionIds.contains(item.conversation.sessionId),
-                isMuted: model.mutedSessionIds.contains(item.conversation.sessionId)
+                isMuted: model.mutedSessionIds.contains(item.conversation.sessionId),
+                showsMetadata: showsMetadata
             )
                 .padding(.leading, CGFloat(item.depth) * 16)
         }
@@ -773,7 +742,7 @@ struct ChatHomeView: View {
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
             .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 56)
-            .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 44 : 36)
+            .frame(minHeight: 44)
             .padding(.horizontal, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
             .contentShape(Rectangle())
         }
@@ -892,6 +861,7 @@ struct ChatHomeView: View {
         } label: {
             Label("Archive", systemImage: "archivebox")
         }
+        .accessibilityIdentifier("archive-session")
         Divider()
         Button(role: .destructive) {
             requestDelete(conversation)
@@ -1320,18 +1290,17 @@ private struct ChatPullToRefreshScrollView<Content: View>: View {
     let coordinateSpaceName: String
     let onRefresh: () async -> Void
     let content: Content
-    @Binding var visualState: ChatPullRefreshVisualState
-    @State private var pullDistance: CGFloat = 0
-    @State private var isRefreshing = false
+    // The list does not observe pull progress; only the toolbar mark does.
+    let refreshState: ChatPullRefreshState
 
     init(
         coordinateSpaceName: String,
-        visualState: Binding<ChatPullRefreshVisualState>,
+        refreshState: ChatPullRefreshState,
         onRefresh: @escaping () async -> Void,
         @ViewBuilder content: () -> Content
     ) {
         self.coordinateSpaceName = coordinateSpaceName
-        _visualState = visualState
+        self.refreshState = refreshState
         self.onRefresh = onRefresh
         self.content = content()
     }
@@ -1346,22 +1315,30 @@ private struct ChatPullToRefreshScrollView<Content: View>: View {
                         contentInsetTop: geometry.contentInsets.top
                     )
                 } action: { _, distance in
-                    updatePullDistance(distance)
+                    refreshState.updatePullDistance(distance)
+                    startRefreshIfSettled()
                 }
                 .onScrollPhaseChange { oldPhase, newPhase in
-                    guard oldPhase == .interacting, newPhase != .interacting else { return }
-                    finishPullGesture()
+                    refreshState.setScrollIdle(newPhase == .idle)
+                    if oldPhase == .interacting, newPhase != .interacting {
+                        finishPullGesture()
+                    }
+                    startRefreshIfSettled()
                 }
         } else {
             list(includeLegacyOffsetProbe: true)
                 .coordinateSpace(.named(coordinateSpaceName))
                 .onPreferenceChange(ChatPullOffsetPreferenceKey.self) { offset in
-                    updatePullDistance(max(0, offset))
+                    refreshState.updatePullDistance(max(0, offset))
+                    startRefreshIfSettled()
                 }
                 .simultaneousGesture(
-                    DragGesture(minimumDistance: 8).onEnded { _ in
-                        finishPullGesture()
-                    }
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { _ in refreshState.setScrollIdle(false) }
+                        .onEnded { _ in
+                            refreshState.setScrollIdle(true)
+                            finishPullGesture()
+                        }
                 )
         }
     }
@@ -1394,40 +1371,21 @@ private struct ChatPullToRefreshScrollView<Content: View>: View {
         .scrollBounceBehavior(.always)
         .scrollDismissesKeyboard(.interactively)
         .environment(\.defaultMinListRowHeight, 0)
-    }
-
-    private func updatePullDistance(_ distance: CGFloat) {
-        guard !isRefreshing else { return }
-        pullDistance = distance
-        if distance > 0.5 {
-            visualState = .pulling(progress: KordiSyncMarkGeometry.pullProgress(
-                for: distance,
-                triggerDistance: ChatPullToRefreshBehavior.triggerDistance
-            ))
-        } else if visualState != .idle {
-            visualState = .idle
-        }
+        .onDisappear { refreshState.cancelPendingRefresh() }
     }
 
     private func finishPullGesture() {
-        guard ChatPullToRefreshBehavior.shouldStart(
-            distance: pullDistance,
-            isRefreshing: isRefreshing
-        ) else { return }
-        beginRefresh()
+        guard refreshState.beginRefresh() else { return }
+        startRefreshIfSettled()
     }
 
-    private func beginRefresh() {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        pullDistance = 0
-        visualState = .refreshing
+    private func startRefreshIfSettled() {
+        guard refreshState.takePendingRefresh() else { return }
         Task {
             await onRefresh()
-            withAnimation(.smooth(duration: 0.24)) {
-                isRefreshing = false
-                visualState = .idle
-            }
+            // Do not give refreshed rows an animation transaction. The toolbar
+            // owns its own motion, independently of list content and identity.
+            refreshState.finishRefresh()
         }
     }
 }
@@ -1666,11 +1624,20 @@ extension View {
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
             .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(Color(uiColor: .separator).opacity(0.45))
-                    .frame(height: 0.5)
+                ChatListSeparator()
                     .padding(.leading, separatorLeading)
             }
+    }
+}
+
+private struct ChatListSeparator: View {
+    @Environment(\.displayScale) private var displayScale
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(uiColor: .separator).opacity(0.55))
+            .frame(height: 1 / displayScale)
+            .accessibilityHidden(true)
     }
 }
 

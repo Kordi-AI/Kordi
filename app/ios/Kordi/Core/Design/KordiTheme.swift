@@ -238,16 +238,23 @@ enum KordiChatTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The same values as `--app-palette-accent-light` and `--app-palette-accent-dark`
-    /// per theme in `app/desktop/src/styles/theme-palette.css`, so the iPhone shell and
-    /// chat use the Mac accent. `AppearanceSettingsTests` checks the two files agree.
+    /// Classic uses Warm Ivory on iPhone, with a darker warm ink in light mode.
+    /// The other themes retain the corresponding desktop palette accents.
     var accent: Color {
         switch self {
-        case .classic: KordiTheme.adaptive(light: 0x0A66D6, dark: 0x5EA2FF)
+        case .classic: KordiTheme.adaptive(light: 0x655B45, dark: 0xE7DDC8)
         case .quiet: KordiTheme.adaptive(light: 0x365F98, dark: 0xAEC4E3)
         case .midnight: KordiTheme.adaptive(light: 0x6B5686, dark: 0xC7B5DD)
         case .sand: KordiTheme.adaptive(light: 0x875837, dark: 0xD9B999)
         case .ocean: KordiTheme.adaptive(light: 0x246775, dark: 0xA1CBD1)
+        }
+    }
+
+    /// Text and symbols placed on a solid accent fill.
+    var accentForeground: Color {
+        switch self {
+        case .classic: KordiTheme.adaptive(light: 0xFFFFFF, dark: 0x201D17)
+        default: .white
         }
     }
 

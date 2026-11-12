@@ -248,6 +248,10 @@ patch dependency binary strings or substitute bytes under an upstream checksum.
 
 ### Archive with symbol path remapping
 
+Keep code coverage disabled for Release performance checks and archives. Pass
+the coverage settings on the command line so Swift package targets receive
+them as well as the app.
+
 ```bash
 : "${KORDI_IOS_TEAM_ID:?Load the approved production team privately}"
 export KORDI_IOS_TEAM_ID
@@ -259,6 +263,7 @@ xcodebuild -project app/ios/Kordi.xcodeproj \
   -disableAutomaticPackageResolution -skipPackageUpdates \
   -allowProvisioningUpdates -hideShellScriptEnvironment \
   DEVELOPMENT_TEAM="$KORDI_IOS_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+  ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO CLANG_COVERAGE_MAPPING_LINKER_ARGS=NO \
   SWIFT_SERIALIZE_DEBUGGING_OPTIONS=NO \
   'OTHER_SWIFT_FLAGS=$(inherited) -debug-prefix-map /var/folders=/build/tmp -file-prefix-map /var/folders=/build/tmp -debug-prefix-map /private/tmp=/build/tmp -file-prefix-map /private/tmp=/build/tmp' \
   'OTHER_CFLAGS=$(inherited) -fdebug-prefix-map=/var/folders=/build/tmp -ffile-prefix-map=/var/folders=/build/tmp' \
