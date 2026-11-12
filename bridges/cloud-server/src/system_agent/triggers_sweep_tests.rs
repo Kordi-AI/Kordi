@@ -13,7 +13,7 @@ use crate::plan_cards::tests::participant;
 impl Chat {
     /// Pretends the conversation has been quiet for longer than the silence
     /// window.
-    async fn let_silence_pass(&self) {
+    pub(super) async fn let_silence_pass(&self) {
         query("UPDATE cloud_chat_messages SET created_at = now() - interval '15 minutes' WHERE conversation_id = $1")
             .bind(self.chat)
             .execute(&self.pool)
@@ -191,6 +191,38 @@ async fn plan_talk_waits_for_silence_and_a_new_message_resets_it() {
     assert!(chat.hooks().await["planDiscussion"].is_null());
     assert_eq!(chat.sweep().await, 0, "once");
     assert_eq!(chat.system_agent_prompts().await.len(), 1);
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn a_group_document_request_needs_no_facilitator_mention() {
+    let chat = Chat::new().await;
+    say(&chat.pool, &chat.bob, chat.chat, "The review went well.").await;
+    assert_eq!(chat.sweep().await, 0);
+
+    say(
+        &chat.pool,
+        &chat.alice,
+        chat.chat,
+        "\u{8bf7}\u{628a}\u{6211}\u{4eec}\u{521a}\u{8ba8}\u{8bba}\u{7684}\u{5185}\u{5bb9}\u{8d77}\u{8349}\u{6210}\u{4e00}\u{4efd}\u{6587}\u{6863}",
+    )
+    .await;
+    assert_eq!(chat.sweep().await, 0);
+    chat.let_silence_pass().await;
+    assert_eq!(chat.sweep().await, 1);
+    let prompts = chat.system_agent_prompts().await;
+    assert_eq!(trigger(&prompts[0]).0, "silence");
+    let (prompt,): (String,) = query_as(
+        "SELECT system_prompt FROM cloud_agent_fallback_runs
+         WHERE session_id = $1 AND run_id LIKE 'pip_%'",
+    )
+    .bind(&chat.session)
+    .fetch_one(&chat.pool)
+    .await
+    .unwrap();
+    assert!(prompt.contains("documentDraft"));
+    assert!(prompt.contains("workflowCard"));
+    assert_eq!(chat.sweep().await, 0, "only one run is queued");
 }
 
 #[tokio::test]

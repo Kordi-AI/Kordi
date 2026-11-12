@@ -196,6 +196,11 @@ pub(super) async fn build_input(
             .iter()
             .map(|member| member.1.as_deref().unwrap_or("Member")),
     );
+    let human_handles = addressing::member_handles(members.iter().filter_map(|member| {
+        (member.0 != config.account_id && member.0 != crate::system_account::SYSTEM_ACCOUNT_ID)
+            .then_some(member.1.as_deref())
+            .flatten()
+    }));
     let mut addressed = HashSet::new();
     let mut asks_system_agent = HashSet::new();
     let mut ids_of = HashMap::new();
@@ -243,7 +248,12 @@ pub(super) async fn build_input(
         if addressed.contains(&id) {
             message["addressesAgent"] = json!(true);
         }
-        if asks_system_agent.contains(&id) {
+        if asks_system_agent.contains(&id)
+            || (!addressed.contains(&id)
+                && message["text"].as_str().is_some_and(|text| {
+                    addressing::starts_with_facilitator_mention(text, &human_handles)
+                }))
+        {
             message["addressesSystemAgent"] = json!(true);
         }
         if ids_of

@@ -1,0 +1,133 @@
+{
+  "kind": "systemAgent",
+  "id": "facilitator-chinese-workflows",
+  "description": "A group proposes a decision and records a durable convention, then asks the Facilitator to propose an assignment.",
+  "title": "CSV import",
+  "members": [
+    {
+      "key": "maya",
+      "name": "Maya Chen"
+    },
+    {
+      "key": "alex",
+      "name": "Alex Park"
+    }
+  ],
+  "turns": [
+    {
+      "messages": [
+        {
+          "text": "\u65b9\u6848 A \u662f\u5148\u4e0a\u7ebf CSV\u3002",
+          "minutesAgo": 4,
+          "from": "maya"
+        },
+        {
+          "text": "\u65b9\u6848 B \u662f\u5148\u4e0a\u7ebf\u8868\u683c\u3002",
+          "minutesAgo": 3,
+          "from": "alex"
+        },
+        {
+          "text": "\u5e2e\u6211\u4eec\u628a\u8fd9\u4e24\u4e2a\u65b9\u6848\u6574\u7406\u6210\u6295\u7968",
+          "minutesAgo": 2,
+          "from": "maya"
+        }
+      ],
+      "expect": {
+        "reply": "any",
+        "workflowKind": "decision",
+        "allowedActions": [],
+        "card": {
+          "status": "none"
+        }
+      },
+      "stub": [
+        {
+          "final": {
+            "message": null,
+            "hooksHandled": [],
+            "workflowCard": {
+              "kind": "decision",
+              "title": "\u5148\u4e0a\u7ebf\u54ea\u4e2a\u5bfc\u5165\u683c\u5f0f\uff1f",
+              "options": [
+                "\u5148\u4e0a\u7ebf CSV",
+                "\u5148\u4e0a\u7ebf\u8868\u683c"
+              ],
+              "sourceMessageIds": "$newMessageIds"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "messages": [
+        {
+          "text": "\u6211\u4eec\u540c\u610f\u6bcf\u6b21\u5bfc\u5165\u90fd\u7531\u7b2c\u4e8c\u4eba\u5ba1\u6838\u3002",
+          "minutesAgo": 3,
+          "from": "maya"
+        },
+        {
+          "text": "\u8fd9\u4e2a\u89c4\u5219\u4ee5\u540e\u4e5f\u9002\u7528\uff0c\u5e2e\u5927\u5bb6\u8bb0\u4e0b\u6765\u3002",
+          "minutesAgo": 2,
+          "from": "alex"
+        }
+      ],
+      "expect": {
+        "reply": "any",
+        "workflowKind": "memory",
+        "allowedActions": [],
+        "card": {
+          "status": "none"
+        }
+      },
+      "stub": [
+        {
+          "final": {
+            "message": null,
+            "hooksHandled": [],
+            "workflowCard": {
+              "kind": "memory",
+              "title": "\u5bfc\u5165\u5ba1\u6838\u89c4\u5219",
+              "detail": "\u6bcf\u6b21\u5bfc\u5165\u7531\u7b2c\u4e8c\u4eba\u5ba1\u6838\u3002",
+              "sourceMessageIds": "$newMessageIds"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "messages": [
+        {
+          "text": "@Facilitator \u8bf7\u8ba9 Alex \u7684 agent \u5199\u4e00\u4efd CSV \u5bfc\u5165\u68c0\u67e5\u6e05\u5355\u3002",
+          "minutesAgo": 2,
+          "mentions": [
+            "system"
+          ],
+          "from": "maya"
+        }
+      ],
+      "expect": {
+        "reply": "any",
+        "workflowKind": "task",
+        "allowedActions": [],
+        "card": {
+          "status": "none"
+        }
+      },
+      "stub": [
+        {
+          "final": {
+            "message": null,
+            "hooksHandled": [],
+            "workflowCard": {
+              "kind": "task",
+              "title": "\u8d77\u8349 CSV \u5bfc\u5165\u68c0\u67e5\u6e05\u5355",
+              "detail": "\u5199\u4e00\u4efd CSV \u5bfc\u5165\u68c0\u67e5\u6e05\u5355\u3002",
+              "assigneeId": "$member:alex",
+              "sourceMessageIds": "$newMessageIds"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

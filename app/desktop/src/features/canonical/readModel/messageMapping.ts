@@ -1,4 +1,5 @@
 import { agentExchangeWaitsForViewer, withAgentExchangeProgress } from '@/features/cloud/agentExchangePresentation';
+import { toolsWithEventTaskTarget } from './toolTaskTarget';
 import { canonicalTools } from './toolMapping';
 export { canonicalTools } from './toolMapping';
 import { parseTurnSegments } from '@/features/chat/turnSegments';
@@ -11,11 +12,13 @@ import { cloudAgentStoredReplyHasRunOutput, isCloudAgentStoredNoProviderReply, i
 import { cloudDirectMessageDisplayText, parseCloudDirectMessageEnvelope } from '@/features/cloud/cloudDirectMessages';
 import { cloudGroupAgentConversationId } from '@/features/cloud/cloudGroupMessages';
 import { storedVoiceMessage, withoutVoiceAttachment } from '@/features/cloud/cloudVoiceMessage';
+import { normalizeFacilitatorCard } from '@/features/cloud/facilitatorCard';
 import { normalizePlanCardSnapshot } from '@/features/cloud/planCardSnapshot';
 import { messageEventSourcesField } from '@/features/cloud/cloudAgentSources';
 import { isProcessingPlaceholderText, stripOutreachContextEnvelope } from '@/features/collaboration/agentPlaceholderText';
 import { compatibleSourceConversationId } from '@/features/collaboration/legacyBridgeCompatibility';
-import type { CanonicalIdentity, CanonicalSessionMessage, CanonicalSessionState, DesktopChatToolSnapshot, Message, MessageActionMetadata } from '@/kordi-app/types';
+import { isFacilitatorHandoffRequestId } from '@/features/systemAgent/systemAgentIdentity';
+import type { CanonicalIdentity, CanonicalSessionMessage, CanonicalSessionState, Message, MessageActionMetadata } from '@/kordi-app/types';
 import { isSelfReferenceName, rewriteLeadingFirstPersonAgentMention, selfDisplayName } from '@/lib/identityLabels';
 import { formatDesktopClockTime } from '@/lib/time';
 import { agentMessagePresentation, ownerScopedAgentName } from './agentMessagePresentation';
@@ -60,57 +63,6 @@ function canonicalMessageActionWithRealSourceLabel(
       senderLabel,
     },
   };
-}
-
-function safeToolArguments(rawArguments: string) {
-  if (!rawArguments.trim()) return {};
-  try {
-    const parsed = JSON.parse(rawArguments);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-  } catch {
-    return {};
-  }
-}
-
-function contentTaskTarget(content: Record<string, unknown>) {
-  const explicit = stringValue(content.taskTarget)?.trim();
-  if (explicit) return explicit;
-  const parentSessionKind = stringValue(content.parentSessionKind)?.trim().toLowerCase();
-  const parentGroupSpaceId = stringValue(content.parentGroupSpaceId)?.trim();
-  const parentSessionTitle = stringValue(content.parentSessionTitle)?.trim();
-  if (parentSessionKind === 'group' || parentGroupSpaceId || parentSessionTitle?.startsWith('Group:')) {
-    return `Group: ${parentSessionTitle || parentGroupSpaceId || 'Shared session'}`;
-  }
-  const targetDisplayName = stringValue(content.targetDisplayName)?.trim();
-  if (targetDisplayName) return `User: ${targetDisplayName}`;
-  return null;
-}
-
-function toolHasTaskTarget(tool: DesktopChatToolSnapshot) {
-  const args = safeToolArguments(tool.arguments);
-  return Boolean(
-    stringValue(args.taskTarget)
-      || stringValue(args.task_target)
-      || stringValue(args.targetAudience)
-      || stringValue(args.target_audience)
-      || stringValue(args.targetGroup)
-      || stringValue(args.target_group)
-      || stringValue(args.targetUser)
-      || stringValue(args.target_user),
-  );
-}
-
-function toolsWithEventTaskTarget(tools: DesktopChatToolSnapshot[], content: Record<string, unknown>) {
-  const target = contentTaskTarget(content);
-  if (!target) return tools;
-  return tools.map((tool) => {
-    const name = tool.name.trim().toLowerCase();
-    if ((name !== 'task_operator' && name !== 'update_plan') || toolHasTaskTarget(tool)) return tool;
-    return {
-      ...tool,
-      arguments: JSON.stringify({ ...safeToolArguments(tool.arguments), taskTarget: target }),
-    };
-  });
 }
 
 export function directCollaborationSourceEventForOutreachDuplicate(message: CanonicalSessionMessage) {
@@ -304,6 +256,9 @@ export function mapCanonicalMessage(
   const legacyCollaborationAgentFailure = isAgentTurn && failed && sourceTransport.startsWith('desktop-bridge');
   const sourceConversationId = compatibleSourceConversationId(content)?.trim();
   const sourceRequestId = stringValue(content.requestId)?.trim();
+  const reportedRunStatus = deliveryState === 'processing' && isFacilitatorHandoffRequestId(sourceRequestId)
+    ? 'running'
+    : content.hostedRunStatus;
   const desktopEntryId = stringValue(content.desktopEntryId)?.trim()
     || (sourceTransport === 'cloud-self-agent' && message.senderRole === 'user' ? message.sourceEventId?.trim() : undefined);
   const parentMessageId = message.parentMessageId?.trim();
@@ -418,6 +373,7 @@ export function mapCanonicalMessage(
   if (role === 'system' && !displayText.trim()) return null;
   const voiceMessage = storedVoiceMessage(content.voiceMessage, isOwnMessage);
   const planCard = normalizePlanCardSnapshot(content.planCard);
+  const facilitatorCard = normalizeFacilitatorCard(content.facilitatorCard);
   return withAgentExchangeProgress({
     id: message.id,
     // A message typed in this window keeps its canonical id as its render
@@ -442,7 +398,7 @@ export function mapCanonicalMessage(
     senderProfileImageUrl: identity?.profileImageUrl ?? null,
     senderAvatarSeed: canonicalIdentityAvatarSeed(identity),
     isOwnMessage,
-    showSenderMeta: role === 'person' || role === 'external-agent', ...systemNoticeSender(messageKind, identity, planCard, isOwnMessage, identityById),
+    showSenderMeta: role === 'person' || role === 'external-agent', ...systemNoticeSender(messageKind, identity, planCard, isOwnMessage, identityById, Boolean(facilitatorCard)),
     text: isAgentTurn ? '' : displayText,
     time,
     timestampMs: message.createdAtMs,
@@ -450,7 +406,7 @@ export function mapCanonicalMessage(
     callActivity: canonicalCallActivity(message, content, isOwnMessage),
     messageKind: voiceMessage ? 'voice' : role === 'system' ? stringValue(content.kind) ?? messageKind : undefined,
     voiceMessage,
-    planCard, ...messageEventSourcesField(content.sources),
+    planCard, facilitatorCard, ...messageEventSourcesField(content.sources),
     detail: stringValue(content.detail),
     attachments: withoutVoiceAttachment(canonicalAttachments(content.attachments), voiceMessage),
     mentions,
@@ -480,8 +436,8 @@ export function mapCanonicalMessage(
           ...(ending ? { ending } : {}),
           replyToMessageId,
           pendingCollaborationAgentRequest,
-          hostedRunStatus: !completed && (content.hostedRunStatus === 'queued' || content.hostedRunStatus === 'leased' || content.hostedRunStatus === 'running')
-            ? content.hostedRunStatus : undefined,
+          hostedRunStatus: !completed && (reportedRunStatus === 'queued' || reportedRunStatus === 'leased' || reportedRunStatus === 'running')
+            ? reportedRunStatus : undefined,
         }
       : undefined,
   }, content.agentExchangeStatus, content.agentExchangeWaitingFor, agentExchangeWaitsForViewer(

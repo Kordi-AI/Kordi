@@ -1598,6 +1598,9 @@ struct ConversationView: View {
                     onPlanCardAction: { action in
                         await model.performPlanCardAction(action)
                     },
+                    onFacilitatorCardRequest: { id, action in
+                        try await model.facilitatorCard(id: id, action: action)
+                    },
                     onUpdateActionFrame: { frame in
                         updateMessageActionFrame(for: message.id, frame: frame, viewportFrame: viewportFrame)
                     },

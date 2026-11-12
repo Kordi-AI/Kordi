@@ -868,10 +868,9 @@ actor CloudAPIClient {
             query: query,
             fallback: "Could not load reliable message history."
         )
-        response.messages.forEach { chatMessagesById[$0.id] = $0 }
         var messages: [CloudMessageDTO] = []
         messages.reserveCapacity(response.messages.count)
-        for message in response.messages {
+        for message in response.messages.map(remember) {
             messages.append(legacyMessage(
                 from: message,
                 conversation: conversation,
@@ -1427,6 +1426,17 @@ actor CloudAPIClient {
     func planCard(token: String, eventID: String, fallback: String = "Could not load the plan.") async throws -> PlanCard {
         let path = eventID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? eventID
         return try await send(path: "/v1/cloud/plan_cards/\(path)", method: "GET", token: token, fallback: fallback)
+    }
+
+    func facilitatorCard(token: String, id: UUID, action: FacilitatorCardAction? = nil) async throws -> FacilitatorCard {
+        let path = "/v1/cloud/facilitator/cards/\(id.uuidString.lowercased())"
+        if let action {
+            return try await send(
+                path: path, method: "POST", token: token, body: action,
+                fallback: "Could not update the Facilitator card."
+            )
+        }
+        return try await send(path: path, method: "GET", token: token, fallback: "Could not load the Facilitator card.")
     }
 
     func setReaction(
@@ -2390,7 +2400,7 @@ actor CloudAPIClient {
             chatBootstrapTask = nil
             lastChatBootstrap = response
             response.conversations.forEach(remember)
-            response.latestMessages.forEach { chatMessagesById[$0.id] = $0 }
+            response.latestMessages.forEach { _ = remember($0) }
             return response
         } catch {
             if chatBootstrapGeneration == expectedGeneration { chatBootstrapTask = nil }
@@ -2500,6 +2510,14 @@ actor CloudAPIClient {
         }
     }
 
+    private func remember(_ message: CloudChatMessage) -> CloudChatMessage {
+        if let cached = chatMessagesById[message.id], cached.version > message.version {
+            return cached
+        }
+        chatMessagesById[message.id] = message
+        return message
+    }
+
     func legacyMessage(
         from message: CloudChatMessage,
         conversation: CloudChatConversation,
@@ -2545,6 +2563,8 @@ actor CloudAPIClient {
             ),
             voiceMessage: message.content.voiceMessage,
             planCard: message.content.planCard,
+            facilitatorCard: KordiSystemAgentIdentity.isSystemAgent(accountId: message.senderAccountId)
+                ? message.content.facilitatorCard : nil,
             conversationId: conversation.id,
             conversationSequence: message.conversationSequence,
             version: message.version,
@@ -2612,8 +2632,9 @@ actor CloudAPIClient {
         if messageTypes.contains(event.eventType),
            let message = event.payload.message,
            let conversation {
-            chatMessagesById[message.id] = message
-            return [messageEvent(id: event.eventId, message: message, conversation: conversation, occurredAt: event.occurredAt)]
+            let latest = remember(message)
+            guard latest.version == message.version else { return [] }
+            return [messageEvent(id: event.eventId, message: latest, conversation: conversation, occurredAt: event.occurredAt)]
         }
         if ["conversation.created", "conversation.updated", "membership.updated"].contains(event.eventType),
            let conversation {

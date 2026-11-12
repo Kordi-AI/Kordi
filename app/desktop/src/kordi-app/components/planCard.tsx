@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils';
 import { planCardAction, type PlanCardActionRequest } from '@/features/cloud/planCardClient';
 import { cloudAvatarImageUrl } from '@/features/cloud/avatar';
 import { cachedSessionSnapshot, loadSession } from '@/features/cloud/session';
-import type { MessagePlanCard, MessagePlanCardOption } from '@/kordi-app/types/message';
+import type { Message, MessagePlanCard, MessagePlanCardOption } from '@/kordi-app/types/message';
+import { FacilitatorCardContent } from './facilitatorCard';
 import { compactCount, planCardAttendance, planCardCountsLabel, planCardView } from '@/features/cloud/planCardSnapshot';
 import { shouldLoadAvatarThroughNativeProxy, useRemoteAvatarImage } from './remoteAvatarImage';
 import { PlanCardChangeTimeDialog } from './planCardChangeTime';
@@ -74,6 +75,12 @@ function leadingOption(options: MessagePlanCardOption[]): MessagePlanCardOption 
     if (!best || option.votes.length > best.votes.length) best = option;
   }
   return best;
+}
+
+export function TranscriptCardContent({ message }: { message: Message }) {
+  if (message.facilitatorCard) return <FacilitatorCardContent snapshot={message.facilitatorCard} />;
+  if (!message.planCard) return null;
+  return <PlanCardContent card={message.planCard} conversationId={message.reactionConversationId} />;
 }
 
 /**

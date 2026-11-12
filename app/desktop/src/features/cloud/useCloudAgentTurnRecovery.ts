@@ -14,6 +14,7 @@ import type {
 } from '@/kordi-app/types';
 import { mergeCanonicalMessageRow } from '@/features/canonical/canonicalStateReducers';
 import { cloudAgentTurnLifecycleState } from '@/features/canonical/cloudAgentTurnLifecycle';
+import { isFacilitatorHandoffRequestId } from '@/features/systemAgent/systemAgentIdentity';
 import type { CloudAccount, CloudAuthClient } from './authClient';
 import { cloudGroupAgentConversationId } from './cloudGroupMessages';
 import { removeCloudGroupPendingRowsForTerminalResponse } from './cloudAgentRequestState';
@@ -62,6 +63,8 @@ export function interruptedCloudGroupAgentTurnRecovery({
     || cleanText(content.requestId)
     || cleanText(content.replyToMessageId);
   if (!requestId) return null;
+  // The approved handoff stays with its server-coordinated run across reloads.
+  if ([requestId, cleanText(content.requestId), cleanText(content.replyToMessageId)].some(isFacilitatorHandoffRequestId)) return null;
   const sender = cleanText(content.sender) || 'Kordi';
   return {
     requestId,

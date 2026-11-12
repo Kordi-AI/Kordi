@@ -19,6 +19,8 @@ pub(crate) struct Job<'a> {
     pub resume: bool,
     pub tools: Vec<Value>,
     pub timeout_ms: u64,
+    pub model_step_limit: Option<usize>,
+    pub tool_call_limit: Option<usize>,
 }
 
 pub(crate) fn worker_command() -> Result<WorkerCommand, RuntimeError> {
@@ -64,7 +66,7 @@ impl Job<'_> {
                 api: Some(api_for_provider(self.auth).into()),
                 base_url: Some(self.auth.base_url.clone()),
                 context_window: None,
-                max_tokens: None,
+                max_tokens: self.auth.max_output_tokens,
             },
             auth: AuthConfig {
                 kind: if self.auth.api_mode == OpenAiApiMode::ChatCompletions {
@@ -92,9 +94,9 @@ impl Job<'_> {
             limits: RunLimits {
                 timeout_ms: self.timeout_ms,
                 max_output_bytes: 16 * 1024 * 1024,
-                max_steps: None,
+                max_steps: self.model_step_limit,
                 idle_timeout_ms: None,
-                max_tool_calls: None,
+                max_tool_calls: self.tool_call_limit,
             },
         })
     }

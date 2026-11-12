@@ -1,4 +1,4 @@
-import { isSystemAgentIdentity, KORDI_SYSTEM_AVATAR_URL, KORDI_SYSTEM_NAME, KORDI_SYSTEM_NOTICE_KIND } from '@/features/systemAgent/systemAgentIdentity';
+import { isSystemAgentIdentity, KORDI_FACILITATOR_NAME, KORDI_SYSTEM_AVATAR_URL, KORDI_SYSTEM_NAME, KORDI_SYSTEM_NOTICE_KIND } from '@/features/systemAgent/systemAgentIdentity';
 import { defaultCloudAgentId } from '@/features/cloud/cloudAgentIdentity';
 import type { CanonicalIdentity, CanonicalSessionMessage, Message } from '@/kordi-app/types';
 import type { MessagePlanCard } from '@/kordi-app/types/message';
@@ -22,12 +22,21 @@ export function isGroupEventNotice(messageKind: CanonicalSessionMessage['message
  * The seed keeps notices from grouping with the posting account's own messages. A notice is
  * never an own bubble, even when the viewer's account posted it (an organizer's plan card). */
 export function systemNoticeSender(messageKind: CanonicalSessionMessage['messageKind'] | null | undefined, sender?: Parameters<typeof isSystemAgentIdentity>[0],
-  planCard?: MessagePlanCard | null, viewerIsOwner = false, identityById?: Map<string, CanonicalIdentity>) {
+  planCard?: MessagePlanCard | null, viewerIsOwner = false, identityById?: Map<string, CanonicalIdentity>, facilitatorCard = false) {
   const agent = isSystemNoticeKind(messageKind) ? planCardAgentSender(planCard, viewerIsOwner, identityById) : null;
   if (agent) return agent;
-  return isSystemNoticeKind(messageKind) || isSystemAgentIdentity(sender)
-    ? { sender: KORDI_SYSTEM_NAME, senderProfileImageUrl: KORDI_SYSTEM_AVATAR_URL, showSenderMeta: true, senderAvatarSeed: 'kordi-system', senderOwnerName: undefined, isOwnMessage: false }
-    : null;
+  const fromFacilitator = isSystemAgentIdentity(sender) && (!isSystemNoticeKind(messageKind) || Boolean(planCard) || facilitatorCard);
+  if (!fromFacilitator && !isSystemNoticeKind(messageKind)) return null;
+  const name = fromFacilitator ? KORDI_FACILITATOR_NAME : KORDI_SYSTEM_NAME;
+  return {
+    sender: name,
+    sourceSenderLabel: name,
+    senderProfileImageUrl: KORDI_SYSTEM_AVATAR_URL,
+    showSenderMeta: true,
+    senderAvatarSeed: fromFacilitator ? 'kordi-facilitator' : 'kordi-system',
+    senderOwnerName: undefined,
+    isOwnMessage: false,
+  };
 }
 
 /** Direct-chat rows: re-dresses a mapped message as a System notice, dropping the poster's

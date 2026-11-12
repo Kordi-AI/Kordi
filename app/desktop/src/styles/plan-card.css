@@ -105,3 +105,9 @@
 .app-plan-card-option-winner .app-plan-card-option-vote { border-color: color-mix(in oklab, #1e8a5f 60%, transparent); }
 .app-plan-card-calendar-note { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 14px; color: #1e8a5f; }
 .app-plan-card-guidance { font-size: 11px; line-height: 14px; color: var(--utility-muted-text); }
+
+.app-facilitator-card-detail { margin: 0; font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.app-facilitator-option { justify-content: space-between; text-align: left; }
+.app-facilitator-option[aria-pressed="true"] { border-color: var(--app-chat-accent); }
+.app-facilitator-option span:last-child { flex: none; color: var(--utility-muted-text, var(--app-chat-meta-peer)); }
+.app-facilitator-card .app-plan-card-actions:empty { display: none; }

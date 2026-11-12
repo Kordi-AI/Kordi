@@ -134,12 +134,14 @@ struct AvatarActionPill: View {
     }
 }
 
-/// The System agent, the built-in plan agent. Its account still posts plans, but
-/// the app shows it as System with the front-facing Kordi bird, like every server notice.
+/// Facilitator is the system-managed agent for group conversations.
 enum KordiSystemAgentIdentity {
     // The stored ids keep the agent's old name.
     static let accountId = "acct_kordi_pip"
     static let agentId = "cloud_agent_kordi_pip"
+    static let displayName = "Facilitator"
+    static let messageKind = "facilitator-message"
+    static let avatar = ConversationAvatarIdentity(name: displayName, source: nil, seed: accountId)
     /// The name the agent's account carried before it showed as System.
     static let legacyName = "PiP"
 

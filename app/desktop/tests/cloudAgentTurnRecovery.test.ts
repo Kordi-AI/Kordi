@@ -60,6 +60,15 @@ test('startup recovery also terminates queued work that lost its coordinator', (
   );
 });
 
+test('startup recovery leaves approved Facilitator handoffs to the server', () => {
+  for (const state of ['queued', 'processing'] as const) {
+    const message = turn(state);
+    message.parentMessageId = 'canonical:request';
+    message.content = { ...message.content, requestId: 'facilitator-handoff:assignment' };
+    assert.equal(interruptedCloudGroupAgentTurnRecovery({ message, accountId: 'acct_me' }), null);
+  }
+});
+
 test('startup recovery ignores terminal and other-account turns', () => {
   assert.equal(interruptedCloudGroupAgentTurnRecovery({
     message: turn('complete'),

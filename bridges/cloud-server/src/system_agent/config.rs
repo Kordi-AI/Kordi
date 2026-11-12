@@ -19,15 +19,11 @@ use crate::service_model_config::{shared_setting, validate_base_url};
 // old name so existing rows stay valid.
 pub const DEFAULT_SYSTEM_AGENT_ACCOUNT_ID: &str = "acct_kordi_pip";
 pub const DEFAULT_SYSTEM_AGENT_ID: &str = "cloud_agent_kordi_pip";
-/// People see the plan agent as System, like every other server notice.
-pub const DEFAULT_SYSTEM_AGENT_NAME: &str =
-    crate::distribution::development_default(crate::system_account::SYSTEM_DISPLAY_NAME);
+pub const DEFAULT_SYSTEM_AGENT_NAME: &str = "Facilitator";
 pub const DEFAULT_SYSTEM_AGENT_SUBTITLE: &str =
-    crate::distribution::development_default("Keeps plans in this chat honest");
+    "Helps the group clarify goals and agree on next steps";
 pub const DEFAULT_SYSTEM_AGENT_OWNER_EMAIL: &str =
     crate::distribution::development_default("pip@kordi.ai");
-pub const DEFAULT_SYSTEM_AGENT_OPENAI_MODEL: &str =
-    crate::distribution::development_default("gpt-5.6-luna");
 
 const SYSTEM_AGENT_OPENAI_PROVIDER: &str = "openai";
 const SYSTEM_AGENT_OPENAI_AUTH_CHOICE: &str = "pip-service-api-key";
@@ -301,9 +297,8 @@ impl PendingSystemAgentConfig {
         mut get: impl FnMut(&str) -> Option<String>,
         pools: Option<ResourcePools>,
     ) -> Result<Option<Self>, SystemAgentConfigError> {
-        // The System agent is always on once its key is configured;
-        // KORDI_SYSTEM_AGENT_ENABLED=false is the only way to turn it off, and
-        // =true without a key is an error.
+        // A configured provider needs an explicit model. The enable switch
+        // can turn it off or require it even when no provider is configured.
         let switch = setting(&mut get, "ENABLED");
         if switched_off(switch.as_deref()) {
             return Ok(None);
@@ -342,17 +337,19 @@ impl PendingSystemAgentConfig {
                             Ok(None)
                         };
                     };
-                    let model = required_or_default(
-                        &mut get,
-                        "OPENAI_MODEL",
-                        DEFAULT_SYSTEM_AGENT_OPENAI_MODEL,
-                    );
+                    let model = setting(&mut get, "OPENAI_MODEL").ok_or(
+                        SystemAgentConfigError::Invalid(
+                            "KORDI_SYSTEM_AGENT_OPENAI_MODEL is required",
+                        ),
+                    )?;
                     let base_url = validated_base_url(setting(&mut get, "OPENAI_BASE_URL"))?;
                     SystemAgentProviderAuth::openai_api_key(api_key, model)?.with_base_url(base_url)
                 }
-                Some(_) => return Err(SystemAgentConfigError::Invalid(
-                    "KORDI_SYSTEM_AGENT_PROVIDER must be openai, openai-compatible, or vertex-ai",
-                )),
+                Some(_) => {
+                    return Err(SystemAgentConfigError::Invalid(
+                        "KORDI_SYSTEM_AGENT_PROVIDER must be openai, openai-compatible, or vertex-ai",
+                    ));
+                }
             }
         };
         let resource_pools = ResourcePoolRegistry::new(
@@ -389,7 +386,11 @@ impl PendingSystemAgentConfig {
             ),
             owner_email,
             agent_id: required_or_default(&mut get, "AGENT_ID", DEFAULT_SYSTEM_AGENT_ID),
-            name: required_or_default(&mut get, "AGENT_NAME", DEFAULT_SYSTEM_AGENT_NAME),
+            name: setting(&mut get, "AGENT_NAME")
+                .filter(|name| {
+                    !name.eq_ignore_ascii_case(crate::system_account::SYSTEM_DISPLAY_NAME)
+                })
+                .unwrap_or_else(|| DEFAULT_SYSTEM_AGENT_NAME.to_string()),
             subtitle: required_or_default(
                 &mut get,
                 "AGENT_SUBTITLE",

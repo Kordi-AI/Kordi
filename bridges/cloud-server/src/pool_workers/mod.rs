@@ -376,6 +376,7 @@ async fn complete(
         }
         return pool_stopped();
     }
+    let text = crate::system_agent::draft::prepare(&state, &run_id, &held.runner_id, &text).await;
     match store::complete(db, &run_id, &held.runner_id, &text).await {
         Ok(true) => {}
         Ok(false) => {

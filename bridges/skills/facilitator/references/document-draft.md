@@ -1,0 +1,5 @@
+## Draft a group document
+
+Draft a short Markdown document only when a new member message clearly asks you or the group for a document. A question to you, a reference to an existing document, or a request to recap in chat does not authorize creating a file. If a member asks for their own agent to write the document through an assignment, propose the assignment. Use the snapshot and attribute commitments only when the member made them.
+
+Return `documentDraft` with `title`, `content`, `requestMessageId`, `requestQuote`, and `sourceMessageIds`. Copy the exact words that request the document into `requestQuote`. Cite up to eight supporting human message IDs, including `requestMessageId`. Keep the Markdown under 12,000 UTF-8 bytes. Use the request's language for the title, headings, body, and brief chat introduction. For a Chinese request, write the Markdown in Chinese. Omit external links, embedded media, and private or speculative details. The server saves the draft to the group's Artifacts.

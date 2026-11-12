@@ -292,10 +292,13 @@ pub(crate) async fn claim_approved(
                ON member.conversation_id = p.conversation_id
               AND member.account_id = p.owner_account_id
               AND member.membership_state = 'active'
-             JOIN ",
+             WHERE p.run_id = $1 AND p.owner_account_id = $2 AND p.status = 'approved'
+               AND ((p.facilitator_task AND p.agent_id = 'cloud-agent:' || p.owner_account_id
+                     AND EXISTS (SELECT 1 FROM cloud_accounts account
+                         WHERE account.account_id = p.owner_account_id AND account.ai_consent_status = 'allowed'))
+                    OR (NOT p.facilitator_task AND EXISTS (SELECT 1 FROM ",
         super::agents::watchers_sql!(),
-        " agent ON agent.agent_id = p.agent_id AND agent.owner_account_id = p.owner_account_id
-             WHERE p.run_id = $1 AND p.owner_account_id = $2 AND p.status = 'approved')"
+        " agent WHERE agent.agent_id = p.agent_id AND agent.owner_account_id = p.owner_account_id))))"
     ))
     .bind(run_id)
     .bind(owner)
@@ -307,6 +310,11 @@ pub(crate) async fn claim_approved(
     let executor = executor(session, claim_id);
     if !lease(pool, run_id, owner, &executor, input.runtime_route.as_ref()).await? {
         return Ok(Some(json!({"runId": run_id, "acquired": false})));
+    }
+    if let Err(error) =
+        crate::cloud_agent_runtime::runs::processing_slot::show(pool, run_id, false).await
+    {
+        eprintln!("[proactive] Could not update the reply slot: {error:?}");
     }
     let identity =
         crate::cloud_agent_runtime::runs::identity::identity_for_run(pool, run_id).await?;

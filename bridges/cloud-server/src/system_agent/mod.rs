@@ -1,4 +1,4 @@
-//! The System agent: the plan agent built into every group conversation.
+//! Facilitator, the neutral agent built into group conversations.
 //!
 //! The System agent is a system-managed account that runs on a Kordi-operated
 //! provider credential, sweeps the conversations it belongs to, and keeps one
@@ -11,11 +11,12 @@ pub(crate) mod cards;
 mod config;
 mod conflicts;
 pub(crate) mod context;
+pub(crate) mod draft;
 mod input;
 mod limits;
 mod loops;
 pub mod membership;
-mod mentions;
+pub(crate) mod mentions;
 mod ownership;
 mod ownership_facts;
 mod ownership_store;
@@ -26,6 +27,7 @@ pub mod store;
 mod triggers;
 mod triggers_store;
 mod worker;
+pub(crate) mod workflows;
 
 pub use agent::bootstrap_system_agent;
 #[cfg(test)]

@@ -72,7 +72,7 @@ pub struct CardSnapshot {
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnOutcome {
-    /// False when the sweep's free check decided no model call was needed.
+    /// False when the sweep did not dispatch a model call.
     pub ran: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -92,6 +92,8 @@ pub struct TurnOutcome {
     pub card_before: Option<CardSnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card: Option<CardSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_kind: Option<String>,
     /// The run's final envelope, as the runner returned it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
@@ -302,6 +304,12 @@ async fn run_turn(harness: &Harness, seeded: &Seeded, stub: &[Value]) -> Result<
     match result {
         Ok(text) => {
             store::complete(pool, &run_id, RUNNER_ID, &text).await?;
+            outcome.workflow_kind = sqlx_core::query_scalar::query_scalar(
+                "SELECT kind FROM cloud_facilitator_cards WHERE run_id = $1 AND message_id IS NOT NULL",
+            )
+            .bind(&run_id)
+            .fetch_optional(pool)
+            .await?;
             outcome.output = Some(text);
         }
         Err(error) => {

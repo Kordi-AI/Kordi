@@ -352,6 +352,30 @@ pub async fn card_action(pool: &PgPool, seeded: &Seeded, action: &CardAction) ->
     match action {
         CardAction::Vote { by, option } => vote(pool, seeded, &event_id, by, *option).await?,
         CardAction::Rsvp { by, rsvp: answer } => rsvp(pool, seeded, &event_id, by, answer).await?,
+        CardAction::Confirm { by, option } => {
+            let row = store::load(pool, &event_id)
+                .await?
+                .context("missing plan")?;
+            let option_id = option.map(|index| format!("opt_{}", index + 1));
+            store::confirm(
+                pool,
+                &event_id,
+                row.revision,
+                seeded.account(by)?,
+                option_id.as_deref(),
+                None,
+            )
+            .await
+            .map_err(|error| anyhow!("fixture confirmation: {error}"))?;
+        }
+        CardAction::Cancel { by } => {
+            let row = store::load(pool, &event_id)
+                .await?
+                .context("missing plan")?;
+            store::cancel(pool, &event_id, row.revision, seeded.account(by)?, None)
+                .await
+                .map_err(|error| anyhow!("fixture cancellation: {error}"))?;
+        }
     }
     query(
         "UPDATE cloud_plan_cards SET updated_at = now() - interval '2 minutes' WHERE event_id = $1",

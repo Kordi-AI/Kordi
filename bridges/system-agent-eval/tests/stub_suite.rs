@@ -159,14 +159,15 @@ async fn system_agent_fixtures_pass_with_the_stub_model() {
     assert_eq!(failures(&report), Vec::<String>::new());
     let summary = &report.summary;
     assert_eq!(summary.fixtures.passed, fixtures.len());
-    // The sweep's free check skips small talk, messages for other agents and
-    // a reminder that already went out.
+    // The semantic pass reads small talk and stays silent. Messages owned by
+    // other agents and already handled card events still skip the model.
     assert_eq!(summary.skipped_by_sweep, 3, "{summary:?}");
     for metric in [
         "planCard",
         "silence",
         "reply",
         "toolValidity",
+        "workflow",
         "repetition",
         "reliability",
         "sweep",
@@ -199,7 +200,7 @@ async fn scoring_catches_a_model_that_misbehaves() {
             [
                 "silent-past-recap",
                 "repeat-temptation",
-                "organizer-cancels",
+                "deal-across-two-passes",
                 "reschedule-confirmed-plan",
             ]
             .contains(&fixture.id())
@@ -222,25 +223,21 @@ async fn scoring_catches_a_model_that_misbehaves() {
     );
     set_stub(
         &mut fixtures,
-        "organizer-cancels",
-        0,
-        json!([
-            {"toolCalls": [{"action": "cancel", "eventId": "$eventId", "revision": 999,
-                "canceledBy": "$member:maya"}]},
-            {"final": {"message": "Canceled.", "hooksHandled": []}}
-        ]),
+        "deal-across-two-passes",
+        1,
+        json!([{"final": {"message": "Confirmed.", "hooksHandled": [],
+            "planCard": {"action": "confirm", "eventId": "$eventId", "revision": "$revision",
+                "confirmedBy": "$member:maya"}}}]),
     );
     // A second card instead of revising the confirmed one.
     set_stub(
         &mut fixtures,
         "reschedule-confirmed-plan",
         0,
-        json!([
-            {"toolCalls": [{"action": "propose", "conversationId": "$conversationId",
+        json!([{"final": {"message": null, "hooksHandled": [],
+            "planCard": {"action": "propose", "conversationId": "$conversationId",
                 "title": "Dinner at Luigi's", "state": "awaitingConfirmation",
-                "participants": "$participants:maya", "sourceMessageIds": "$newMessageIds"}]},
-            {"final": {"message": null, "hooksHandled": []}}
-        ]),
+                "participants": "$participants:maya", "sourceMessageIds": "$newMessageIds"}}}]),
     );
     let report = replay_with_stub("misbehaving", &fixtures).await;
     let failed = failures(&report);
@@ -254,11 +251,7 @@ async fn scoring_catches_a_model_that_misbehaves() {
         "{failed:#?}"
     );
     assert!(
-        has("organizer-cancels / pass 1 / plan_card cancel is expected and accepted"),
-        "{failed:#?}"
-    );
-    assert!(
-        has("organizer-cancels / pass 1 / uses plan_card cancel"),
+        has("deal-across-two-passes / pass 2 / plan_card confirm is expected and accepted"),
         "{failed:#?}"
     );
     assert!(

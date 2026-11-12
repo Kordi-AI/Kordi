@@ -263,6 +263,7 @@ pub fn router_with_shared_rate_limiter(
         )
         .merge(crate::digest::routes(state.clone()))
         .merge(crate::plan_cards::routes(state.clone()))
+        .merge(crate::system_agent::workflows::routes(state.clone()))
         .merge(crate::pool_workers::routes(state.clone()))
         .merge(crate::projects::routes(state.clone()))
         .merge(crate::support::routes(state.clone()))

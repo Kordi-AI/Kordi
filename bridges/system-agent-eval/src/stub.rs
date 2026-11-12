@@ -168,7 +168,7 @@ impl CloudModelProvider for StubProvider {
         }
         let text = match &step["final"] {
             Value::String(text) => text.clone(),
-            other => other.to_string(),
+            other => resolve(other, &Context::from_messages(messages), &self.members).to_string(),
         };
         Ok(ModelProviderResponse::FinalText(text))
     }

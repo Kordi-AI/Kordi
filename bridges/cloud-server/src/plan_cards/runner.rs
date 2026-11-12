@@ -34,6 +34,8 @@ fn source_messages(prompt: &str) -> Vec<Value> {
         .filter(|message| message["isNew"] == true)
         .filter(|message| {
             message["fromSystemAgent"] != true
+                && message["fromAgent"] != true
+                && message["agentOwned"] != true
                 && message["addressesAgent"] != true
                 && message["answeredByAgent"] != true
         })
@@ -122,6 +124,13 @@ pub async fn runner_action(
             StatusCode::FORBIDDEN,
         );
     };
+    if serde_json::from_str::<Value>(&prompt).is_ok_and(|input| input["workflowKind"].is_string()) {
+        return error(
+            "plan_card_unavailable",
+            "This Facilitator run is handling a decision, memory, or assignment.",
+            StatusCode::FORBIDDEN,
+        );
+    }
     let request: Request = match serde_json::from_value(request) {
         Ok(request) => request,
         Err(err) => {
@@ -132,6 +141,13 @@ pub async fn runner_action(
             )
         }
     };
+    if !matches!(&request, Request::Propose(_)) {
+        return error(
+            "plan_card_member_action_required",
+            "Members can vote, RSVP, and confirm or change the state of a plan on the card.",
+            StatusCode::FORBIDDEN,
+        );
+    }
     let action = request.action();
     let actor = Actor {
         account_id: system_agent_account_id,

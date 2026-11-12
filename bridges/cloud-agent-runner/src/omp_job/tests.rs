@@ -54,6 +54,8 @@ fn sandbox_free_jobs_keep_exact_tool_catalog_and_route() {
             resume: false,
             tools: tools.clone(),
             timeout_ms: 20_000,
+            model_step_limit: None,
+            tool_call_limit: None,
         }
         .request()
         .unwrap();
@@ -84,6 +86,7 @@ fn auth_fixture(base_url: String) -> OpenAiProviderConfig {
         api_mode: OpenAiApiMode::ChatCompletions,
         account_id: None,
         verbatim_model: false,
+        max_output_tokens: None,
         headers: Default::default(),
     }
 }
@@ -168,6 +171,8 @@ async fn packaged_worker_runs_scoped_system_agent_and_digest_tools() {
                 resume: false,
                 tools,
                 timeout_ms: 20_000,
+                model_step_limit: None,
+                tool_call_limit: None,
             },
             &host,
             &events,

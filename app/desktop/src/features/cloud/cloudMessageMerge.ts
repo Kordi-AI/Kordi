@@ -155,6 +155,7 @@ export function cloudMessagesEqual(
     && (message.clientMessageId ?? null) === (other.clientMessageId ?? null)
     && (message.messageKind ?? null) === (other.messageKind ?? null)
     && cloudVoiceMessagesEqual(message.voiceMessage, other.voiceMessage)
+    && JSON.stringify(message.facilitatorCard ?? null) === JSON.stringify(other.facilitatorCard ?? null)
     && JSON.stringify(message.planCard ?? null) === JSON.stringify(other.planCard ?? null)
     && (message.canonicalHistoryLocalMessageId ?? null) === (other.canonicalHistoryLocalMessageId ?? null)
     && (message.version ?? null) === (other.version ?? null)
@@ -211,6 +212,7 @@ export function mergeCloudMessageMonotonicState(
     voiceMessage: incomingIsOlder
       ? current.voiceMessage
       : incoming.voiceMessage ?? current.voiceMessage,
+    facilitatorCard: incomingIsOlder ? current.facilitatorCard : incoming.facilitatorCard ?? current.facilitatorCard,
     planCard: incomingIsOlder
       ? current.planCard
       : incoming.planCard ?? current.planCard,

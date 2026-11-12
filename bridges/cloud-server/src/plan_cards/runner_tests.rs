@@ -40,6 +40,7 @@ impl Fixture {
         }
         let pending = PendingSystemAgentConfig::from_lookup(|key| match key {
             "KORDI_SYSTEM_AGENT_OPENAI_API_KEY" => Some("synthetic-test-key".to_string()),
+            "KORDI_SYSTEM_AGENT_OPENAI_MODEL" => Some("synthetic-model".to_string()),
             _ => None,
         })
         .unwrap()
@@ -140,6 +141,18 @@ impl Fixture {
         })).await
     }
 
+    async fn member_action(&self, account_id: &str, request: Value) -> super::models::PlanCardRow {
+        let actor = super::routes::Actor {
+            account_id: account_id.to_owned(),
+            on_behalf_of_conversation: None,
+            represented_accounts: Default::default(),
+            source_message_ids: Vec::new(),
+        };
+        super::routes::dispatch_row(&self.pool, &actor, serde_json::from_value(request).unwrap())
+            .await
+            .unwrap()
+    }
+
     async fn calendar_members(&self, event_id: &str) -> Vec<String> {
         assert!(super::projection::drain(&self.pool, 100)
             .await
@@ -158,7 +171,7 @@ impl Fixture {
 
 #[tokio::test]
 #[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
-async fn leased_system_actions_confirm_decline_and_cancel_with_matching_calendars() {
+async fn only_members_can_confirm_decline_and_cancel_a_facilitator_plan() {
     let f = Fixture::new().await;
     let card = f.propose().await;
     let event = card["eventId"].as_str().unwrap();
@@ -172,23 +185,28 @@ async fn leased_system_actions_confirm_decline_and_cancel_with_matching_calendar
     )
     .await;
     for member in [&f.owner, &f.attendee, &f.peer] {
-        f.ok(json!({"action":"vote","eventId":event,"participantId":member,"optionId":"first"}))
-            .await;
-        f.ok(json!({"action":"rsvp","eventId":event,"participantId":member,"rsvp":"yes"}))
-            .await;
+        let vote =
+            json!({"action":"vote","eventId":event,"participantId":member,"optionId":"first"});
+        let rsvp = json!({"action":"rsvp","eventId":event,"participantId":member,"rsvp":"yes"});
+        assert_eq!(f.call(vote.clone()).await.status(), 403);
+        assert_eq!(f.call(rsvp.clone()).await.status(), 403);
+        f.member_action(member, vote).await;
+        f.member_action(member, rsvp).await;
     }
     let current = super::store::load(&f.pool, event).await.unwrap().unwrap();
-    let confirmed = f.ok(json!({"action":"confirm","eventId":event,"revision":current.revision,"confirmedBy":f.owner,"optionId":"first"})).await;
-    assert_eq!(confirmed["state"], "confirmed");
+    let confirm = json!({"action":"confirm","eventId":event,"revision":current.revision,"confirmedBy":f.owner,"optionId":"first"});
+    assert_eq!(f.call(confirm.clone()).await.status(), 403);
+    let confirmed = f.member_action(&f.owner, confirm).await;
+    assert_eq!(confirmed.state, super::models::PlanCardState::Confirmed);
     let mut all = vec![f.owner.clone(), f.attendee.clone(), f.peer.clone()];
     all.sort();
     assert_eq!(f.calendar_members(event).await, all);
 
     f.messages(&[(&f.attendee, "I can't make it")], 0).await;
-    let declined = f
-        .ok(json!({"action":"rsvp","eventId":event,"participantId":f.attendee,"rsvp":"no"}))
-        .await;
-    assert_eq!(declined["state"], "confirmed");
+    let decline = json!({"action":"rsvp","eventId":event,"participantId":f.attendee,"rsvp":"no"});
+    assert_eq!(f.call(decline.clone()).await.status(), 403);
+    let declined = f.member_action(&f.attendee, decline).await;
+    assert_eq!(declined.state, super::models::PlanCardState::Confirmed);
     let row = super::store::load(&f.pool, event).await.unwrap().unwrap();
     for participant in &row.participants {
         assert_eq!(
@@ -205,10 +223,11 @@ async fn leased_system_actions_confirm_decline_and_cancel_with_matching_calendar
 
     f.messages(&[(&f.owner, "Cancel lunch for everyone")], 0)
         .await;
-    let canceled = f
-        .ok(json!({"action":"cancel","eventId":event,"revision":row.revision,"canceledBy":f.owner}))
-        .await;
-    assert_eq!(canceled["state"], "canceled");
+    let cancel =
+        json!({"action":"cancel","eventId":event,"revision":row.revision,"canceledBy":f.owner});
+    assert_eq!(f.call(cancel.clone()).await.status(), 403);
+    let canceled = f.member_action(&f.owner, cancel).await;
+    assert_eq!(canceled.state, super::models::PlanCardState::Canceled);
     assert!(f.calendar_members(event).await.is_empty());
 }
 

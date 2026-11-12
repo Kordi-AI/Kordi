@@ -303,7 +303,7 @@ async fn proposals(
         },
     };
     let sql = format!(
-        "{PROPOSAL_SELECT} WHERE p.owner_account_id = $1 AND p.status = $2
+        "{PROPOSAL_SELECT} WHERE p.owner_account_id = $1 AND p.status = $2 AND NOT p.facilitator_task
            AND ($3::text IS NULL OR p.agent_id = $3)
            AND ($4::uuid IS NULL OR p.conversation_id = $4)
            AND (p.agent_id = 'cloud-agent:' || p.owner_account_id
