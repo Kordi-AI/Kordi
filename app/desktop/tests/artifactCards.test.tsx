@@ -125,10 +125,12 @@ test('the open arrow shows on rows and cards only where a file can be opened', (
   const artifact = doc('a', 'notes/plan.md', { timeLabel: '10:24' });
   const rowWith = renderToStaticMarkup(createElement(ArtifactListRow, { artifact, location: 'notes', isActive: false, participants: [], onSelect: () => {}, onOpenExternal: () => {}, fetchTitle: async () => ({ title: '' }) }));
   assert.match(rowWith, /data-artifact-open-external=""[^>]*aria-label="Open plan\.md in its default app"/);
+  // The arrow sits right after the name, before the detail.
+  assert.match(rowWith, /data-artifact-row-title=""[^>]*>plan\.md<\/span><\/button><button[^>]*data-artifact-open-external=""[^]*data-artifact-row-meta=""/);
   const rowWithout = renderToStaticMarkup(createElement(ArtifactListRow, { artifact, location: 'notes', isActive: false, participants: [], onSelect: () => {}, fetchTitle: async () => ({ title: '' }) }));
   assert.doesNotMatch(rowWithout, /data-artifact-open-external/);
   // The row is one line: the name and its detail sit side by side.
-  assert.match(rowWithout, /data-artifact-row-title=""[^>]*>plan\.md<\/span><span data-artifact-row-meta=""[^>]*>notes · Created · 10:24</);
+  assert.match(rowWithout, /data-artifact-row-title=""[^>]*>plan\.md<\/span><\/button><span data-artifact-row-meta=""[^>]*>notes · Created · 10:24</);
 
   const card = renderToStaticMarkup(createElement(ArtifactCard, {
     artifact, isActive: false, participants: [], thumbnailContext: { isNativeShell: true, api: null }, onOpen: () => {}, onOpenExternal: () => {}, fetchTitle: async () => ({ title: '' }),
