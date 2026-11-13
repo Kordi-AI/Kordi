@@ -236,6 +236,32 @@ returns 503 `connectors_unavailable`, and broker calls fail closed), `KORDI_CLOU
 Each provider app must register the callback
 `<KORDI_CLOUD_PUBLIC_BASE_URL>/v1/cloud/connectors/oauth/callback`.
 
+### Local test stacks
+
+A loopback test stack needs its own developer-owned connector apps. There are
+no shared test apps, and production apps cannot be reused: copying production
+credentials into a development environment is not allowed, and their callback
+names the production origin.
+
+- Register each app with the stack's callback, for example
+  `http://127.0.0.1:<port>/v1/cloud/connectors/oauth/callback`. Plain `http` on
+  loopback is accepted by a Google "Web application" OAuth client (exact URI;
+  changes can take a few minutes to apply), a GitHub OAuth app, and a Slack app.
+- Create the Slack app from a manifest with user scopes only:
+  `channels:history`, `groups:history`, `channels:read`, `groups:read`, and
+  `chat:write`. Skip Slack's own "Install" step; Kordi's Connect performs the
+  grant.
+- The Google client needs the Calendar and Gmail APIs enabled in its project.
+- `GET /v1/cloud/connectors` reports `oauthReady` per provider. A start URL from
+  `POST /v1/cloud/connectors/:provider/oauth/start` should open the provider's
+  sign-in or consent page rather than an error page.
+- A new connection has no events until its first poll (every
+  `KORDI_CONNECTOR_POLL_MINUTES`, default 15; the first poll looks back 24
+  hours). A Grounding card build started before then finds nothing from that
+  connector.
+- Keep the client IDs and secrets in the stack's private environment file, and
+  delete the apps when the stack is removed.
+
 The broker route is `POST /internal/connectors/call`. PR 2 added the lease
 check: see "What shipped in PR 2" below.
 
