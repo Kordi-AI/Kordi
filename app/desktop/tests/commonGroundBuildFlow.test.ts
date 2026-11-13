@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { BUILD_NOT_STARTED, buildFailureMessage, unreadLinkLine } from '../src/features/commonGround/buildRequest';
+import { BUILD_NOT_STARTED, buildFailureMessage, currentUnreadLinks, linkEntries, signInLinks, unreadLinkLine } from '../src/features/commonGround/buildRequest';
 import { isTransientFailure, CommonGroundError } from '../src/features/commonGround/client';
 import { BUILD_POLL_MS, BUILD_START_CHECKS, CommonGroundStore } from '../src/features/commonGround/store';
 
@@ -89,4 +89,29 @@ test('build flow: a link the build could not read is named by its site', () => {
   assert.equal(unreadLinkLine('https://scholar.google.com/citations?user=abc'), "Couldn't read scholar.google.com");
   assert.equal(unreadLinkLine('https://www.example.test/~jane'), "Couldn't read example.test");
   assert.equal(unreadLinkLine('not a url'), "Couldn't read not a url");
+});
+
+test('build flow: an unread link says why, and a sign-in site always reads as sign-in', () => {
+  const scholar = 'https://scholar.google.com/citations?user=abc';
+  assert.equal(unreadLinkLine(scholar, 'blocked'), 'scholar.google.com blocked Kordi from reading it.');
+  assert.equal(unreadLinkLine(scholar, 'not_found'), 'Nothing found at scholar.google.com.');
+  assert.equal(unreadLinkLine(scholar, 'unreachable'), "Couldn't reach scholar.google.com.");
+  assert.equal(unreadLinkLine(scholar, 'unreadable'), 'scholar.google.com has no text Kordi can read.');
+  assert.equal(unreadLinkLine('https://docs.example.test/x', 'sign_in'), "docs.example.test needs sign-in, so Kordi can't read it.");
+  // An older server reports LinkedIn's sign-in wall as unreadable.
+  assert.equal(unreadLinkLine('https://www.linkedin.com/in/your-name/', 'unreadable'), "LinkedIn needs sign-in, so Kordi can't read it.");
+  assert.equal(buildFailureMessage('links_unread', 1), "Kordi couldn't read your link, so there's nothing to build from.");
+  assert.equal(buildFailureMessage('links_unread', 2), "Kordi couldn't read your links, so there's nothing to build from.");
+});
+
+test('build flow: Links entries are read as the server reads them', () => {
+  assert.deepEqual(linkEntries('linkedin.com/in/your-name; https://example.test/~jane\nworking on evals'), [
+    'https://linkedin.com/in/your-name',
+    'https://example.test/~jane',
+  ]);
+  assert.deepEqual(signInLinks('https://www.linkedin.com/in/your-name/; https://example.test', []), ['https://www.linkedin.com/in/your-name/']);
+  const unread = [{ url: 'https://www.linkedin.com/in/your-name', reason: 'sign_in' }];
+  assert.deepEqual(signInLinks('https://www.linkedin.com/in/your-name/', unread), [], 'a link the build reported is not flagged twice');
+  assert.deepEqual(currentUnreadLinks(unread, 'https://www.linkedin.com/in/your-name/'), unread);
+  assert.deepEqual(currentUnreadLinks(unread, 'https://example.test'), []);
 });

@@ -21,6 +21,7 @@ use serde_json::{json, Value};
 use sqlx_core::{query::query, query_as::query_as};
 use sqlx_postgres::PgPool;
 
+use super::profiles::SourcePicks;
 use super::prompt::{self, Gathered};
 use super::runs::{self, NewRun, CARD_PREFIX};
 use super::{card, db_error, err, limited, profiles, BUILD_LIMIT};
@@ -113,6 +114,30 @@ pub(super) async fn start(
         },
     };
     let profile_id = profile.profile_id.as_str();
+    let picks = request.picks.map(|picks| picks.cleaned());
+    // Every source was a link that could not be read: the build fails now,
+    // without a run that would find nothing.
+    if links::nothing_read(&evidence, &unread_links) {
+        let recorded =
+            record_unread_links(pool, account, profile_id, &unread_links, picks.as_ref()).await;
+        return match recorded {
+            Ok(true) => {
+                if picks.is_some() {
+                    profile.sources = picks;
+                }
+                match card::owner_view(pool, account, Some(&profile)).await {
+                    Ok(mut view) => {
+                        use axum::response::IntoResponse;
+                        view["used"] = json!(used);
+                        (StatusCode::OK, Json(view)).into_response()
+                    }
+                    Err(error) => db_error(error),
+                }
+            }
+            Ok(false) => in_progress(),
+            Err(error) => db_error(error),
+        };
+    }
     let mut system_prompt = prompt::system_prompt(&profile);
     let mut user_prompt =
         prompt::user_prompt(&Utc::now().date_naive().to_string(), &profile, &evidence);
@@ -122,7 +147,6 @@ pub(super) async fn start(
     }
     let config = system_agent.config();
     let run_id = runs::new_run_id(CARD_PREFIX);
-    let picks = request.picks.map(|picks| picks.cleaned());
     let result = async {
         let mut tx = pool.begin().await?;
         query(
@@ -196,13 +220,61 @@ pub(super) async fn start(
             Err(error) => db_error(error),
         },
         Ok(Start::Declined) => super::unavailable(),
-        Ok(Start::InProgress) => err(
-            "common_ground_build_in_progress",
-            "Your card is already being built.",
-            StatusCode::CONFLICT,
-        ),
+        Ok(Start::InProgress) => in_progress(),
         Err(error) => db_error(error),
     }
+}
+
+fn in_progress() -> Response {
+    err(
+        "common_ground_build_in_progress",
+        "Your card is already being built.",
+        StatusCode::CONFLICT,
+    )
+}
+
+/// Records a build that failed because none of its links could be read. The
+/// card, if there is one, stays as it was. False when a build is in flight.
+async fn record_unread_links(
+    pool: &PgPool,
+    account: &str,
+    profile_id: &str,
+    unread: &[card::UnreadLink],
+    picks: Option<&SourcePicks>,
+) -> sqlx_core::Result<bool> {
+    let mut tx = pool.begin().await?;
+    query(
+        "INSERT INTO cloud_common_ground_cards (profile_id, account_id) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(profile_id)
+    .bind(account)
+    .execute(&mut *tx)
+    .await?;
+    let sql = format!(
+        "UPDATE cloud_common_ground_cards card SET build_error_code = $2, link_errors_json = $3,
+             updated_at = now()
+         WHERE card.profile_id = $1 AND NOT ({})",
+        card::BUILD_IN_FLIGHT_SQL
+    );
+    let recorded = query(&sql)
+        .bind(profile_id)
+        .bind(card::LINKS_UNREAD)
+        .bind(serde_json::to_value(unread).unwrap_or_default())
+        .execute(&mut *tx)
+        .await?;
+    if recorded.rows_affected() == 0 {
+        return Ok(false);
+    }
+    if let Some(picks) = picks {
+        query("UPDATE cloud_common_ground_profiles SET sources_json = $2 WHERE profile_id = $1")
+            .bind(profile_id)
+            .bind(picks.to_json())
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(true)
 }
 
 /// Stores the card from a finished run. A reply that is not a card fails

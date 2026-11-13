@@ -1,6 +1,6 @@
 // The Build screen's choices turned into the build request, kept free of React for tests.
 
-import type { CgAgentFile, CgBuildRequest, CgDeviceItem, CgProfileKind, CgSourcePicks } from './types';
+import type { CgAgentFile, CgBuildRequest, CgDeviceItem, CgProfileKind, CgSourcePicks, CgUnreadLink } from './types';
 
 export type CgBuildChoices = {
   memory: boolean;
@@ -75,8 +75,9 @@ export function emptySourcesMessage(request: CgBuildRequest): string {
 }
 
 /** A build that found nothing for the profile cannot succeed again with the same sources. */
-export function buildFailureMessage(errorCode: string | null) {
+export function buildFailureMessage(errorCode: string | null, unreadLinks = 0) {
   switch (errorCode) {
+    case 'links_unread': return `Kordi couldn't read your ${unreadLinks > 1 ? 'links' : 'link'}, so there's nothing to build from.`;
     case 'no_topics': return 'Nothing here fits this profile. Add a note or choose other sources.';
     case 'build_timed_out': return 'Building took too long. Try again.';
     default: return 'Could not build your card. Try again.';
@@ -86,15 +87,61 @@ export function buildFailureMessage(errorCode: string | null) {
 /** The start request got no answer and the card shows no build: it did not start. */
 export const BUILD_NOT_STARTED = 'Could not start building. Try again.';
 
-/** "Couldn't read scholar.google.com", for a link the last build could not read. */
-export function unreadLinkLine(url: string): string {
-  let host = url;
+/** Sites that show Kordi's page reader only a sign-in page, by host. */
+const SIGN_IN_SITES: Record<string, string> = { 'linkedin.com': 'LinkedIn', 'facebook.com': 'Facebook', 'instagram.com': 'Instagram' };
+
+function linkHost(url: string): string {
   try {
-    host = new URL(url).hostname.replace(/^www\./, '');
+    return new URL(url).hostname.replace(/^www\./, '');
   } catch {
-    // Keep the link as given.
+    return url;
   }
-  return `Couldn't read ${host}`;
+}
+
+/** "LinkedIn" for a link to a site that needs sign-in, or null. */
+export function signInSite(url: string): string | null {
+  const host = linkHost(url).toLowerCase();
+  const site = Object.keys(SIGN_IN_SITES).find((key) => host === key || host.endsWith(`.${key}`));
+  return site ? SIGN_IN_SITES[site] : null;
+}
+
+/** The links in the Links box as the server reads them: full addresses, and bare hosts given https. */
+export function linkEntries(links: string): string[] {
+  return links.split(/[;\n]/).map((entry) => entry.trim()).filter(Boolean).flatMap((entry) => {
+    if (entry.includes(' ')) return [];
+    if (/^https?:\/\//i.test(entry)) return [entry];
+    const host = entry.split('/')[0];
+    const tld = host.split('.').pop() ?? '';
+    return host.includes('.') && /^[a-z]{2,}$/i.test(tld) ? [`https://${entry}`] : [];
+  });
+}
+
+const sameLink = (a: string, b: string) => a.replace(/\/+$/, '').toLowerCase() === b.replace(/\/+$/, '').toLowerCase();
+
+/** The unread links still in the Links box: a link the owner removed no longer needs a line. */
+export function currentUnreadLinks(unread: CgUnreadLink[], links: string): CgUnreadLink[] {
+  const entries = linkEntries(links);
+  return unread.filter(({ url }) => entries.some((entry) => sameLink(entry, url)));
+}
+
+/** Links in the box to a site that needs sign-in, before a build reads them. */
+export function signInLinks(links: string, unread: CgUnreadLink[]): string[] {
+  return linkEntries(links).filter((url) => signInSite(url) && !unread.some((link) => sameLink(link.url, url)));
+}
+
+/** Why a link was not read, in plain words: "LinkedIn needs sign-in, so Kordi can't read it." */
+export function unreadLinkLine(url: string, reason?: string): string {
+  const site = signInSite(url);
+  const name = site ?? linkHost(url);
+  // A sign-in site answers a reader that is not signed in with a wall, whatever the status says.
+  switch (site && reason !== 'not_found' ? 'sign_in' : reason) {
+    case 'sign_in': return `${name} needs sign-in, so Kordi can't read it.`;
+    case 'blocked': return `${name} blocked Kordi from reading it.`;
+    case 'not_found': return `Nothing found at ${name}.`;
+    case 'unreachable': return `Couldn't reach ${name}.`;
+    case 'unreadable': return `${name} has no text Kordi can read.`;
+    default: return `Couldn't read ${name}`;
+  }
 }
 
 /** The hint in the build screen's notes box: what this profile keeps. Work when there is no profile, as the server builds. */

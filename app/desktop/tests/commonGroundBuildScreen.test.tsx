@@ -170,13 +170,50 @@ test('build screen: a failed build shows even when the store also carries its no
   });
 });
 
-test('build screen: links the last build could not read are named under Links', async () => {
+const SCHOLAR = 'https://scholar.google.com/citations?user=abc';
+const LINKEDIN = 'https://www.linkedin.com/in/your-name/';
+const withLinks = (links: string) => ({ ...work, sources: { memory: false, connectors: [], device: [], agents: false, documents: [], links, notes: '' } });
+
+test('build screen: a link the last build could not read says why, with Notes as the next step', async () => {
   const { store } = storeWith({});
-  const unreadLinks = [{ url: 'https://scholar.google.com/citations?user=abc', reason: 'blocked' }];
-  store.set({ owner: owner({ card: null, profile: work, build: { status: 'idle', errorCode: null, unreadLinks } }) });
+  const unreadLinks = [{ url: SCHOLAR, reason: 'blocked' }];
+  store.set({ profiles: [withLinks(SCHOLAR)], owner: owner({ card: null, profile: withLinks(SCHOLAR), build: { status: 'idle', errorCode: null, unreadLinks } }) });
   await mount(createElement(Screen, { store, host: hostWith() }), async (root) => {
-    const line = root.querySelector('.cg-unread-links li');
-    assert.equal(line?.textContent, "Couldn't read scholar.google.com");
-    assert.equal(line?.getAttribute('title'), 'https://scholar.google.com/citations?user=abc');
+    const line = root.querySelector('.cg-unread-links.is-error li.cg-unread-link');
+    assert.equal(line?.textContent, 'scholar.google.com blocked Kordi from reading it.');
+    assert.equal(line?.getAttribute('title'), SCHOLAR);
+    await click(buttonNamed(root, 'Paste the text into Notes'));
+    assert.equal(document.activeElement?.getAttribute('aria-label'), 'Notes');
+  });
+});
+
+test('build screen: a removed link loses its line', async () => {
+  const { store } = storeWith({});
+  const unreadLinks = [{ url: SCHOLAR, reason: 'blocked' }];
+  store.set({ profiles: [withLinks('')], owner: owner({ card: null, profile: withLinks(''), build: { status: 'idle', errorCode: null, unreadLinks } }) });
+  await mount(createElement(Screen, { store, host: hostWith() }), async (root) => {
+    assert.equal(root.querySelector('.cg-unread-links'), null);
+  });
+});
+
+test('build screen: a link to a sign-in site is flagged before Build', async () => {
+  const { store } = storeWith({});
+  store.set({ profiles: [withLinks(LINKEDIN)], owner: owner({ card: null, profile: withLinks(LINKEDIN) }) });
+  await mount(createElement(Screen, { store, host: hostWith() }), async (root) => {
+    const lines = [...root.querySelectorAll('.cg-unread-links li')].map((item) => item.textContent);
+    assert.deepEqual(lines, ["LinkedIn needs sign-in, so Kordi can't read it.", 'Paste the text into Notes']);
+    assert.equal(root.querySelector('.cg-unread-link'), null, 'not an error before a build');
+  });
+});
+
+test('build screen: a build with only unreadable links names the link as the reason', async () => {
+  const unreadLinks = [{ url: LINKEDIN, reason: 'sign_in' }];
+  const failedView = owner({ card: null, profile: withLinks(LINKEDIN), build: { status: 'failed', errorCode: 'links_unread', unreadLinks } });
+  const { store } = storeWith({ 'POST card/build': { status: 200, body: failedView } });
+  store.set({ profiles: [withLinks(LINKEDIN)], owner: owner({ card: null, profile: withLinks(LINKEDIN) }) });
+  await mount(createElement(Screen, { store, host: hostWith() }), async (root) => {
+    await click(buttonNamed(root, 'Build'));
+    assert.equal(alertText(root), "Kordi couldn't read your link, so there's nothing to build from.");
+    assert.equal(root.querySelector('.cg-unread-link')?.textContent, "LinkedIn needs sign-in, so Kordi can't read it.");
   });
 });
