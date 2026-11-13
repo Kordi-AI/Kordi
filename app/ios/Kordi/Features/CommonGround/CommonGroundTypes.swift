@@ -236,11 +236,74 @@ struct CommonGroundUnreadLink: Decodable, Hashable {
     let url: String
     let reason: String
 
-    /// "Couldn't read scholar.google.com".
-    var line: String {
+    /// Why the link was not read: "LinkedIn needs sign-in, so Kordi can't read it."
+    var line: String { CommonGroundLinks.line(url: url, reason: reason) }
+}
+
+/// The Links box as the server reads it, and why a link could not be read.
+enum CommonGroundLinks {
+    /// Sites that show Kordi's page reader only a sign-in page, by host.
+    static let signInSites = ["linkedin.com": "LinkedIn", "facebook.com": "Facebook", "instagram.com": "Instagram"]
+
+    static func host(_ url: String) -> String {
         var host = URL(string: url)?.host ?? url
         if host.hasPrefix("www.") { host.removeFirst(4) }
-        return "Couldn't read \(host)"
+        return host
+    }
+
+    /// "LinkedIn" for a link to a site that needs sign-in, or nil.
+    static func signInSite(_ url: String) -> String? {
+        let host = host(url).lowercased()
+        return signInSites.first { host == $0.key || host.hasSuffix(".\($0.key)") }?.value
+    }
+
+    /// Why a link was not read, in plain words. A sign-in site answers a reader that is not
+    /// signed in with a wall, whatever the status says.
+    static func line(url: String, reason: String) -> String {
+        let site = signInSite(url)
+        let name = site ?? host(url)
+        switch site != nil && reason != "not_found" ? "sign_in" : reason {
+        case "sign_in": return "\(name) needs sign-in, so Kordi can't read it."
+        case "blocked": return "\(name) blocked Kordi from reading it."
+        case "not_found": return "Nothing found at \(name)."
+        case "unreachable": return "Couldn't reach \(name)."
+        case "unreadable": return "\(name) has no text Kordi can read."
+        default: return "Couldn't read \(name)"
+        }
+    }
+
+    /// Full addresses, and bare hosts given https, separated by `;` or new lines.
+    static func entries(_ links: String) -> [String] {
+        links.split(whereSeparator: { $0 == ";" || $0.isNewline }).compactMap { part in
+            let entry = part.trimmingCharacters(in: .whitespaces)
+            guard !entry.isEmpty, !entry.contains(" ") else { return nil }
+            let lower = entry.lowercased()
+            if lower.hasPrefix("https://") || lower.hasPrefix("http://") { return entry }
+            let host = entry.split(separator: "/").first.map(String.init) ?? ""
+            let tld = host.split(separator: ".").last.map(String.init) ?? ""
+            let looksLikeHost = host.contains(".") && tld.count >= 2 && tld.allSatisfy { $0.isASCII && $0.isLetter }
+            return looksLikeHost ? "https://\(entry)" : nil
+        }
+    }
+
+    private static func same(_ a: String, _ b: String) -> Bool {
+        func key(_ value: String) -> String {
+            var value = value.lowercased()
+            while value.hasSuffix("/") { value.removeLast() }
+            return value
+        }
+        return key(a) == key(b)
+    }
+
+    /// The unread links still in the box: a link the person removed no longer needs a line.
+    static func current(_ unread: [CommonGroundUnreadLink], in links: String) -> [CommonGroundUnreadLink] {
+        let entries = entries(links)
+        return unread.filter { link in entries.contains { same($0, link.url) } }
+    }
+
+    /// Links in the box to a site that needs sign-in, before a build reads them.
+    static func signInLinks(_ links: String, unread: [CommonGroundUnreadLink]) -> [String] {
+        entries(links).filter { url in signInSite(url) != nil && !unread.contains { same($0.url, url) } }
     }
 }
 

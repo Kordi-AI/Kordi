@@ -124,6 +124,12 @@
 .cg-textarea { display: block; width: 100%; min-height: 72px; padding: 10px 12px; border: 0; background: transparent; resize: vertical; }
 :is(.cg-input, .cg-textarea)::placeholder { color: var(--utility-muted-text); }
 .cg-unread-links { margin: 6px 0 0; padding: 0 12px; list-style: none; color: var(--utility-muted-text); font-size: 11.5px; line-height: 1.5; }
+.cg-unread-links.is-error .cg-unread-link { color: var(--app-error-text); }
+.cg-unread-action {
+  padding: 0; border: 0; background: none; color: var(--utility-foreground); font: inherit; font-weight: 500; cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--cg-line); text-underline-offset: 2px; outline: none;
+}
+.cg-unread-action:hover, .cg-unread-action:focus-visible { text-decoration-color: currentColor; }
 .cg-input:focus { border-color: var(--app-focus-border); }
 
 .cg-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; }

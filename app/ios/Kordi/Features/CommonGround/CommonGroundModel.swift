@@ -236,6 +236,10 @@ final class CommonGroundModel: ObservableObject {
     /// One line for a failed build, from the last build state.
     var buildFailureMessage: String? {
         guard buildFailed else { return nil }
+        if owner?.build.errorCode == "links_unread" {
+            let several = (owner?.build.unreadLinks?.count ?? 0) > 1
+            return "Kordi couldn't read your \(several ? "links" : "link"), so there's nothing to build from."
+        }
         return owner?.build.errorCode.flatMap { Self.messages[$0] } ?? "Could not build your card."
     }
 

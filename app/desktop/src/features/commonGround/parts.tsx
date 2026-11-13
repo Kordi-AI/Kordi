@@ -169,12 +169,22 @@ export function CgNotice({ text }: { text: string | null }) {
   return text ? <ErrorLine className="mt-2.5">{text}</ErrorLine> : null;
 }
 
-/** One quiet line per link the last build could not read. */
-export function CgUnreadLinks({ links }: { links: CgUnreadLink[] }) {
-  if (!links.length) return null;
+/**
+ * One line per link the last build could not read, saying why. On Build the lines are errors, links to a
+ * site that needs sign-in are flagged before a build is spent on them, and `onUseNotes` offers Notes instead.
+ */
+export function CgUnreadLinks({ links, signIn = [], onUseNotes, quiet = false }: {
+  links: CgUnreadLink[];
+  signIn?: string[];
+  onUseNotes?: () => void;
+  quiet?: boolean;
+}) {
+  if (!links.length && !signIn.length) return null;
   return (
-    <ul className="cg-unread-links">
-      {links.map(({ url }) => <li key={url} title={url}>{unreadLinkLine(url)}</li>)}
+    <ul className={cn('cg-unread-links', !quiet && 'is-error')} aria-live="polite">
+      {links.map(({ url, reason }) => <li key={url} title={url} className="cg-unread-link">{unreadLinkLine(url, reason)}</li>)}
+      {signIn.map((url) => <li key={url} title={url}>{unreadLinkLine(url, 'sign_in')}</li>)}
+      {onUseNotes ? <li><button type="button" className="cg-unread-action" onClick={onUseNotes}>Paste the text into Notes</button></li> : null}
     </ul>
   );
 }

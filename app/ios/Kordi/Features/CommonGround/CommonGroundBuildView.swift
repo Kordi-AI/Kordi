@@ -11,6 +11,7 @@ struct CommonGroundBuildView: View {
     @State private var memory = false
     @State private var links = ""
     @State private var notes = ""
+    @FocusState private var notesFocused: Bool
     @StateObject private var device = CommonGroundDeviceAccess()
     @StateObject private var kordiSources = CommonGroundBuildSources()
     @State private var deviceIncluded: Set<CommonGroundDeviceSource> = []
@@ -52,17 +53,28 @@ struct CommonGroundBuildView: View {
         }
     }
 
-    /// One quiet line per link the last build could not read.
+    /// One line per link the last build could not read, saying why, for links still in the box. A link
+    /// to a site that needs sign-in is flagged as soon as it is typed, and Notes is offered instead.
     @ViewBuilder
     private var unreadLinks: some View {
-        if let links = model.owner?.build.unreadLinks, !links.isEmpty {
+        let unread = CommonGroundLinks.current(model.owner?.build.unreadLinks ?? [], in: links)
+        let signIn = CommonGroundLinks.signInLinks(links, unread: unread)
+        if !unread.isEmpty || !signIn.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(links, id: \.url) { link in
-                    Text(link.line)
+                ForEach(unread, id: \.url) { link in
+                    Text(link.line).foregroundStyle(.red)
                 }
+                ForEach(signIn, id: \.self) { url in
+                    Text(CommonGroundLinks.line(url: url, reason: "sign_in")).foregroundStyle(.secondary)
+                }
+                Button("Paste the text into Notes") { notesFocused = true }
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .underline()
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
             }
             .font(.footnote)
-            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)
             .padding(.top, -8)
@@ -100,6 +112,7 @@ struct CommonGroundBuildView: View {
                 unreadLinks
                 CommonGroundSection(title: "Notes") {
                     field(model.activeProfileKind.notesHint, text: $notes)
+                        .focused($notesFocused)
                 }
                 if let failure = model.buildFailureMessage {
                     Text(failure)

@@ -88,6 +88,27 @@ fn refused_and_challenge_pages_are_reported_not_read() {
         ),
         LinkFailure::SignIn
     );
+    // LinkedIn answers with status 999 and a script that sends the reader to sign in.
+    assert_eq!(
+        blocked(
+            999,
+            "https://www.linkedin.com/in/your-name",
+            "<html><head><script>window.location.href = \"https://\" + domain + \"/authwall?trk=\" + trk;</script></head></html>"
+        ),
+        LinkFailure::SignIn
+    );
+    assert_eq!(
+        blocked(
+            200,
+            "https://www.linkedin.com/in/your-name",
+            "<html><script>location.href='https://www.linkedin.com/authwall?trk=bf'</script></html>"
+        ),
+        LinkFailure::SignIn
+    );
+    assert_eq!(
+        blocked(999, "https://example.com/", "Request denied"),
+        LinkFailure::Blocked
+    );
     assert_eq!(
         blocked(404, "https://example.com/gone", ""),
         LinkFailure::NotFound
@@ -185,4 +206,34 @@ async fn a_link_that_never_answers_times_out_as_unreachable() {
     .await;
     assert_eq!(unread.len(), 1);
     assert_eq!(unread[0].reason, "unreachable");
+}
+
+#[test]
+fn nothing_is_read_only_when_every_source_is_an_unread_link() {
+    let unread = |url: &str| UnreadLink {
+        url: url.into(),
+        reason: "sign_in".into(),
+    };
+    let profile = "https://www.linkedin.com/in/your-name/";
+    assert!(nothing_read(&[link(profile)], &[unread(profile)]));
+    // A note, or a link that was read, still gives the build something.
+    assert!(!nothing_read(&[link(profile), note()], &[unread(profile)]));
+    assert!(!nothing_read(
+        &[link(profile), link("https://example.com/~jane")],
+        &[unread(profile)]
+    ));
+    assert!(!nothing_read(&[], &[]));
+}
+
+#[test]
+fn a_readable_page_that_links_to_sign_in_is_still_read() {
+    let page = classify(
+        200,
+        "https://www.linkedin.com/company/example",
+        "text/html",
+        r#"<html><head><title>Example Labs</title></head><body><a href="https://www.linkedin.com/authwall?trk=nav">Sign in</a>
+<main><p>Example Labs builds tools that help research teams share their work.</p></main></body></html>"#,
+    )
+    .expect("readable page");
+    assert!(page.text.contains("help research teams share their work"));
 }
