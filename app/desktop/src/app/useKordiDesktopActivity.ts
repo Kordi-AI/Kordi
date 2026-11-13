@@ -18,7 +18,7 @@ import type {
 import { useDesktopMessageAttention } from '@/features/notifications/useDesktopMessageAttention';
 import { extractSessionArtifacts } from '@/features/chat/artifacts';
 import { isLocalDraftChatConversationId, isProjectDraftSessionId } from '@/features/chat/draftSessions';
-import { sessionsForGlobalAttention, totalVisibleUnread } from '@/features/chat/unreadCounts';
+import { sessionsForGlobalAttention, sessionsForUnreadBadges, totalVisibleUnread } from '@/features/chat/unreadCounts';
 import { EMPTY_CLOUD_SESSION_ACTIVITY, cloudArtifactsForSession, type CloudSessionActivityStore } from '@/features/cloud/cloudSessionActivity';
 import { invokeDesktop } from '@/lib/desktop';
 
@@ -182,8 +182,8 @@ export function useKordiDesktopActivity({
     [chatConversations, hiddenSessionIds],
   );
   const totalUnreadMessages = useMemo(
-    () => totalVisibleUnread(attentionConversations, mutedSessionIds, unreadSessionIds),
-    [attentionConversations, mutedSessionIds, unreadSessionIds],
+    () => totalVisibleUnread(sessionsForUnreadBadges(chatConversations, hiddenSessionIds), mutedSessionIds, unreadSessionIds),
+    [chatConversations, hiddenSessionIds, mutedSessionIds, unreadSessionIds],
   );
 
   useEffect(() => {

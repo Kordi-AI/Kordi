@@ -5,15 +5,24 @@ export const HEADER_HEIGHT = 64;
 export const OVERSCAN = 4;
 
 export type ParticipantSpaceBlock = {
-  header: Extract<ChatSidebarRow, { kind: 'space' }>;
+  /** Null for rows listed before the first heading, such as personal agent rows. */
+  header: Extract<ChatSidebarRow, { kind: 'space' }> | null;
   channels: ChatSidebarRow[];
 };
+
+/** Key for the block of rows listed before the first heading. */
+export const LEADING_BLOCK_KEY = 'leading-rows';
+
+export function participantSpaceBlockKey(block: ParticipantSpaceBlock) {
+  return block.header?.key ?? LEADING_BLOCK_KEY;
+}
 
 export function participantSpaceBlocks(rows: readonly ChatSidebarRow[], compactChannels = false): ParticipantSpaceBlock[] {
   const blocks: ParticipantSpaceBlock[] = [];
   for (const row of rows) {
     if (row.kind === 'space' && !(compactChannels && row.key.startsWith('project-more:'))) blocks.push({ header: row, channels: [] });
-    else blocks[blocks.length - 1]?.channels.push(row);
+    else if (blocks.length) blocks[blocks.length - 1].channels.push(row);
+    else blocks.push({ header: null, channels: [row] });
   }
   return blocks;
 }
