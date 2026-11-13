@@ -1,18 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
 import { ACCOUNT_HINT_EVENT_TYPES } from '../src/features/cloud/accountHintEvents';
 import { syncCloudDiffOnce } from '../src/features/cloud/cloudDiffSync';
 import { ChatSyncState } from '../src/features/cloud/chatSyncState';
 import { ChatSyncSyncClient } from '../src/features/cloud/chatSyncSyncClient';
 import type { ChatSyncEvent, ChatSyncSyncResponse } from '../src/features/cloud/chatSyncTypes';
+import type { CgHost } from '../src/features/commonGround/host';
+import { ResultsScreen } from '../src/features/commonGround/ResultsScreen';
 import { notifyCommonGroundRoomEvents, subscribeRoomHints, type CgRoomHints } from '../src/features/commonGround/roomHints';
-import {
-  CommonGroundStore, LOBBY_FALLBACK_POLL_MS, LOBBY_POLL_MS, MATCH_FALLBACK_POLL_MS, MATCH_POLL_MS, type CgScreen,
-} from '../src/features/commonGround/store';
+import { CommonGroundStore, MATCH_FALLBACK_POLL_MS, MATCH_POLL_MS, type CgScreen } from '../src/features/commonGround/store';
 import { receiveRoomHints } from '../src/features/commonGround/storeHints';
 import type { CgResults } from '../src/features/commonGround/types';
 import { mockServer, owner, person, room } from './helpers/commonGroundServer';
+import { click, mount } from './helpers/nearbyScreen';
 
 const results = (people: string[], status: CgResults['status'] = 'ready'): CgResults => (
   { status, people: people.map((id) => ({ person: person(id), score: 80, headline: 'Shared work' })), topics: [], suggestion: null }
@@ -27,6 +31,19 @@ function storeAt(client: CommonGroundStore['client'], screen: CgScreen, cached: 
   const store = new CommonGroundStore(client);
   store.set({ loaded: true, owner: owner(), stack: [home, screen], ...cached });
   return store;
+}
+
+const host = { self: person('me') } as unknown as CgHost;
+const screenMarkup = (store: CommonGroundStore, code = '4821') => (
+  renderToStaticMarkup(createElement(ResultsScreen, { code, state: store.getSnapshot(), store, host }))
+);
+
+/** The People rows on the room screen, in order: each name and its score, null when unscored. */
+function peopleRows(store: CommonGroundStore, code = '4821') {
+  return [...screenMarkup(store, code).matchAll(/<button type="button" class="cg-row is-button">(.*?)<\/button>/g)].map(([, row]) => ({
+    name: /class="cg-row-title">([^<]*)</.exec(row)?.[1],
+    score: /class="cg-trail">(\d+)%/.exec(row)?.[1] ?? null,
+  }));
 }
 
 test('room hints: only the two types pass the sync mapping and notify, with each room code once per batch', () => {
@@ -86,16 +103,49 @@ test('a room hint re-requests ready Results for that room once and shows the new
   assert.equal(store.getSnapshot().rooms['4821'].members.length, 2);
 });
 
-test('a room hint re-reads the lobby and moves it to Results once matching started', async () => {
+test('a room hint shows new members unscored until their match is in, each person once', async () => {
   const { calls, client } = mockServer({
-    'GET rooms/4821': { status: 200, body: room('4821', { members: [person('a'), person('b')], matchingStarted: true }) },
-    'POST rooms/4821/results': { status: 200, body: results([], 'matching') },
+    'GET rooms/4821': { status: 200, body: room('4821', { members: [person('a'), person('b'), person('c')] }) },
+    'POST rooms/4821/results': [{ status: 200, body: results(['a'], 'matching') }, { status: 200, body: results(['c', 'a']) }],
   });
-  const store = storeAt(client, { name: 'lobby', code: '4821' }, { rooms: { '4821': room('4821') } });
+  const store = storeAt(client, { name: 'results', code: '4821' }, { results: { '4821': results(['a']) }, rooms: { '4821': room('4821', { members: [person('a')] }) } });
+  assert.deepEqual(peopleRows(store), [{ name: 'a', score: '80' }]);
   await receiveRoomHints(store, roomHint('4821'));
-  assert.deepEqual(store.top(), { name: 'results', code: '4821' });
-  assert.equal(store.getSnapshot().stack.length, 2, 'Results replaces the lobby');
-  assert.ok(calls.some((call) => call.method === 'GET' && call.url.endsWith('/rooms/4821')));
+  assert.ok(calls.some((call) => call.method === 'GET' && call.url.endsWith('/rooms/4821')), 'the refresh reads the room too');
+  // Matched people first, as ranked; then members still being matched, in join order.
+  assert.deepEqual(peopleRows(store), [{ name: 'a', score: '80' }, { name: 'b', score: null }, { name: 'c', score: null }]);
+  assert.match(screenMarkup(store), /Finding overlap/);
+  await receiveRoomHints(store, matchHint);
+  assert.deepEqual(peopleRows(store), [{ name: 'c', score: '80' }, { name: 'a', score: '80' }, { name: 'b', score: null }]);
+  assert.doesNotMatch(screenMarkup(store), /Finding overlap|No matches yet/);
+});
+
+test('alone the room waits for others, and a closed room lists only its results', () => {
+  const store = storeAt(mockServer({}).client, { name: 'results', code: '4821' }, {
+    results: { '4821': results([]), '1907': results([]) },
+    rooms: { '4821': room('4821'), '1907': room('1907', { open: false, members: [person('b')] }) },
+  });
+  const alone = screenMarkup(store);
+  assert.match(alone, /class="cg-hint">Waiting for others</);
+  assert.doesNotMatch(alone, /No matches yet/);
+  store.set({ results: { ...store.getSnapshot().results, '4821': results([], 'matching') } });
+  assert.doesNotMatch(screenMarkup(store), /Waiting for others/, 'while matching only the progress line shows');
+  assert.match(screenMarkup(store), /Finding overlap/);
+  assert.deepEqual(peopleRows(store, '1907'), []);
+  assert.match(screenMarkup(store, '1907'), /No matches yet/);
+  assert.doesNotMatch(screenMarkup(store, '1907'), /Waiting for others/);
+});
+
+test('an unmatched member opens their card through the profile shared in the room', async () => {
+  const store = storeAt(mockServer({}).client, { name: 'results', code: '4821' }, {
+    results: { '4821': results([]) },
+    rooms: { '4821': room('4821', { members: [person('b')], profileId: 'cgp_work' }) },
+  });
+  await mount(createElement(ResultsScreen, { code: '4821', state: store.getSnapshot(), store, host }), async (root) => {
+    assert.doesNotMatch(root.textContent ?? '', /No matches yet|Waiting for others/);
+    await click(root.querySelector('button.cg-row'));
+  });
+  assert.deepEqual(store.top(), { name: 'person', accountId: 'b', profileId: 'cgp_work' });
 });
 
 test('hints during a refresh in flight cause exactly one more request, and a poll waits for it', async () => {
@@ -210,21 +260,13 @@ test('a hint waits for a user action and for the window to show, and does nothin
 
 test('polling keeps today\'s pace until the first hint, then falls back to the slower one', async () => {
   const { client } = mockServer({
-    'GET rooms/4821': { status: 200, body: room('4821') },
     'GET rooms/1907': { status: 200, body: room('1907') },
     'POST rooms/1907/results': { status: 200, body: results([], 'matching') },
   });
-  const lobby: CgScreen = { name: 'lobby', code: '4821' };
-  const matching: CgScreen = { name: 'results', code: '1907' };
-  const store = storeAt(client, lobby, { results: { '1907': results([], 'matching') } });
-  assert.equal(await store.poll(), LOBBY_POLL_MS);
-  store.set({ stack: [home, matching] });
+  const store = storeAt(client, { name: 'results', code: '1907' }, { results: { '1907': results([], 'matching') } });
   assert.equal(await store.poll(), MATCH_POLL_MS);
   // A hint for a room not on screen still shows the stream delivers them.
   await receiveRoomHints(store, roomHint('5550'));
   assert.equal(await store.poll(), MATCH_FALLBACK_POLL_MS);
-  store.set({ stack: [home, lobby] });
-  assert.equal(await store.poll(), LOBBY_FALLBACK_POLL_MS);
-  assert.equal(LOBBY_FALLBACK_POLL_MS, 10_000);
   assert.equal(MATCH_FALLBACK_POLL_MS, 10_000);
 });

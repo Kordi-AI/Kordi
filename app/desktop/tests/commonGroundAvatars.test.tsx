@@ -44,7 +44,7 @@ test('results show both populated and empty groups as square group avatars', asy
   const server = mockServer({ 'POST rooms/4821/results': { status: 200, body: response } });
   const store = new CommonGroundStore(server.client, { profiles: true });
   store.set({ rooms: { '4821': room('4821') } });
-  await store.findCommonGround('4821');
+  await store.loadScreen({ name: 'results', code: '4821' });
   const host: CgHost = {
     self: fx.self, profiles: true, memoryAvailable: false, connectors: null, agentFiles: null, device: null,
     openChat: () => undefined, acceptRequest: async () => undefined, contactsChanged: () => undefined,
@@ -121,7 +121,7 @@ test('the Grounding page gives the signed-in account its own photo in server-bui
   });
   const store = new CommonGroundStore(server.client, { profiles: true });
   store.set({ loaded: true, owner: owner(), rooms: { '4821': room('4821', { members: [hana] }) } });
-  await store.findCommonGround('4821');
+  await store.loadScreen({ name: 'results', code: '4821' });
   store.set({ stack: [{ name: 'home' }, { name: 'results', code: '4821' }] });
   const host: CgHost = {
     self, profiles: true, memoryAvailable: false, connectors: null, agentFiles: null, device: null,

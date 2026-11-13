@@ -54,11 +54,11 @@ This document is the UX and UI design for iOS and macOS. It is tracked in [#1847
 ### 4. Rooms (many people)
 
 - **Pair code**: a 4-digit keypad. Everyone at the event enters the same code. The first person to enter a free code creates the room and may name it ("NeurIPS poster session"); others see the name when they join.
-- **Lobby**: the room name and code, a live grid of members as they arrive, and **Find common ground** (enabled when at least two others are present). Tapping a member shows their card (topics only) right away, before matching. Members can leave at any time. Once anyone finds common ground, every member's lobby moves to Results, and entering a room where it was already found opens Results directly.
+- **Entering a room**: entering a code opens the room, with its name and code. Matching starts by itself; nobody presses a button. The room lists members as they arrive and each match as soon as it is ready. Members can leave at any time.
 - **Results**:
   - **Suggested group**: the largest cluster that includes you and at least two others, as one card: the shared theme, the members' avatars, and **Start group**.
   - **Room topics**: themes several people share, each with the people in it.
-  - **People**: everyone ranked by match with you, with percentage and a one-line reason. Tap opens the match.
+  - **People**: everyone ranked by match with you, with percentage and a one-line reason. Tap opens the match. Members whose match is not ready yet follow in the order they joined, without a percentage; tapping one shows their card (topics only). Alone in the room, it shows "Waiting for others".
 - A room expires 24 hours after its last join. Codes are rate-limited per account and per device; a wrong or expired code shows "Room not found".
 
 ### 5. Match
@@ -105,7 +105,7 @@ Each profile has one card.
 | Building failed | The sources screen with a one-line error and **Try again**. |
 | Source permission denied | The row shows "Access is off" and **Settings**. |
 | Camera denied (QR scan) | "Camera access is off" and **Settings**; the short-code field stays available. |
-| Alone in lobby | The member grid shows only you and "Waiting for others". |
+| Alone in a room | People shows "Waiting for others". |
 | Room not found or expired | Inline error under the keypad; the code is cleared. |
 | Too many attempts | "Try again in a minute." |
 | Offline | Actions disabled with "You're offline" in the toast. |
@@ -130,10 +130,10 @@ Routes under `/v1/cloud/common-ground/`. Every person returned in Common ground 
 - `POST people/:id/meet`: Meet; proposes a plan card in the direct conversation with a contact.
 - `GET rooms/:code/preview`: before joining, an open room's `code`, `name`, suggested `kind`, `memberCount` (people only), whether you are a `member`, the `profileId` you already share there (null when not a member) and the `suggestedProfileId` a join would share; 404 for a free or closed code. Fails with the same 409 a join would (`common_ground_no_card`, `common_ground_sharing_off`). Every preview counts against the address limit; only misses spend the account's join budget, and once it is spent previews are refused too.
 - `GET rooms`: your rooms, open or closed, newest activity first; leaving a room removes it from the list.
-- `POST rooms`: Create a code; opens a room on a free four-digit code with `name` (required), `kind` and `profileId`, and returns `201` with the lobby and its `code`.
-- `GET rooms/:code` carries `matchingStarted`: true once anyone in the room asked for its results. Lobbies then open Results for every member, and each member's own matching runs from there.
+- `POST rooms`: Create a code; opens a room on a free four-digit code with `name` (required), `kind` and `profileId`, and returns `201` with the room and its `code`.
+- `GET rooms/:code` carries `matchingStarted`: true once anyone in the room asked for its results. Clients ask for results as soon as they open a room, so matching starts by itself.
 - A closed room stays readable for members who have not left: `GET rooms/:code` returns `open: false`, results and `people/:id/match` return what was stored without running matching again, members still see each other's cards, and Start group and Join still work. Leaving the room withdraws that visibility.
-- A room or pairing links two people only while both linked profiles have a built card with sharing on. When your card is the reason, `people/:id`, `people/:id/match`, Add, Chat, Meet and room results answer 409 `common_ground_sharing_off` (or `common_ground_no_card`). When theirs is, the person routes answer 404 `common_ground_person_not_found`, and Recent, results and themes leave them out. Lobby members show `hasCard: false`, and group intros and joined lines quote no topics unless everyone they name shares.
+- A room or pairing links two people only while both linked profiles have a built card with sharing on. When your card is the reason, `people/:id`, `people/:id/match`, Add, Chat, Meet and room results answer 409 `common_ground_sharing_off` (or `common_ground_no_card`). When theirs is, the person routes answer 404 `common_ground_person_not_found`, and Recent, results and themes leave them out. Room members show `hasCard: false`, and group intros and joined lines quote no topics unless everyone they name shares.
 - `POST rooms/:code/group`: Start group; adds your contacts and invites the other room members. An optional `topic` records the room topic the group is for.
 - `POST rooms/:code/invitations/:ref/join`: Join; accepts a room group invitation addressed to you.
 
@@ -200,11 +200,12 @@ Issue #2433. The setting is stored on the card row (`cloud_common_ground_cards.a
 
 ## Copy
 
-Sentence case. A title and at most one short line per screen. Buttons are verbs: Build profile, Tap, Pair, Pair code, Find common ground, Start group, Add, Message, Joint idea, Meet, Share, Rebuild card.
+Sentence case. A title and at most one short line per screen. Buttons are verbs: Build profile, Tap, Pair, Pair code, Start group, Add, Message, Joint idea, Meet, Share, Rebuild card.
 
 ## Decisions from review
 
 - Common ground lives in Contacts on both platforms: on iOS the toolbar icon beside Add contact (no pinned row), on macOS a pinned row at the top of the Contacts list. It is not a tab or a sidebar item.
 - **Meet** ships in the first version.
-- People in a room can see each other's cards in the lobby, before **Find common ground**.
+- Rooms match by themselves: entering a code opens the room, which lists people as they arrive and their matches as soon as they are ready. There is no button to start matching.
+- People in a room can see each other's cards before their match is ready.
 - Rooms expire 24 hours after the last join.

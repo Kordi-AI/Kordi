@@ -25,6 +25,13 @@ function candidates(results: CgResults, members: CgPerson[], selfId: string): Cg
   return [...byId.values()];
 }
 
+/** Members whose match is not in yet, in join order; a closed room lists its results only. */
+function arriving(results: CgResults, members: CgPerson[], selfId: string, closed: boolean): CgPerson[] {
+  if (closed) return [];
+  const listed = new Set([selfId, ...results.people.map((entry) => entry.person.accountId)]);
+  return members.filter((member) => !listed.has(member.accountId));
+}
+
 function GroupsSection({ code, results, state, store, host }: { code: string; results: CgResults; state: CgState; store: CommonGroundStore; host: CgHost }) {
   const groups = results.groups ?? [];
   const invitations = state.support.invitations ? results.invitations ?? [] : [];
@@ -74,8 +81,12 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
   const startGroup = (theme: { label: string; people: CgPerson[] }) => setStarting(topicGroupDraft(theme, selfId));
   const line = `${peopleCount(everyone.length)} · ${results.topics.length} shared topics`;
   const profileId = results.profileId ?? room?.profileId ?? undefined;
+  const unmatched = arriving(results, members, selfId, closed);
+  const empty = (tab === 'people' ? results.people.length + unmatched.length : results.topics.length) === 0;
   // While matching, an empty list shows only the progress line under the tabs.
-  const matchingEmpty = results.status === 'matching' && (tab === 'people' ? results.people : results.topics).length === 0;
+  const matchingEmpty = results.status === 'matching' && empty;
+  // Alone in an open room, People waits for others instead of showing an empty list.
+  const waiting = tab === 'people' && empty && !matchingEmpty && !closed && room?.members.length === 0;
 
   return (
     <>
@@ -110,19 +121,29 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
         </CgSection>
       ) : null}
       <CgSegmented value={tab} onChange={setTab} label="Results" options={[['people', 'People'], ['topics', 'Topics']]} />
-      {matchingEmpty ? null : <CgSection>
+      {matchingEmpty || waiting ? null : <CgSection>
         <CgGroup>
           {tab === 'people'
-            ? results.people.map((entry) => (
-              <CgRow
-                key={entry.person.accountId}
-                lead={<CgAvatar person={entry.person} size={36} />}
-                title={personTitle(entry.person)}
-                sub={entry.headline}
-                trailing={<CgScore score={entry.score} />}
-                onClick={() => store.open({ name: 'match', accountId: entry.person.accountId, profileId })}
-              />
-            ))
+            ? <>
+              {results.people.map((entry) => (
+                <CgRow
+                  key={entry.person.accountId}
+                  lead={<CgAvatar person={entry.person} size={36} />}
+                  title={personTitle(entry.person)}
+                  sub={entry.headline}
+                  trailing={<CgScore score={entry.score} />}
+                  onClick={() => store.open({ name: 'match', accountId: entry.person.accountId, profileId })}
+                />
+              ))}
+              {unmatched.map((member) => (
+                <CgRow
+                  key={member.accountId}
+                  lead={<CgAvatar person={member} size={36} />}
+                  title={personTitle(member)}
+                  onClick={() => store.open({ name: 'person', accountId: member.accountId, profileId })}
+                />
+              ))}
+            </>
             : results.topics.map((theme) => (
               <CgRow
                 key={theme.label}
@@ -137,11 +158,12 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
                 )}
               />
             ))}
-          {(tab === 'people' ? results.people : results.topics).length === 0 && results.status !== 'matching'
+          {empty && results.status !== 'matching'
             ? <CgRow title={<span className="cg-muted">{tab === 'people' ? 'No matches yet' : 'No shared topics yet'}</span>} />
             : null}
         </CgGroup>
       </CgSection>}
+      {waiting ? <div className="cg-hint">Waiting for others</div> : null}
       {results.status === 'matching' ? <CgProgress inline line="Finding overlap" /> : null}
       <GroupsSection code={code} results={results} state={state} store={store} host={host} />
       {closed ? (

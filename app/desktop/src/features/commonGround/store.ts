@@ -23,7 +23,6 @@ export type CgScreen =
   | { name: 'home' }
   | { name: 'build'; memory?: boolean }
   | { name: 'card' } | CgNearbyScreen
-  | { name: 'lobby'; code: string }
   | { name: 'results'; code: string }
   | { name: 'match'; accountId: string; profileId?: string }
   | { name: 'person'; accountId: string; profileId?: string };
@@ -67,10 +66,8 @@ export type CommonGroundStoreOptions = {
   buildCheckMs?: number;
 };
 
-export const LOBBY_POLL_MS = 2_000;
 export const MATCH_POLL_MS = 3_000;
-/** The lobby and matching poll delays once room and match hints arrive and polling is the fallback. */
-export const LOBBY_FALLBACK_POLL_MS = 10_000;
+/** The matching poll delay once room and match hints arrive and polling is the fallback. */
 export const MATCH_FALLBACK_POLL_MS = 10_000;
 export const BUILD_POLL_MS = 3_000;
 export { BUILD_CHECK_MS, BUILD_START_CHECKS } from './storeBuild';
@@ -343,11 +340,11 @@ export class CommonGroundStore {
     try {
       this.set({ busy: 'join', notice: null });
       const room = await this.client.joinRoom(code, input);
-      // A room where common ground was already found opens on its results.
-      const screen: CgScreen = room.matchingStarted ? { name: 'results', code } : { name: 'lobby', code };
+      // Joining opens the room; asking for its results starts matching.
+      const screen: CgScreen = { name: 'results', code };
       this.set({ busy: null, rooms: { ...this.state.rooms, [code]: room }, stack: [...this.state.stack, screen] });
       // Results load after the rooms list, which would otherwise land over them.
-      void this.loadRooms().finally(() => { if (screen.name === 'results' && this.top() === screen) void this.loadScreen(screen); });
+      void this.loadRooms().finally(() => { if (this.top() === screen) void this.loadScreen(screen); });
       return true;
     } catch (error) {
       const code = commonGroundErrorCode(error);
@@ -365,13 +362,6 @@ export class CommonGroundStore {
     const { [code]: _results, ...results } = this.state.results;
     this.set({ rooms, results, roomList: this.state.roomList.filter((room) => room.code !== code) });
     this.home();
-  }
-
-  async findCommonGround(code: string): Promise<void> {
-    const results = await this.run('find', () => this.client.results(code));
-    if (!results) return;
-    this.set({ results: { ...this.state.results, [code]: results } });
-    this.set({ stack: [...this.state.stack.slice(0, -1), { name: 'results', code }] });
   }
 
   /** The room behind four typed digits, before joining it. */

@@ -16,7 +16,7 @@
  * (`features/commonGround/cardHints`). `common_ground.room.updated` (a room's
  * members, matching, themes or a member's card changed) and
  * `common_ground.matches.updated` (a match for this account finished or
- * failed) refresh the open Grounding lobby, Results, match page or Rooms list
+ * failed) refresh the open Grounding room, match page or Rooms list
  * (`features/commonGround/roomHints`).
  */
 export const ACCOUNT_HINT_EVENT_TYPES: ReadonlySet<string> = new Set([

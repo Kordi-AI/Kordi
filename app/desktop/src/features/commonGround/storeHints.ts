@@ -1,5 +1,5 @@
 // Room and match hints for the Grounding store (`roomHints` brings them from the sync stream).
-// A room hint refreshes that room's lobby or Results, or the Rooms list on Home; a match hint
+// A room hint refreshes that room's Results and members, or the Rooms list on Home; a match hint
 // refreshes Results or a match page. Refreshes of one screen run one at a time and are shared
 // with the polling: a hint during a refresh asks for exactly one more after it, because the
 // running request may predate the change, while a poll during one waits for it. A hint waits
@@ -97,7 +97,7 @@ export function flushRoomHints(store: CommonGroundStore): Promise<void> {
       return true;
     }) : Promise.resolve();
   }
-  const forRoom = (screen.name === 'lobby' || screen.name === 'results') && hints.codes.includes(screen.code);
+  const forRoom = screen.name === 'results' && hints.codes.includes(screen.code);
   const forMatches = hints.matches && (screen.name === 'results' || screen.name === 'match');
   return forRoom || forMatches ? run(store, screen, hints, () => refreshTop(store, screen)) : Promise.resolve();
 }

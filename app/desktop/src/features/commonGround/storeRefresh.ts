@@ -1,6 +1,6 @@
 import { CommonGroundError, commonGroundErrorMessage } from './client';
 import {
-  BUILD_POLL_MS, LOBBY_FALLBACK_POLL_MS, LOBBY_POLL_MS, MATCH_FALLBACK_POLL_MS, MATCH_POLL_MS, personKey, roomClosed,
+  BUILD_POLL_MS, MATCH_FALLBACK_POLL_MS, MATCH_POLL_MS, personKey, roomClosed,
   type CgScreen, type CgState, type CommonGroundStore,
 } from './store';
 import * as autoOps from './storeAutoRebuild';
@@ -36,18 +36,8 @@ export async function refreshScreen(store: CommonGroundStore, screen: CgScreen):
   try {
     switch (screen.name) {
       case 'home': await store.loadHome(); return true;
-      case 'lobby': {
-        const room = await store.client.room(screen.code);
-        cache('rooms', screen.code, room);
-        // Someone found common ground: every lobby moves on to Results.
-        if (room.matchingStarted && snapshot() === before && store.top() === screen) {
-          store.set(patch);
-          store.replace({ name: 'results', code: screen.code });
-          return true;
-        }
-        break;
-      }
       case 'results': {
+        // The room comes along, so people who just joined show before their match is in.
         const room = store.client.room(screen.code).catch(() => null);
         cache('results', screen.code, await store.client.results(screen.code));
         const loaded = await room;
@@ -84,11 +74,9 @@ export async function refreshScreen(store: CommonGroundStore, screen: CgScreen):
   }
 }
 
-/** The lobby or matching poll delay: today's pace until a room or match hint shows the stream works. */
-function pollDelay(store: CommonGroundStore, screen: CgScreen): number {
-  const heard = hintOps.roomHintsHeard(store);
-  if (screen.name === 'lobby') return heard ? LOBBY_FALLBACK_POLL_MS : LOBBY_POLL_MS;
-  return heard ? MATCH_FALLBACK_POLL_MS : MATCH_POLL_MS;
+/** The matching poll delay: today's pace until a room or match hint shows the stream works. */
+function pollDelay(store: CommonGroundStore): number {
+  return hintOps.roomHintsHeard(store) ? MATCH_FALLBACK_POLL_MS : MATCH_POLL_MS;
 }
 
 /** The store's `poll()`: refreshes what the top screen waits on; returns the next delay or null. */
@@ -109,13 +97,13 @@ export async function pollTop(store: CommonGroundStore): Promise<number | null> 
         : screen.name === 'match' ? state().matches[personKey(screen.accountId, screen.profileId)]?.status : 'ready';
       return !status || status === 'matching';
     };
-    if (screen.name === 'lobby' || (matching() && (screen.name !== 'results' || !roomClosed(state(), screen.code)))) {
+    if (matching() && (screen.name !== 'results' || !roomClosed(state(), screen.code))) {
       await hintOps.refreshShared(store, screen);
       if (store.top() !== screen) return null;
-      return screen.name === 'lobby' || matching() ? pollDelay(store, screen) : null;
+      return matching() ? pollDelay(store) : null;
     }
   } catch {
-    return pollDelay(store, screen);
+    return pollDelay(store);
   }
   if (autoOps.cardRefreshDue(store)) return autoOps.refreshCard(store);
   await store.syncFromServer();
