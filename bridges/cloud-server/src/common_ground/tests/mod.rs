@@ -18,6 +18,7 @@ mod group_intro_tests;
 mod group_origin_tests;
 mod matching_guard_tests;
 mod matching_pair_tests;
+mod matching_refresh_tests;
 mod matching_tests;
 mod matching_unit_tests;
 mod nearby_access_tests;

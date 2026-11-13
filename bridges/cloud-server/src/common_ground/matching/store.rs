@@ -328,7 +328,8 @@ pub(super) async fn stored_themes(
 }
 
 /// The room's last stored themes, whatever member set they were computed
-/// for. A closed room shows these as they were.
+/// for. A closed room shows these as they were; an open room shows them
+/// while a theme run replaces them.
 pub(super) async fn latest_themes(
     pool: &PgPool,
     room_id: Uuid,
