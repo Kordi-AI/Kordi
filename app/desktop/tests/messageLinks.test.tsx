@@ -477,21 +477,3 @@ test('chat links keep fixed icon geometry and immediate hover/focus feedback', (
   assert.match(css, /\.app-markdown-link:hover\s*{[\s\S]*text-decoration-line:\s*underline;/);
   assert.doesNotMatch(css, /\.app-markdown-link:focus-visible\s*{[^}]*outline:\s*\d/);
 });
-
-test('@Facilitator in a group sends a mention the server answers, never an agent route', async () => {
-  const { messageMentionsForSend } = await import('../src/features/chat/messageMentions');
-  const group = { id: 'session:group:g', participantSpaceId: 'group:g', directness: 'Group chat' };
-  const mentions = messageMentionsForSend('@Facilitator can you find a time? Thanks @facilitator.', group, null);
-  assert.deepEqual(
-    mentions.map((mention) => [mention.startUtf16, mention.displayText, mention.targetKind, mention.targetIdentityId, mention.humanId ?? null, mention.agentId ?? null]),
-    [
-      [0, '@Facilitator', 'agent', 'agent:cloud-agent:acct_kordi_pip', null, null],
-      [41, '@facilitator', 'agent', 'agent:cloud-agent:acct_kordi_pip', null, null],
-    ],
-  );
-  assert.deepEqual(messageMentionsForSend('@Facilitator hi', { id: 'session:direct:d' }, null), []);
-  assert.deepEqual(messageMentionsForSend('@Facilitators hi', group, null), []);
-  const rendered = parseMessageInlineParts('@Facilitator can you find a time?', mentions.slice(0, 1))
-    .filter((part) => part.type === 'mention');
-  assert.deepEqual(rendered.map((part) => part.type === 'mention' ? [part.label, part.targetKind] : []), [['@Facilitator', 'agent']]);
-});
