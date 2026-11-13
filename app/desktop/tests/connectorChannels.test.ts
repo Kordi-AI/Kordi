@@ -9,6 +9,7 @@ import {
   chosenChannelsFromSettings,
   filterChannelChoices,
   toggleChannel,
+  withListedNames,
 } from '../src/features/connectors/connectorChannels';
 import { connectorStateFromSummary, createCloudConnectorsClient } from '../src/features/connectors/connectorsCloudClient';
 import { isConnectorNeedsReconnect } from '../src/features/connectors/connectorsErrors';
@@ -49,6 +50,23 @@ test('choices merge, filter, and toggle in chosen order', () => {
   assert.deepEqual(toggleChannel(added, { id: 'C9', name: 'old-channel', isPrivate: false }, false), [{ id: 'G2', name: 'launch' }]);
   assert.deepEqual(channelSettings([{ id: 'C1', name: 'general' }, { id: 'G2', name: null }]), {
     channels: ['C1', 'G2'],
+    channelNames: { C1: 'general' },
+  });
+});
+
+test('saved channels take listed names and never store an id as a name', () => {
+  const options = [{ id: 'C1', name: 'general', isPrivate: false }];
+  assert.deepEqual(withListedNames([
+    { id: 'C1', name: null },
+    { id: 'C9', name: 'C9' },
+    { id: 'C8', name: 'old-channel' },
+  ], options), [
+    { id: 'C1', name: 'general' },
+    { id: 'C9', name: null },
+    { id: 'C8', name: 'old-channel' },
+  ]);
+  assert.deepEqual(channelSettings([{ id: 'C1', name: 'general' }, { id: 'C9', name: 'C9' }]), {
+    channels: ['C1', 'C9'],
     channelNames: { C1: 'general' },
   });
 });

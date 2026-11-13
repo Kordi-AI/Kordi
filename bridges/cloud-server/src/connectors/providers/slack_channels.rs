@@ -39,9 +39,18 @@ pub fn clean_name(raw: &str) -> Option<String> {
     valid.then(|| name.to_string())
 }
 
+/// A stored name for channel `id`: cleaned, and never the id itself, which
+/// says nothing and would show as `#C123 (C123)`.
+fn name_for(id: &str, raw: Option<&Value>) -> Option<String> {
+    raw.and_then(Value::as_str)
+        .and_then(clean_name)
+        .filter(|name| name != id)
+}
+
 /// Validates `channelNames` against the chosen `channels`. Names for
-/// channels that are not chosen, and names Slack would not produce, are
-/// dropped rather than rejected, so a save never fails on a display name.
+/// channels that are not chosen, names equal to the id, and names Slack
+/// would not produce are dropped rather than rejected, so a save never fails
+/// on a display name.
 pub fn validate_names(
     raw: Option<&Value>,
     channels: &[String],
@@ -53,7 +62,7 @@ pub fn validate_names(
     };
     let mut names = Map::new();
     for id in channels {
-        if let Some(name) = map.get(id).and_then(Value::as_str).and_then(clean_name) {
+        if let Some(name) = name_for(id, map.get(id)) {
             names.insert(id.clone(), Value::String(name));
         }
     }
@@ -66,10 +75,7 @@ pub fn chosen_with_names(settings: &Value) -> Vec<(String, Option<String>)> {
     chosen_channels(settings)
         .into_iter()
         .map(|id| {
-            let name = names
-                .and_then(|names| names.get(&id))
-                .and_then(Value::as_str)
-                .and_then(clean_name);
+            let name = name_for(&id, names.and_then(|names| names.get(&id)));
             (id, name)
         })
         .collect()

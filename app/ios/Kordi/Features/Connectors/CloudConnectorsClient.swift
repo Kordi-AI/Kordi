@@ -87,7 +87,8 @@ enum CloudConnectorsMapping {
     static func settings(_ channels: [ConnectorChannel]) -> CloudConnectorSettings {
         var names: [String: String] = [:]
         for channel in channels {
-            if let name = channel.name?.nonEmpty { names[channel.id] = name }
+            // A name equal to the id says nothing and would show as `#C123 (C123)`.
+            if let name = channel.name?.nonEmpty, name != channel.id { names[channel.id] = name }
         }
         return CloudConnectorSettings(channels: channels.map(\.id), channelNames: names)
     }

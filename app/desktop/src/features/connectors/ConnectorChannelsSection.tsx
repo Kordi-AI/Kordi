@@ -7,7 +7,7 @@ import { SettingsRow, SettingsSection } from '@/kordi-app/components/settingsLay
 import { settingsType } from '@/kordi-app/components/settingsType';
 import { cn } from '@/lib/utils';
 
-import { channelChoices, filterChannelChoices, MAX_CHOSEN_CHANNELS, toggleChannel } from './connectorChannels';
+import { channelChoices, filterChannelChoices, MAX_CHOSEN_CHANNELS, toggleChannel, withListedNames } from './connectorChannels';
 import type { ConnectorsClient } from './connectorsClient';
 import { isConnectorNeedsReconnect } from './connectorsErrors';
 import type { ConnectorChannelOption, ConnectorDefinition, ConnectorState } from './connectorsModel';
@@ -115,7 +115,8 @@ function ChannelList({
     setSaving(true);
     setSaveError(null);
     try {
-      onSaved(await client.saveChannels(providerId, toggleChannel(chosen, option, on)));
+      const listed = loaded.kind === 'ready' ? loaded.options : [];
+      onSaved(await client.saveChannels(providerId, withListedNames(toggleChannel(chosen, option, on), listed)));
     } catch (caught) {
       setSaveError(message(caught, 'Could not save channels.'));
     } finally {

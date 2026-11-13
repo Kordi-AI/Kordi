@@ -49,4 +49,24 @@ final class ConnectorChannelsTests: XCTestCase {
         XCTAssertEqual(added.map(\.id), ["C9", "G2"])
         XCTAssertEqual(ConnectorChannelChoices.toggle(added, option: options[1], on: false).map(\.id), ["C9"])
     }
+
+    func testSavedChannelsTakeListedNamesAndNeverAnIdAsName() {
+        let options = [ConnectorChannelOption(id: "C1", name: "general", isPrivate: false)]
+        let named = ConnectorChannelChoices.named([
+            ConnectorChannel(id: "C1", name: nil),
+            ConnectorChannel(id: "C9", name: "C9"),
+            ConnectorChannel(id: "C8", name: "old-channel"),
+        ], options: options)
+        XCTAssertEqual(named, [
+            ConnectorChannel(id: "C1", name: "general"),
+            ConnectorChannel(id: "C9", name: nil),
+            ConnectorChannel(id: "C8", name: "old-channel"),
+        ])
+
+        let settings = CloudConnectorsMapping.settings([
+            ConnectorChannel(id: "C1", name: "general"),
+            ConnectorChannel(id: "C9", name: "C9"),
+        ])
+        XCTAssertEqual(settings.channelNames, ["C1": "general"])
+    }
 }

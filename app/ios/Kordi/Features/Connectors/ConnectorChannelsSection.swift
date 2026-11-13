@@ -26,12 +26,16 @@ struct ConnectorChannelsSection: View {
     var body: some View {
         SettingsDivider()
         SettingsSectionTitle("Channels")
-        content
-            .task { await load() }
-            .onChange(of: store.states[providerId]) {
-                // After signing in again, try the list once more.
-                if case .reconnect = loaded { Task { await load() } }
-            }
+        // One stable container: modifiers on `content` itself would apply to
+        // each child view, so every row would start its own load.
+        VStack(alignment: .leading, spacing: 0) {
+            content
+        }
+        .task { await load() }
+        .onChange(of: store.states[providerId]) {
+            // After signing in again, try the list once more.
+            if case .reconnect = loaded { Task { await load() } }
+        }
     }
 
     @ViewBuilder
@@ -82,27 +86,47 @@ struct ConnectorChannelsSection: View {
         chosen.contains { $0.id == option.id }
     }
 
+    private var listedOptions: [ConnectorChannelOption] {
+        if case .ready(let options) = loaded { return options }
+        return []
+    }
+
     private func binding(_ option: ConnectorChannelOption) -> Binding<Bool> {
         Binding(
             get: { isChosen(option) },
-            set: { on in Task { await save(ConnectorChannelChoices.toggle(chosen, option: option, on: on)) } }
+            set: { on in
+                // Mark the save before the task starts so a second quick tap
+                // cannot save a list built from the same, older choices.
+                guard !saving else { return }
+                saving = true
+                saveError = nil
+                let next = ConnectorChannelChoices.named(
+                    ConnectorChannelChoices.toggle(chosen, option: option, on: on),
+                    options: listedOptions
+                )
+                Task { await save(next) }
+            }
         )
     }
 
     private func load() async {
         loaded = .loading
         do {
-            loaded = .ready(try await store.client.listChannels(providerId))
+            let options = try await store.client.listChannels(providerId)
+            guard !Task.isCancelled else { return }
+            loaded = .ready(options)
         } catch let error as ConnectorsClientError where error.code == CloudConnectorsClient.scopeMissingCode {
             loaded = .reconnect(error.message)
+        } catch let error where CloudTransportErrorPolicy.isCancellation(error) {
+            // The view went away or a newer load replaced this one.
+            return
         } catch {
             loaded = .failed(ConnectorsStore.message(error, fallback: "Could not load channels."))
         }
     }
 
+    /// Saves `channels`; the caller has already set `saving`.
     private func save(_ channels: [ConnectorChannel]) async {
-        saving = true
-        saveError = nil
         defer { saving = false }
         do {
             store.apply(try await store.client.saveChannels(providerId, channels: channels))
@@ -125,6 +149,19 @@ enum ConnectorChannelChoices {
             .filter { !listed.contains($0.id) }
             .map { ConnectorChannelOption(id: $0.id, name: $0.name ?? $0.id, isPrivate: $0.id.hasPrefix("G")) }
         return missing + options
+    }
+
+    /// `channels` with names from the listed options, so every channel Slack
+    /// lists is saved with its name. A name equal to the id is dropped.
+    static func named(_ channels: [ConnectorChannel], options: [ConnectorChannelOption]) -> [ConnectorChannel] {
+        var listed: [String: String] = [:]
+        for option in options { listed[option.id] = option.name }
+        return channels.map { channel in
+            let name = [listed[channel.id], channel.name]
+                .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+                .first { !$0.isEmpty && $0 != channel.id }
+            return ConnectorChannel(id: channel.id, name: name)
+        }
     }
 
     /// Choices whose name contains `query`, ignoring case and a leading `#`.

@@ -18,16 +18,17 @@ fn slack_settings_keep_names_for_chosen_channels_only() {
     let slack = registry.get("slack").unwrap();
     assert_eq!(
         slack.validate_settings(&json!({
-            "channels": ["C0GENERAL", "G0SECRET", "C0NONAME"],
+            "channels": ["C0GENERAL", "G0SECRET", "C0NONAME", "G0SECRET2"],
             "channelNames": {
                 "C0GENERAL": "#general",
                 "G0SECRET": "launch-team",
                 "C0NONAME": "has space",
-                "C0OTHER": "not-chosen"
+                "C0OTHER": "not-chosen",
+                "G0SECRET2": "G0SECRET2"
             }
         })),
         Ok(json!({
-            "channels": ["C0GENERAL", "G0SECRET", "C0NONAME"],
+            "channels": ["C0GENERAL", "G0SECRET", "C0NONAME", "G0SECRET2"],
             "channelNames": { "C0GENERAL": "general", "G0SECRET": "launch-team" }
         }))
     );
@@ -89,6 +90,16 @@ fn slack_tools_name_the_chosen_channels() {
             .unwrap()
             .contains("#general (C0GENERAL)"));
         assert_eq!(schema["required"][0], "channel");
+
+        // A stored name equal to the id is shown as the bare id.
+        let (description, _) = tailored(
+            tool,
+            json!({ "channels": ["C0GENERAL"], "channelNames": { "C0GENERAL": "C0GENERAL" } }),
+        );
+        assert!(
+            description.ends_with("Chosen channels: C0GENERAL."),
+            "{description}"
+        );
     }
 
     // Other providers and settings without channels are left alone.

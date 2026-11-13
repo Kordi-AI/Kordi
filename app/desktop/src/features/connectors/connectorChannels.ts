@@ -28,7 +28,8 @@ export function chosenChannelsFromSettings(settings: unknown): ConnectorChannel[
 export function channelSettings(channels: ConnectorChannel[]): { channels: string[]; channelNames: Record<string, string> } {
   const channelNames: Record<string, string> = {};
   for (const channel of channels) {
-    if (channel.name) channelNames[channel.id] = channel.name;
+    // A name equal to the id says nothing and would show as `#C123 (C123)`.
+    if (channel.name && channel.name !== channel.id) channelNames[channel.id] = channel.name;
   }
   return { channels: channels.map((channel) => channel.id), channelNames };
 }
@@ -40,6 +41,20 @@ export function channelChoices(options: ConnectorChannelOption[], chosen: Connec
     .filter((channel) => !listed.has(channel.id))
     .map((channel) => ({ id: channel.id, name: channel.name ?? channel.id, isPrivate: channel.id.startsWith('G') }));
   return [...missing, ...options];
+}
+
+/**
+ * `channels` with names from the listed options, so every channel Slack lists
+ * is saved with its name. A name equal to the id is dropped.
+ */
+export function withListedNames(channels: ConnectorChannel[], options: ConnectorChannelOption[]): ConnectorChannel[] {
+  const listed = new Map(options.map((option) => [option.id, option.name]));
+  return channels.map((channel) => {
+    const name = [listed.get(channel.id), channel.name]
+      .map((candidate) => candidate?.trim() ?? '')
+      .find((candidate) => candidate && candidate !== channel.id);
+    return { id: channel.id, name: name ?? null };
+  });
 }
 
 /** Choices whose name contains `query`, ignoring case and a leading `#`. */

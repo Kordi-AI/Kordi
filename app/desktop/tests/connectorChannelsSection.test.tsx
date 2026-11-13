@@ -19,7 +19,10 @@ const OPTIONS: ConnectorChannelOption[] = [
   { id: 'C3', name: 'random', isPrivate: false },
 ];
 
-function slackClient(listChannels: () => Promise<ConnectorChannelOption[]>) {
+function slackClient(
+  listChannels: () => Promise<ConnectorChannelOption[]>,
+  initial: ConnectorChannel[] = [{ id: 'C1', name: 'general' }],
+) {
   const preview = createPreviewConnectorsClient({ latencyMs: 0 });
   let slack: ConnectorState | null = null;
   const saves: ConnectorChannel[][] = [];
@@ -28,7 +31,7 @@ function slackClient(listChannels: () => Promise<ConnectorChannelOption[]>) {
     async list() {
       const listed = await preview.list();
       const states = listed.states.map((state) => (state.providerId === 'slack'
-        ? (slack ??= { ...state, status: 'connected', channels: [{ id: 'C1', name: 'general' }] })
+        ? (slack ??= { ...state, status: 'connected', channels: initial })
         : state));
       return { ...listed, states };
     },
@@ -84,6 +87,18 @@ test('the Channels section lists, searches, and saves Slack channels', async () 
     await click(checkbox(host, 'G2'), installed.dom.window);
     assert.deepEqual(saves, [[{ id: 'C1', name: 'general' }, { id: 'G2', name: 'launch' }]]);
     assert.equal(checkbox(host, 'G2')?.checked, true);
+  } finally {
+    await act(async () => root.unmount());
+    installed.restore();
+  }
+});
+
+test('saving fills names from the list for channels chosen before names', async () => {
+  const { client, saves } = slackClient(async () => OPTIONS, [{ id: 'C1', name: null }, { id: 'C9', name: 'C9' }]);
+  const { installed, host, root } = await openSlack(client);
+  try {
+    await click(checkbox(host, 'C3'), installed.dom.window);
+    assert.deepEqual(saves, [[{ id: 'C1', name: 'general' }, { id: 'C9', name: null }, { id: 'C3', name: 'random' }]]);
   } finally {
     await act(async () => root.unmount());
     installed.restore();
