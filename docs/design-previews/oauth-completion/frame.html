@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Completion page frame</title>
+<script type="module">
+  // Renders the proposed page exactly as the loopback listener would serve it.
+  // The fragment of this URL stands in for the OAuth callback fragment, and the
+  // completion POST is stubbed so each state can be held:
+  //   ?status=loading|success|error&theme=light|dark&font=system|geist
+  import { completionDocument } from './page.js';
+
+  const query = new URLSearchParams(location.search);
+  const status = query.get('status') || 'success';
+  const theme = query.get('theme');
+  const font = query.get('font');
+
+  window.fetch = () => status === 'loading'
+    ? new Promise(() => {})
+    : Promise.resolve({ ok: status === 'success' });
+
+  let html = completionDocument('cloud_oauth_preview');
+  if (theme === 'light' || theme === 'dark') html = html.replace('<html lang="en"', `<html lang="en" data-theme="${theme}"`);
+  if (font === 'geist') {
+    // Preview only: compares embedded Geist with the system stack. The fonts are
+    // copied from the homepage repo into ./fonts and are not committed.
+    const faces = [400, 600].map((weight) => `@font-face { font-family: Geist; src: url("fonts/geist-${weight}.ttf") format("truetype"); font-weight: ${weight}; }`).join('\n');
+    html = html.replace('<style>', `<style>${faces}`);
+  }
+  document.open();
+  document.write(html);
+  document.close();
+</script>
