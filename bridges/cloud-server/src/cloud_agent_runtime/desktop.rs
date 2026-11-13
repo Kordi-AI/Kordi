@@ -438,7 +438,12 @@ async fn publish_progress(
             .bind(&session_id).bind(&session.account_id).bind(&requester).fetch_one(&mut *tx).await?;
         let reply = crate::chat_sync::models::SendMessageRequest { client_message_id: input.client_message_id, kind: "text".into(), content: json!({"schema":1,"blocks":[{"type":"text","text":input.body}]}), reply_to_message_id: None, attachment_ids:vec![] };
         let reply = if phase == "completed" { crate::document_shares::agents::create::reply::attach_run_documents(&mut tx, &run_id, reply).await? } else { reply }; // A completed reply carries the run's documents (issue 1808).
-        let message = if group { crate::chat_sync::store::send_message_in_transaction(&mut tx, &session.account_id, conversation.0, reply).await?.value }
+        // A yield keeps the run's processing row as its one visible row (#2416).
+        let yield_slot = if group && phase == "completed" && reply.attachment_ids.is_empty() && reply_row::is_group_yield(&input.body) {
+            reply_row::group_yield_slot(&mut tx, &run_id, &session.account_id, conversation.0).await?
+        } else { None };
+        let message = if let Some(slot) = yield_slot { slot }
+            else if group { crate::chat_sync::store::send_message_in_transaction(&mut tx, &session.account_id, conversation.0, reply).await?.value }
             else { reply_row::publish_into_reply_row(&mut tx, &run_id, &session.account_id, conversation.0, reply).await? };
         query("UPDATE cloud_agent_fallback_runs SET status=$2, response_message_id=$3, updated_at=$4, completed_at=CASE WHEN $2 IN ('completed','failed','cancelled') THEN $4 ELSE NULL END WHERE run_id=$1")
             .bind(&run_id).bind(phase).bind(message.id.to_string()).bind(Utc::now().to_rfc3339()).execute(&mut *tx).await?;

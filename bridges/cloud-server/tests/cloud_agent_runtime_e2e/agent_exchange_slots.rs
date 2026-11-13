@@ -46,6 +46,108 @@ impl Fixture {
     }
 }
 
+impl Fixture {
+    /// Publishes the root run's group reply from Alpha's Mac, as the desktop
+    /// chat publisher does.
+    async fn publish_from_mac(&self, id: &str, text: &str, phase: &str) -> Value {
+        let (request,): (String,) =
+            query_as("SELECT request_message_id FROM cloud_agent_fallback_runs WHERE run_id=$1")
+                .bind(&self.root)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap();
+        let owner = &self.people[0].account_id;
+        let envelope = json!({"kind":"group-message","groupId":self.session,"createdByAccountId":owner,"actor":{"accountId":owner,"displayName":"Alpha"},"participants":[],
+            "message":{"id":id,"senderAccountId":owner,"senderKind":"agent","senderAgentId":format!("cloud-agent:{owner}"),"text":text,"createdAtMs":chrono::Utc::now().timestamp_millis(),"deliveryState":phase,"requestId":request,"replyToMessageId":request}});
+        let body = format!(
+            "kordi-cloud-group:{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(envelope.to_string())
+        );
+        self.post(
+            0,
+            &format!("/v1/cloud/agent-runs/desktop/{}/progress", self.root),
+            json!({"claimId":self.claim,"body":body,"clientMessageId":uuid::Uuid::new_v4()}),
+        )
+        .await
+    }
+    async fn root_response(&self) -> uuid::Uuid {
+        let (id,): (String,) =
+            query_as("SELECT response_message_id FROM cloud_agent_fallback_runs WHERE run_id=$1")
+                .bind(&self.root)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap();
+        id.parse().unwrap()
+    }
+}
+
+/// The owner's Mac runs the task: its processing row is the one slot, also
+/// after the turn yields with the waiting outcome, and the resumed result
+/// replaces it. A yield that inserted its own row left a second "Waiting
+/// for" row behind for every member.
+#[tokio::test]
+async fn a_mac_run_that_yields_keeps_its_processing_row() {
+    let Some(f) = Fixture::new().await else {
+        return;
+    };
+    let processing = f
+        .publish_from_mac("msg:cloud-agent-processing:slot", "", "processing")
+        .await;
+    let slot: uuid::Uuid = processing["messageId"].as_str().unwrap().parse().unwrap();
+    f.ask_ok("ask", 1, "Which day?").await;
+    let rows = f.agent_rows().await;
+    let completed = f
+        .publish_from_mac(
+            "msg:cloud-agent:turn",
+            r#"{"agentExchangeOutcome":"waiting"}"#,
+            "complete",
+        )
+        .await;
+    assert_eq!(
+        completed["messageId"],
+        slot.to_string(),
+        "the Mac learns the slot"
+    );
+    assert_eq!(f.agent_rows().await, rows, "no second row for the yield");
+    assert_eq!(f.root_response().await, slot);
+    let waiting = f.message(slot).await;
+    assert_eq!(waiting["id"], "msg:cloud-agent-processing:slot");
+    assert_eq!(waiting["text"], "Waiting for Exchange Beta.");
+    assert_eq!(waiting["deliveryState"], "processing");
+    assert_eq!(
+        waiting["structuredContent"]["agentExchangeStatus"],
+        "waiting"
+    );
+    assert_eq!(
+        waiting["structuredContent"]["agentExchangeWaitingForAccountId"],
+        f.people[1].account_id
+    );
+
+    f.say(1, "Tuesday", None).await;
+    let resume = f.pending(0).await.remove(0);
+    assert_eq!(
+        f.message(slot).await["structuredContent"]["agentExchangeStatus"],
+        "processing"
+    );
+    let claim = f.claim(0, &resume).await;
+    f.finish(
+        0,
+        resume["runId"].as_str().unwrap(),
+        claim,
+        "Booked for Tuesday.",
+    )
+    .await;
+    let done = f.message(slot).await;
+    assert_eq!(done["text"], "Booked for Tuesday.");
+    assert_eq!(done["deliveryState"], "complete");
+    assert!(done["structuredContent"]["agentExchangeStatus"].is_null());
+    assert_eq!(
+        f.agent_rows().await,
+        rows,
+        "no processing row is left behind"
+    );
+}
+
 #[tokio::test]
 async fn the_asking_agent_keeps_one_row_from_waiting_to_its_result() {
     let Some(f) = Fixture::new().await else {
