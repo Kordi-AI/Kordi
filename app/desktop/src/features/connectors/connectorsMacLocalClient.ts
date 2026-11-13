@@ -85,8 +85,13 @@ export function createDesktopMacLocalConnectorsClient(
     macLocalConnectorState(providerId, all[sourceFor(providerId)], agents)
   );
 
+  const listChannels = services?.listChannels?.bind(services);
+  const saveChannels = services?.saveChannels?.bind(services);
+
   return {
     servicesAvailable: services !== null,
+    ...(listChannels ? { listChannels } : {}),
+    ...(saveChannels ? { saveChannels } : {}),
     async list() {
       const [macLocal, base] = await Promise.all([
         invoke<MacLocalConnectorsState>('desktop_mac_local_connectors_state'),

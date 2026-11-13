@@ -289,3 +289,45 @@ async fn a_server_lease_longer_than_forty_seconds_keeps_the_turn_running() {
     assert!(!watched.cancel.is_cancelled());
     watched.cancel.cancel();
 }
+
+#[test]
+fn streamed_text_starts_a_paragraph_after_a_tool_call_or_message_start() {
+    let snapshot = Arc::new(Mutex::new(DesktopChatTurnSnapshot {
+        id: "turn".to_string(),
+        session_id: "session".to_string(),
+        prompt: String::new(),
+        status: "streaming".to_string(),
+        message: String::new(),
+        assistant_text: String::new(),
+        thinking_text: String::new(),
+        segments: Vec::new(),
+        tools: vec![],
+        completed: false,
+        succeeded: false,
+        started_at_ms: 0,
+        completed_at_ms: None,
+        transcript_entry_id: None,
+        error: None,
+        retry_reason: None,
+        transcript_refresh_required: false,
+        background_follow_up: None,
+    }));
+    for event in [
+        TurnEvent::TextStart,
+        TurnEvent::TextDelta("You have 50 ".into()),
+        TurnEvent::TextDelta("notifications.".into()),
+        TurnEvent::ToolCallStart {
+            id: "call-reach".into(),
+            name: "reach_out".into(),
+        },
+        TurnEvent::TextStart,
+        TurnEvent::TextDelta("Please paste ".into()),
+        TurnEvent::TextDelta("the Slack link.".into()),
+    ] {
+        apply_desktop_turn_event(&snapshot, &event);
+    }
+    assert_eq!(
+        snapshot_turn(&snapshot).unwrap().assistant_text,
+        "You have 50 notifications.\n\nPlease paste the Slack link."
+    );
+}

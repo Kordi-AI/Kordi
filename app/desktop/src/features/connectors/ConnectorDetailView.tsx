@@ -41,6 +41,7 @@ export function ConnectorDetailView({
   busy,
   backButtonRef,
   primaryAction,
+  channelsSection = null,
   onBack,
   onToggleAct,
   onSetAgentGrant,
@@ -53,6 +54,8 @@ export function ConnectorDetailView({
   busy: boolean;
   backButtonRef: RefObject<HTMLButtonElement | null>;
   primaryAction: ReactNode;
+  /** Shown under Access while connected, such as the Slack channel list. */
+  channelsSection?: ReactNode;
   onBack: () => void;
   onToggleAct: (state: ConnectorState, enabled: boolean) => void;
   onSetAgentGrant: (agent: ConnectorAgent, granted: boolean) => void;
@@ -130,6 +133,8 @@ export function ConnectorDetailView({
               description="Digests and scheduled work can only read. They never get act tools."
             />
           </SettingsSection>
+
+          {channelsSection}
 
           <SettingsSection title="Agents">
             {macLocal ? <SettingsRow title="All agents on this Mac" /> : agents.map((agent) => (

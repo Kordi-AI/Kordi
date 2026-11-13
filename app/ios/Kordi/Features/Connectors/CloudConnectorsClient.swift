@@ -70,8 +70,27 @@ enum CloudConnectorsMapping {
             grantedScopeIds: grantedScopeIds(definition: definition, summary: summary),
             actEnabled: summary.actEnabled,
             agentIds: summary.agentIds,
-            lastEventAt: summary.lastEventAt
+            lastEventAt: summary.lastEventAt,
+            channels: providerId == .slack ? channels(summary.settings) : nil
         )
+    }
+
+    /// The chosen channels in stored order, with names when the settings have them.
+    static func channels(_ settings: CloudConnectorSettings?) -> [ConnectorChannel] {
+        let names = settings?.channelNames ?? [:]
+        return (settings?.channels ?? []).compactMap { id in
+            id.nonEmpty.map { ConnectorChannel(id: $0, name: names[$0]?.nonEmpty) }
+        }
+    }
+
+    /// The settings body that saves `channels`.
+    static func settings(_ channels: [ConnectorChannel]) -> CloudConnectorSettings {
+        var names: [String: String] = [:]
+        for channel in channels {
+            // A name equal to the id says nothing and would show as `#C123 (C123)`.
+            if let name = channel.name?.nonEmpty, name != channel.id { names[channel.id] = name }
+        }
+        return CloudConnectorSettings(channels: channels.map(\.id), channelNames: names)
     }
 
     static func states(from summaries: [CloudConnectorSummary]) -> [ConnectorState] {
@@ -360,5 +379,38 @@ final class CloudConnectorsClient: ConnectorsClient {
     func recheckPermission(_ providerId: ConnectorProviderId) async throws -> ConnectorState {
         let result = try await list()
         return result.states.first { $0.providerId == providerId } ?? .empty(providerId)
+    }
+
+    var supportsChannels: Bool { true }
+
+    static let scopeMissingCode = "connector_scope_missing"
+
+    func listChannels(_ providerId: ConnectorProviderId) async throws -> [ConnectorChannelOption] {
+        _ = try service(providerId)
+        let token = try requireToken()
+        do {
+            let options = try await withLiveConnector(providerId) { summary in
+                try await api.connectorSettingOptions(token: token, connectorId: summary.connectorId)
+            }
+            return options.channels.map { ConnectorChannelOption(id: $0.id, name: $0.name, isPrivate: $0.isPrivate) }
+        } catch let error as CloudAPIError where error.code == Self.scopeMissingCode || error.code == "connector_not_connected" {
+            throw ConnectorsClientError(
+                message: "Reconnect \(ConnectorsModel.definition(providerId).name) to choose channels.",
+                code: Self.scopeMissingCode
+            )
+        }
+    }
+
+    func saveChannels(_ providerId: ConnectorProviderId, channels: [ConnectorChannel]) async throws -> ConnectorState {
+        _ = try service(providerId)
+        let token = try requireToken()
+        let updated = try await withLiveConnector(providerId) { summary in
+            try await api.setConnectorSettings(
+                token: token,
+                connectorId: summary.connectorId,
+                settings: CloudConnectorsMapping.settings(channels)
+            )
+        }
+        return store(updated, for: providerId)
     }
 }

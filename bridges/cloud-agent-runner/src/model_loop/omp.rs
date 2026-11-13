@@ -178,7 +178,37 @@ async fn run_omp_with_config<C: CloudAgentRunClient + Sync>(
         }),
     };
     let outcomes = host.outcomes.into_inner().unwrap_or_default();
-    Ok((run_reply_text(result.text, &outcomes)?, state))
+    let text = omp_reply_text(result.text, &result.messages);
+    Ok((run_reply_text(text, &outcomes)?, state))
+}
+
+/// The reply of a run: the text of all its assistant messages under the shared
+/// turn reply rule (`kordi_core::types::compose_turn_reply`), so a summary the
+/// model wrote before its last tool call is not lost behind the final answer.
+/// The worker's own text is only the last message's. When that last message
+/// wrote no text, earlier text such as "Creating the brief now…" or "I'll ask
+/// Priya." only announced the tool calls that followed, so the worker's empty
+/// text stands and `run_reply_text` falls back to the tool outcomes.
+fn omp_reply_text(final_text: String, messages: &[Value]) -> String {
+    let last_has_text = messages
+        .iter()
+        .rev()
+        .find(|message| message.get("role").and_then(Value::as_str) == Some("assistant"))
+        .is_some_and(|message| {
+            kordi_core::types::assistant_message_texts(message)
+                .iter()
+                .any(|text| !text.trim().is_empty())
+        });
+    if !last_has_text {
+        return final_text;
+    }
+    let reply =
+        kordi_core::types::compose_turn_reply(&kordi_core::types::assistant_text_parts(messages));
+    if reply.is_empty() {
+        final_text
+    } else {
+        reply
+    }
 }
 
 /// A model the provider refuses for this account is its own failure: trying

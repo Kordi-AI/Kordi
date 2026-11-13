@@ -25,6 +25,24 @@ protocol ConnectorsClient: AnyObject {
     func disconnect(_ providerId: ConnectorProviderId) async throws
     func auditLog(_ providerId: ConnectorProviderId) async throws -> [ConnectorAuditEntry]
     func recheckPermission(_ providerId: ConnectorProviderId) async throws -> ConnectorState
+    /// True when this client can list and save Slack channel choices.
+    var supportsChannels: Bool { get }
+    /// Channels the person can choose. Throws `ConnectorsClientError` with
+    /// code `connector_scope_missing` when the connection must be renewed.
+    func listChannels(_ providerId: ConnectorProviderId) async throws -> [ConnectorChannelOption]
+    func saveChannels(_ providerId: ConnectorProviderId, channels: [ConnectorChannel]) async throws -> ConnectorState
+}
+
+extension ConnectorsClient {
+    var supportsChannels: Bool { false }
+
+    func listChannels(_ providerId: ConnectorProviderId) async throws -> [ConnectorChannelOption] {
+        throw ConnectorsClientError(message: "Channels cannot be chosen here.")
+    }
+
+    func saveChannels(_ providerId: ConnectorProviderId, channels: [ConnectorChannel]) async throws -> ConnectorState {
+        throw ConnectorsClientError(message: "Channels cannot be chosen here.")
+    }
 }
 
 /// In-memory connectors client with sample data. It never holds anything that

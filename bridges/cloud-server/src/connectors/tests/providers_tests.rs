@@ -108,9 +108,15 @@ fn requested_scopes_are_only_what_the_tools_use() {
         providers::GMAIL.act_scopes,
         ["https://www.googleapis.com/auth/gmail.send"]
     );
+    // The list scopes fill the channel picker in settings.
     assert_eq!(
         providers::SLACK.read_scopes,
-        ["channels:history", "groups:history"]
+        [
+            "channels:history",
+            "groups:history",
+            "channels:read",
+            "groups:read"
+        ]
     );
     assert_eq!(providers::GITHUB.act_scopes, ["repo"]);
     let all = |spec: &providers::ProviderSpec| {
@@ -125,7 +131,7 @@ fn requested_scopes_are_only_what_the_tools_use() {
             all(spec)
                 .iter()
                 .all(|scope| !scope.ends_with("gmail.modify")
-                    && !["users:read", "channels:read", "groups:read"].contains(&scope.as_str())),
+                    && !["users:read", "im:history", "im:read"].contains(&scope.as_str())),
             "{}",
             spec.id
         );
@@ -143,6 +149,8 @@ fn granted_scopes_map_to_catalog_ids() {
         providers::SLACK.catalog_scope_ids(&granted(&[
             "channels:history",
             "groups:history",
+            "channels:read",
+            "groups:read",
             "chat:write"
         ])),
         ["slack.channels.read", "slack.messages.write"]

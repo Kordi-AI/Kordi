@@ -24,7 +24,13 @@ export type CloudConnectorSummary = {
   /** Granted scopes as catalog ids; absent on servers before connectorsVersion 2. */
   grantedScopeIds?: string[];
   lastEventAt?: string | null;
+  /** Provider settings, such as `{ channels, channelNames }` for Slack. */
+  settings?: unknown;
 };
+
+/** A Slack channel the person can choose, from `GET /:id/settings/options`. */
+export type CloudConnectorChannelOption = { id: string; name: string; isPrivate: boolean };
+export type CloudConnectorSettingOptions = { channels?: CloudConnectorChannelOption[] };
 
 export type CloudConnectorAgent = { agentId: string; name: string; isDefault?: boolean };
 
@@ -202,6 +208,15 @@ export class CloudConnectorsHttpClient {
 
   setAgents(token: string, connectorId: string, agentIds: string[]): Promise<CloudConnectorResponse> {
     return this.send(connectorPath(connectorId, '/agents'), token, 'PUT', { agentIds }, 'Could not change which agents can use this connector.');
+  }
+
+  /** Choices for the connector's settings; `connector_scope_missing` asks for a reconnect. */
+  settingOptions(token: string, connectorId: string): Promise<CloudConnectorSettingOptions> {
+    return this.send(connectorPath(connectorId, '/settings/options'), token, 'GET', undefined, 'Could not load channels.');
+  }
+
+  setSettings(token: string, connectorId: string, settings: Record<string, unknown>): Promise<CloudConnectorResponse> {
+    return this.send(connectorPath(connectorId, '/settings'), token, 'PUT', settings, 'Could not save channels.');
   }
 
   audit(token: string, connectorId: string, query: CloudConnectorAuditQuery = {}): Promise<CloudConnectorAuditResponse> {

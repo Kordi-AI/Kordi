@@ -93,13 +93,23 @@ pub async fn tools_for_run(
             continue;
         };
         for descriptor in tools_for_trigger(connector, provider.as_ref(), trigger) {
+            let mut description = descriptor.description.to_string();
+            let mut input_schema = super::tool_schemas::input_schema(descriptor.name);
+            // Settings shape what the run is told, such as the Slack
+            // channels the person chose.
+            provider.tailor_tool(
+                descriptor.name,
+                &connector.settings,
+                &mut description,
+                &mut input_schema,
+            );
             tools.push(LeaseConnectorTool {
                 connector_id: connector.connector_id.clone(),
                 provider: connector.provider.clone(),
                 name: descriptor.name.to_string(),
                 group: descriptor.group,
-                description: descriptor.description.to_string(),
-                input_schema: super::tool_schemas::input_schema(descriptor.name),
+                description,
+                input_schema,
             });
         }
     }
