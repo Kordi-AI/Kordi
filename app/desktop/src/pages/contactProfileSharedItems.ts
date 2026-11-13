@@ -3,6 +3,7 @@ import {
   isMp4VideoAttachment,
   shouldPreviewAttachmentInline,
 } from '@/features/chat/attachmentMediaGallery';
+import { withUploadedAttachmentId } from '@/features/documents/companionDocument';
 import { externalMessageLinks } from '@/kordi-app/components/messageLinks';
 import type { Conversation, Message, MessageAttachment } from '@/kordi-app/types';
 
@@ -32,7 +33,14 @@ type SharedItemBase = {
 };
 
 export type SharedPhotoItem = SharedItemBase & { attachment: MessageAttachment; isVideo: boolean };
-export type SharedFileItem = SharedItemBase & { attachment: MessageAttachment };
+/** The person who sent a shared item, for the file rows; agents are left out. */
+export type SharedItemSender = {
+  key: string;
+  name: string;
+  avatarSeed: string | null;
+  imageUrl: string | null;
+};
+export type SharedFileItem = SharedItemBase & { attachment: MessageAttachment; sender: SharedItemSender | null };
 export type SharedLinkItem = SharedItemBase & { href: string; label: string | null; domain: string };
 
 export type ContactProfileSharedItems = {
@@ -50,6 +58,29 @@ function messageTimestamp(message: Message) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function messageSender(message: Message): SharedItemSender | null {
+  if (message.senderType === 'agent' || message.role === 'owned-agent' || message.role === 'external-agent') return null;
+  const isSelf = message.isOwnMessage === true || message.role === 'user';
+  const name = isSelf ? 'You' : message.sender?.trim() || message.sourceSenderLabel?.trim() || '';
+  if (!name) return null;
+  const key = message.senderIdentityId?.trim() || (isSelf ? 'self' : `name:${name}`);
+  return {
+    key,
+    name,
+    avatarSeed: message.senderAvatarSeed?.trim() || key,
+    imageUrl: message.senderProfileImageUrl?.trim() || null,
+  };
+}
+
+/**
+ * One file is listed once: a document sent again, or carried by more than one message,
+ * shares its cloud attachment id (or, before upload, its path on this Mac). Its row takes
+ * the latest message's time and the first sender's name.
+ */
+function fileIdentity(attachment: MessageAttachment) {
+  return attachment.attachmentId?.trim() || attachment.localPath?.trim() || null;
+}
+
 /** Photos are what the transcript shows as media: inline images and playable videos. */
 export function isSharedPhotoAttachment(attachment: MessageAttachment) {
   if (attachment.subtype === 'sticker') return false;
@@ -64,7 +95,7 @@ function linkDomain(href: string) {
   }
 }
 
-/** Shared photos, files and distinct links of a conversation, newest first. */
+/** Shared photos, distinct files and distinct links of a conversation, newest first. */
 export function collectContactProfileSharedItems(
   messages: readonly Message[] | null | undefined,
 ): ContactProfileSharedItems {
@@ -73,9 +104,11 @@ export function collectContactProfileSharedItems(
   const files: SharedFileItem[] = [];
   const links: SharedLinkItem[] = [];
   const seenLinks = new Set<string>();
+  const filesByIdentity = new Map<string, SharedFileItem>();
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     const timestampMs = messageTimestamp(message);
+    const sender = messageSender(message);
     const messageKey = message.id ?? `message-${index}`;
     const attachments = message.attachments ?? [];
     for (let at = attachments.length - 1; at >= 0; at -= 1) {
@@ -85,7 +118,18 @@ export function collectContactProfileSharedItems(
       if (isSharedPhotoAttachment(attachment)) {
         photos.push({ key, attachment, timestampMs, isVideo: isMp4VideoAttachment(attachment) });
       } else {
-        files.push({ key, attachment, timestampMs });
+        // The upload id lets a renamed document show its title and keeps one row per document.
+        const file = withUploadedAttachmentId(attachment);
+        const identity = fileIdentity(file);
+        const listed = identity ? filesByIdentity.get(identity) : undefined;
+        if (listed) {
+          // Messages run newest first: the row keeps its latest time and credits the first sender.
+          if (sender) listed.sender = sender;
+          continue;
+        }
+        const item: SharedFileItem = { key, attachment: file, timestampMs, sender };
+        if (identity) filesByIdentity.set(identity, item);
+        files.push(item);
       }
     }
     for (const link of externalMessageLinks(message.text ?? '', Number.MAX_SAFE_INTEGER)) {

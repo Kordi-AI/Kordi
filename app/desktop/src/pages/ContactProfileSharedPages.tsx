@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { ChevronLeft, FileText, Play } from 'lucide-react';
+import { ChevronLeft, Play } from 'lucide-react';
 
+import { hasCloudDocumentTitle } from '@/features/documents/documentTitles';
 import { readCachedLinkPreview } from '@/kordi-app/components/linkPreviewMetadata';
 import { formatAttachmentSize } from '@/kordi-app/components/transcriptAttachmentTypes';
+import type { ConversationParticipant, SessionArtifact } from '@/kordi-app/types';
 import { cn } from '@/lib/utils';
+import { ArtifactListRow } from '@/pages/ArtifactListRow';
 import { openSharedFile, openSharedLink, openSharedPhoto } from '@/pages/contactProfileSharedActions';
 import {
   CONTACT_PROFILE_SHARED_PAGE_TITLES,
@@ -93,25 +96,49 @@ function SharedRow({ lead, title, caption, trailing, captionAccent = false, onCl
   );
 }
 
+/**
+ * A shared file as an Artifacts list row, so a file reads the same here and in the chat's
+ * Artifacts tab: its type badge, a shared document's current title (not the blank name it was
+ * first sent under), the size of other files, the date, and who sent it.
+ */
+function SharedFileRow({ file, now }: { file: SharedFileItem; now: Date }) {
+  const { attachment, sender } = file;
+  const name = attachment.name?.trim() || 'File';
+  const attachmentId = attachment.attachmentId?.trim() || null;
+  const isDocument = hasCloudDocumentTitle(attachmentId, name);
+  const artifact: SessionArtifact = {
+    id: file.key,
+    path: name,
+    name,
+    kind: isDocument ? 'document' : 'file',
+    category: 'artifact',
+    summary: '',
+    timeLabel: sharedItemDateLabel(file.timestampMs, now) || undefined,
+    attachmentId,
+    createdByAccountId: sender?.key ?? null,
+  };
+  const participants: ConversationParticipant[] = sender
+    ? [{ id: sender.key, name: sender.name, kind: 'human', role: 'member', avatarKey: sender.avatarSeed, profileImageUrl: sender.imageUrl }]
+    : [];
+  // A document's upload size is its first version's, so only other files show a size.
+  const size = isDocument ? '' : formatAttachmentSize(attachment.sizeBytes) ?? '';
+  return (
+    <ArtifactListRow
+      artifact={artifact}
+      location={size}
+      isActive={false}
+      participants={participants}
+      onSelect={() => { void openSharedFile(attachment).catch(() => undefined); }}
+    />
+  );
+}
+
 function FilesPage({ groups, now }: { groups: SharedMonthGroup<SharedFileItem>[]; now: Date }) {
   return groups.map((group) => (
     <section key={group.key} aria-label={group.label || undefined}>
       <MonthLabel label={group.label} />
-      <div className="app-contact-shared-list">
-        {group.items.map((file) => {
-          const caption = [formatAttachmentSize(file.attachment.sizeBytes), sharedItemDateLabel(file.timestampMs, now)]
-            .filter(Boolean)
-            .join(' · ');
-          return (
-            <SharedRow
-              key={file.key}
-              lead={<span className="app-contact-shared-lead is-file"><FileText aria-hidden="true" /></span>}
-              title={file.attachment.name || 'File'}
-              caption={caption}
-              onClick={() => { void openSharedFile(file.attachment).catch(() => undefined); }}
-            />
-          );
-        })}
+      <div className="app-contact-shared-file-list">
+        {group.items.map((file) => <SharedFileRow key={file.key} file={file} now={now} />)}
       </div>
     </section>
   ));
