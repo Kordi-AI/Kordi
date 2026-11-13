@@ -101,6 +101,7 @@ export async function publishModelSubsession(id: string): Promise<void> {
     let refusals = 0;
     let emptySessionReads = 0;
     let publishedStatus: string | null = null;
+    let unansweredStreak = 0;
     let watching = true;
     const renew = () => {
       if (!watching || !leaseTurnId || leaseTurnId !== runningTurnId) return Promise.resolve();
@@ -176,6 +177,7 @@ export async function publishModelSubsession(id: string): Promise<void> {
           if (runningTurnId) armLease(runningTurnId);
           const saved = await client.putAgentSubsession(current.token, snapshot, version);
           version = saved.version;
+          unansweredStreak = 0;
           if (saved.status !== publishedStatus) { publishedStatus = saved.status; notifySubsessionActivity(id); }
           if (refusal) console.info(`[subsessions] background session ${id} is synced again`);
           refusal = null;
@@ -198,6 +200,9 @@ export async function publishModelSubsession(id: string): Promise<void> {
           // A running task keeps running either way; its lease is renewed
           // below. The cloud record catches up once an attempt is accepted.
           if (runningTurnId) armLease(runningTurnId);
+          if (failure.kind === 'unanswered') {
+            if (unansweredStreak++ === 0) console.warn(`[subsessions] no answer for background session ${id}; retrying`, error);
+          } else unansweredStreak = 0;
           if (failure.kind === 'refused') {
             // A conflict or an expired access token clears up on retry; any
             // other refusal settles a caller waiting for the first attempt.
