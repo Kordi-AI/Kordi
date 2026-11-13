@@ -326,5 +326,7 @@ mod conversation_info;
 mod cloud;
 #[path = "agent_exchange_language.rs"]
 mod language;
+#[path = "agent_exchange_own_chat.rs"]
+mod own_chat;
 #[path = "agent_exchange_slots.rs"]
 mod slots;
