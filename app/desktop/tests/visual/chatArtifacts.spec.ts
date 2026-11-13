@@ -158,3 +158,15 @@ test('files open in the side panel in the viewer for their type, filling it', as
   const pane = await panel.boundingBox();
   expect((viewer?.height ?? 0) / (pane?.height ?? 1)).toBeGreaterThan(0.85);
 });
+
+test('opening the side panel only reflows the cards; their size stays the same', async ({ page }) => {
+  await page.goto('/tests/visual/chatArtifacts.html?theme=light&layout=cards');
+  const thumb = page.locator('[data-artifact-card="true"] .app-artifact-card-thumb').first();
+  await expect(thumb).toBeVisible();
+  const before = await thumb.boundingBox();
+  await page.locator('[data-artifact-card="true"]').first().click();
+  await expect(page.getByRole('complementary', { name: 'Document panel' })).toBeVisible();
+  const after = await thumb.boundingBox();
+  expect(Math.round(after?.width ?? 0)).toBe(Math.round(before?.width ?? 1));
+  expect(Math.round(after?.height ?? 0)).toBe(Math.round(before?.height ?? 1));
+});
