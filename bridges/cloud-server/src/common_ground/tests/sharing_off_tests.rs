@@ -13,10 +13,10 @@ use super::sharing_support::{
     recent_ids, results, set_sharing, topics, CG,
 };
 use super::support::{
-    answer_match, build_card_with, card_reply, claim_open, make_contacts, open_runs,
+    answer_match, answer_themes, build_card_with, card_reply, claim_open, make_contacts, open_runs,
     people_in_a_room, RUNNER,
 };
-use crate::common_ground::{complete, fail};
+use crate::common_ground::fail;
 
 #[tokio::test]
 async fn sharing_off_hides_a_pairing_both_ways() {
@@ -120,24 +120,6 @@ async fn sharing_off_hides_a_pairing_both_ways() {
     assert_eq!(card(&app, &priya_token, &alex, None).await.0, 200);
 }
 
-/// Answers the open room-theme run with these themes, each given by the
-/// account ids of its people.
-async fn answer_themes(pool: &sqlx_postgres::PgPool, themes: &[(&str, &[&String])]) {
-    let (run_id, read) = claim_open(pool, "room", None).await;
-    let themes: Vec<Value> = themes
-        .iter()
-        .map(|(label, people)| {
-            let people: Vec<usize> = people
-                .iter()
-                .map(|id| read.iter().position(|r| r == *id).unwrap())
-                .collect();
-            json!({"label": label, "people": people})
-        })
-        .collect();
-    let reply = json!({ "themes": themes }).to_string();
-    complete(pool, &run_id, RUNNER, &reply).await.unwrap();
-}
-
 #[tokio::test]
 async fn sharing_off_hides_a_room_both_ways_open_or_closed() {
     let Some(pool) = pool().await else {
@@ -163,19 +145,16 @@ async fn sharing_off_hides_a_room_both_ways_open_or_closed() {
     assert_eq!(topics(&body).len(), 2, "{body}");
 
     // Priya turns sharing off. Alex's lobby keeps her in the room without a
-    // card; his results leave her out, and the theme run that follows does
-    // not read her card.
+    // card; his results and the previous themes shown while they are found
+    // again leave her out, and the theme run does not read her card.
     set_sharing(&app, &priya_token, None, false).await;
     let expected = vec![(priya.clone(), false), (sam.clone(), true)];
     assert_eq!(lobby(&app, &code, &alex_token).await, expected);
     let (status, body) = results(&app, &code, &alex_token).await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(ids(&body["people"], "person"), vec![sam.clone()]);
-    assert_eq!(
-        body["topics"],
-        json!([]),
-        "themes are found again without her"
-    );
+    let shown = vec![("Agent memory".to_string(), vec![alex.clone(), sam.clone()])];
+    assert_eq!(topics(&body), shown, "{body}");
     let (run_id, read) = claim_open(&pool, "room", None).await;
     assert_eq!(read, vec![alex.clone(), sam.clone()]);
     fail(&pool, &run_id, Some(RUNNER), "provider_error")

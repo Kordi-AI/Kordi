@@ -6,8 +6,10 @@ import { subscribeCardHints } from './cardHints';
 import { createCommonGroundClient } from './client';
 import { COMMON_GROUND_PAIR_LINK_EVENT, takePendingPairLink } from './pairLink';
 import { localProfileMemory } from './profiles';
+import { subscribeRoomHints } from './roomHints';
 import { CommonGroundStore } from './store';
 import { requestCardRefresh } from './storeAutoRebuild';
+import { clearRoomHints, receiveRoomHints } from './storeHints';
 import { redeemPairLink } from './storePairing';
 import { startCommonGroundPolling } from './polling';
 
@@ -36,7 +38,9 @@ export function commonGroundStoreFor(accountId: string, profiles = false): Commo
 
 /**
  * Store state, with polling while mounted and the window is visible, a refetch when it becomes
- * visible again, and a refetch of the cards when a card build lands (`common_ground.card.updated`).
+ * visible again, a refetch of the cards when a card build lands (`common_ground.card.updated`),
+ * and a refresh of the open room's Results, match page or Rooms list when a room or match changes
+ * (`common_ground.room.updated`, `common_ground.matches.updated`).
  */
 export function useCommonGround(store: CommonGroundStore) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
@@ -45,11 +49,14 @@ export function useCommonGround(store: CommonGroundStore) {
     else if (store.top().name === 'home') void store.loadRooms();
     if (store.top().name !== 'home') void store.loadScreen();
     const stopHints = subscribeCardHints(() => { void requestCardRefresh(store); });
+    const stopRoomHints = subscribeRoomHints((hints) => { void receiveRoomHints(store, hints, () => document.hidden); });
     const stopPolling = startCommonGroundPolling(() => store.poll(), {
       win: window, doc: document, schedule: setTimeout, cancel: clearTimeout,
     });
     return () => {
       stopHints();
+      stopRoomHints();
+      clearRoomHints(store);
       stopPolling();
     };
   }, [store]);

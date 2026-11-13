@@ -99,6 +99,7 @@ tests=(
   read_outbox_tests::upgrade_from_191_backfills_read_watermarks
   memory_tests::upgrade_from_195_adds_several_categories_per_memory
   memory_tests::upgrade_after_197_backfills_missing_memory_categories
+  common_ground_rematch_tests::upgrade_from_199_adds_card_rematch_marks
 )
 index=0
 for test_name in "${tests[@]}"; do

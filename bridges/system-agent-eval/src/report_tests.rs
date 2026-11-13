@@ -72,6 +72,7 @@ fn report(label: &str, silent_ok: bool, card_ok: bool, prices: Option<Prices>) -
             endpoint_host: "model.example.test".into(),
         },
         prices,
+        match_prompt: None,
         fixtures,
         summary,
     }
@@ -229,4 +230,49 @@ fn comparison_warns_when_fixture_sets_differ() {
     let (md, json) = compare(&baseline, &[same]);
     assert!(!md.contains("Warning"));
     assert!(json["warnings"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn numbers_are_compared_side_by_side_and_may_be_missing_on_one_side() {
+    use crate::report_numbers::{combine, Measure};
+    let mut baseline = report("baseline", true, true, None);
+    baseline.summary.numbers = combine(&[
+        vec![Measure::new("lab/auc", 0.8, 10)],
+        vec![Measure::new("lab/auc", 0.9, 10)],
+    ]);
+    baseline.match_prompt = Some(crate::match_run::MatchPrompt::Baseline.info());
+    let mut candidate = report("candidate", true, true, None);
+    candidate.summary.numbers = combine(&[vec![
+        Measure::new("lab/auc", 0.75, 10),
+        Measure::new("lab/top3", 0.5, 4),
+    ]]);
+    let without = report("without", true, true, None);
+    let (md, json) = compare(&baseline, &[candidate, without.clone()]);
+    assert!(
+        md.contains("| lab/auc | 0.850 (n=20; 0.800 / 0.900) | 0.750 (n=10) -0.100 | n/a |"),
+        "{md}"
+    );
+    assert!(
+        md.contains("| lab/top3 | n/a | 0.500 (n=4) | n/a |"),
+        "{md}"
+    );
+    assert!(
+        md.contains(", baseline match instructions (sha256 "),
+        "{md}"
+    );
+    assert_eq!(json["baseline"]["matchPrompt"]["name"], "baseline");
+    assert_eq!(
+        json["numbers"][0]["baseline"]["perRepeat"],
+        json!([0.8, 0.9])
+    );
+    assert!(json["numbers"][1]["baseline"].is_null());
+    assert!(json["numbers"][0]["candidates"][1].is_null());
+    // A saved report without the section still loads and compares.
+    let mut saved = serde_json::to_value(&without).unwrap();
+    saved["summary"].as_object_mut().unwrap().remove("numbers");
+    let loaded: RunReport = serde_json::from_value(saved).unwrap();
+    assert!(loaded.summary.numbers.is_empty() && loaded.match_prompt.is_none());
+    let (md, json) = compare(&without, &[loaded]);
+    assert!(!md.contains("## Numbers"));
+    assert_eq!(json["numbers"], json!([]));
 }

@@ -1,5 +1,10 @@
 import { CommonGroundError, commonGroundErrorMessage } from './client';
-import { personKey, type CgScreen, type CgState, type CommonGroundStore } from './store';
+import {
+  BUILD_POLL_MS, MATCH_FALLBACK_POLL_MS, MATCH_POLL_MS, personKey, roomClosed,
+  type CgScreen, type CgState, type CommonGroundStore,
+} from './store';
+import * as autoOps from './storeAutoRebuild';
+import * as hintOps from './storeHints';
 import type { CgRoomSummary } from './types';
 
 function filterCaches(state: CgState, fields: Array<'rooms' | 'results' | 'matches' | 'people'>, keep: (id: string) => boolean): Partial<CgState> {
@@ -16,7 +21,12 @@ export function reconcileRooms(store: CommonGroundStore, roomList: CgRoomSummary
   store.set({ roomList, ...filterCaches(store.getSnapshot(), ['rooms', 'results'], (code) => codes.has(code)) });
 }
 
-export async function refreshScreen(store: CommonGroundStore, screen: CgScreen): Promise<void> {
+/**
+ * Fetches what `screen` shows and stores it. False when the result was set aside because other
+ * state changed while it was out (its patch is built on the state it started from), so a caller
+ * that needs it can ask again; true otherwise, including after an error.
+ */
+export async function refreshScreen(store: CommonGroundStore, screen: CgScreen): Promise<boolean> {
   const snapshot = store.getSnapshot;
   const before = snapshot();
   const patch: Partial<CgState> = {};
@@ -25,9 +35,9 @@ export async function refreshScreen(store: CommonGroundStore, screen: CgScreen):
   };
   try {
     switch (screen.name) {
-      case 'home': return store.loadHome();
-      case 'lobby': cache('rooms', screen.code, await store.client.room(screen.code)); break;
+      case 'home': await store.loadHome(); return true;
       case 'results': {
+        // The room comes along, so people who just joined show before their match is in.
         const room = store.client.room(screen.code).catch(() => null);
         cache('results', screen.code, await store.client.results(screen.code));
         const loaded = await room;
@@ -41,9 +51,11 @@ export async function refreshScreen(store: CommonGroundStore, screen: CgScreen):
           await store.client[screen.name](accountId, profileId));
         break;
       }
-      default: return;
+      default: return true;
     }
-    if (snapshot() === before) store.set(patch);
+    if (snapshot() !== before) return false;
+    store.set(patch);
+    return true;
   } catch (error) {
     const state = snapshot();
     // A fresh denial invalidates loaded content; transient errors preserve it for retry.
@@ -56,7 +68,44 @@ export async function refreshScreen(store: CommonGroundStore, screen: CgScreen):
         const key = personKey(screen.accountId, screen.profileId);
         store.set(filterCaches(state, ['matches', 'people'], (id) => id !== key));
       }
-    } else if (state !== before) return;
+    } else if (state !== before) return true;
     store.set({ notice: commonGroundErrorMessage(error) });
+    return true;
   }
+}
+
+/** The matching poll delay: today's pace until a room or match hint shows the stream works. */
+function pollDelay(store: CommonGroundStore): number {
+  return hintOps.roomHintsHeard(store) ? MATCH_FALLBACK_POLL_MS : MATCH_POLL_MS;
+}
+
+/** The store's `poll()`: refreshes what the top screen waits on; returns the next delay or null. */
+export async function pollTop(store: CommonGroundStore): Promise<number | null> {
+  // Polls run while the window shows: hints held back while it was hidden run now.
+  void hintOps.flushRoomHints(store);
+  const state = store.getSnapshot;
+  const screen = store.top();
+  try {
+    if (state().owner?.build.status === 'building') {
+      const profileId = state().profileId;
+      const owner = await store.client.card(profileId);
+      if (state().profileId === profileId) store.applyOwner(owner);
+      return owner.build.status === 'building' ? BUILD_POLL_MS : null;
+    }
+    const matching = () => {
+      const status = screen.name === 'results' ? state().results[screen.code]?.status
+        : screen.name === 'match' ? state().matches[personKey(screen.accountId, screen.profileId)]?.status : 'ready';
+      return !status || status === 'matching';
+    };
+    if (matching() && (screen.name !== 'results' || !roomClosed(state(), screen.code))) {
+      await hintOps.refreshShared(store, screen);
+      if (store.top() !== screen) return null;
+      return matching() ? pollDelay(store) : null;
+    }
+  } catch {
+    return pollDelay(store);
+  }
+  if (autoOps.cardRefreshDue(store)) return autoOps.refreshCard(store);
+  await store.syncFromServer();
+  return null;
 }

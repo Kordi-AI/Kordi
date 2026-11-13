@@ -71,6 +71,9 @@ async fn room_results_match_detail_and_recent() {
         assert_eq!(status, 200);
     }
     let results = format!("/v1/cloud/common-ground/rooms/{code}/results");
+    let room = format!("/v1/cloud/common-ground/rooms/{code}");
+    let (_, body) = send(&app, "GET", &room, &priya_token, None).await;
+    assert_eq!(body["matchingStarted"], false, "nobody asked yet");
 
     // The first request queues one match run for alex and one theme run for
     // the room; polling while they work queues nothing more.
@@ -89,6 +92,11 @@ async fn room_results_match_detail_and_recent() {
     );
     let (status, _) = send(&app, "POST", &results, &outsider_token, None).await;
     assert_eq!(status, 404, "results are for members");
+    let (_, body) = send(&app, "GET", &room, &priya_token, None).await;
+    assert_eq!(
+        body["matchingStarted"], true,
+        "everyone's lobby learns that matching started"
+    );
 
     let (run_id, cards) = claim_open(&pool, "match", Some(&alex)).await;
     let (owner,): (String,) =
@@ -229,7 +237,8 @@ async fn room_results_match_detail_and_recent() {
         "only people who may see each other are matched"
     );
 
-    // Each viewer gets their own match; a failure is reported, then retried.
+    // The reply speaks to Alex ("You need compute"), so it was not stored
+    // for Priya: she gets her own match; a failure is reported, then retried.
     let detail = format!("/v1/cloud/common-ground/people/{alex}/match");
     let (status, body) = send(&app, "GET", &detail, &priya_token, None).await;
     assert_eq!((status, body["status"].as_str()), (202, Some("matching")));

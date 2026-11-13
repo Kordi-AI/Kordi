@@ -276,6 +276,7 @@ async fn after_edit(
 ) -> Response {
     match result {
         Ok(Some(())) => {
+            rooms::announce_profile(pool, &profile.profile_id).await;
             owner_response(pool, &profile.account_id, Some(profile), StatusCode::OK).await
         }
         Ok(None) => no_card(),
@@ -311,7 +312,14 @@ pub(in crate::common_ground) async fn update_settings(
     };
     let result = apply_settings(pool, &profile.profile_id, account, &body).await;
     match result {
-        Ok(_) => owner_response(pool, account, Some(&profile), StatusCode::OK).await,
+        Ok(_) => {
+            // Sharing changes what other people see; the automatic setting
+            // does not.
+            if body.sharing.is_some() {
+                rooms::announce_profile(pool, &profile.profile_id).await;
+            }
+            owner_response(pool, account, Some(&profile), StatusCode::OK).await
+        }
         Err(error) => db_error(error),
     }
 }

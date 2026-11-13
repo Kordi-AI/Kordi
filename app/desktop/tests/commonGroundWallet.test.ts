@@ -349,7 +349,7 @@ test('wallet: joining with the suggested card sends its profile and keeps the se
   assert.equal(await store.joinRoom('4821', { profileId: 'cgp_kaust', kind: 'custom' }), true);
   assert.deepEqual(calls[0].body, { profileId: 'cgp_kaust', kind: 'custom' });
   assert.equal(store.getSnapshot().profileId, 'cgp_work');
-  assert.deepEqual(store.top(), { name: 'lobby', code: '4821' });
+  assert.deepEqual(store.top(), { name: 'results', code: '4821' });
 });
 
 test('wallet: Create needs any built card, not only the selected one', () => {

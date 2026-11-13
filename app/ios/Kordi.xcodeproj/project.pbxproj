@@ -206,6 +206,7 @@
 		65DE0C04690101610FE360F5 /* MessageSendOutbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8E0D3E88D523BD5CAF4207C /* MessageSendOutbox.swift */; };
 		66218B84FEF69BF454A03DFD /* KordiNotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA78321DA07764D220886E90 /* KordiNotificationCoordinator.swift */; };
 		6713318BE4C577415E71EA92 /* TrajectoryExpansionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7440154A228DEDC75C9D5EF /* TrajectoryExpansionUITests.swift */; };
+		678D44977B05B2B048711F3E /* CommonGroundSyncHints.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEB81FF5B5F28FBE068E68F /* CommonGroundSyncHints.swift */; };
 		68545B137503BCCB74EC902C /* CommonGroundCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7805CAF02455FD762B57398 /* CommonGroundCardView.swift */; };
 		688B8035C36DDCB0F8505288 /* AttachmentTransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A21B553E883C637AF55134AE /* AttachmentTransferTests.swift */; };
 		69B60317B1A3F374C6950257 /* ConnectorDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C933E64AB182D0C9D4561A /* ConnectorDetailView.swift */; };
@@ -256,6 +257,7 @@
 		80A95422E8CFC11EC99E011D /* CommonGroundTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99CD429A25D6DE32F1B1AD49 /* CommonGroundTimelineView.swift */; };
 		80E51AE75851A2075A09CA1F /* MessageLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA5F52BFCAE2FA90368EFC77 /* MessageLayoutUITests.swift */; };
 		811AB691C8BD53A05B7CD315 /* MessageLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12292B95430FB4CC8DF46E8F /* MessageLayout.swift */; };
+		81218390618DBFA2E0C0CBC9 /* CommonGroundSyncHintTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37019EAF2C3FBE6EE02C6EDF /* CommonGroundSyncHintTests.swift */; };
 		815401CF8A4EACBD885CF830 /* UsageSettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F879220CECB2FA8550256F /* UsageSettingsModel.swift */; };
 		81A5A5B135938E1C332EB16D /* ConversationSendMotionIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09BA4667BF4AE8544BDA7C41 /* ConversationSendMotionIntegrationTests.swift */; };
 		81D7FDA77C7D35A70528FC08 /* SharedDocumentModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BD53EA1C951C6672F2D9DA9 /* SharedDocumentModelTests.swift */; };
@@ -614,6 +616,7 @@
 		1DECAF58B49CE2DE63185B4C /* ChatRowSwipeGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRowSwipeGesture.swift; sourceTree = "<group>"; };
 		1FD2D1F807A447AC713E259F /* SystemNoticeIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemNoticeIdentityTests.swift; sourceTree = "<group>"; };
 		1FE75FD69082AA54E82579EC /* Distribution.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Distribution.xcassets; sourceTree = "<group>"; };
+		1FEB81FF5B5F28FBE068E68F /* CommonGroundSyncHints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundSyncHints.swift; sourceTree = "<group>"; };
 		200F6B7F78667004B33236FA /* CommonGroundDeviceAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundDeviceAccess.swift; sourceTree = "<group>"; };
 		20B347EC88568935A02AB5FA /* CommonGroundQRViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundQRViews.swift; sourceTree = "<group>"; };
 		20E1D5EB9F29E06DD365480B /* ConnectorsSettingsLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorsSettingsLink.swift; sourceTree = "<group>"; };
@@ -658,6 +661,7 @@
 		355449706C1ED56DF89133F2 /* ContactProfileSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactProfileSections.swift; sourceTree = "<group>"; };
 		35E4741FA31FACB0202B6A98 /* DocumentSelectionMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentSelectionMenu.swift; sourceTree = "<group>"; };
 		366FB25C511905DAAB4EEEC8 /* KordiMarkdownListParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KordiMarkdownListParser.swift; sourceTree = "<group>"; };
+		37019EAF2C3FBE6EE02C6EDF /* CommonGroundSyncHintTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundSyncHintTests.swift; sourceTree = "<group>"; };
 		379A8A36CB77D9967CF63DAF /* CloudDirectMessageProjectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDirectMessageProjectorTests.swift; sourceTree = "<group>"; };
 		380517C49EBFE2D3A6B1F638 /* CommonGroundHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundHomeView.swift; sourceTree = "<group>"; };
 		3A1D80120E4E51E70DAEC13A /* ReportTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportTarget.swift; sourceTree = "<group>"; };
@@ -1533,6 +1537,7 @@
 				AB004F6B7BACCE373E946958 /* CommonGroundResultsView.swift */,
 				CCAF2EDCCD5927A31300D1C3 /* CommonGroundRoomList.swift */,
 				F357ED39C59FAD90F5BF85AB /* CommonGroundRoomViews.swift */,
+				1FEB81FF5B5F28FBE068E68F /* CommonGroundSyncHints.swift */,
 				27A7AA9C5E9ACB4C67614BC8 /* CommonGroundTapController.swift */,
 				F44D9CA51F047600C8139DC5 /* CommonGroundTapView.swift */,
 				310F9B146798BBE0C0C3F2B2 /* CommonGroundTileHue.swift */,
@@ -1602,6 +1607,7 @@
 				BCA3140299E9E5FC81BE1334 /* CommonGroundNearbyTests.swift */,
 				D39F2C49D23ED800BDB4BC85 /* CommonGroundPairingTests.swift */,
 				C32CCFD675AE9F8FA81E8C4F /* CommonGroundProfileTests.swift */,
+				37019EAF2C3FBE6EE02C6EDF /* CommonGroundSyncHintTests.swift */,
 				CC9D282C0E391AFB2885E0C1 /* CommonGroundTests.swift */,
 				8CF543DAFCB4887780A9921F /* CommonGroundWalletTests.swift */,
 				8D777A5F9528D93CB115E881 /* CompanionChatPanelTests.swift */,
@@ -2201,6 +2207,7 @@
 				A28DD7210A6063ED807EA5D0 /* CommonGroundNearbyTests.swift in Sources */,
 				DDA1D85B5894C466DF636DA6 /* CommonGroundPairingTests.swift in Sources */,
 				31C2168086204016839FC8AB /* CommonGroundProfileTests.swift in Sources */,
+				81218390618DBFA2E0C0CBC9 /* CommonGroundSyncHintTests.swift in Sources */,
 				E4AC073444D24CC4B6775118 /* CommonGroundTests.swift in Sources */,
 				CB0EA5039747CC5AC755EE5F /* CommonGroundWalletTests.swift in Sources */,
 				0AE339A604A15C66AF7F3BFA /* CompanionChatPanelTests.swift in Sources */,
@@ -2430,6 +2437,7 @@
 				A082484169F35E02D7235624 /* CommonGroundResultsView.swift in Sources */,
 				1D66CC9EE8FEA4BCD2B5B2EB /* CommonGroundRoomList.swift in Sources */,
 				54E213B51A1D5B127679B739 /* CommonGroundRoomViews.swift in Sources */,
+				678D44977B05B2B048711F3E /* CommonGroundSyncHints.swift in Sources */,
 				1AFA07991060C43CB11A7921 /* CommonGroundTapController.swift in Sources */,
 				58733A399C24E18ED0DD1F59 /* CommonGroundTapView.swift in Sources */,
 				A207CB18D4DB771ED154D18B /* CommonGroundTileHue.swift in Sources */,

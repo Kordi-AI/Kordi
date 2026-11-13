@@ -414,6 +414,50 @@ pub(super) async fn announce(pool: &PgPool, room_id: Uuid) {
     }
 }
 
+/// Tells the members of every open room where `profile_id` is shared that
+/// its card changed, so their results refresh. Best effort, like
+/// [`announce`]. Closed rooms are left out: they show what was stored, and
+/// their members refresh when they open them.
+pub(super) async fn announce_profile(pool: &PgPool, profile_id: &str) {
+    let result = async {
+        let mut tx = pool.begin().await?;
+        let rooms: Vec<(Uuid, String)> = query_as(&format!(
+            "SELECT room.room_id, room.code FROM cloud_common_ground_room_members member
+             JOIN cloud_common_ground_rooms room ON room.room_id = member.room_id
+             WHERE member.profile_id = $1 AND member.left_at IS NULL AND {ROOM_OPEN_SQL}"
+        ))
+        .bind(profile_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        for (room_id, code) in rooms {
+            notify_members(&mut tx, room_id, &code).await?;
+        }
+        tx.commit().await
+    }
+    .await;
+    if let Err(error) = result {
+        eprintln!("[common-ground] Could not announce a card change: {error}");
+    }
+}
+
+/// Called in `tx` before a room's match or theme run is queued, with the
+/// room locked: when it is the room's first, tells the members that
+/// matching started, so every lobby moves to Results.
+pub(super) async fn announce_matching(
+    tx: &mut Transaction<'_, Postgres>,
+    room_id: Uuid,
+) -> sqlx_core::Result<()> {
+    if view::matching_started(&mut **tx, room_id).await? {
+        return Ok(());
+    }
+    let (code,): (String,) =
+        query_as("SELECT code FROM cloud_common_ground_rooms WHERE room_id = $1")
+            .bind(room_id)
+            .fetch_one(&mut **tx)
+            .await?;
+    notify_members(tx, room_id, &code).await
+}
+
 pub(super) async fn notify_members(
     tx: &mut Transaction<'_, Postgres>,
     room_id: Uuid,
