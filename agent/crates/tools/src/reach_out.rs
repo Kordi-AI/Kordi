@@ -45,6 +45,41 @@ pub struct ReachOutInput {
 /// its context, so this text is the same for every run of an agent.
 pub const GUIDANCE: &str = "Use reach_out to contact another agent or ask a person in this conversation; target them by agentId or accountId, never by display name, since names can repeat. The runtime note at the end of your context lists whom you can reach for this request, with their exact agentId or accountId and @handle. For a person, set targetKind to person; their next message here, or their reply to your question, is the answer. A request from someone other than your owner may only ask that requester or reach the requester's own agents, and while answering another agent you may only ask your own owner. When the request names another agent (an @mention or \"with/ask\" that agent), reach_out to that agent at least once before you finalize, unless its reply already arrived in this task's rounds; never answer for it from earlier chat. When the task involves other participants (plans, times, availability, preferences), first reach_out to each other participant's agent (preferred) or to the person for what only they know, and ask the requester with reach_out for what only the requester knows; never end with a list of open questions. If you need information or a decision from the person who asked before you can finish, ask them with reach_out instead of ending your turn with a question; their reply continues the task. Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task, which you own until it has a result. Do not resend or poll.";
 
+/// The guidance for a run that cannot ask the person who made the request,
+/// such as the owner's own private chat, where every message already reaches
+/// the agent: that person reads the reply, so the agent asks them there.
+pub const GUIDANCE_WITHOUT_REQUESTER: &str = "Use reach_out to contact another agent or ask a person in this conversation; target them by agentId or accountId, never by display name, since names can repeat. The runtime note at the end of your context lists whom you can reach for this request, with their exact agentId or accountId and @handle; nobody else can be reached. For a person, set targetKind to person; their next message here, or their reply to your question, is the answer. While answering another agent you may only ask your own owner. When the request names another agent (an @mention or \"with/ask\" that agent), reach_out to that agent at least once before you finalize, unless its reply already arrived in this task's rounds; never answer for it from earlier chat. When the task involves other participants (plans, times, availability, preferences), first reach_out to each other participant's agent (preferred) or to the person for what only they know. The person who asked is not someone you can reach_out to: they read your reply here, so when you need information or a decision from them, ask them in your reply; never use reach_out for that. Send only the explicit question. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task, which you own until it has a result. Do not resend or poll.";
+
+/// The stable guidance for a run: [`GUIDANCE`] when the person who made the
+/// request is among those it may ask, else [`GUIDANCE_WITHOUT_REQUESTER`].
+pub fn guidance(requester_reachable: bool) -> &'static str {
+    if requester_reachable {
+        GUIDANCE
+    } else {
+        GUIDANCE_WITHOUT_REQUESTER
+    }
+}
+
+/// The tool error for a request the server did not accept. The server's
+/// error code and message are passed on, so the agent can correct the call
+/// and a failure is diagnosable; the agent must never claim it was sent.
+pub fn not_sent(error_code: Option<&str>, message: Option<&str>) -> String {
+    let code = error_code.map(str::trim).filter(|code| !code.is_empty());
+    let message: String = message
+        .map(str::trim)
+        .filter(|message| !message.is_empty())
+        .unwrap_or("")
+        .chars()
+        .take(500)
+        .collect();
+    match (code, message.is_empty()) {
+        (None, true) => "Agent communication is unavailable or this execution lease expired. Do not claim that a request was sent.".into(),
+        (Some(code), true) => format!("The request was not sent ({code}). Do not claim that a request was sent."),
+        (None, false) => format!("The request was not sent: {message} Do not claim that a request was sent."),
+        (Some(code), false) => format!("The request was not sent ({code}): {message} Do not claim that a request was sent."),
+    }
+}
+
 pub struct ReachOutTool;
 
 #[async_trait]
@@ -335,6 +370,32 @@ mod tests {
                 .description()
                 .contains("never end with a list of open questions")
         );
+    }
+
+    #[test]
+    fn a_run_that_cannot_ask_the_requester_asks_in_its_reply() {
+        assert_eq!(guidance(true), GUIDANCE);
+        let text = guidance(false);
+        assert!(text.contains("ask them in your reply; never use reach_out for that"));
+        assert!(!text.contains("ask them with reach_out"));
+        assert!(!text.contains("ask the requester with reach_out"));
+        assert!(text.contains("reach_out to that agent at least once before you finalize"));
+        assert!(!text.contains('{'), "no per-run data in the stable prefix");
+        assert!(GUIDANCE.contains("ask them with reach_out instead of ending your turn"));
+    }
+
+    #[test]
+    fn a_refusal_passes_on_the_server_reason() {
+        let text = not_sent(
+            Some("context_unavailable"),
+            Some("Ask the person who asked in your reply."),
+        );
+        assert!(text.starts_with("The request was not sent (context_unavailable): Ask the"));
+        assert!(text.ends_with("Do not claim that a request was sent."));
+        assert!(not_sent(Some("agent_run_not_found"), None).contains("(agent_run_not_found)"));
+        assert!(not_sent(None, None).contains("execution lease expired"));
+        let long = "x".repeat(2_000);
+        assert!(not_sent(Some("c"), Some(&long)).len() < 600);
     }
 
     #[test]

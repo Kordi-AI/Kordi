@@ -84,10 +84,12 @@ struct CloudConnectorSummary: Decodable, Equatable {
     /// The granted scopes as catalog ids (`<provider>.<thing>.<access>`).
     /// Nil from servers that only report the native scopes above.
     let grantedScopeIds: [String]?
+    /// Provider settings; for Slack the chosen channels and their names.
+    let settings: CloudConnectorSettings?
 
     private enum CodingKeys: String, CodingKey {
         case connectorId, provider, status, readScopes, actScopes, actEnabled, agentIds
-        case createdAt, updatedAt, revokedAt, connectedAt, lastEventAt, grantedScopeIds
+        case createdAt, updatedAt, revokedAt, connectedAt, lastEventAt, grantedScopeIds, settings
     }
 
     init(
@@ -103,7 +105,8 @@ struct CloudConnectorSummary: Decodable, Equatable {
         revokedAt: String? = nil,
         connectedAt: String? = nil,
         lastEventAt: String? = nil,
-        grantedScopeIds: [String]? = nil
+        grantedScopeIds: [String]? = nil,
+        settings: CloudConnectorSettings? = nil
     ) {
         self.connectorId = connectorId
         self.provider = provider
@@ -118,6 +121,7 @@ struct CloudConnectorSummary: Decodable, Equatable {
         self.connectedAt = connectedAt
         self.lastEventAt = lastEventAt
         self.grantedScopeIds = grantedScopeIds
+        self.settings = settings
     }
 
     init(from decoder: Decoder) throws {
@@ -135,7 +139,32 @@ struct CloudConnectorSummary: Decodable, Equatable {
         connectedAt = try container.decodeIfPresent(String.self, forKey: .connectedAt)
         lastEventAt = try container.decodeIfPresent(String.self, forKey: .lastEventAt)
         grantedScopeIds = try container.decodeIfPresent([String].self, forKey: .grantedScopeIds)
+        settings = try? container.decodeIfPresent(CloudConnectorSettings.self, forKey: .settings)
     }
+}
+
+/// Connector settings the app reads and writes: Slack's chosen channel ids
+/// and their names. Other providers send an empty object.
+struct CloudConnectorSettings: Codable, Equatable {
+    let channels: [String]?
+    let channelNames: [String: String]?
+
+    init(channels: [String]? = nil, channelNames: [String: String]? = nil) {
+        self.channels = channels
+        self.channelNames = channelNames
+    }
+}
+
+/// `GET /v1/cloud/connectors/:id/settings/options`: the channels the person
+/// can choose.
+struct CloudConnectorSettingOptions: Decodable, Equatable {
+    struct Channel: Decodable, Equatable {
+        let id: String
+        let name: String
+        let isPrivate: Bool
+    }
+
+    let channels: [Channel]
 }
 
 /// An agent the server lists next to the connectors, when it does.
@@ -309,6 +338,26 @@ extension CloudAPIClient {
             token: token,
             body: CloudConnectorSetAgentsRequest(agentIds: agentIds),
             fallback: "Could not update this connector."
+        )
+        return response.connector
+    }
+
+    func connectorSettingOptions(token: String, connectorId: String) async throws -> CloudConnectorSettingOptions {
+        try await send(
+            path: connectorPath(connectorId, "/settings/options"),
+            method: "GET",
+            token: token,
+            fallback: "Could not load channels."
+        )
+    }
+
+    func setConnectorSettings(token: String, connectorId: String, settings: CloudConnectorSettings) async throws -> CloudConnectorSummary {
+        let response: CloudConnectorResponse = try await send(
+            path: connectorPath(connectorId, "/settings"),
+            method: "PUT",
+            token: token,
+            body: settings,
+            fallback: "Could not save channels."
         )
         return response.connector
     }

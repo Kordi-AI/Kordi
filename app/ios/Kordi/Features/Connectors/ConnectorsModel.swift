@@ -73,6 +73,8 @@ struct ConnectorState: Codable, Equatable, Sendable {
     var agentIds: [String]
     /// ISO 8601 timestamp of the newest event received from the provider.
     var lastEventAt: String?
+    /// Slack only: the channels chosen for Kordi, with names when known.
+    var channels: [ConnectorChannel]? = nil
 
     static func empty(_ providerId: ConnectorProviderId) -> ConnectorState {
         ConnectorState(
@@ -85,6 +87,19 @@ struct ConnectorState: Codable, Equatable, Sendable {
             lastEventAt: nil
         )
     }
+}
+
+/// A channel chosen for Kordi. `name` is nil for choices saved before names.
+struct ConnectorChannel: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let name: String?
+}
+
+/// A channel the person can choose, as the provider lists it.
+struct ConnectorChannelOption: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let name: String
+    let isPrivate: Bool
 }
 
 struct ConnectorAgent: Codable, Equatable, Identifiable, Sendable {

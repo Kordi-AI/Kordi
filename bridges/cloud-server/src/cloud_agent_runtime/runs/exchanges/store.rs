@@ -242,7 +242,7 @@ pub(super) async fn send(
     let text = args["message"].as_str().unwrap_or_default().trim();
     let target_ref = args["target"].as_str().unwrap_or_default();
     if text.is_empty() || text.len() > 32_000 || target_ref.len() > 256 {
-        return Err(RunError::NotFound);
+        return Err(super::refusal::rejected(super::refusal::INVALID));
     }
     if let Some(person) = super::person::requested(pool, parent, args, target_ref).await? {
         return super::person::send(pool, parent, executor, account, key, text, &person).await;
@@ -250,10 +250,13 @@ pub(super) async fn send(
     // An answering run reaches no agent (the directory below enforces whose
     // agents another person's request may reach).
     if parent.answering.is_some() {
-        return Err(RunError::NotFound);
+        return Err(super::refusal::rejected(super::refusal::ANSWERING));
     }
     let targets = directory(pool, parent).await?;
-    let target = resolve_target(&targets, target_ref)?;
+    let target = match resolve_target(&targets, target_ref) {
+        Ok(target) => target,
+        Err(_) => return Err(super::refusal::agent(pool, parent, target_ref).await),
+    };
     // Another person's agent runs only when its owner allowed AI; the
     // requester's own agents only when they did not decline it.
     let ready = if target.owner_account_id == parent.requester {
@@ -282,7 +285,7 @@ pub(super) async fn send(
         .bind(&parent.run).bind(key).bind(&target.agent_id).bind(text).fetch_optional(&mut *tx).await?;
     if let Some((id, status, agent, request_text)) = existing {
         if agent != target.agent_id || request_text != text {
-            return Err(RunError::NotFound);
+            return Err(super::refusal::rejected(super::refusal::REUSED_CALL));
         }
         return Ok(receipt(id, &status, target));
     }

@@ -10,6 +10,20 @@ use super::{
     TokenGrant,
 };
 
+/// Why setting choices could not be listed.
+#[derive(Debug, thiserror::Error)]
+pub enum SettingOptionsError {
+    /// The provider has no settings to choose from.
+    #[error("this connector has no setting choices")]
+    Unsupported,
+    /// The stored grant predates a scope the listing needs; a reconnect
+    /// asks for it.
+    #[error("the connector grant lacks a scope the listing needs")]
+    MissingScope,
+    #[error(transparent)]
+    Provider(#[from] ProviderError),
+}
+
 /// The service-specific half of a connector: tools, settings, identity,
 /// and events. Defaults mean "not supported".
 #[async_trait]
@@ -34,6 +48,23 @@ pub trait ServiceAdapter: Send + Sync + 'static {
         _secret: &ConnectorSecret,
     ) -> Result<Option<String>, ProviderError> {
         Ok(None)
+    }
+
+    async fn setting_options(
+        &self,
+        _secret: &ConnectorSecret,
+        _granted: &[String],
+    ) -> Result<Value, SettingOptionsError> {
+        Err(SettingOptionsError::Unsupported)
+    }
+
+    fn tailor_tool(
+        &self,
+        _tool: &str,
+        _settings: &Value,
+        _description: &mut String,
+        _schema: &mut Value,
+    ) {
     }
 
     fn live_subscription(&self, _hooks: &ConnectorHooks) -> bool {
@@ -139,6 +170,25 @@ impl<A: ServiceAdapter> ConnectorProvider for ServiceProvider<A> {
         secret: &ConnectorSecret,
     ) -> Result<Option<String>, ProviderError> {
         self.adapter.account_identity(secret).await
+    }
+
+    async fn setting_options(
+        &self,
+        secret: &ConnectorSecret,
+        granted: &[String],
+    ) -> Result<Value, SettingOptionsError> {
+        self.adapter.setting_options(secret, granted).await
+    }
+
+    fn tailor_tool(
+        &self,
+        tool: &str,
+        settings: &Value,
+        description: &mut String,
+        schema: &mut Value,
+    ) {
+        self.adapter
+            .tailor_tool(tool, settings, description, schema);
     }
 
     fn live_subscription(&self, hooks: &ConnectorHooks) -> bool {

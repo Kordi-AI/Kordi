@@ -107,9 +107,9 @@ type SecretRow = (
 /// The only function that reads `cloud_connector_secrets`.
 ///
 /// Callers are limited to this broker, its refresh step
-/// (`connectors::refresh`), and `connectors::oauth` (provider revoke on
-/// disconnect). Do not add other readers: every other module must go through
-/// the broker so tokens never leave the server.
+/// (`connectors::refresh`), `connectors::oauth` (provider revoke on
+/// disconnect), and `connectors::setting_options` (owner setting choices).
+/// No other readers: tokens never leave the server.
 pub(super) async fn read_sealed_secret<'e, E>(
     executor: E,
     connector_id: &str,

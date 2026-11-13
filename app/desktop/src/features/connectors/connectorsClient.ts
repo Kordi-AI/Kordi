@@ -1,6 +1,8 @@
 import {
   type ConnectorAgent,
   type ConnectorAuditEntry,
+  type ConnectorChannel,
+  type ConnectorChannelOption,
   type ConnectorProviderId,
   type ConnectorState,
 } from './connectorsModel';
@@ -30,6 +32,14 @@ export type ConnectorsClient = {
   disconnect(providerId: ConnectorProviderId): Promise<void>;
   auditLog(providerId: ConnectorProviderId): Promise<ConnectorAuditEntry[]>;
   recheckPermission(providerId: ConnectorProviderId): Promise<ConnectorState>;
+  /**
+   * Slack: channels the person can choose. Rejects with
+   * `ConnectorNeedsReconnectError` when the connection cannot list them.
+   * Omitted when this client has no channel choices.
+   */
+  listChannels?(providerId: ConnectorProviderId): Promise<ConnectorChannelOption[]>;
+  /** Saves the chosen channels (ids and names) and returns the new state. */
+  saveChannels?(providerId: ConnectorProviderId, channels: ConnectorChannel[]): Promise<ConnectorState>;
   /**
    * False when no client backs the service rows, so the panel hides the
    * Services section. Omitted means available.
