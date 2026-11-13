@@ -213,7 +213,7 @@ export function CardScreen({ state, store, memoryRouting = false, memoryCards = 
           </div>
         </>
       ) : null}
-      <CgUnreadLinks links={state.owner.build.unreadLinks ?? []} />
+      <CgUnreadLinks links={state.owner.build.unreadLinks ?? []} quiet />
       <div data-help-target="grounding-sharing" className="cg-panel cg-cardpage-share">
         {autoRebuild !== undefined ? (
           <div className="cg-mrow">

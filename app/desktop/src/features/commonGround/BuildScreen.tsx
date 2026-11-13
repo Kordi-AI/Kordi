@@ -1,12 +1,14 @@
 import { requireAiConsent } from '@/features/aiConsent/aiConsentStore';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Brain, Monitor } from 'lucide-react';
 
 import { SettingsSwitch } from '@/kordi-app/components/settingsLayout';
 import { ConnectorsSection } from './BuildConnectors';
 import { DeviceRows, type CgDeviceBlocked, type CgDeviceTitles } from './BuildDeviceRows';
 import { DocumentsRow } from './BuildDocuments';
-import { agentFilesSummary, buildFailureMessage, canBuildProfile, commonGroundBuildRequest, notesHint, type CgBuildChoices } from './buildRequest';
+import {
+  agentFilesSummary, buildFailureMessage, canBuildProfile, commonGroundBuildRequest, currentUnreadLinks, notesHint, signInLinks, type CgBuildChoices,
+} from './buildRequest';
 import { DEVICE_SOURCES } from './deviceAccess';
 import type { CgHost } from './host';
 import { CgAvatar, CgBack, CgGroup, CgHero, CgIcon, CgNotice, CgProgress, CgRow, CgSection, CgUnreadLinks } from './parts';
@@ -39,6 +41,7 @@ export function BuildScreen({ state, store, host }: { state: CgState; store: Com
   const [blocked, setBlocked] = useState<CgDeviceBlocked>({});
   // Errors show after Build here (or the card's last failed build on opening) and clear with the next change to the sources.
   const [phase, setPhase] = useState<'opened' | 'attempted' | 'edited'>('opened');
+  const notesRef = useRef<HTMLTextAreaElement>(null);
   const change: typeof savePicks = (update) => {
     setPhase('edited');
     savePicks(update);
@@ -62,9 +65,16 @@ export function BuildScreen({ state, store, host }: { state: CgState; store: Com
   };
   // The card's own failed build always shows on opening, even when the store also carries a notice
   // (a build that failed while this screen was replaced, such as when a first card's profile arrives).
-  const failed = state.owner?.build.status === 'failed' ? buildFailureMessage(state.owner.build.errorCode) : null;
+  const lastUnread = state.owner?.build.unreadLinks ?? [];
+  const failed = state.owner?.build.status === 'failed' ? buildFailureMessage(state.owner.build.errorCode, lastUnread.length) : null;
   const notice = phase === 'attempted' ? state.notice ?? failed : phase === 'opened' ? failed : null;
-  const unreadLinks = state.owner?.build.unreadLinks ?? [];
+  // Lines only for links still in the box; a link to a sign-in site is flagged as soon as it is pasted.
+  const unreadLinks = currentUnreadLinks(lastUnread, picks.links);
+  const signIn = signInLinks(picks.links, unreadLinks);
+  const useNotes = () => {
+    notesRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    notesRef.current?.focus({ preventScroll: true });
+  };
   const hasAgentFiles = Boolean(agentFiles?.length);
   const agentsRow = host.agentFiles ? (
     <CgRow
@@ -109,11 +119,11 @@ export function BuildScreen({ state, store, host }: { state: CgState; store: Com
         <CgGroup>
           <textarea className="cg-textarea" value={picks.links} onChange={(event) => set({ links: event.target.value })} placeholder="Homepage; ORCID; papers" aria-label="Links" />
         </CgGroup>
-        <CgUnreadLinks links={unreadLinks} />
+        <CgUnreadLinks links={unreadLinks} signIn={signIn} onUseNotes={useNotes} />
       </CgSection>
       <CgSection title="Notes">
         <CgGroup>
-          <textarea data-help-target="grounding-notes" className="cg-textarea" value={picks.notes} onChange={(event) => set({ notes: event.target.value })} placeholder={notesHint(profile?.kind)} aria-label="Notes" />
+          <textarea ref={notesRef} data-help-target="grounding-notes" className="cg-textarea" value={picks.notes} onChange={(event) => set({ notes: event.target.value })} placeholder={notesHint(profile?.kind)} aria-label="Notes" />
         </CgGroup>
       </CgSection>
       <div className="cg-actions-center">
