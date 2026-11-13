@@ -152,7 +152,7 @@ async fn an_automatic_update_that_changes_the_card_matches_again() {
 }
 
 #[tokio::test]
-async fn more_than_eight_people_get_one_run_with_the_opened_matches_first() {
+async fn more_than_five_people_get_one_run_with_the_opened_matches_first() {
     let Some(pool) = pool().await else {
         return;
     };
@@ -168,10 +168,15 @@ async fn more_than_eight_people_get_one_run_with_the_opened_matches_first() {
     let all: Vec<&str> = profiles.iter().map(String::as_str).collect();
     let limiter = limiter();
     tick(&pool, &limiter, &all).await;
-    // Two runs: the first eight members, then the last two.
+    // The room matches Ada's five best estimates (all tie, so by name: Ben
+    // to Fay); opening Gus, Hal and Ivy matches each of them too.
     match_room(&app, &pool, &code, &ada, &ada_token).await;
-    assert_eq!(match_runs(&pool, &ada).await, 2);
-    // Dee and Fay, from the first run, were opened; Fay more recently.
+    assert_eq!(match_runs(&pool, &ada).await, 1);
+    for index in [6, 7, 8] {
+        open_match(&app, &pool, (&ada, &ada_token), &people[index].0).await;
+    }
+    assert_eq!(match_runs(&pool, &ada).await, 4);
+    // Dee and Fay, from the room run, were opened earlier; Fay more recently.
     for (index, at) in [(3, "2026-11-01T09:00:00Z"), (5, "2026-11-02T09:00:00Z")] {
         query(
             "UPDATE cloud_common_ground_matches SET opened_at = $3::timestamptz
@@ -186,21 +191,19 @@ async fn more_than_eight_people_get_one_run_with_the_opened_matches_first() {
     }
     build_card_with(&app, &pool, &ada, &ada_token, &changed_card()).await;
     tick(&pool, &limiter, &all).await;
-    assert_eq!(match_runs(&pool, &ada).await, 3);
+    assert_eq!(match_runs(&pool, &ada).await, 5);
     assert_eq!(mark(&pool, &profiles[0]).await, None);
     let cards = open_cards(&pool, &ada).await;
-    assert_eq!(cards.len(), 9, "the viewer and eight people");
-    assert_eq!(
-        cards[..3],
-        [ada.clone(), people[5].0.clone(), people[3].0.clone()]
-    );
-    let mut newest: Vec<&String> = cards[3..5].iter().collect();
+    assert_eq!(cards.len(), 6, "the viewer and five people");
+    assert_eq!(cards[0], ada);
+    let mut newest: Vec<&String> = cards[1..4].iter().collect();
     newest.sort();
-    let mut last_run = vec![&people[9].0, &people[10].0];
-    last_run.sort();
-    assert_eq!(newest, last_run, "then the most recently computed");
+    let mut opened_now = vec![&people[6].0, &people[7].0, &people[8].0];
+    opened_now.sort();
+    assert_eq!(newest, opened_now, "the most recently opened first");
+    assert_eq!(cards[4..], [people[5].0.clone(), people[3].0.clone()]);
     tick(&pool, &limiter, &all).await;
-    assert_eq!(match_runs(&pool, &ada).await, 3, "the other two wait");
+    assert_eq!(match_runs(&pool, &ada).await, 5, "the other three wait");
 }
 
 #[tokio::test]

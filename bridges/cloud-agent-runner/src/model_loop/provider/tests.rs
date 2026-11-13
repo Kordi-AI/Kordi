@@ -69,6 +69,24 @@ fn openai_config_accepts_codex_oauth_material_and_preserves_model() {
 }
 
 #[test]
+fn chat_runs_keep_short_retries_and_background_runs_wait_out_rate_limits() {
+    let mut config = fixture_auth();
+    assert_eq!(config.retry, super::ProviderRetryPolicy::INTERACTIVE);
+    let options = config.request_options();
+    assert_eq!(
+        (options.max_retries, options.max_retry_delay_ms),
+        (2, 2_000)
+    );
+
+    config.retry = super::ProviderRetryPolicy::BACKGROUND;
+    let options = config.request_options();
+    assert_eq!(
+        (options.max_retries, options.max_retry_delay_ms),
+        (4, 60_000)
+    );
+}
+
+#[test]
 fn provider_config_uses_native_anthropic_and_google_defaults() {
     let anthropic = OpenAiProviderConfig::from_material(&ProviderAuthMaterial {
         snapshot_id: "snap-anthropic".to_string(),
@@ -191,6 +209,7 @@ fn completion_request_uses_shared_provider_shape_without_rewriting_model() {
         verbatim_model: false,
         max_output_tokens: None,
         headers: Default::default(),
+        retry: Default::default(),
     };
     let request = completion_request_from_cloud_messages(
         &auth,
@@ -230,6 +249,7 @@ fn fixture_auth() -> OpenAiProviderConfig {
         verbatim_model: false,
         max_output_tokens: None,
         headers: Default::default(),
+        retry: Default::default(),
     }
 }
 
@@ -446,6 +466,7 @@ fn native_search_retains_the_run_scoped_route() {
         verbatim_model: false,
         max_output_tokens: None,
         headers: Default::default(),
+        retry: Default::default(),
     };
     let search = config.web_search_runtime();
     assert_eq!(search.model.id, config.model);

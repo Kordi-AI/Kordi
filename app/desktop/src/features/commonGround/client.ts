@@ -9,8 +9,8 @@ import { isCardDesign, isCardIcon } from './cardDesign';
 import { nearbyRoutes } from './clientNearby';
 import type {
   CgBuildRequest, CgCreatedGroup, CgDocument, CgCreateRoomInput, CgGroup, CgJoinInput, CgMatch, CgMeetInput, CgOwnerView, CgPairCode, CgPerson,
-  CgPersonCard, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry, CgRelationship, CgResults, CgRoom, CgRoomPreview, CgRoomSummary, CgRoutedMemory,
-  CgTopicLists,
+  CgPersonCard, CgProfile, CgProfileInput, CgProfilePatch, CgRankedPerson, CgReason, CgRecentEntry, CgRelationship, CgResults, CgRoom, CgRoomPreview,
+  CgRoomSummary, CgRoutedMemory, CgTopicLists, CgTrade,
 } from './types';
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -107,6 +107,48 @@ function joinBody(input: CgJoinInput) {
 function withRelationship<T extends { person: CgPerson; relationship?: CgRelationship }>(body: T): T {
   const relationship = body.relationship ?? body.person?.relationship;
   return relationship && body.person ? { ...body, person: { ...body.person, relationship } } : body;
+}
+
+/** Newer servers list everyone, marking quick estimates with `estimated: true`; the key is absent otherwise. */
+function rankedPerson(entry: CgRankedPerson): CgRankedPerson {
+  const { estimated, ...rest } = withRelationship(entry);
+  return estimated === true ? { ...rest, estimated: true } : rest;
+}
+
+const stringOf = (value: unknown) => (typeof value === 'string' ? value : '');
+const records = (value: unknown): Array<Record<string, unknown>> =>
+  Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object') : [];
+
+function reasonsOf(value: unknown): CgReason[] {
+  return records(value).map((item) => ({ topic: stringOf(item.topic), theirTopic: stringOf(item.theirTopic), why: stringOf(item.why) })).filter((item) => item.topic);
+}
+
+function tradesOf(value: unknown): CgTrade[] {
+  return records(value).map((item) => ({ topic: stringOf(item.topic), for: stringOf(item.for), why: stringOf(item.why) })).filter((item) => item.topic);
+}
+
+/** A 202 match from newer servers carries the quick estimate's topics; older servers send none and nothing is added. */
+function matchEstimate(body: Partial<CgMatch>): Partial<CgMatch> {
+  const raw = body as Record<string, unknown>;
+  if (!['shared', 'youBring', 'theyBring'].some((key) => Array.isArray(raw[key]))) return {};
+  return {
+    ...(typeof body.score === 'number' ? { score: body.score } : {}),
+    ...(typeof body.headline === 'string' ? { headline: body.headline } : {}),
+    shared: reasonsOf(raw.shared),
+    youBring: tradesOf(raw.youBring),
+    theyBring: tradesOf(raw.theyBring),
+    nextStep: stringOf(raw.nextStep),
+    estimated: true,
+  };
+}
+
+/**
+ * A 200 match is ready. When no model run may be queued, the server answers ready with only the
+ * estimate (`estimated: true`, empty reasons); it is read like a pending estimate and not polled.
+ */
+function readyMatch(body: CgMatch): CgMatch {
+  const { estimated, ...rest } = body;
+  return estimated === true ? { ...rest, ...matchEstimate(body), estimated: true, status: 'ready' } : { ...rest, status: 'ready' };
 }
 
 /** Groups carry `topic` from newer servers; a missing field is null. */
@@ -260,7 +302,7 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
       const results = await data<CgResults>('POST', cg(`rooms/${enc(code)}/results`));
       return {
         ...results,
-        people: (results.people ?? []).map(withRelationship),
+        people: (results.people ?? []).map(rankedPerson),
         ...(results.groups ? { groups: results.groups.map(withTopic) } : {}),
       };
     },
@@ -278,8 +320,8 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
     match: async (accountId: string, profileId?: string | null): Promise<CgMatch> => {
       const { status, body } = await send<CgMatch>('GET', cg(`people/${enc(accountId)}/match${profileQuery(profileId)}`));
       const match: CgMatch = status === 202
-        ? { status: body.status === 'failed' ? 'failed' : 'matching', person: body.person, relationship: body.relationship, profileId: body.profileId }
-        : { ...body, status: 'ready' };
+        ? { status: body.status === 'failed' ? 'failed' : 'matching', person: body.person, relationship: body.relationship, profileId: body.profileId, ...matchEstimate(body) }
+        : readyMatch(body);
       return withRelationship(match);
     },
     addContact: (accountId: string, message?: string) => data<{ relationship: CgRelationship }>(

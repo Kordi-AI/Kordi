@@ -8,9 +8,9 @@ use super::{Reason, SharedCard, Trade};
 
 pub(in crate::common_ground) const MATCH_SYSTEM: &str = "You find common ground between people at an event, for one of them (\"you\").
 You get your interest card and the numbered cards of other people. For each other person:
-- shared: pairs of (your topic, their topic) from working on or interests that are the same area, so the two of you would have a useful conversation about it. Shared words alone are not enough: \"GPU memory\" and \"agent memory\" are different. At most 3, best first.
-- you_bring: one of your can help with topics that would directly and concretely help their working on, interests or looking for. At most 3.
-- they_bring: one of their can help with topics that would directly and concretely help your working on, interests or looking for. At most 3.
+- shared: pairs of (your topic, their topic) from working on or interests that are the same area, so the two of you would have a useful conversation about it. Shared words alone are not enough: \"GPU memory\" and \"agent memory\" are different. At most 2, best first.
+- you_bring: one of your can help with topics that would directly and concretely help their working on, interests or looking for. At most 2.
+- they_bring: one of their can help with topics that would directly and concretely help your working on, interests or looking for. At most 2.
 - why: one short reason per pair, under 14 words, such as \"Both study memory for agents\".
 - next_step: one concrete next step for both people, under 16 words, such as \"Compare memory benchmarks over coffee\". Empty when there is nothing in common.
 Write why and next_step so they read the same to either person: no \"you\", \"your\" or names.

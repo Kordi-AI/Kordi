@@ -13,8 +13,8 @@ use super::sharing_support::{
     recent_ids, results, set_sharing, topics, CG,
 };
 use super::support::{
-    answer_match, answer_themes, build_card_with, card_reply, claim_open, make_contacts, open_runs,
-    people_in_a_room, RUNNER,
+    age_themes_of, answer_match, answer_themes, build_card_with, card_reply, claim_open,
+    make_contacts, open_runs, people_in_a_room, RUNNER,
 };
 use crate::common_ground::fail;
 
@@ -143,6 +143,7 @@ async fn sharing_off_hides_a_room_both_ways_open_or_closed() {
     expected.sort();
     assert_eq!(ranked, expected, "{body}");
     assert_eq!(topics(&body).len(), 2, "{body}");
+    age_themes_of(&pool, &code).await;
 
     // Priya turns sharing off. Alex's lobby keeps her in the room without a
     // card; his results and the previous themes shown while they are found

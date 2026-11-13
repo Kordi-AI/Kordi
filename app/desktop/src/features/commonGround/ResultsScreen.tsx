@@ -25,7 +25,7 @@ function candidates(results: CgResults, members: CgPerson[], selfId: string): Cg
   return [...byId.values()];
 }
 
-/** Members whose match is not in yet, in join order; a closed room lists its results only. */
+/** Members not listed in the results yet, in join order; a closed room lists its results only. Estimated people are listed. */
 function arriving(results: CgResults, members: CgPerson[], selfId: string, closed: boolean): CgPerson[] {
   if (closed) return [];
   const listed = new Set([selfId, ...results.people.map((entry) => entry.person.accountId)]);
@@ -87,8 +87,9 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
   const matchingEmpty = results.status === 'matching' && empty;
   // Alone in an open room, People waits for others instead of showing an empty list.
   // The server also reports `matching` while only the room's topics refresh, so People shows the line
-  // only when someone is still unscored (or nothing else would be on screen).
-  const finding = results.status === 'matching' && (tab === 'topics' || unmatched.length > 0 || matchingEmpty);
+  // only when someone is still unscored or only estimated (or nothing else would be on screen).
+  const estimating = results.people.some((entry) => entry.estimated);
+  const finding = results.status === 'matching' && (tab === 'topics' || unmatched.length > 0 || estimating || matchingEmpty);
   const waiting = tab === 'people' && empty && !matchingEmpty && !closed && room?.members.length === 0;
 
   return (

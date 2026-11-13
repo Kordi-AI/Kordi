@@ -259,7 +259,8 @@ export type CgRoomSummary = {
 };
 
 export type CgTheme = { label: string; people: CgPerson[] };
-export type CgRankedPerson = { person: CgPerson; score: number; headline: string; relationship?: CgRelationship };
+/** `estimated` marks a quick topic-overlap score with no model reasons yet; newer servers list everyone that way. */
+export type CgRankedPerson = { person: CgPerson; score: number; headline: string; relationship?: CgRelationship; estimated?: boolean };
 export type CgMatchStatus = 'ready' | 'matching' | 'failed';
 
 export type CgResults = {
@@ -287,6 +288,8 @@ export type CgMatch = {
   nextStep?: string;
   relationship?: CgRelationship;
   profileId?: string;
+  /** The topics are the quick estimate's, with empty reasons: while `matching`, or `ready` when no model run may be queued. */
+  estimated?: boolean;
 };
 
 export type CgMeetInput = { title?: string; startAt: string; endAt?: string; location?: string };

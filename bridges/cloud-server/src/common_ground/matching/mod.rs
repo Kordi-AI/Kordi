@@ -6,6 +6,7 @@
 //! kept for both of them, so each pair runs once. A card that changed is
 //! matched again with the people it is still linked to (`rematch`).
 
+mod estimate;
 mod finish;
 pub(super) mod prompt;
 mod recent;
@@ -13,6 +14,7 @@ mod rematch;
 mod routes;
 mod store;
 
+pub(super) use estimate::{estimate, Rarity};
 pub(super) use finish::{complete, fail};
 pub(super) use recent::recent;
 pub(super) use rematch::rematch;

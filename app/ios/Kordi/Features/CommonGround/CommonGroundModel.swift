@@ -16,7 +16,7 @@ final class CommonGroundModel: ObservableObject {
     nonisolated static let lobbyPollInterval: Duration = .seconds(2)
     nonisolated static let matchPollInterval: Duration = .seconds(3)
     /// The matching poll once a sync hint showed that hints arrive.
-    nonisolated static let hintedMatchPollInterval: Duration = .seconds(10)
+    nonisolated static let hintedMatchPollInterval: Duration = .seconds(20)
     /// An open room's ready Results look again this often, in case a hint was missed.
     nonisolated static let fallbackPollInterval: Duration = .seconds(60)
     /// Home reloads cards on appear and on foreground at most this often.

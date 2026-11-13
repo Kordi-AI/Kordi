@@ -292,5 +292,5 @@ test('polling keeps today\'s pace until the first hint, then falls back to the s
   // A hint for a room not on screen still shows the stream delivers them.
   await receiveRoomHints(store, roomHint('5550'));
   assert.equal(await store.poll(), MATCH_FALLBACK_POLL_MS);
-  assert.equal(MATCH_FALLBACK_POLL_MS, 10_000);
+  assert.equal(MATCH_FALLBACK_POLL_MS, 20_000);
 });

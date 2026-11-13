@@ -7,15 +7,19 @@ private enum CommonGroundMatchTab: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
-/// What you share with one person. Waits while the server is matching.
+/// What you share with one person. Waits while the server is matching; when
+/// the pending match carries the quick estimate's topics, they show meanwhile.
 struct CommonGroundMatchView: View {
     @EnvironmentObject private var model: CommonGroundModel
     @Environment(\.dismiss) private var dismiss
     let personID: String
 
     var body: some View {
-        if let match = model.matches[personID], match.isReady {
+        if let match = model.matches[personID], match.isReady || match.hasEstimateTopics {
             CommonGroundMatchContent(match: match)
+                .task(id: match.isMatching) {
+                    if match.isMatching { await model.waitForMatch(personID) }
+                }
         } else if let match = model.matches[personID], !match.isMatching {
             CommonGroundPage {
                 CommonGroundHero(title: match.person.displayName, status: "No match yet") {
@@ -83,8 +87,8 @@ private struct CommonGroundMatchContent: View {
     var body: some View {
         let person = match.person
         CommonGroundPage {
-            CommonGroundHero(title: person.displayName, status: match.headline ?? "") {
-                CommonGroundMatchBadge(me: model.me, person: person, score: match.score)
+            CommonGroundHero(title: person.displayName, status: match.isMatching ? "Finding common ground" : match.headline ?? "") {
+                CommonGroundMatchBadge(me: model.me, person: person, score: match.isMatching ? nil : match.score)
             } actions: {
                 CommonGroundPersonActions(person: person)
             }
@@ -111,18 +115,21 @@ private struct CommonGroundMatchContent: View {
                         }
                     }
                 case .shared:
-                    CommonGroundSection {
-                        if match.shared.isEmpty {
-                            row("No clear overlap yet", nil)
-                        }
-                        ForEach(Array(match.shared.enumerated()), id: \.offset) { index, reason in
-                            if index > 0 { SessionDetailSeparator(leading: SessionDetailMetrics.rowHorizontalInset) }
-                            row(reason.topic, reason.why, style: commonGroundStyle(for: reason.topic))
+                    // While matching, an empty list stays hidden instead of saying there is no overlap.
+                    if !match.shared.isEmpty || !match.isMatching {
+                        CommonGroundSection {
+                            if match.shared.isEmpty {
+                                row("No clear overlap yet", nil)
+                            }
+                            ForEach(Array(match.shared.enumerated()), id: \.offset) { index, reason in
+                                if index > 0 { SessionDetailSeparator(leading: SessionDetailMetrics.rowHorizontalInset) }
+                                row(reason.topic, reason.why.nonEmpty, style: commonGroundStyle(for: reason.topic))
+                            }
                         }
                     }
                 case .trade:
                     VStack(spacing: 16) {
-                        if match.youBring.isEmpty && match.theyBring.isEmpty {
+                        if match.youBring.isEmpty && match.theyBring.isEmpty && !match.isMatching {
                             CommonGroundSection { row("No clear trade yet", nil) }
                         }
                         if !match.youBring.isEmpty {
@@ -157,7 +164,7 @@ private struct CommonGroundMatchContent: View {
         CommonGroundSection(title: title) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 if index > 0 { SessionDetailSeparator(leading: SessionDetailMetrics.rowHorizontalInset) }
-                row(item.topic, item.why.isEmpty ? "For \(item.target)" : item.why, style: commonGroundStyle(for: item.topic))
+                row(item.topic, item.why.nonEmpty ?? item.target.nonEmpty.map { "For \($0)" }, style: commonGroundStyle(for: item.topic))
             }
         }
     }

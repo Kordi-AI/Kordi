@@ -76,12 +76,26 @@ async fn room_results_match_detail_and_recent() {
     assert_eq!(body["matchingStarted"], false, "nobody asked yet");
 
     // The first request queues one match run for alex and one theme run for
-    // the room; polling while they work queues nothing more.
+    // the room, and ranks everyone at once by the topic estimate; polling
+    // while they work queues nothing more.
     let (status, body) = send(&app, "POST", &results, &alex_token, None).await;
     assert_eq!(status, 200, "{body}");
+    assert_eq!(body["status"].as_str(), Some("matching"));
+    let estimated: Vec<(&str, bool)> = body["people"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| {
+            (
+                p["person"]["accountId"].as_str().unwrap(),
+                p["estimated"] == true,
+            )
+        })
+        .collect();
     assert_eq!(
-        (body["status"].as_str(), body["people"].clone()),
-        (Some("matching"), json!([]))
+        estimated,
+        [(priya.as_str(), true), (sam.as_str(), true)],
+        "{body}"
     );
     let (status, body) = send(&app, "POST", &results, &alex_token, None).await;
     assert_eq!((status, body["status"].as_str()), (200, Some("matching")));
@@ -291,11 +305,11 @@ async fn room_results_match_detail_and_recent() {
     .await;
     let (_, body) = send(&app, "POST", &results, &alex_token, None).await;
     assert_eq!(body["status"], "matching");
-    assert_eq!(
-        body["people"],
-        json!([]),
-        "priya is matched again; sam no longer shares"
-    );
+    // Priya is matched again and shows by estimate meanwhile; sam no
+    // longer shares.
+    assert_eq!(body["people"].as_array().unwrap().len(), 1, "{body}");
+    assert_eq!(body["people"][0]["person"]["accountId"], priya.as_str());
+    assert_eq!(body["people"][0]["estimated"], true);
     let (_, cards) = claim_open(&pool, "match", Some(&alex)).await;
     assert_eq!(cards, vec![alex.clone(), priya.clone()]);
 }

@@ -1,5 +1,6 @@
 //! Room results and match detail, per pair of shared profiles.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::{
@@ -11,8 +12,8 @@ use axum::{
 use serde_json::{json, Value};
 use sqlx_core::{query::query, query_as::query_as};
 
-use super::store::{self, Pending, Queued, MAX_THEME_MEMBERS};
-use super::{shared_cards, suggestion, visible_themes, MatchResult, SharedCard};
+use super::store::{self, Pending, Queued, MATCH_BATCH, MAX_THEME_MEMBERS, THEME_REFRESH};
+use super::{estimate, shared_cards, suggestion, visible_themes, MatchResult, Rarity, SharedCard};
 use crate::auth::rate_limit::CloudRateLimiter;
 use crate::common_ground::actions::{attach, relationship, relationships, room_extras};
 use crate::common_ground::profiles::{self, ProfileQuery};
@@ -42,10 +43,14 @@ fn status(pending: Option<Pending>) -> &'static str {
 
 /// `POST /v1/cloud/common-ground/rooms/:code/results`: everyone in the room
 /// ranked by match with you, the themes several people share, and the
-/// suggested group. People still being matched are left out until ready;
-/// `status` is "matching" until everything is in, and the last themes stay
-/// while new ones are found. A closed room shows what was stored for it and
-/// never queues a run.
+/// suggested group. Everyone shows at once: a person without a model result
+/// yet is ranked by a quick estimate from topic words (`estimated: true`).
+/// The model writes reasons for your best few estimated matches
+/// ([`MATCH_BATCH`]) and for anyone you open (`match_detail`); `status` is
+/// "matching" while that run works. The last themes stay while new ones are
+/// found, and a room filling up runs themes at most every
+/// [`THEME_REFRESH`]. A closed room shows what was stored for it and never
+/// queues a run.
 pub(in crate::common_ground) async fn results(
     State(state): State<Arc<ServerState>>,
     Extension(rate_limiter): Extension<Arc<CloudRateLimiter>>,
@@ -118,8 +123,24 @@ pub(in crate::common_ground) async fn results(
         Ok(fresh) => fresh,
         Err(error) => return db_error(error),
     };
-    let stale: Vec<SharedCard> = others
+    // Every pair is estimated, so the best few stay the same people while
+    // their model results come in.
+    let rarity = Rarity::of(&visible_cards);
+    let estimates: HashMap<&str, MatchResult> = others
         .iter()
+        .map(|o| (o.profile_id.as_str(), estimate(&viewer, o, &rarity)))
+        .collect();
+    let mut by_estimate: Vec<&SharedCard> = others.iter().collect();
+    by_estimate.sort_by(|a, b| {
+        let score = |card: &SharedCard| estimates[card.profile_id.as_str()].score;
+        score(b)
+            .cmp(&score(a))
+            .then(a.name.cmp(&b.name))
+            .then(a.profile_id.cmp(&b.profile_id))
+    });
+    let stale: Vec<SharedCard> = by_estimate
+        .into_iter()
+        .take(MATCH_BATCH)
         .filter(|o| !fresh.contains_key(&o.profile_id))
         .cloned()
         .collect();
@@ -156,7 +177,25 @@ pub(in crate::common_ground) async fn results(
     // An open room's themes count only for the current theme members; a
     // closed room keeps themes computed with people who no longer share.
     let mut visible = themes.map(|themes| visible_themes(themes, &visible_cards));
-    let needs_themes = open && visible.is_none() && theme_members.len() >= 2;
+    // The people the viewer sees and a theme run reads: older themes count
+    // only for them, as their labels may come from earlier cards.
+    let seen: Vec<SharedCard> = theme_members
+        .iter()
+        .filter(|c| !hidden.contains(&c.account_id))
+        .cloned()
+        .collect();
+    let mut needs_themes = open && visible.is_none() && theme_members.len() >= 2;
+    // A viewer who declined AI may not queue a theme run, so sees none.
+    if needs_themes && !excluded.contains(account) {
+        match store::latest_themes_with_age(pool, room_id).await {
+            Ok(Some((themes, age))) if age < THEME_REFRESH => {
+                visible = Some(visible_themes(themes, &seen));
+                needs_themes = false;
+            }
+            Ok(_) => {}
+            Err(error) => return db_error(error),
+        }
+    }
     // Each queued run is charged; polling while one works or pauses is free.
     let mut pending = None;
     if open && !stale.is_empty() {
@@ -194,11 +233,6 @@ pub(in crate::common_ground) async fn results(
                 // Until the new themes land, the last ones stay for the people
                 // the viewer sees and the run reads. Their labels may come from
                 // earlier cards, so only a pending run keeps them up.
-                let seen: Vec<SharedCard> = theme_members
-                    .iter()
-                    .filter(|c| !hidden.contains(&c.account_id))
-                    .cloned()
-                    .collect();
                 visible = match store::latest_themes(pool, room_id).await {
                     Ok(themes) => themes.map(|themes| visible_themes(themes, &seen)),
                     Err(error) => return db_error(error),
@@ -211,20 +245,37 @@ pub(in crate::common_ground) async fn results(
         }
     }
 
-    let mut ranked: Vec<(&SharedCard, &MatchResult)> = others
+    // A model result replaces the estimate as soon as it is stored.
+    // A closed room shows only what was stored for it.
+    let mut ranked: Vec<(&SharedCard, &MatchResult, bool)> = others
         .iter()
-        .filter_map(|o| fresh.get(&o.profile_id).map(|r| (o, r)))
+        .filter_map(|o| match fresh.get(&o.profile_id) {
+            Some(result) => Some((o, result, false)),
+            None if open => Some((o, &estimates[o.profile_id.as_str()], true)),
+            None => None,
+        })
         .collect();
-    ranked.sort_by(|a, b| b.1.score.cmp(&a.1.score).then(a.0.name.cmp(&b.0.name)));
-    let ranked_ids: Vec<String> = ranked.iter().map(|(c, _)| c.account_id.clone()).collect();
+    ranked.sort_by(|a, b| {
+        b.1.score
+            .cmp(&a.1.score)
+            .then(a.0.name.cmp(&b.0.name))
+            .then(a.0.profile_id.cmp(&b.0.profile_id))
+    });
+    let ranked_ids: Vec<String> = ranked
+        .iter()
+        .map(|(c, _, _)| c.account_id.clone())
+        .collect();
     let relationships = match relationships(pool, account, &ranked_ids).await {
         Ok(relationships) => relationships,
         Err(error) => return db_error(error),
     };
     let people: Vec<Value> = ranked
         .iter()
-        .map(|(card, result)| {
+        .map(|(card, result, estimated)| {
             let mut entry = json!({ "person": person(card), "score": result.score, "headline": result.headline });
+            if *estimated {
+                entry["estimated"] = json!(true);
+            }
             attach(&mut entry, &card.account_id, &relationships);
             entry
         })
@@ -347,25 +398,48 @@ pub(in crate::common_ground) async fn match_detail(
     )
     .await
     {
-        Ok(Queued::Pending(pending)) => match relationship(pool, account, &other).await {
-            Ok(relationship) => (
-                StatusCode::ACCEPTED,
-                Json(json!({
-                    "status": status(Some(pending)),
-                    "person": person(other_card),
-                    "profileId": viewer.profile_id,
-                    "relationship": relationship,
-                })),
-            )
-                .into_response(),
-            Err(error) => db_error(error),
-        },
+        Ok(Queued::Pending(pending)) => {
+            let body = estimated_match(
+                pool,
+                account,
+                &cards,
+                viewer,
+                other_card,
+                status(Some(pending)),
+            );
+            match body.await {
+                Ok(body) => (StatusCode::ACCEPTED, Json(body)).into_response(),
+                Err(error) => db_error(error),
+            }
+        }
         Ok(Queued::Limited(retry_after)) => limited(retry_after),
-        Ok(Queued::Skipped) => crate::common_ground::err(
-            "common_ground_match_not_found",
-            "No match was saved for this person.",
-            StatusCode::NOT_FOUND,
-        ),
+        // Someone declined AI, so no run will add reasons: the estimate is
+        // all there is.
+        Ok(Queued::Skipped) => {
+            match estimated_match(pool, account, &cards, viewer, other_card, "ready").await {
+                Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+                Err(error) => db_error(error),
+            }
+        }
         Err(error) => db_error(error),
     }
+}
+
+/// The quick estimate of a match as the detail shows it: the topics at once,
+/// with empty reasons and next step until a model run adds them.
+async fn estimated_match(
+    pool: &sqlx_postgres::PgPool,
+    account: &str,
+    cards: &[SharedCard],
+    viewer: &SharedCard,
+    other: &SharedCard,
+    status: &str,
+) -> sqlx_core::Result<Value> {
+    let mut body = json!(estimate(viewer, other, &Rarity::of(cards)));
+    body["estimated"] = json!(true);
+    body["status"] = json!(status);
+    body["person"] = person(other);
+    body["profileId"] = json!(viewer.profile_id);
+    body["relationship"] = relationship(pool, account, &other.account_id).await?;
+    Ok(body)
 }
