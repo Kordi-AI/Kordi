@@ -55,6 +55,8 @@ mod refresh_tests;
 mod routes_tests;
 mod safety_tests;
 mod service_fixture;
+mod slack_channels_tests;
+mod slack_options_route_tests;
 mod sweep_tests;
 mod webhook_tests;
 

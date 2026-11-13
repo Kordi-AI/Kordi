@@ -24,6 +24,7 @@ mod person;
 mod person_replies;
 mod progress;
 mod publish;
+mod refusal;
 mod rounds;
 mod slots;
 pub(crate) use outcome::{
@@ -31,6 +32,7 @@ pub(crate) use outcome::{
     parent_completion_body, separate_control_outcome,
 };
 pub(crate) use person_replies::match_replies as match_person_replies;
+pub(crate) use refusal::note as reach_note;
 mod store;
 pub(crate) use lifecycle::{finish, reconcile};
 pub(crate) use main_row::{show_waiting, yield_in_place};
@@ -118,9 +120,11 @@ async fn execute(
     }
     if input.action == "capabilities" {
         let people = person::directory(pool, &parent).await?;
-        return Ok(
-            json!({"available":true,"targets":directory(pool, &parent).await?,"people":people}),
-        );
+        let targets = directory(pool, &parent).await?;
+        // Nobody to reach (the owner's private chat with only their own
+        // agent) leaves the tool hidden: the agent asks in its reply.
+        let available = !targets.is_empty() || !people.is_empty();
+        return Ok(json!({"available":available,"targets":targets,"people":people}));
     }
     if input.tool_call_id.trim().is_empty() || input.tool_call_id.len() > 256 {
         return Err(RunError::NotFound);
@@ -281,13 +285,13 @@ pub(crate) async fn reachable(pool: &PgPool, run: &str) -> RunResult<Option<Valu
 }
 
 /// A lease advertises the tool only when its authorization and directory
-/// exist. The text is the same for every run of an agent, so the system
-/// prompt prefix stays stable; whom this run can reach is in the runtime
-/// note at the tail of its context.
+/// exist. The text depends only on whether the requester can be asked, so
+/// the system prompt prefix stays stable in a conversation; whom this run
+/// can reach is in the runtime note at the tail of its context.
 pub(crate) async fn guidance(pool: &PgPool, run: &str) -> RunResult<Option<String>> {
-    Ok(reachable(pool, run)
-        .await?
-        .map(|_| kordi_tools::reach_out::GUIDANCE.to_owned()))
+    Ok(reachable(pool, run).await?.map(|reachable| {
+        kordi_tools::reach_out::guidance(refusal::requester_listed(&reachable)).to_owned()
+    }))
 }
 
 async fn is_authorized(pool: &PgPool, run: &str) -> RunResult<bool> {

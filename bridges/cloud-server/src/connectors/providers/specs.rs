@@ -110,8 +110,14 @@ pub static SLACK: ProviderSpec = ProviderSpec {
     token_url: "https://slack.com/api/oauth.v2.access",
     revoke_url: Some("https://slack.com/api/auth.revoke"),
     // `slack_read_channel` and polling read history in public and private
-    // channels. Channels are chosen by id, so no list or user scopes.
-    read_scopes: &["channels:history", "groups:history"],
+    // channels. `channels:read` and `groups:read` list the channels the
+    // person can choose for Kordi in settings; no user or DM scopes.
+    read_scopes: &[
+        "channels:history",
+        "groups:history",
+        "channels:read",
+        "groups:read",
+    ],
     act_scopes: &["chat:write"],
     scope_param: ScopeParam::SlackUserScope,
     supports_pkce: false,
@@ -119,6 +125,8 @@ pub static SLACK: ProviderSpec = ProviderSpec {
     catalog_scopes: &[
         ("channels:history", &["slack.channels.read"]),
         ("groups:history", &["slack.channels.read"]),
+        ("channels:read", &["slack.channels.read"]),
+        ("groups:read", &["slack.channels.read"]),
         ("chat:write", &["slack.messages.write"]),
     ],
 };
