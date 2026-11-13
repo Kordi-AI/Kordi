@@ -70,7 +70,7 @@ test('contact info sheet preview', async ({ page }, testInfo) => {
   await expect(profile.getByRole('button', { name: 'Video', exact: true })).toBeVisible();
   await expect(profile.getByRole('button', { name: 'Copy ID' })).toBeVisible();
   await expect(profile.getByRole('button', { name: /^Photos\s*7$/ })).toBeVisible();
-  await expect(profile.getByRole('button', { name: /^Files\s*2$/ })).toBeVisible();
+  await expect(profile.getByRole('button', { name: /^Files\s*3$/ })).toBeVisible();
   await profile.getByRole('button', { name: /^Links\s*3$/ }).click();
   await expect(profile.getByRole('region', { name: 'Links' })).toBeVisible();
   await profile.getByRole('button', { name: 'Back to profile' }).click();
