@@ -229,7 +229,7 @@ async fn organizer_revision(
     mut args: PlanCardProposeArgs,
 ) -> Result<PlanCardProposeArgs, Rejection> {
     let Some(event_id) = args.existing_event_id.as_deref() else {
-        return Err(forbidden("Plan cards are proposed by the System agent."));
+        return Err(forbidden("Plan cards are proposed by the Facilitator."));
     };
     if !is_active_member(pool, args.conversation_id, account_id).await {
         return Err(store_error(PlanCardStoreError::Forbidden));

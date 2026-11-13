@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Facilitator naming · Kordi proposal</title>
+<style>
+:root{
+  --font:-apple-system,"SF Pro Text",Inter,system-ui,sans-serif;
+  --page:#e9e9ee;--chrome-muted:rgba(60,60,67,.6);
+  --canvas:#fafafa;--bubble:#f0f0f2;--text:#1c1c1e;--muted:#6b6b70;--line:rgba(0,0,0,.08);
+  --name:#2a62c9;--mention:#1d6b3a;--mark:rgba(214,80,60,.14);--mark-line:rgba(214,80,60,.55);
+  --bar:#2a62c9;--row:#fff;
+}
+@media (prefers-color-scheme:dark){
+  :root{--page:#141416;--chrome-muted:rgba(235,235,245,.6);--canvas:#1c1c1e;--bubble:#2a2a2d;--text:#f2f2f7;--muted:#a0a0a8;
+    --line:rgba(255,255,255,.1);--name:#6f9cf0;--mention:#5fc287;--mark:rgba(240,110,90,.18);--row:#242427}
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--text);font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased;padding:20px 16px 48px}
+h1{font-size:17px;font-weight:600;margin:0 auto 4px;max-width:1240px}
+.lede{max-width:1240px;margin:0 auto 18px;color:var(--chrome-muted);font-size:13px}
+.grid{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px}
+.col{background:var(--canvas);border-radius:14px;border:1px solid var(--line);padding:16px 16px 20px;min-width:0}
+.col > h2{font-size:13px;font-weight:600;margin:0 0 14px}
+.col > h2 span{font-weight:400;color:var(--muted);margin-left:6px}
+h3{font-size:12px;font-weight:600;color:var(--muted);margin:18px 0 8px}
+.msg{display:flex;gap:10px;align-items:flex-end;margin:0 0 10px}
+.msg img{width:32px;height:32px;border-radius:8px;flex-shrink:0}
+.bubble{background:var(--bubble);border-radius:14px;padding:8px 12px;min-width:0}
+.bubble .who{color:var(--name);font-weight:600;font-size:13px;margin-bottom:2px}
+.bubble p{margin:0 0 4px}
+.bubble p:last-child{margin:0}
+.m{color:var(--mention);font-weight:600}
+.flag{background:var(--mark);box-shadow:inset 0 0 0 1px var(--mark-line);border-radius:4px;padding:0 2px}
+.note{font-size:12px;color:var(--muted);margin:2px 0 12px 42px}
+.rows{background:var(--row);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.row{padding:10px 12px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row .top{display:flex;justify-content:space-between;gap:12px;font-size:13px}
+.row .top span:last-child{color:var(--muted);font-variant-numeric:tabular-nums}
+.track{height:4px;border-radius:2px;background:var(--line);margin:7px 0 5px}
+.track i{display:block;height:100%;border-radius:2px;background:var(--bar)}
+.row small{color:var(--muted);font-size:12px}
+.consent{font-size:13px;color:var(--muted);margin:0;padding:10px 12px}
+</style>
+</head>
+<body>
+<h1>Facilitator naming</h1>
+<p class="lede">Group notices, the Facilitator agent and Settings copy. Red marks what changes.</p>
+
+<div class="grid">
+  <section class="col">
+    <h2>Now</h2>
+
+    <h3>Group created from a Grounding room</h3>
+    <div class="msg"><img src="../../../app/desktop/public/kordi-system-avatar.jpg" alt="">
+      <div class="bubble"><div class="who flag">System</div>
+        <p>Welcome everyone to the Developer tools and CI group.</p>
+        <p><span class="m">@Alex Rivera</span>: working on CI workflows and tests; can help with CI debugging and flaky tests.</p>
+        <p class="flag"><span class="m">@Bea Okafor</span> (invited): working on ICLR 2027 reviewing and the Kordi hackathon GitHub app; can help with peer review.</p>
+      </div>
+    </div>
+    <p class="note">Bea has not accepted yet, but is tagged and her card is shared with the group.</p>
+
+    <h3>Bea joins</h3>
+    <div class="msg"><img src="../../../app/desktop/public/kordi-system-avatar.jpg" alt="">
+      <div class="bubble"><div class="who flag">System</div>
+        <p><span class="m">@Bea Okafor</span> joined. Working on ICLR 2027 reviewing and <span class="flag">kordi</span> hackathon GitHub app; can help with peer review and <span class="flag">gitHub</span> app integrations. Shares large language models with <span class="flag"><span class="m">@Alex</span> Rivera</span>.</p>
+      </div>
+    </div>
+
+    <h3>Settings › Usage</h3>
+    <div class="rows">
+      <div class="row"><div class="top"><span class="flag">System agent per chat</span><span>12 of 40</span></div><div class="track"><i style="width:30%"></i></div><small>Resets at 00:00 UTC</small></div>
+      <div class="row"><div class="top"><span class="flag">System agent</span><span>Running</span></div></div>
+    </div>
+
+    <h3>AI consent</h3>
+    <div class="rows"><p class="consent">Agents, <span class="flag">the System agent</span>, Digest and Grounding send the messages, files and calendar details they work on to AI providers such as OpenAI, Anthropic and Google.</p></div>
+  </section>
+
+  <section class="col">
+    <h2>Proposed</h2>
+
+    <h3>Group created from a Grounding room</h3>
+    <div class="msg"><img src="../../../app/desktop/public/kordi-system-avatar.jpg" alt="">
+      <div class="bubble"><div class="who">Facilitator</div>
+        <p>Welcome to the Developer tools and CI group.</p>
+        <p><span class="m">@Alex Rivera</span>: working on CI workflows and tests; can help with CI debugging and flaky tests.</p>
+      </div>
+    </div>
+    <p class="note">Invited people are left out until they accept: no tag, no card.</p>
+
+    <h3>Bea joins</h3>
+    <div class="msg"><img src="../../../app/desktop/public/kordi-system-avatar.jpg" alt="">
+      <div class="bubble"><div class="who">Facilitator</div>
+        <p><span class="m">@Bea Okafor</span> joined. Working on ICLR 2027 reviewing and Kordi hackathon GitHub app; can help with peer review and GitHub app integrations. Shares large language models with <span class="m">@Alex Rivera</span>.</p>
+      </div>
+    </div>
+
+    <h3>Settings › Usage</h3>
+    <div class="rows">
+      <div class="row"><div class="top"><span>Facilitator per chat</span><span>12 of 40</span></div><div class="track"><i style="width:30%"></i></div><small>Resets at 00:00 UTC</small></div>
+      <div class="row"><div class="top"><span>Facilitator</span><span>Running</span></div></div>
+    </div>
+
+    <h3>AI consent</h3>
+    <div class="rows"><p class="consent">Agents, the Facilitator, Digest and Grounding send the messages, files and calendar details they work on to AI providers such as OpenAI, Anthropic and Google.</p></div>
+  </section>
+</div>
+</body>
+</html>

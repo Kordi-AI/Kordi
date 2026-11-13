@@ -22,9 +22,10 @@ export function isFacilitatorHandoffRequestId(id: string | null | undefined): bo
   return id?.startsWith('facilitator-handoff:') ?? false;
 }
 
-/** Server notices such as introductions and joins show as System with the front-facing Kordi bird. */
+/** Server notices such as introductions and joins show as the Facilitator, with the
+ * front-facing Kordi bird, so they read as the same Facilitator as the agent. */
 export const KORDI_SYSTEM_NOTICE_KIND = 'system-notice';
-export const KORDI_SYSTEM_NAME = 'System';
+export const KORDI_SYSTEM_NAME = KORDI_FACILITATOR_NAME;
 export const KORDI_SYSTEM_AVATAR_URL = publicAssetPath('kordi-system-avatar.jpg');
 
 export function isSystemAvatarUrl(url: string | null | undefined): boolean {

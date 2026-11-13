@@ -34,6 +34,7 @@ pub use agent::bootstrap_system_agent;
 pub(crate) use config::test_config;
 pub use config::{
     PendingSystemAgentConfig, SystemAgentConfig, SystemAgentConfigError, SystemAgentProviderAuth,
+    DEFAULT_SYSTEM_AGENT_NAME,
 };
 pub use store::RUN_PREFIX;
 pub use worker::spawn;

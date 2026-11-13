@@ -48,7 +48,7 @@ enum AIConsentGate {
 /// Contract copy for the AI choice.
 enum AIConsentCopy {
     static let title = "Kordi uses AI models"
-    static let body = "Agents, the System agent, Digest and Grounding send the messages, files and calendar details they work on to AI providers such as OpenAI, Anthropic and Google."
+    static let body = "Agents, the Facilitator, Digest and Grounding send the messages, files and calendar details they work on to AI providers such as OpenAI, Anthropic and Google."
     static let declinedTitle = "AI models are off"
     static let declinedMessage = "Allow in Settings › Privacy to use agents."
     static let toggle = "Share with AI models"

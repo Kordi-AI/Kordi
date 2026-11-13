@@ -36,7 +36,7 @@ export function cloudAccountSettingsNavGroups({
         ...(memoryAvailable
           ? [{ id: 'memory' as const, label: 'Memory', icon: Brain, keywords: ['lessons', 'remember', 'forget', 'privacy'] }]
           : []),
-        { id: 'usage', label: 'Usage', icon: Gauge, keywords: ['limits', 'runs', 'spend', 'quota', 'system agent', 'grounding'] },
+        { id: 'usage', label: 'Usage', icon: Gauge, keywords: ['limits', 'runs', 'spend', 'quota', 'facilitator', 'system agent', 'grounding'] },
         { id: 'appearance', label: 'Appearance', icon: Palette, keywords: ['theme', 'dark', 'light', 'chat', 'threads', 'message layout'] },
         ...(updatesAvailable
           ? [{ id: 'updates' as const, label: 'Updates', icon: RefreshCw, keywords: ['version', 'automatic', 'install', 'restart'] }]

@@ -126,8 +126,8 @@ enum UsagePresentation {
         case "pool.runs": "Runs"
         case "pool.spend": "Spend"
         case "account.grounding_runs": "Grounding"
-        case "conversation.system_agent_runs": "System agent per chat"
-        case "pool.stopped": "System agent"
+        case "conversation.system_agent_runs": "Facilitator per chat"
+        case "pool.stopped": "Facilitator"
         default: "Limit"
         }
     }

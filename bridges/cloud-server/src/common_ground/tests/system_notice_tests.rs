@@ -107,7 +107,7 @@ async fn a_new_group_holds_system_not_system_agent_and_hides_it() {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(display_name.as_deref(), Some("System"));
+    assert_eq!(display_name.as_deref(), Some("Facilitator"));
 
     let (_, results) = send(
         &app,

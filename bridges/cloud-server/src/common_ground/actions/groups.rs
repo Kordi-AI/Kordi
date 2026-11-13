@@ -164,7 +164,6 @@ pub(in crate::common_ground) async fn start_group(
             topic: topic.as_deref(),
             creator: viewer,
             added: &created.added,
-            invited: &created.invited,
         };
         if let Err(error) = intro::queue(pool, system_agent.config(), intro).await {
             eprintln!("[common-ground] Could not queue a group intro: {error}");

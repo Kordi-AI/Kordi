@@ -20,6 +20,7 @@ use crate::service_model_config::{shared_setting, validate_base_url};
 pub const DEFAULT_SYSTEM_AGENT_ACCOUNT_ID: &str = "acct_kordi_pip";
 pub const DEFAULT_SYSTEM_AGENT_ID: &str = "cloud_agent_kordi_pip";
 pub const DEFAULT_SYSTEM_AGENT_NAME: &str = "Facilitator";
+const LEGACY_NOTICE_NAME: &str = "System";
 pub const DEFAULT_SYSTEM_AGENT_SUBTITLE: &str =
     "Helps the group clarify goals and agree on next steps";
 pub const DEFAULT_SYSTEM_AGENT_OWNER_EMAIL: &str =
@@ -387,9 +388,9 @@ impl PendingSystemAgentConfig {
             owner_email,
             agent_id: required_or_default(&mut get, "AGENT_ID", DEFAULT_SYSTEM_AGENT_ID),
             name: setting(&mut get, "AGENT_NAME")
-                .filter(|name| {
-                    !name.eq_ignore_ascii_case(crate::system_account::SYSTEM_DISPLAY_NAME)
-                })
+                // "System" was the notice account's old name; the agent and
+                // the notices both show as the Facilitator now.
+                .filter(|name| !name.eq_ignore_ascii_case(LEGACY_NOTICE_NAME))
                 .unwrap_or_else(|| DEFAULT_SYSTEM_AGENT_NAME.to_string()),
             subtitle: required_or_default(
                 &mut get,

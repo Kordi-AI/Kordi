@@ -1,6 +1,7 @@
-//! Group intros: a group started from a room opens with System introducing
-//! everyone, written by one plain completion on the Kordi key. Invited
-//! people who join later get a templated line instead, with no model call.
+//! Group intros: a group started from a room opens with the Facilitator
+//! introducing the people already in it, written by one plain completion on
+//! the Kordi key. Invited people are left out until they accept: each gets a
+//! templated line when they join, with no model call.
 
 mod mentions;
 mod prompt;
@@ -34,7 +35,6 @@ pub(super) struct NewIntro<'a> {
     pub topic: Option<&'a str>,
     pub creator: &'a str,
     pub added: &'a [String],
-    pub invited: &'a [String],
 }
 
 /// The (account, profile) pairs these accounts joined `room_id` with.
@@ -115,7 +115,6 @@ pub(super) async fn queue(
 ) -> sqlx_core::Result<()> {
     let accounts: Vec<(String, Role)> = std::iter::once((intro.creator.to_string(), Role::Creator))
         .chain(intro.added.iter().map(|id| (id.clone(), Role::Added)))
-        .chain(intro.invited.iter().map(|id| (id.clone(), Role::Invited)))
         .collect();
     let people = introduced(pool, intro.room_id, &accounts).await?;
     let run_id = runs::new_run_id(INTRO_PREFIX);
@@ -171,8 +170,9 @@ fn clean_reply(text: &str) -> String {
         .collect::<String>()
 }
 
-/// Everyone an intro names, as it names them: the creator, the people added
-/// and the people invited, without the System account or the System agent.
+/// Everyone an intro may name, as it names them: the creator and the people
+/// in the group, without service accounts. Invited people who have not
+/// joined are never mentioned.
 async fn intro_members(
     pool: &PgPool,
     group_space_id: &str,
@@ -185,9 +185,6 @@ async fn intro_members(
              UNION ALL
              SELECT account_id, 1, joined_at FROM cloud_chat_conversation_members
              WHERE conversation_id = $2 AND membership_state = 'active'
-             UNION ALL
-             SELECT invitee_account_id, 2, created_at FROM cloud_common_ground_room_invitations
-             WHERE group_space_id = $1
          ) people
          JOIN cloud_accounts account ON account.account_id = people.account_id
          ORDER BY people.rank, people.at, people.account_id",

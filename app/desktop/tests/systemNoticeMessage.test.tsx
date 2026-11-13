@@ -31,18 +31,18 @@ function systemAgentMessage(messageKind: string, text: string): CanonicalSession
   };
 }
 
-test('system notices show as System with the front-facing bird and no tag', () => {
+test('system notices show as the Facilitator with the front-facing bird and no tag', () => {
   const text = 'Welcome to the group.\nAlex joined. Ask me to plan something together.';
   const message = mapCanonicalMessage(systemAgentMessage('system-notice', text), new Map([[systemAgent.id, systemAgent]]), 'human:me');
   assert.ok(message);
   assert.equal(message.role, 'person');
-  assert.equal(message.sender, 'System');
+  assert.equal(message.sender, 'Facilitator');
   assert.equal(message.senderProfileImageUrl, KORDI_SYSTEM_AVATAR_URL);
   assert.equal(message.showSenderMeta, true);
   assert.equal(message.text, text);
 
   const markup = renderToStaticMarkup(createElement(MessageBubble, { msg: message, onOpenSenderProfile: () => {} }));
-  assert.match(markup, />System</);
+  assert.match(markup, />Facilitator</);
   assert.match(markup, /kordi-system-avatar\.jpg/);
   assert.doesNotMatch(markup, /Built-in agent|PiP/);
   assert.doesNotMatch(markup, /aria-label="Open System profile"/);

@@ -351,11 +351,14 @@ function blobEmojiRanges(text: string): InlineRange[] {
   return ranges;
 }
 
-function isMentionBoundary(text: string, index: number, length: number) {
+function isMentionBoundary(text: string, index: number, length: number, sentenceEnd = false) {
   const before = text[index - 1] ?? '';
   const after = text[index + length] ?? '';
+  // A known person may end a sentence ("… with @Alex Rivera."); a textual
+  // handle such as "@alex.smith" may not.
+  const endsSentence = sentenceEnd && after === '.' && !/\S/u.test(text[index + length + 1] ?? '');
   return (!before || !/[\p{L}\p{N}._%+-]/u.test(before))
-    && (!after || !/[\p{L}\p{N}._'-]/u.test(after));
+    && (!after || endsSentence || !/[\p{L}\p{N}._'-]/u.test(after));
 }
 
 function inferredMentionTargetKind(label: string): 'agent' | 'person' {
@@ -392,7 +395,7 @@ function structuredMentionRanges(text: string, mentions: MessageMention[], reser
       end,
     };
     if (
-      isMentionBoundary(text, start, end - start)
+      isMentionBoundary(text, start, end - start, true)
       && !reserved.some((range) => rangesOverlap(candidate, range))
       && !ranges.some((range) => rangesOverlap(candidate, range))
     ) {

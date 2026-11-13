@@ -85,7 +85,7 @@ final class SystemNoticeIdentityTests: XCTestCase {
         let message = try XCTUnwrap(projected.first { $0.id == "notice" })
         let systemAgentReply = try XCTUnwrap(projected.first { $0.id == "reply" })
 
-        XCTAssertEqual(message.authorName, "System")
+        XCTAssertEqual(message.authorName, "Facilitator")
         XCTAssertEqual(message.text, "Maya joined.")
         XCTAssertFalse(message.isSystemNotice, "Notices keep the normal bubble layout")
         XCTAssertEqual(systemAgentReply.authorName, KordiSystemAgentIdentity.displayName)
@@ -105,7 +105,7 @@ final class SystemNoticeIdentityTests: XCTestCase {
 
         let identity = MessageAuthorIdentity.resolve(notice, in: conversation, account: nil, mentionTargets: [])
 
-        XCTAssertEqual(identity.name, "System")
+        XCTAssertEqual(identity.name, "Facilitator")
         XCTAssertNil(identity.source)
         XCTAssertEqual(identity.seed, KordiSystemIdentity.seed)
         XCTAssertFalse(KordiSystemAgentIdentity.matches(name: identity.name, seed: identity.seed))
@@ -118,7 +118,7 @@ final class SystemNoticeIdentityTests: XCTestCase {
 
     func testPlanAgentMessageWithoutTheKindShowsAsSystem() {
         let conversation = makeGroup()
-        for authorName in ["System", KordiSystemAgentIdentity.legacyName] {
+        for authorName in ["Facilitator", KordiSystemIdentity.legacyDisplayName, KordiSystemAgentIdentity.legacyName] {
             let message = ChatMessage(
                 id: "system-agent", conversationId: conversation.id, author: .person, authorName: authorName,
                 text: "Plan", createdAt: .distantPast, deliveryState: .sent, errorMessage: nil,
