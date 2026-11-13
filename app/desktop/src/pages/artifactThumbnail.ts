@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
 import type { DocumentShareApi } from '@/features/documents/documentShareApi';
 import { documentFormatForPath } from '@/features/documents/documentReaderModel';
 import { rememberDocumentTitle } from '@/features/documents/documentTitles';
@@ -8,7 +7,7 @@ import type { SessionArtifact } from '@/kordi-app/types';
 
 import { artifactDocumentApi } from './artifactDocumentApi';
 import { artifactPreviewKind } from './artifactPreviewFormat';
-import { loadArtifactPreview } from './artifactPreviewLoader';
+import { artifactPreviewsAvailable, loadArtifactPreview } from './artifactPreviewLoader';
 
 export type ArtifactThumbnailKind = ReturnType<typeof artifactPreviewKind>;
 
@@ -72,7 +71,7 @@ async function loadCloudDocument(artifact: SessionArtifact, api: NonNullable<Art
 }
 
 async function loadLocalFile(artifact: SessionArtifact, context: ArtifactThumbnailContext): Promise<ArtifactThumbnailSource | null> {
-  if (!context.isNativeShell && !isBrowserAppRuntime()) return null;
+  if (!artifactPreviewsAvailable(context.isNativeShell)) return null;
   const preview = await loadArtifactPreview({
     isNativeShell: context.isNativeShell,
     path: artifact.path,

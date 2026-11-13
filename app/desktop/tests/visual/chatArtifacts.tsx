@@ -4,7 +4,7 @@
 // artifacts or memories, and `?layout=list` or `?layout=cards` saves that
 // layout first (otherwise the saved choice applies, cards by default). It makes no network calls and needs no session.
 import './previewChatTheme';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { DocumentReaderHostContext, type DocumentReaderHost } from '../../src/features/documents/documentReaderHost';
@@ -14,7 +14,12 @@ import type { DocumentResponse } from '../../src/features/documents/documentShar
 import type { Conversation, SessionArtifact } from '../../src/kordi-app/types';
 import { ARTIFACT_LAYOUT_STORAGE_KEY } from '../../src/pages/artifactLayoutPreference';
 import { setArtifactDocumentApiForPreview } from '../../src/pages/artifactDocumentApi';
+import { setArtifactPreviewLoaderForPreview } from '../../src/pages/artifactPreviewLoader';
 import { isNativeDesktopShell } from '../../src/lib/desktop';
+import { COMPANION_DOCUMENT_OPEN_EVENT, type CompanionDocument } from '../../src/features/documents/companionDocument';
+import type { DesktopArtifactPreview } from '../../src/kordi-app/types';
+import { ArtifactPreviewWindow } from '../../src/pages/ArtifactInspector';
+import { loadArtifactPreview } from '../../src/pages/artifactPreviewLoader';
 import { ChatDetailPanel } from '../../src/pages/ChatDetailPanel';
 import { ChatMemoryTab } from '../../src/pages/ChatMemoryTab';
 import { RightDetailRail } from '../../src/pages/RightDetailRail';
@@ -67,6 +72,98 @@ setArtifactDocumentApiForPreview({
   getDocumentRaw: async (attachmentId) => (attachmentId === 'att_signup' ? SIGNUP_PAGE : PRICING_PAGE),
 });
 
+// Contents of the synthetic project files, one per file type the tab draws, so each type can be
+// reviewed in the cards, the list, and the preview without the desktop app.
+const LOCAL_FILES: Record<string, string> = {
+  'src/headlines.ts': `export type Headline = { id: string; text: string; audience: 'teams' | 'writers' };
+
+/** Launch headlines, tested in pairs on the pricing page. */
+export const HEADLINES: Headline[] = [
+  { id: 'h1', text: 'Everything your agent writes, in one place', audience: 'teams' },
+  { id: 'h2', text: 'Draft together, with the agent in the room', audience: 'writers' },
+  { id: 'h3', text: 'Shared documents for every group chat', audience: 'teams' },
+];
+
+export function pickHeadline(audience: Headline['audience'], seed: number) {
+  const options = HEADLINES.filter((headline) => headline.audience === audience);
+  return options[seed % options.length];
+}
+`,
+  'data/pricing.csv': `Plan,Monthly price,Seats,Shared documents,Agent runs per day
+Free,0,3,10,20
+Team,12,25,Unlimited,500
+Business,29,200,Unlimited,5000
+Enterprise,Custom,Unlimited,Unlimited,Custom
+`,
+  'data/launch-metrics.json': JSON.stringify({
+    week: '2026-11-02',
+    signups: { total: 1284, fromInvites: 512, organic: 772 },
+    documents: { created: 3410, sharedByLink: 618, editedByAgent: 1975 },
+    retention: { day1: 0.62, day7: 0.41 },
+  }),
+  'diagrams/signup-flow.mmd': `flowchart LR
+  A[Landing page] --> B{Has an invite?}
+  B -- Yes --> C[Join the group]
+  B -- No --> D[Create a team]
+  D --> E[Invite teammates]
+  C --> F[First shared document]
+  E --> F
+`,
+  'brand/launch-badge.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <rect width="320" height="200" rx="28" fill="#1f2937"/>
+  <circle cx="92" cy="100" r="46" fill="#f59e0b"/>
+  <path d="M74 100l12 12 24-26" stroke="#1f2937" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="160" y="92" fill="#f9fafb" font-family="system-ui" font-size="26" font-weight="700">Shared</text>
+  <text x="160" y="124" fill="#f9fafb" font-family="system-ui" font-size="26" font-weight="700">documents</text>
+</svg>
+`,
+  'scripts/clean_events.py': `"""Drop duplicate launch events before the weekly report."""
+import csv
+import sys
+
+
+def clean(rows):
+    seen = set()
+    for row in rows:
+        key = (row["user_id"], row["event"], row["day"])
+        if key in seen:
+            continue
+        seen.add(key)
+        yield row
+
+
+if __name__ == "__main__":
+    reader = csv.DictReader(sys.stdin)
+    writer = csv.DictWriter(sys.stdout, fieldnames=reader.fieldnames)
+    writer.writeheader()
+    writer.writerows(clean(reader))
+`,
+  'notes/standup.txt': `Standup, Nov 8
+
+Taylor: pricing page copy is ready for review.
+Priya: interview notes are in Artifacts; two teams asked for phone editing.
+Agent: drafted the FAQ and the announcement email.
+
+Blockers: none.
+Next: review the launch brief together on Monday.
+`,
+};
+
+/** A file's text: the project copy, or the cloud copy of a shared document. */
+function sampleText(path: string, attachmentId?: string | null) {
+  if (LOCAL_FILES[path] !== undefined) return LOCAL_FILES[path];
+  if (attachmentId === 'att_pricing') return PRICING_PAGE;
+  if (attachmentId === 'att_signup') return SIGNUP_PAGE;
+  const cloud = attachmentId ? CLOUD_MARKDOWN[attachmentId] : undefined;
+  return cloud ? cloud.blocks.join('\n\n') : undefined;
+}
+
+setArtifactPreviewLoaderForPreview(async ({ path, attachmentId }) => {
+  const text = sampleText(path, attachmentId);
+  if (text === undefined) throw new Error('No such file or directory (os error 2)');
+  return { path, truncated: false, lines: text.split('\n').map((line, index) => ({ number: index + 1, text: line })) };
+});
+
 // The preview stands in for a server that reports memory routes.
 publishMemoryVersion(1);
 
@@ -100,6 +197,11 @@ const artifacts: SessionArtifact[] = empty ? [] : [
   { id: 'faq', path: 'notes/faq.md', name: 'faq.md', kind: 'document', category: 'artifact', summary: 'Created', timeLabel: 'Yesterday', createdByAccountId: 'acct_priya', attachmentId: 'att_faq' },
   { id: 'email-draft', path: 'notes/announcement-email.md', name: 'announcement-email.md', kind: 'document', category: 'artifact', summary: 'Created', timeLabel: 'Mon', attachmentId: 'att_email' },
   { id: 'signup-page', path: 'site/signup.html', name: 'signup.html', kind: 'document', category: 'artifact', summary: 'Created', timeLabel: 'Mon', createdByAccountId: 'acct_taylor', attachmentId: 'att_signup' },
+  { id: 'launch-metrics', path: 'data/launch-metrics.json', name: 'launch-metrics.json', kind: 'code', category: 'artifact', summary: 'Created', timeLabel: 'Mon' },
+  { id: 'signup-flow', path: 'diagrams/signup-flow.mmd', name: 'signup-flow.mmd', kind: 'file', category: 'artifact', summary: 'Created', timeLabel: 'Mon', createdByAccountId: 'acct_taylor' },
+  { id: 'badge', path: 'brand/launch-badge.svg', name: 'launch-badge.svg', kind: 'file', category: 'artifact', summary: 'Created', timeLabel: 'Sun' },
+  { id: 'clean-events', path: 'scripts/clean_events.py', name: 'clean_events.py', kind: 'code', category: 'artifact', summary: 'Created', timeLabel: 'Sun' },
+  { id: 'standup', path: 'notes/standup.txt', name: 'standup.txt', kind: 'document', category: 'artifact', summary: 'Created', timeLabel: 'Nov 8' },
   { id: 'headline-test', path: 'src/headlines.ts', name: 'headlines.ts', kind: 'code', category: 'related', summary: 'Modified', timeLabel: '09:41' },
   { id: 'pricing-data', path: 'data/pricing.csv', name: 'pricing.csv', kind: 'file', category: 'related', summary: 'Created', timeLabel: '09:30' },
 ];
@@ -117,6 +219,17 @@ const readerHost: DocumentReaderHost = {
 function Preview() {
   const [tab, setTab] = useState<'info' | 'artifacts' | 'tasks' | 'memory'>(params.get('tab') === 'memory' ? 'memory' : 'artifacts');
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
+  // The page has no companion pane, so a Markdown or HTML document opens in the preview window instead.
+  const [companion, setCompanion] = useState<DesktopArtifactPreview | null>(null);
+  useEffect(() => {
+    const open = (event: Event) => {
+      const { artifact } = (event as CustomEvent<CompanionDocument>).detail;
+      event.preventDefault();
+      void loadArtifactPreview({ isNativeShell: false, path: artifact.path, attachmentId: artifact.attachmentId }).then(setCompanion).catch(() => undefined);
+    };
+    window.addEventListener(COMPANION_DOCUMENT_OPEN_EVENT, open);
+    return () => window.removeEventListener(COMPANION_DOCUMENT_OPEN_EVENT, open);
+  }, []);
   return (
     <div
       className={`kordi-app theme-${theme}`}
@@ -166,6 +279,14 @@ function Preview() {
           </div>
         </section>
       </div>
+      {companion ? (
+        <ArtifactPreviewWindow
+          preview={companion}
+          title={companion.path.split('/').pop() ?? companion.path}
+          kindLabel={/\.html?$/i.test(companion.path) ? 'Preview' : 'Markdown'}
+          onClose={() => setCompanion(null)}
+        />
+      ) : null}
     </div>
   );
 }

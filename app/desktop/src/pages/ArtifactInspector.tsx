@@ -1,6 +1,5 @@
 import { fileNameFromPath, extensionLabel, languageFromPath, artifactPreviewKind } from './artifactPreviewFormat';
-import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
-import { loadArtifactPreview } from './artifactPreviewLoader';
+import { artifactPreviewsAvailable, loadArtifactPreview } from './artifactPreviewLoader';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Braces, ChevronLeft, FileText, FolderOpen, Globe2, LoaderCircle, Maximize2, X } from 'lucide-react';
 import { ErrorLine } from '@/components/ui/ErrorLine';
@@ -311,7 +310,7 @@ export function ArtifactInspector({
   useEffect(() => {
     setPreviewError(null);
 
-    if (!previewArtifact?.id || !activePreviewKey || (!isNativeShell && !isBrowserAppRuntime()) || cachedPreview || opensInCompanion) {
+    if (!previewArtifact?.id || !activePreviewKey || !artifactPreviewsAvailable(isNativeShell) || cachedPreview || opensInCompanion) {
       setIsPreviewLoading(false);
       return;
     }

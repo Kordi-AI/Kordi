@@ -57,10 +57,10 @@ for (const theme of ['light', 'dark'] as const) {
     await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
     const edge = await memoryTextEdge(page);
     await page.goto(`/tests/visual/chatArtifacts.html?theme=${theme}`);
-    await expect(page.locator('[data-artifact-card="true"]')).toHaveCount(8);
-    // Markdown and HTML draw their first lines; files without a copy here show their type mark.
-    await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(6);
-    await expect(page.locator('[data-thumbnail-status="none"]')).toHaveCount(2);
+    await expect(page.locator('[data-artifact-card="true"]')).toHaveCount(13);
+    // Every sample type draws its first lines: Markdown, HTML, JSON, Mermaid, SVG, Python, text,
+    // TypeScript, and CSV.
+    await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(13);
     await expect(page.locator('[data-artifact-card-title]').first()).toHaveText('Launch brief');
     await expect(page.locator('[aria-current="true"]')).toHaveCount(0);
     // Changed project files share the grid and say how they changed.
@@ -89,9 +89,9 @@ test('the layout switch moves to the list and stays there after a reload (light)
   await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
   await page.goto('/tests/visual/chatArtifacts.html?theme=light');
   await page.getByRole('button', { name: 'List', exact: true }).click();
-  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(8);
+  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(13);
   await page.reload();
-  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(8);
+  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(13);
   await expect(page.getByRole('button', { name: 'List', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -99,7 +99,7 @@ test('chat artifacts list rows are one line and line up with the toolbar (light)
   await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
   await page.goto('/tests/visual/chatArtifacts.html?theme=light&layout=list');
   const rows = page.locator('[data-artifact-row-shell]');
-  await expect(rows).toHaveCount(8);
+  await expect(rows).toHaveCount(13);
   await expect(page.locator('[data-artifact-file-row="true"][aria-current="true"]')).toHaveCount(0);
 
   // A row's fill runs exactly from the search field's left edge to the New button's right edge.
