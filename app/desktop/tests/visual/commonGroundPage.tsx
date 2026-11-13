@@ -18,7 +18,7 @@ import '../../src/index.css';
 
 // Login-free preview of Common ground in the real Contacts page. A fetch stub answers the
 // `/v1/cloud/common-ground` routes from fixtures, with three profiles (`commonGroundVersion` 3).
-// Query: ?screen=home|unbuilt|build|card|look|lobby|results|match|meet|pair|pair-off, ?theme=light|dark, ?status=matching|matching-empty (results).
+// Query: ?screen=home|unbuilt|build|card|look|results|match|meet|pair|pair-off, ?theme=light|dark, ?status=matching|matching-empty (results).
 // "unbuilt" is Home with the Health card selected, which has no card yet, so Build opens in place.
 // "look" is the card page with the background and icon popover open; "pair" is Home with the
 // Pair popover open, and "pair-off" the same with sharing off.
@@ -74,7 +74,9 @@ const ROUTES: Record<string, (query: string, body: Record<string, unknown>) => u
     }
     return joinedRoom;
   },
-  'POST rooms': () => ({ ...fx.room, roomId: 'room_7319', code: '7319', name: 'Agents meetup', members: [] }),
+  // The room just joined lists its members while their matches run.
+  'POST rooms/5160/results': () => ({ ...fx.results, status: 'matching', people: [], topics: [], suggestion: null, groups: [] }),
+  'POST rooms': () =>({ ...fx.room, roomId: 'room_7319', code: '7319', name: 'Agents meetup', members: [] }),
   // ?status=matching|matching-empty shows results still being matched.
   'POST rooms/4821/results': () => {
     const status = params.get('status');
@@ -120,7 +122,6 @@ const STACKS: Record<string, CgScreen[]> = {
   build: [{ name: 'build' }],
   card: [{ name: 'card' }],
   look: [{ name: 'card' }],
-  lobby: [{ name: 'lobby', code: '4821' }],
   results: [{ name: 'results', code: '4821' }],
   match: [{ name: 'match', accountId: 'acct_hana' }],
   meet: [{ name: 'match', accountId: 'acct_hana' }],

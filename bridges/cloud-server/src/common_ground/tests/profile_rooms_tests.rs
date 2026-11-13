@@ -196,7 +196,11 @@ async fn rooms_share_one_profile_per_person() {
         })
         .collect();
     assert_eq!(shared, [("Priya", "health"), ("Sam", "work")], "{body}");
-    assert_eq!(matches_between(&pool, &alex.health, &priya.health).await, 1);
+    assert_eq!(
+        matches_between(&pool, &alex.health, &priya.health).await,
+        2,
+        "one run stores the pair for both people"
+    );
 
     // Switching the shared profile clears the matches and matches again.
     let switch = format!("{CG}/rooms/{code}/profile");
@@ -413,7 +417,11 @@ async fn deleting_a_profile_leaves_rooms_and_drops_its_matches() {
         Some(json!({"code": pair["code"]})),
     )
     .await;
-    assert_eq!(matches_between(&pool, &alex.work, &priya.work).await, 1);
+    assert_eq!(
+        matches_between(&pool, &alex.work, &priya.work).await,
+        2,
+        "stored for both people"
+    );
 
     let (status, _) = send(
         &app,

@@ -219,8 +219,15 @@ async fn nearby_background_work_keeps_the_organization_it_was_created_in() {
     let pools = setup(&pool).await;
     let here = spot();
     let (me, token) = located(&pools.app, &pool, "Viewer", here).await;
-    located(&pools.app, &pool, "Other", north(here, 200.0)).await;
+    let (other, _) = located(&pools.app, &pool, "Other", north(here, 200.0)).await;
     join(&pool, &pools.team, &me).await;
+    // Without match alerts of its own, the other person queues no run that
+    // would already match the pair, so the viewer's alert run is queued.
+    query("UPDATE cloud_common_ground_nearby SET alert_matches = false WHERE account_id = $1")
+        .bind(&other)
+        .execute(&pool)
+        .await
+        .unwrap();
 
     // Nearby turned on again and a request created in the team, a second
     // request in Personal; then the person goes back to Personal.

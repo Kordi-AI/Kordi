@@ -11,7 +11,7 @@ use crate::grounding::BuildOutcome;
 use crate::replay::{CardSnapshot, TurnOutcome};
 
 /// Metric names, in report order.
-pub const METRICS: [&str; 9] = [
+pub const METRICS: [&str; 10] = [
     "planCard",
     "workflow",
     "silence",
@@ -19,6 +19,7 @@ pub const METRICS: [&str; 9] = [
     "toolValidity",
     "repetition",
     "grounding",
+    "groundingMatch",
     "reliability",
     "sweep",
 ];
@@ -33,7 +34,12 @@ pub struct Check {
     pub detail: Option<String>,
 }
 
-fn check(metric: &str, name: impl Into<String>, passed: bool, detail: Option<String>) -> Check {
+pub(crate) fn check(
+    metric: &str,
+    name: impl Into<String>,
+    passed: bool,
+    detail: Option<String>,
+) -> Check {
     Check {
         metric: metric.to_string(),
         name: name.into(),

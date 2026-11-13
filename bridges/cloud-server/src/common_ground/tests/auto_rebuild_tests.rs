@@ -8,6 +8,7 @@ use sqlx_postgres::PgPool;
 
 use super::db_fixture::{account, app, pool, send, signed_in};
 use super::profile_memories_tests::{own, save};
+use super::rematch_support::limiter;
 use super::support::{build_card_with, card_reply, claim, claim_run, RUNNER};
 use crate::common_ground::auto::{sweep, AutoRebuildConfig, Hold, Outcome};
 use crate::common_ground::{complete, fail};
@@ -31,10 +32,11 @@ pub(super) async fn sweep_card(
     config: &AutoRebuildConfig,
 ) -> Option<Outcome> {
     let service = crate::system_agent::test_config(service);
+    let limiter = limiter();
     // Each claim pushes the cards it took a minute out, so a few sweeps
     // reach this card even when other marked cards are waiting.
     for _ in 0..5 {
-        let outcomes = sweep(pool, &service, config).await.unwrap();
+        let outcomes = sweep(pool, &service, &limiter, config).await.unwrap();
         if let Some((_, outcome)) = outcomes.into_iter().find(|(id, _)| id == profile_id) {
             return Some(outcome);
         }

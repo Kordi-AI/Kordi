@@ -203,6 +203,7 @@ pub(in crate::common_ground) async fn view(
         )
         .collect();
     let (groups, invitations) = actions::room_extras(pool, room_id, viewer).await?;
+    let matching_started = matching_started(pool, room_id).await?;
     Ok(json!({
         "roomId": room_id,
         "code": code,
@@ -215,7 +216,25 @@ pub(in crate::common_ground) async fn view(
         "members": members,
         "groups": groups,
         "invitations": invitations,
+        "matchingStarted": matching_started,
     }))
+}
+
+/// True once someone asked for the room's common ground: a match or theme
+/// run was queued for it, or themes were stored. Lobbies then open the
+/// results for everyone, where each member's own matching runs.
+pub(super) async fn matching_started<'e, E>(executor: E, room_id: Uuid) -> sqlx_core::Result<bool>
+where
+    E: sqlx_core::executor::Executor<'e, Database = sqlx_postgres::Postgres>,
+{
+    let (started,): (bool,) = query_as(
+        "SELECT EXISTS (SELECT 1 FROM cloud_common_ground_match_runs WHERE room_id = $1)
+             OR EXISTS (SELECT 1 FROM cloud_common_ground_room_themes WHERE room_id = $1)",
+    )
+    .bind(room_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(started)
 }
 
 pub(in crate::common_ground) async fn view_response(

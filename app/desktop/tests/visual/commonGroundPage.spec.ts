@@ -9,8 +9,7 @@ const SCREENS: Array<[string, (page: import('@playwright/test').Page) => import(
   ['build', (page) => page.getByText('24 titles')],
   ['card', (page) => page.getByText('Agent memory survey.pdf')],
   ['look', (page) => page.getByRole('radiogroup', { name: 'Icon' })],
-  ['lobby', (page) => page.locator('.cg-member', { hasText: 'Hana Sato' })],
-  ['results', (page) => page.getByText('Eval reading group')],
+  ['results',(page) => page.getByText('Eval reading group')],
   ['match', (page) => page.getByRole('button', { name: 'Chat' })],
   ['meet', (page) => page.getByRole('button', { name: 'Meet', exact: true })],
 ];
@@ -37,7 +36,7 @@ for (const theme of ['light', 'dark'] as const) {
         await expect(page.getByRole('button', { name: 'Create', exact: true })).toBeHidden();
         await expect(page.getByText('Poster session 2026')).toBeHidden();
       }
-      if (screen === 'lobby' || screen === 'results') await expect(page.getByText('Sharing: Work')).toBeVisible();
+      if (screen === 'results') await expect(page.getByText('Sharing: Work')).toBeVisible();
       if (screen === 'results') {
         await page.getByRole('tab', { name: 'Topics' }).click();
         await expect(page.getByRole('button', { name: 'Start a group for Retrieval' })).toBeVisible();
@@ -65,8 +64,10 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(page).toHaveScreenshot(`commonGroundPage-${screen}-${theme}.png`);
       if (screen === 'join') {
         await page.getByRole('button', { name: 'Enter pair room' }).click();
-        await expect(page.locator('.cg-member', { hasText: 'Hana Sato' })).toBeVisible();
+        // The room opens at once and lists who is there while their matches run.
+        await expect(page.locator('.cg-row', { hasText: 'Hana Sato' })).toBeVisible();
         await expect(page.getByText('Poster session 2026')).toBeVisible();
+        await expect(page.getByText('Finding overlap')).toBeVisible();
       }
     });
   }

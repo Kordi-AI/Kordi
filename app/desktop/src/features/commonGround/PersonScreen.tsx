@@ -27,13 +27,7 @@ export function PersonScreen({ accountId, profileId, state, store, host }: {
     <>
       <CgBack onBack={() => store.back()} />
       <CgHero avatar={<CgAvatar person={person} size={72} />} title={personTitle(person)} line={person.handle ? <span className="cg-hero-handle">@{person.handle}</span> : undefined} />
-      <PersonActions
-        person={person}
-        state={state}
-        store={store}
-        host={host}
-        onFind={() => store.open({ name: 'match', accountId, profileId })}
-      />
+      <PersonActions person={person} state={state} store={store} host={host} />
       <CgNotice text={state.notice} />
       {CG_TOPIC_SECTIONS.filter(([key]) => card[key].length).map(([key, title]) => (
         <CgSection key={key} title={title}>

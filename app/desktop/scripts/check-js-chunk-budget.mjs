@@ -79,16 +79,18 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // Multi-category memory labels, choices and import preservation add up to 2 kB.
 // Facilitator decision, Memory, and assignment cards add 7.1 kB across the shared UI and sync code.
 // Slack channel choices in Connectors settings add 6.0 kB, so it moves to 5.908 MB.
+// Grounding room and match hints (refresh on a hint, one shared refresh per screen and the slower
+// fallback polling) add up to 3 kB, so it moves to 5.911 MB and the web app to 5.939 MB.
 // The Artifacts tab's card grid (a lazy 7.9 kB chunk), toolbar, compact list rows, and opening
-// files in their default app add 20.4 kB, so it moves to 5.929 MB.
+// files in their default app add 20.4 kB, so it moves to 5.932 MB.
 // Opening every artifact in the companion pane and the source view's type names, Copy, and
-// open actions add 0.9 kB, so it moves to 5.931 MB.
+// open actions add 0.9 kB, so it moves to 5.934 MB.
 // The companion pane's table and image viewers, their styles, reading image artifacts from the Mac,
 // and the code viewer's small entry module add 14 kB (CodeMirror itself has its own cap below), so
-// it moves to 5.947 MB.
+// it moves to 5.95 MB.
 // The PDF viewer, the file card with Quick Look, and loading Quick Look thumbnails add 5.9 kB, so it
-// moves to 5.953 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_953_000;
+// moves to 5.956 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_956_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -121,12 +123,13 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The shared Facilitator cards add the same 7.1 kB to the browser target.
 // Scoped history, indexed browser message storage, and targeted pin loading add up to 12 kB.
 // The shared Slack channel choices add the same 6.0 kB to the browser target.
-// The same Artifacts cards, toolbar, and list rows add 20.2 kB there, so it moves to 5.956 MB.
-// The same companion routing and source view actions add 0.7 kB there, so it moves to 5.958 MB.
+// The Grounding room and match hints add up to 3 kB here too.
+// The same Artifacts cards, toolbar, and list rows add 20.2 kB there, so it moves to 5.959 MB.
+// The same companion routing and source view actions add 0.7 kB there, so it moves to 5.961 MB.
 // The same table and image viewers, their styles, and the code viewer's entry module add 14.6 kB
-// there, so it moves to 5.974 MB.
-// The same PDF viewer and file card add 4.5 kB there, so it moves to 5.98 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_980_000;
+// there, so it moves to 5.977 MB.
+// The same PDF viewer and file card add 4.5 kB there, so it moves to 5.983 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_983_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
