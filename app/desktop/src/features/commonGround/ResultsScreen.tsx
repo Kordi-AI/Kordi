@@ -86,6 +86,9 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
   // While matching, an empty list shows only the progress line under the tabs.
   const matchingEmpty = results.status === 'matching' && empty;
   // Alone in an open room, People waits for others instead of showing an empty list.
+  // The server also reports `matching` while only the room's topics refresh, so People shows the line
+  // only when someone is still unscored (or nothing else would be on screen).
+  const finding = results.status === 'matching' && (tab === 'topics' || unmatched.length > 0 || matchingEmpty);
   const waiting = tab === 'people' && empty && !matchingEmpty && !closed && room?.members.length === 0;
 
   return (
@@ -164,7 +167,7 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
         </CgGroup>
       </CgSection>}
       {waiting ? <div className="cg-hint">Waiting for others</div> : null}
-      {results.status === 'matching' ? <CgProgress inline line="Finding overlap" /> : null}
+      {finding ? <CgProgress inline line="Finding overlap" /> : null}
       <GroupsSection code={code} results={results} state={state} store={store} host={host} />
       {closed ? (
         <div className="cg-actions-end">

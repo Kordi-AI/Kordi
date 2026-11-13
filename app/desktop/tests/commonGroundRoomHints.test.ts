@@ -16,7 +16,7 @@ import { CommonGroundStore, MATCH_FALLBACK_POLL_MS, MATCH_POLL_MS, type CgScreen
 import { receiveRoomHints } from '../src/features/commonGround/storeHints';
 import type { CgResults } from '../src/features/commonGround/types';
 import { mockServer, owner, person, room } from './helpers/commonGroundServer';
-import { click, mount } from './helpers/nearbyScreen';
+import { buttonNamed, click, mount } from './helpers/nearbyScreen';
 
 const results = (people: string[], status: CgResults['status'] = 'ready'): CgResults => (
   { status, people: people.map((id) => ({ person: person(id), score: 80, headline: 'Shared work' })), topics: [], suggestion: null }
@@ -118,6 +118,22 @@ test('a room hint shows new members unscored until their match is in, each perso
   await receiveRoomHints(store, matchHint);
   assert.deepEqual(peopleRows(store), [{ name: 'c', score: '80' }, { name: 'a', score: '80' }, { name: 'b', score: null }]);
   assert.doesNotMatch(screenMarkup(store), /Finding overlap|No matches yet/);
+});
+
+test('People shows the progress line only while a member is still unscored; Topics keeps it while matching', async () => {
+  const store = storeAt(mockServer({}).client, { name: 'results', code: '4821' }, {
+    results: { '4821': results(['a'], 'matching') },
+    rooms: { '4821': room('4821', { members: [person('a')] }) },
+  });
+  assert.doesNotMatch(screenMarkup(store), /Finding overlap/, 'everyone has a result');
+  store.set({ rooms: { '4821': room('4821', { members: [person('a'), person('b')] }) } });
+  assert.match(screenMarkup(store), /Finding overlap/, 'b has no result yet');
+  store.set({ rooms: { '4821': room('4821', { members: [person('a')] }) } });
+  await mount(createElement(ResultsScreen, { code: '4821', state: store.getSnapshot(), store, host }), async (root) => {
+    assert.doesNotMatch(root.textContent ?? '', /Finding overlap/);
+    await click(buttonNamed(root, 'Topics'));
+    assert.match(root.textContent ?? '', /Finding overlap/);
+  });
 });
 
 test('alone the room waits for others, and a closed room lists only its results', () => {
