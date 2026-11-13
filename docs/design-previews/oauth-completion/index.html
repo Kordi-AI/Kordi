@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OAuth completion page</title>
+<style>
+  :root { color-scheme: light; --bg: #efebe7; --ink: #191817; --muted: #6d6865; --rule: #ddd3cd; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 64px; background: var(--bg); color: var(--ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+  .note { margin: 0 0 18px; color: var(--muted); max-width: 90ch; }
+  .controls { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 24px; }
+  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: #fff; }
+  .seg button { border: 0; padding: 6px 12px; background: none; font: inherit; color: var(--muted); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .seg button:focus { outline: none; }
+  .seg button:focus-visible { box-shadow: inset 0 0 0 2px var(--muted); }
+  .label { color: var(--muted); margin-right: 6px; align-self: center; }
+  section { margin-bottom: 28px; }
+  h2 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+  .row { display: grid; grid-template-columns: repeat(3, max-content); gap: 16px; }
+  figure { margin: 0; }
+  figcaption { margin-top: 6px; color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
+  figcaption a { color: var(--muted); }
+  .frame { overflow: hidden; border: 1px solid var(--rule); border-radius: 10px; background: #fff; }
+  .frame iframe { border: 0; transform-origin: 0 0; display: block; }
+</style>
+</head>
+<body>
+<h1>Loopback completion page</h1>
+<p class="note">The page the desktop app serves on <code>127.0.0.1</code> after a browser OAuth hand-off, restyled to the kordi.ai log-in pages (homepage <code>origin/main</code>, which includes <code>codex/obvious-style-preview</code>). Connector grants get their own copy, named from the <code>#kordi_connector</code> fragment. Each frame runs the real page script with the completion POST held in one state.</p>
+<div class="controls">
+  <span><span class="label">Theme</span><span class="seg" data-control="theme"><button value="light">Light</button><button value="dark">Dark</button></span></span>
+  <span><span class="label">Width</span><span class="seg" data-control="width"><button value="desktop">Desktop</button><button value="phone">Phone</button></span></span>
+  <span><span class="label">Font</span><span class="seg" data-control="font"><button value="system">System stack</button><button value="geist">Embedded Geist</button></span></span>
+</div>
+<div id="rows"></div>
+<script type="module">
+  const b64 = (value) => btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const rows = [
+    { title: 'Account sign-in', hashes: { loading: '#kordi_cloud_oauth=preview', success: '#kordi_cloud_oauth=preview', error: '#kordi_cloud_oauth_error=Access%20was%20not%20granted.' } },
+    { title: 'Connect GitHub', hashes: { loading: `#kordi_connector=${b64({ completionCode: 'cc', provider: 'github', grant: 'read' })}`, success: `#kordi_connector=${b64({ completionCode: 'cc', provider: 'github', grant: 'read' })}`, error: '#kordi_connector_error=Access%20was%20not%20granted.&kordi_connector_error_code=provider_denied' } },
+    { title: 'Connect Google Calendar (longest name)', hashes: { loading: `#kordi_connector=${b64({ completionCode: 'cc', provider: 'google_calendar', grant: 'read' })}`, success: `#kordi_connector=${b64({ completionCode: 'cc', provider: 'google_calendar', grant: 'read' })}`, error: `#kordi_connector=${b64({ completionCode: 'cc', provider: 'google_calendar', grant: 'read' })}` } },
+  ];
+  const notes = {
+    'Connect GitHub:error': 'provider error fragment carries no provider',
+    'Connect Google Calendar (longest name):error': 'hand-off to the app failed',
+  };
+  const query = new URLSearchParams(location.search);
+  const state = { theme: query.get('theme') || 'light', width: query.get('width') || 'desktop', font: query.get('font') || 'system' };
+  const sizes = { desktop: { w: 1100, h: 720, scale: 0.36 }, phone: { w: 390, h: 760, scale: 0.5 } };
+
+  function render() {
+    const size = sizes[state.width];
+    document.getElementById('rows').innerHTML = rows.map((row) => `
+      <section><h2>${row.title}</h2><div class="row">${['loading', 'success', 'error'].map((status) => {
+        const src = `frame.html?status=${status}&theme=${state.theme}&font=${state.font}${row.hashes[status]}`;
+        const note = notes[`${row.title}:${status}`];
+        return `<figure><div class="frame" style="width:${size.w * size.scale}px;height:${size.h * size.scale}px"><iframe src="${src}" title="${row.title} ${status}" style="width:${size.w}px;height:${size.h}px;transform:scale(${size.scale})"></iframe></div><figcaption><span>${status[0].toUpperCase() + status.slice(1)}${note ? ` · ${note}` : ''}</span><a href="${src}" target="_blank" rel="noopener">Open</a></figcaption></figure>`;
+      }).join('')}</div></section>`).join('');
+    for (const [name, value] of Object.entries(state)) {
+      document.querySelectorAll(`[data-control="${name}"] button`).forEach((button) => button.setAttribute('aria-pressed', String(button.value === value)));
+    }
+    history.replaceState(null, '', `?${new URLSearchParams(state)}`);
+  }
+  document.querySelectorAll('[data-control]').forEach((group) => group.addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    state[group.dataset.control] = button.value;
+    render();
+  }));
+  render();
+</script>
+</body>
+</html>
