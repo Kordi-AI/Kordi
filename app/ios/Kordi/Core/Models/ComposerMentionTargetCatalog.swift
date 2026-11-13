@@ -71,6 +71,8 @@ enum ComposerMentionTargetCatalog {
                 ownerName: "All people in this group",
                 avatarSource: nil
             ))
+            // The Facilitator is in every group; it leads the agents.
+            targets.append(KordiSystemAgentIdentity.mentionTarget)
             var seenPeople = Set<String>()
             for participant in conversation.groupParticipants
                 where participant.accountId != account.accountId
@@ -210,8 +212,8 @@ enum ComposerMentionTargetCatalog {
             id: "draft", senderAccountId: senderAccountId, text: text, createdAtMs: 0,
             senderKind: "human", senderDisplayName: nil, deliveryState: nil, replyToMessageId: nil, requestId: nil,
             mentions: mentions(in: text, selectedTarget: selected, targets: targets),
-            targetCloudAgentId: selected?.kind == .agent ? selected?.agentId : nil,
-            targetCloudAgentOwnerAccountId: selected?.kind == .agent ? selected?.accountId : nil
+            targetCloudAgentId: selected?.kind == .agent && selected?.isFacilitator != true ? selected?.agentId : nil,
+            targetCloudAgentOwnerAccountId: selected?.kind == .agent && selected?.isFacilitator != true ? selected?.accountId : nil
         )
         guard let target = GroupAgentTarget.resolve(message, participants: participants) else {
             return selected?.kind == .person || selected?.kind == .all ? selected : nil
@@ -389,6 +391,7 @@ enum ComposerMentionTargetCatalog {
         _ rhs: ComposerMentionTarget
     ) -> Bool {
         if lhs.kind != rhs.kind { return mentionKindRank(lhs.kind) < mentionKindRank(rhs.kind) }
+        if lhs.isFacilitator != rhs.isFacilitator { return lhs.isFacilitator }
         let nameComparison = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
         if nameComparison != .orderedSame { return nameComparison == .orderedAscending }
         let ownerComparison = (lhs.ownerName ?? "").localizedCaseInsensitiveCompare(rhs.ownerName ?? "")

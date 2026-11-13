@@ -141,6 +141,18 @@ enum KordiSystemAgentIdentity {
     static let agentId = "cloud_agent_kordi_pip"
     static let displayName = "Facilitator"
     static let messageKind = "facilitator-message"
+    /// The mention the server answers as the Facilitator. It names no agent,
+    /// so it never routes to a person's agent.
+    static let mentionTargetId = "agent:cloud-agent:\(accountId)"
+    static let mentionTarget = ComposerMentionTarget(
+        id: mentionTargetId,
+        displayName: displayName,
+        kind: .agent,
+        accountId: accountId,
+        agentId: nil,
+        ownerName: nil,
+        avatarSource: nil
+    )
     static let avatar = ConversationAvatarIdentity(name: displayName, source: nil, seed: accountId)
     /// The name the agent's account carried before it showed as System.
     static let legacyName = "PiP"

@@ -512,6 +512,7 @@ test('buildCollaborationMentionTargetsByScope includes group-only people but onl
     targets.chat.map((target) => `${target.targetKind}:${target.label}:${target.nodeId}`),
     [
       'all:All:group:session:group:cloud',
+      'agent:Facilitator:agent:cloud-agent:acct_kordi_pip',
       'agent:BabyTREE:acct_me',
       'person:Alice:acct_alice',
       "agent:Alice's Kordi:acct_alice",
@@ -519,6 +520,9 @@ test('buildCollaborationMentionTargetsByScope includes group-only people but onl
     ],
   );
   assert.equal(targets.chat[0]?.detail, 'All people in this group');
+  assert.equal(targets.chat[1]?.detail, 'Built in');
+  assert.equal(targets.chat[1]?.avatarImageUrl, '/kordi-system-avatar.jpg');
+  assert.equal(targets.project.some((target) => target.label === 'Facilitator'), false);
   assert.equal(targets.project.some((target) => target.targetKind === 'all'), false);
   assert.equal(targets.chat.some((target) => target.label === "Bob's Kordi"), false);
 });

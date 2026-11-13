@@ -1,5 +1,5 @@
 import type { MessageMention } from '@/kordi-app/types';
-import { isFacilitatorHandoffRequestId, isSystemAgentAccountId } from '@/features/systemAgent/systemAgentIdentity';
+import { isFacilitatorHandoffRequestId, isSystemAgentAccountId, KORDI_FACILITATOR_MENTION_TARGET_ID } from '@/features/systemAgent/systemAgentIdentity';
 import type { CloudGroupControlEnvelope, CloudGroupParticipant } from './cloudGroupMessages';
 
 export type CloudGroupAgentTarget = { ownerAccountId: string; agentId: string };
@@ -57,7 +57,8 @@ export function cloudGroupHumanAgentTarget(message: GroupMessage, participants: 
   const explicit = agent || owner ? targetForIds(agent, owner, sender, participants) : null;
   if ((agent || owner) && !explicit) return null;
   const mentions = message.mentions ?? [];
-  const agentMentions = mentions.filter((m) => m.targetKind === 'agent');
+  // A Facilitator mention is answered by the System agent itself, never routed to a person's agent.
+  const agentMentions = mentions.filter((m) => m.targetKind === 'agent' && m.targetIdentityId?.trim() !== KORDI_FACILITATOR_MENTION_TARGET_ID);
   if (agentMentions.length) {
     const targets = agentMentions.map((m) => mentionTarget(m, message, participants));
     if (targets.some((t) => !t)) return null;

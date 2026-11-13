@@ -685,6 +685,63 @@
         "targetCloudAgentOwnerAccountId": "acct_one"
       },
       "expected": null
+    },
+    {
+      "name": "a Facilitator mention routes to no person's agent",
+      "message": {
+        "id": "request",
+        "senderAccountId": "acct_sender",
+        "senderKind": "human",
+        "text": "@Facilitator find a time",
+        "createdAtMs": 1,
+        "mentions": [
+          {
+            "label": "Facilitator",
+            "targetKind": "agent",
+            "targetIdentityId": "agent:cloud-agent:acct_kordi_pip",
+            "startUtf16": 0,
+            "lengthUtf16": 12,
+            "displayText": "@Facilitator",
+            "displayLabel": "Facilitator"
+          }
+        ]
+      },
+      "expected": null
+    },
+    {
+      "name": "a Facilitator mention beside an agent mention keeps that agent",
+      "message": {
+        "id": "request",
+        "senderAccountId": "acct_sender",
+        "senderKind": "human",
+        "text": "@Facilitator and @Kordi check status",
+        "createdAtMs": 1,
+        "mentions": [
+          {
+            "label": "Facilitator",
+            "targetKind": "agent",
+            "targetIdentityId": "agent:cloud-agent:acct_kordi_pip",
+            "startUtf16": 0,
+            "lengthUtf16": 12,
+            "displayText": "@Facilitator",
+            "displayLabel": "Facilitator"
+          },
+          {
+            "label": "Kordi",
+            "targetKind": "agent",
+            "targetIdentityId": "agent:cloud-agent:acct_one",
+            "agentId": "cloud-agent:acct_one",
+            "humanId": "acct_one",
+            "startUtf16": 17,
+            "lengthUtf16": 6,
+            "displayText": "@Kordi"
+          }
+        ]
+      },
+      "expected": {
+        "ownerAccountId": "acct_one",
+        "agentId": "cloud-agent:acct_one"
+      }
     }
   ]
 }

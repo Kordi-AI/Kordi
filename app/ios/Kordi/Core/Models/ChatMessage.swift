@@ -964,6 +964,8 @@ struct ComposerMentionTarget: Identifiable, Hashable {
     let ownerName: String?
     let avatarSource: String?
 
+    var isFacilitator: Bool { id == KordiSystemAgentIdentity.mentionTargetId }
+
     var mentionText: String {
         if kind == .all { return "@all" }
         var name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)

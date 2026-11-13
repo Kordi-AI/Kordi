@@ -169,6 +169,16 @@ fn mention_target(
     )
 }
 
+/// The mention the Mac and iPhone composers send for "@Facilitator".
+const FACILITATOR_MENTION_TARGET: &str = "agent:cloud-agent:acct_kordi_pip";
+
+fn names_facilitator(mention: &Value) -> bool {
+    let target = text(mention, "targetIdentityId");
+    target == FACILITATOR_MENTION_TARGET
+        || crate::system_agent::service_account_id()
+            .is_some_and(|account| target == format!("agent:cloud-agent:{account}"))
+}
+
 pub(super) fn human_group_target(
     message: &CloudGroupMessage,
     participants: &[CloudGroupParticipant],
@@ -202,9 +212,11 @@ pub(super) fn human_group_target(
         None
     };
     let mentions = message.mentions.as_deref().unwrap_or_default();
+    // A Facilitator mention is answered by the System agent itself, never
+    // routed to a person's agent.
     let agent_mentions: Vec<_> = mentions
         .iter()
-        .filter(|m| text(m, "targetKind") == "agent")
+        .filter(|m| text(m, "targetKind") == "agent" && !names_facilitator(m))
         .collect();
     if !agent_mentions.is_empty() {
         let mut targets = BTreeMap::new();

@@ -9,6 +9,7 @@ import type { DesktopChatTurnStopTarget } from './agentRequestStop';
 import { releaseHostedRequestWait } from './messageActions/hostedRequestWait';
 
 import type { UseComposerControllerArgs } from './composerController.types';
+import { isFacilitatorMentionOption } from '@/features/systemAgent/systemAgentIdentity';
 import {
   appendDesktopSystemMessageToState,
   runLocalSlashCommand,
@@ -268,7 +269,8 @@ export function useComposerMessageActions({
   });
 
   const acceptChatMentionTarget = useCallback((option: ComposerMentionOption) => {
-    selectedChatAgentMentionRef.current = option.targetKind === 'agent' ? option : null;
+    // The Facilitator is mentioned, never routed to as a cloud agent.
+    selectedChatAgentMentionRef.current = option.targetKind === 'agent' && !isFacilitatorMentionOption(option) ? option : null;
   }, []);
   const stopCollaborationOutreach = useCallback(async (conversationId: string, requestId?: string | null) => {
     setDesktopChatError(null);

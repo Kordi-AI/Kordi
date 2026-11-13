@@ -10,6 +10,7 @@ import {
   type MentionScopeConversation,
 } from './messageActions/mentions';
 import type { ResolvedMentionedCollaborationTarget } from './messageActions/types';
+import { KORDI_FACILITATOR_MENTION_TARGET_ID, KORDI_FACILITATOR_NAME } from '@/features/systemAgent/systemAgentIdentity';
 
 const MAX_MENTIONS = 32;
 const MAX_MENTION_TEXT_LENGTH = 256;
@@ -168,6 +169,36 @@ export function mentionsForAllGroupMembers(
   return mentions.slice(0, MAX_MENTIONS);
 }
 
+/** "@Facilitator" in a group, as a mention the server answers. It names no agent or owner, so
+ * the message is never routed to a person's agent. */
+export function mentionsForFacilitator(
+  text: string,
+  conversation: MentionScopeConversation | null | undefined,
+): MessageMention[] {
+  if (!conversationHasGroupMentionScope(conversation)) return [];
+  const mentions: MessageMention[] = [];
+  for (const match of text.matchAll(new RegExp(`@${KORDI_FACILITATOR_NAME}`, 'giu'))) {
+    const startUtf16 = match.index;
+    const before = text[startUtf16 - 1] ?? '';
+    const after = text[startUtf16 + match[0].length] ?? '';
+    if (
+      (!before || !/[\p{L}\p{N}._%+-]/u.test(before))
+      && (!after || !/[\p{L}\p{N}_'-]/u.test(after))
+    ) {
+      mentions.push({
+        label: KORDI_FACILITATOR_NAME,
+        targetKind: 'agent',
+        targetIdentityId: KORDI_FACILITATOR_MENTION_TARGET_ID,
+        startUtf16,
+        lengthUtf16: match[0].length,
+        displayText: match[0],
+        displayLabel: KORDI_FACILITATOR_NAME,
+      });
+    }
+  }
+  return mentions.slice(0, MAX_MENTIONS);
+}
+
 export function messageMentionsForSend(
   text: string,
   conversation: MentionScopeConversation | null | undefined,
@@ -177,6 +208,7 @@ export function messageMentionsForSend(
     ...mentionsForConversationParticipants(text, conversation),
     ...mentionForCollaborationTarget(target, text),
     ...mentionsForAllGroupMembers(text, conversation),
+    ...mentionsForFacilitator(text, conversation),
   ].map((mention) => [`${mention.startUtf16}:${mention.lengthUtf16}`, mention])).values()]
     .sort((left, right) => (left.startUtf16 ?? 0) - (right.startUtf16 ?? 0))
     .slice(0, MAX_MENTIONS);
