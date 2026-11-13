@@ -6,7 +6,7 @@ import { buildForkLineage } from '@/features/chat/forkLineage';
 import { filterParticipantSpaces } from '@/features/chat/participantSpaces';
 import { subscribeParticipantSpaceExpansion } from '@/features/chat/participantSpaceNavigation';
 import { spaceMatchesChannel } from '@/features/chat/participantSpaceFilters';
-import { effectiveSessionUnread, sessionsForGlobalAttention, totalVisibleUnread } from '@/features/chat/unreadCounts';
+import { effectiveSessionUnread, sessionsForGlobalAttention } from '@/features/chat/unreadCounts';
 import type { ChatChannel } from '@/kordi-app/types';
 import {
   buildChatSidebarRows,
@@ -400,6 +400,10 @@ export function useWorkspaceChatSidebarModel(
   ), [archivedParticipantSpaces]);
   const unreadByChannel = useMemo(() => {
     const counts = { contact: 0, agent: 0 };
+    // Count only agent chats the Agent list keeps; a hidden blank chat could never be read.
+    const listedAgentSessionIds = new Set(filterParticipantSpaces(participantSpaces, '', 'agent')
+      .flatMap((space) => space.sessions.flatMap((session) => [session.id, session.canonicalSessionId]))
+      .filter((id): id is string => Boolean(id)));
     const channels = new Map<string, ChatChannel>();
     for (const space of participantSpaces) {
       const channel = spaceMatchesChannel(space, 'agent') ? 'agent' : 'contact';
@@ -412,17 +416,18 @@ export function useWorkspaceChatSidebarModel(
       const channel = channels.get(session.canonicalSessionId ?? session.id)
         ?? channels.get(session.id)
         ?? (session.type === 'owned-agent' || session.type === 'external-agent' ? 'agent' : 'contact');
+      if (
+        channel === 'agent'
+        && !listedAgentSessionIds.has(session.canonicalSessionId ?? session.id)
+        && !listedAgentSessionIds.has(session.id)
+      ) continue;
       counts[channel] += effectiveSessionUnread(session, mutedSessionIds, unreadSessionIds);
     }
     return counts;
   }, [archivedSessionIds, chatConversations, mutedSessionIds, participantSpaces, unreadSessionIds]);
   const contactUnread = unreadByChannel.contact;
   const agentUnread = unreadByChannel.agent;
-  const totalUnread = totalVisibleUnread(
-    sessionsForGlobalAttention(chatConversations, archivedSessionIds),
-    mutedSessionIds,
-    unreadSessionIds,
-  );
+  const totalUnread = contactUnread + agentUnread;
   const collaborationSyncStatus: CollaborationSyncStatus =
     options.isCollaborationSyncUnavailable
       ? 'unavailable'

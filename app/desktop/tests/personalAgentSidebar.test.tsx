@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { __setSessionBackendForTests } from '../src/features/cloud/session';
 import type { ChatSyncConversation } from '../src/features/cloud/chatSyncTypes';
 import { buildParticipantSpaces, filterParticipantSpaces } from '../src/features/chat/participantSpaces';
+import { ChatProjectsContext } from '../src/features/projects/chatProjects';
 import { personalAgentSessionsFromSnapshots, type PersonalAgentStatus } from '../src/features/personalAgent/personalAgentClient';
 import { PersonalAgentPage } from '../src/features/personalAgent/PersonalAgentPage';
 import { __setDefaultPersonalAgentStatusForTests } from '../src/features/personalAgent/personalAgentStatus';
@@ -93,6 +94,37 @@ test('Agent Chats lists each personal agent under the Personal agent entry, and 
     }
     assert.doesNotMatch(markup, /data-session-sidebar-section="pinned"/);
     assert.doesNotMatch(markup, /<span>Personal agent<\/span>/);
+    assert.match(markup, /data-agent-session-row="session:direct-agent:figure"/);
+  } finally {
+    __setDefaultPersonalAgentStatusForTests(null);
+    setPersonalAgentEntries([]);
+  }
+});
+
+test('with projects on, personal agent rows still render above the project and recent headings', () => {
+  setPersonalAgentEntries(entries);
+  __setDefaultPersonalAgentStatusForTests(watching);
+  try {
+    const projectSession = agentChat('session:direct-agent:project', 'Project task', 'Ran the build.');
+    const props = sidebarProps({}, [
+      agentChat(KORDI_SESSION, "Alex's Kordi", 'Lab sync moved to 10 am Thursday.', { unread: 1, metadata: { personalAgent: { agentId: `cloud-agent:${ACCOUNT}` } } }),
+      agentChat('session:direct-agent:figure', 'Figure script fix', 'Patched the loader to accept both.'),
+      projectSession,
+    ]);
+    const markup = renderToStaticMarkup(createElement(ChatProjectsContext, {
+      value: {
+        enabled: true,
+        projects: [{ id: 'alpha', name: 'Alpha', root: '/fixture/alpha', sessions: [{ id: projectSession.id }] }],
+        assign: async () => {}, create: async () => {},
+      },
+      children: createElement(WorkspaceSidebar, props as never),
+    }));
+    const rows = [...markup.matchAll(/data-personal-agent-row="([^"]+)"/g)].map((match) => match[1]);
+    assert.deepEqual(rows, [`cloud-agent:${ACCOUNT}`, 'cloud_agent_research', 'cloud_agent_inbox']);
+    // The unread personal chat is reachable, so its count can be read and cleared.
+    assert.match(markup, /aria-label="Alex&#x27;s Kordi, Online, unread\. Lab sync moved to 10 am Thursday\."/);
+    assert.ok(markup.indexOf('data-personal-agent-row=') < markup.indexOf('Alpha'));
+    assert.match(markup, /data-agent-session-row="session:direct-agent:project"/);
     assert.match(markup, /data-agent-session-row="session:direct-agent:figure"/);
   } finally {
     __setDefaultPersonalAgentStatusForTests(null);
