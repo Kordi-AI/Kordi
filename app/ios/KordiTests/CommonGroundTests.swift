@@ -389,12 +389,35 @@ final class CommonGroundTests: XCTestCase {
     func testARunThatEndedWithoutACardSaysWhyAndNamesUnreadLinks() throws {
         let json = #"{"card":null,"sharing":true,"build":{"status":"failed","errorCode":"build_timed_out","unreadLinks":[{"url":"https://scholar.google.com/citations?user=abc","reason":"blocked"}]}}"#
         let view = try decode(CommonGroundOwnerView.self, json)
-        XCTAssertEqual(view.build.unreadLinks?.map(\.line), ["Couldn't read scholar.google.com"])
+        XCTAssertEqual(view.build.unreadLinks?.map(\.line), ["scholar.google.com blocked Kordi from reading it."])
         let model = stubbedModel()
         model.apply(view)
         XCTAssertEqual(model.buildFailureMessage, "Building took too long. Try again.")
         // Older servers send no list.
         XCTAssertNil(try decode(CommonGroundOwnerView.self, Self.buildingJSON).build.unreadLinks)
+    }
+
+    func testABuildWithOnlyUnreadableLinksNamesTheLink() throws {
+        let json = #"{"card":null,"sharing":true,"build":{"status":"failed","errorCode":"links_unread","unreadLinks":[{"url":"https://www.linkedin.com/in/your-name/","reason":"sign_in"}]}}"#
+        let model = stubbedModel()
+        model.apply(try decode(CommonGroundOwnerView.self, json))
+        XCTAssertEqual(model.buildFailureMessage, "Kordi couldn't read your link, so there's nothing to build from.")
+        XCTAssertEqual(model.owner?.build.unreadLinks?.map(\.line), ["LinkedIn needs sign-in, so Kordi can't read it."])
+    }
+
+    func testUnreadLinksSayWhyAndSignInSitesAreFlaggedBeforeBuild() {
+        let scholar = "https://scholar.google.com/citations?user=abc"
+        XCTAssertEqual(CommonGroundLinks.line(url: scholar, reason: "not_found"), "Nothing found at scholar.google.com.")
+        XCTAssertEqual(CommonGroundLinks.line(url: scholar, reason: "unreachable"), "Couldn't reach scholar.google.com.")
+        XCTAssertEqual(CommonGroundLinks.line(url: scholar, reason: "unreadable"), "scholar.google.com has no text Kordi can read.")
+        // An older server reports LinkedIn's sign-in wall as unreadable.
+        XCTAssertEqual(CommonGroundLinks.line(url: "https://www.linkedin.com/in/your-name/", reason: "unreadable"), "LinkedIn needs sign-in, so Kordi can't read it.")
+        XCTAssertEqual(CommonGroundLinks.entries("linkedin.com/in/your-name; https://example.test/~jane\nworking on evals"), ["https://linkedin.com/in/your-name", "https://example.test/~jane"])
+        XCTAssertEqual(CommonGroundLinks.signInLinks("https://www.linkedin.com/in/your-name/; https://example.test", unread: []), ["https://www.linkedin.com/in/your-name/"])
+        let unread = [CommonGroundUnreadLink(url: "https://www.linkedin.com/in/your-name", reason: "sign_in")]
+        XCTAssertEqual(CommonGroundLinks.signInLinks("https://www.linkedin.com/in/your-name/", unread: unread), [])
+        XCTAssertEqual(CommonGroundLinks.current(unread, in: "https://www.linkedin.com/in/your-name/"), unread)
+        XCTAssertEqual(CommonGroundLinks.current(unread, in: "https://example.test"), [])
     }
 
     func testTheSameLinkCitedTwiceIsOneReference() throws {

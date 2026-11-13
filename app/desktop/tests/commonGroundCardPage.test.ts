@@ -79,7 +79,7 @@ test('card page: a link the build could not read says so under Sources', () => {
   const unreadLinks = [{ url: scholar, reason: 'blocked' }];
   store.set({ profiles: [work], profileId: 'cgp_work', owner: owner({ card: linksCard, build: { status: 'idle', errorCode: null, unreadLinks } }) });
   const html = renderToStaticMarkup(createElement(CardScreen, { state: store.getSnapshot(), store }));
-  assert.match(html, /<ul class="cg-unread-links"><li title="https:\/\/scholar\.google\.com\/citations\?user=abc">Couldn&#x27;t read scholar\.google\.com<\/li><\/ul>/);
+  assert.match(html, /<ul class="cg-unread-links" aria-live="polite"><li title="https:\/\/scholar\.google\.com\/citations\?user=abc" class="cg-unread-link">scholar\.google\.com blocked Kordi from reading it\.<\/li><\/ul>/);
 });
 
 const timelineCard = withProfile({ workingOn: ['Agent memory', 'Eval design'], interests: ['Speech'] }, {
