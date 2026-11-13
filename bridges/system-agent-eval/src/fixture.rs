@@ -1,5 +1,6 @@
-//! Fixture files: synthetic group conversations and Grounding card builds,
-//! each with the outcome a good System agent produces.
+//! Fixture files: synthetic group conversations, Grounding card builds and
+//! Grounding match suites, each with the outcome a good System agent
+//! produces. A match suite expands into many runs (`crate::match_suite`).
 //!
 //! Dates in fixture text are templates resolved against the moment a fixture
 //! is replayed, because the System agent reads the real clock:
@@ -14,11 +15,19 @@ use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::match_suite::{self, MatchFixture};
+
+/// The fixture kinds `--kind` names, spelled like their directories.
+pub const KIND_NAMES: [&str; 3] = ["system-agent", "grounding", "grounding-match"];
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Fixture {
     SystemAgent(Conversation),
     Grounding(CardBuildFixture),
+    /// Expanded from a suite file, never read on its own.
+    #[serde(skip_deserializing)]
+    GroundingMatch(MatchFixture),
 }
 
 impl Fixture {
@@ -26,14 +35,39 @@ impl Fixture {
         match self {
             Self::SystemAgent(conversation) => &conversation.id,
             Self::Grounding(build) => &build.id,
+            Self::GroundingMatch(run) => &run.id,
         }
     }
 
+    /// The kind as reports name it.
     pub fn kind(&self) -> &'static str {
         match self {
             Self::SystemAgent(_) => "systemAgent",
             Self::Grounding(_) => "grounding",
+            Self::GroundingMatch(_) => "groundingMatch",
         }
+    }
+
+    /// The kind as `--kind` names it.
+    pub fn kind_name(&self) -> &'static str {
+        match self {
+            Self::SystemAgent(_) => KIND_NAMES[0],
+            Self::Grounding(_) => KIND_NAMES[1],
+            Self::GroundingMatch(_) => KIND_NAMES[2],
+        }
+    }
+
+    pub fn description(&self) -> &str {
+        match self {
+            Self::SystemAgent(conversation) => &conversation.description,
+            Self::Grounding(build) => &build.description,
+            Self::GroundingMatch(run) => &run.description,
+        }
+    }
+
+    /// System agent fixtures replay into a disposable database.
+    pub fn needs_database(&self) -> bool {
+        matches!(self, Self::SystemAgent(_))
     }
 }
 
@@ -293,7 +327,7 @@ fn expand_one(token: &str, now: DateTime<Utc>) -> Result<String> {
 }
 
 /// Loads every `*.json` fixture under `dir`, sorted by file name, with its
-/// templates resolved against `now`.
+/// templates resolved against `now`. A suite file adds all of its runs.
 pub fn load_dir(dir: &Path, now: DateTime<Utc>) -> Result<Vec<Fixture>> {
     let mut paths: Vec<_> = std::fs::read_dir(dir)
         .with_context(|| format!("reading {}", dir.display()))?
@@ -305,7 +339,7 @@ pub fn load_dir(dir: &Path, now: DateTime<Utc>) -> Result<Vec<Fixture>> {
         if path.is_dir() {
             fixtures.extend(load_dir(&path, now)?);
         } else if path.extension().is_some_and(|ext| ext == "json") {
-            fixtures.push(load_file(&path, now)?);
+            fixtures.extend(load_file(&path, now)?);
         }
     }
     let mut ids = std::collections::BTreeSet::new();
@@ -317,10 +351,23 @@ pub fn load_dir(dir: &Path, now: DateTime<Utc>) -> Result<Vec<Fixture>> {
     Ok(fixtures)
 }
 
-pub fn load_file(path: &Path, now: DateTime<Utc>) -> Result<Fixture> {
+/// The `kind` of a fixture file.
+#[derive(Deserialize)]
+struct FileKind {
+    kind: String,
+}
+
+const SUITE_KIND: &str = "groundingMatchSuite";
+
+pub fn load_file(path: &Path, now: DateTime<Utc>) -> Result<Vec<Fixture>> {
     let raw =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    parse(&raw, now).with_context(|| format!("in {}", path.display()))
+    let loaded = match serde_json::from_str::<FileKind>(&raw) {
+        Ok(file) if file.kind == SUITE_KIND => match_suite::parse(&raw)
+            .map(|runs| runs.into_iter().map(Fixture::GroundingMatch).collect()),
+        _ => parse(&raw, now).map(|fixture| vec![fixture]),
+    };
+    loaded.with_context(|| format!("in {}", path.display()))
 }
 
 pub fn parse(raw: &str, now: DateTime<Utc>) -> Result<Fixture> {
@@ -397,54 +444,5 @@ fn validate(fixture: &Fixture) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn now() -> DateTime<Utc> {
-        "2026-11-03T10:15:42Z".parse().unwrap()
-    }
-
-    #[test]
-    fn templates_resolve_against_the_replay_clock() {
-        let text = "{{d+3:weekday}} {{d+3:long}} at {{d+3}}T19:00:00+00:00, reminder {{now+90m}}";
-        assert_eq!(
-            expand(text, now()).unwrap(),
-            "Friday Friday, November 6 at 2026-11-06T19:00:00+00:00, reminder 2026-11-03T11:45:00+00:00"
-        );
-        assert!(expand("{{d+x}}", now()).is_err());
-        assert!(expand("{{d+1", now()).is_err());
-    }
-
-    #[test]
-    fn every_fixture_in_the_repository_loads() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
-        let fixtures = load_dir(&dir, now()).unwrap();
-        let count = |kind| fixtures.iter().filter(|f| f.kind() == kind).count();
-        assert!(count("systemAgent") >= 10);
-        assert!(count("grounding") >= 2);
-        // Every pass has a stub script, so the stub run covers every fixture.
-        for fixture in &fixtures {
-            match fixture {
-                Fixture::SystemAgent(conversation) => {
-                    for turn in &conversation.turns {
-                        assert!(!turn.stub.is_empty(), "{} lacks a stub", conversation.id);
-                    }
-                }
-                Fixture::Grounding(build) => {
-                    assert!(build.stub.is_some(), "{} lacks a stub", build.id)
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn unknown_members_and_actions_are_rejected() {
-        let base = r#"{"kind":"systemAgent","id":"x","description":"d","title":"t",
-            "members":[{"key":"a","name":"A"}],
-            "turns":[{"messages":[{"from":"MSG","text":"hi","minutesAgo":2}],
-            "expect":{"reply":"silent","allowedActions":["ACTION"]}}]}"#;
-        assert!(parse(&base.replace("MSG", "a").replace("ACTION", "rsvp"), now()).is_ok());
-        assert!(parse(&base.replace("MSG", "zed").replace("ACTION", "rsvp"), now()).is_err());
-        assert!(parse(&base.replace("MSG", "a").replace("ACTION", "reopen"), now()).is_err());
-    }
-}
+#[path = "fixture_tests.rs"]
+mod tests;

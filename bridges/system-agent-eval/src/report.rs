@@ -6,10 +6,15 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::match_run::PromptInfo;
 use crate::replay::UsageRecord;
+pub use crate::report_diff::fixture_set_diff;
+use crate::report_diff::flipped;
+use crate::report_numbers::Number;
 use crate::score::{Check, METRICS};
 
-pub const SCHEMA_VERSION: u32 = 1;
+/// Version 2 adds numbers to the summary and the match instructions used.
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +25,9 @@ pub struct RunReport {
     pub provider: ProviderInfo,
     #[serde(default)]
     pub prices: Option<Prices>,
+    /// The match instructions, when the run had match fixtures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub match_prompt: Option<PromptInfo>,
     pub fixtures: Vec<FixtureResult>,
     pub summary: Summary,
 }
@@ -102,6 +110,9 @@ pub struct Summary {
     /// True when some runs did not report usage, so `costUsd` is partial.
     #[serde(default)]
     pub cost_partial: bool,
+    /// Numbers measured over whole suites, such as match score AUC.
+    #[serde(default)]
+    pub numbers: Vec<Number>,
 }
 
 fn percentile(sorted: &[u64], fraction: f64) -> Option<u64> {
@@ -170,6 +181,7 @@ fn metric_title(metric: &str) -> &str {
         "toolValidity" => "Valid tool calls",
         "repetition" => "No repeated messages",
         "grounding" => "Grounding cards",
+        "groundingMatch" => "Grounding matches",
         "reliability" => "Runs completed",
         "sweep" => "Passes the sweep skipped correctly",
         other => other,
@@ -224,66 +236,22 @@ pub fn cost(summary: &Summary) -> String {
     }
 }
 
-/// Fixture ids only the candidate has (added) and only the baseline has
-/// (removed). Different sets make the totals incomparable.
-pub fn fixture_set_diff(baseline: &RunReport, candidate: &RunReport) -> (Vec<String>, Vec<String>) {
-    let ids = |report: &RunReport| -> std::collections::BTreeSet<String> {
-        report.fixtures.iter().map(|f| f.id.clone()).collect()
-    };
-    let (base, other) = (ids(baseline), ids(candidate));
-    (
-        other.difference(&base).cloned().collect(),
-        base.difference(&other).cloned().collect(),
-    )
-}
-
-/// Every check of a run by a stable key: fixture, pass, check name and its
-/// occurrence within the pass.
-fn keyed_checks(report: &RunReport) -> BTreeMap<String, &Check> {
-    let mut keyed = BTreeMap::new();
-    for fixture in &report.fixtures {
-        for (index, pass) in fixture.passes.iter().enumerate() {
-            let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
-            for check in &pass.checks {
-                let count = seen.entry(&check.name).or_default();
-                *count += 1;
-                keyed.insert(
-                    format!(
-                        "{} / pass {} / {} #{}",
-                        fixture.id,
-                        index + 1,
-                        check.name,
-                        count
-                    ),
-                    check,
-                );
-            }
-        }
-    }
-    keyed
-}
-
-/// Checks that pass in `from` and fail in `to`.
-fn flipped(from: &RunReport, to: &RunReport) -> Vec<(String, Option<String>)> {
-    let before = keyed_checks(from);
-    keyed_checks(to)
-        .into_iter()
-        .filter(|(key, check)| !check.passed && before.get(key).is_some_and(|c| c.passed))
-        .map(|(key, check)| {
-            (
-                key.trim_end_matches(" #1").to_string(),
-                check.detail.clone(),
-            )
-        })
-        .collect()
-}
-
 pub fn compare(baseline: &RunReport, candidates: &[RunReport]) -> (String, Value) {
     let runs: Vec<&RunReport> = std::iter::once(baseline).chain(candidates).collect();
     let mut md = String::from("# System agent quality comparison\n\n");
     for report in &runs {
+        let prompt = report
+            .match_prompt
+            .as_ref()
+            .map_or(String::new(), |prompt| {
+                format!(
+                    ", {} match instructions (sha256 {})",
+                    prompt.name,
+                    &prompt.sha256[..prompt.sha256.len().min(12)]
+                )
+            });
         md.push_str(&format!(
-            "- **{}**: {} `{}` via the {} engine ({}), {}\n",
+            "- **{}**: {} `{}` via the {} engine ({}), {}{prompt}\n",
             report.label,
             report.provider.provider,
             report.provider.model,
@@ -366,6 +334,8 @@ pub fn compare(baseline: &RunReport, candidates: &[RunReport]) -> (String, Value
         "Estimated cost",
         runs.iter().map(|r| cost(&r.summary)).collect(),
     );
+    let (numbers_md, numbers) = crate::report_numbers::compare(&runs);
+    md.push_str(&numbers_md);
 
     md.push_str(&format!(
         "\n\n## Fixtures\n\n| Fixture | {} |\n|---|",
@@ -428,6 +398,7 @@ pub fn compare(baseline: &RunReport, candidates: &[RunReport]) -> (String, Value
         candidate_json.push(json!({
             "label": candidate.label,
             "provider": candidate.provider,
+            "matchPrompt": candidate.match_prompt,
             "summary": candidate.summary,
             "regressions": list(&regressions),
             "improvements": list(&improvements),
@@ -438,8 +409,10 @@ pub fn compare(baseline: &RunReport, candidates: &[RunReport]) -> (String, Value
     md.push('\n');
     let json = json!({
         "schemaVersion": SCHEMA_VERSION,
-        "baseline": {"label": baseline.label, "provider": baseline.provider, "summary": baseline.summary},
+        "baseline": {"label": baseline.label, "provider": baseline.provider,
+            "matchPrompt": baseline.match_prompt, "summary": baseline.summary},
         "candidates": candidate_json,
+        "numbers": numbers,
         "warnings": warnings,
     });
     (md, json)

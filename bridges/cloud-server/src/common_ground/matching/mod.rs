@@ -278,32 +278,52 @@ fn words(text: &str) -> impl Iterator<Item = String> + '_ {
         .map(str::to_lowercase)
 }
 
-/// Whether `text` addresses the reader or names one of `names`. A name
-/// counts by any word of it longer than one letter, as a whole word, or
-/// anywhere for a word with letters beyond ASCII (some scripts put no
+/// What makes a text read differently to the two people.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Addressing {
+    /// A word that addresses the reader, such as "you" or "your".
+    SecondPerson,
+    /// A word of one of the two people's names.
+    Name,
+}
+
+/// How `text` addresses the reader or names one of `names`, if it does. A
+/// name counts by any word of it longer than one letter, as a whole word,
+/// or anywhere for a word with letters beyond ASCII (some scripts put no
 /// spaces between words). Extra matches only cost a second run.
-fn addresses_someone(text: &str, names: &[&str]) -> bool {
+fn addressing_in(text: &str, names: &[&str]) -> Option<Addressing> {
     let found: std::collections::HashSet<String> = words(text).collect();
     if SECOND_PERSON.iter().any(|word| found.contains(*word)) {
-        return true;
+        return Some(Addressing::SecondPerson);
     }
     let lower = text.to_lowercase();
-    names.iter().flat_map(|name| words(name)).any(|word| {
-        word.chars().count() > 1
-            && (found.contains(&word) || (!word.is_ascii() && lower.contains(&word)))
-    })
+    names
+        .iter()
+        .flat_map(|name| words(name))
+        .any(|word| {
+            word.chars().count() > 1
+                && (found.contains(&word) || (!word.is_ascii() && lower.contains(&word)))
+        })
+        .then_some(Addressing::Name)
+}
+
+/// How the first reason or next step that addresses someone does it, in
+/// the order reasons, trades, next step; `None` when all of them read the
+/// same to either person.
+pub(super) fn addressing(found: &prompt::Found, names: &[&str]) -> Option<Addressing> {
+    let reasons = found.shared.iter().map(|reason| &reason.why);
+    let trades = found.you_bring.iter().chain(&found.they_bring);
+    reasons
+        .chain(trades.map(|trade| &trade.why))
+        .chain(std::iter::once(&found.next_step))
+        .find_map(|text| addressing_in(text, names))
 }
 
 /// Whether every reason and the next step read the same to either person:
 /// no "you" and neither person's name. Only then is one run's finding also
 /// stored for the other person.
 pub(super) fn reads_for_either(found: &prompt::Found, names: &[&str]) -> bool {
-    let reasons = found.shared.iter().map(|reason| &reason.why);
-    let trades = found.you_bring.iter().chain(&found.they_bring);
-    !reasons
-        .chain(trades.map(|trade| &trade.why))
-        .chain(std::iter::once(&found.next_step))
-        .any(|text| addresses_someone(text, names))
+    addressing(found, names).is_none()
 }
 
 /// Themes with only the people in `cards`, the cards the viewer sees. A

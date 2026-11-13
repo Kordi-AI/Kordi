@@ -6,12 +6,16 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use kordi_system_agent_eval::database::DisposableDatabase;
-use kordi_system_agent_eval::{fixture, report, setup};
+use kordi_system_agent_eval::{fixture, report, select, setup};
 
 const USAGE: &str = "usage:
-  system-agent-eval run --label NAME [--stub] [--fixtures DIR] [--only ID,ID] [--out FILE]
+  system-agent-eval run --label NAME [--stub] [--fixtures DIR] [--only ID,ID] [--kind KIND]
+                        [--repeat N] [--match-prompt current|baseline] [--out FILE]
   system-agent-eval compare BASELINE.json CANDIDATE.json... [--markdown FILE] [--json FILE]
-  system-agent-eval list [--fixtures DIR]
+  system-agent-eval list [--fixtures DIR] [--kind KIND]
+
+KIND is system-agent, grounding or grounding-match. --repeat replays each
+fixture N times and needs fixtures that run without a database.
 
 System agent fixtures need KORDI_SYSTEM_AGENT_EVAL_DATABASE_URL: a PostgreSQL
 server on this machine (Unix socket, localhost or a loopback address) and a
@@ -67,25 +71,21 @@ async fn run(mut args: Args) -> Result<()> {
     }
     let stub = args.flag("--stub");
     let only = args.value("--only")?;
+    let kind = args.value("--kind")?;
+    let repeat = select::repeat(args.value("--repeat")?.as_deref())?;
+    let match_prompt = select::match_prompt(args.value("--match-prompt")?.as_deref())?;
     let out = args.value("--out")?;
     let now = chrono::Utc::now();
-    let mut fixtures = load(&mut args, now)?;
+    let fixtures = load(&mut args, now)?;
     args.done()?;
-    if let Some(only) = only {
-        let wanted: Vec<&str> = only.split(',').map(str::trim).collect();
-        fixtures.retain(|fixture| wanted.contains(&fixture.id()));
-        if fixtures.len() != wanted.len() {
-            bail!("--only names a fixture that does not exist");
-        }
-    }
+    let fixtures = select::select(fixtures, only.as_deref(), kind.as_deref())?;
+    select::check_repeat(&fixtures, repeat)?;
     let settings = if stub {
         setup::stub_settings()
     } else {
         setup::live_settings()?
     };
-    let needs_database = fixtures
-        .iter()
-        .any(|fixture| matches!(fixture, fixture::Fixture::SystemAgent(_)));
+    let needs_database = fixtures.iter().any(fixture::Fixture::needs_database);
     let database = if needs_database {
         let url = std::env::var(setup::DATABASE_URL_VAR).with_context(|| {
             format!(
@@ -124,14 +124,19 @@ async fn run(mut args: Args) -> Result<()> {
                 }
                 None => (settings.pending.unprovisioned(), None),
             };
-            setup::run_suite(
+            let options = setup::RunOptions {
+                repeat,
+                match_prompt,
+                prices: settings.prices,
+                now,
+            };
+            setup::run_suite_with(
                 &label,
                 &fixtures,
                 &config,
                 harness.as_ref(),
                 settings.engine,
-                settings.prices,
-                now,
+                &options,
             )
             .await
         });
@@ -246,14 +251,16 @@ fn compare(mut args: Args) -> Result<()> {
 }
 
 fn list(mut args: Args) -> Result<()> {
+    let kind = args.value("--kind")?;
     let fixtures = load(&mut args, chrono::Utc::now())?;
     args.done()?;
-    for fixture in fixtures {
-        let description = match &fixture {
-            fixture::Fixture::SystemAgent(conversation) => &conversation.description,
-            fixture::Fixture::Grounding(build) => &build.description,
-        };
-        println!("{:<34} {:<12} {description}", fixture.id(), fixture.kind());
+    for fixture in select::select(fixtures, None, kind.as_deref())? {
+        println!(
+            "{:<34} {:<15} {}",
+            fixture.id(),
+            fixture.kind(),
+            fixture.description()
+        );
     }
     Ok(())
 }
