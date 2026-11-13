@@ -6,7 +6,7 @@ import { defaultAgentDisplayName,publicScopedAgentMentionHandle,stripSelfPossess
 import { mentionTextStartsWithLabel } from './localAgentMentions';
 import { mentionHandleForLabel,normalizeMentionLabel } from './mentionHandles';
 import { directChatHasMember, directChatMemberKeys } from './directChatMembers';
-import { ambiguousOwnerNames, identitySuffixForCandidate, uniqueAgentMentionCandidates, uniqueHandle } from './uniqueAgentMentions';
+import { ambiguousOwnerNames, identitySuffixForCandidate, sharedAgentDisplayLabel, sharedAgentInScope, uniqueAgentMentionCandidates, uniqueHandle } from './uniqueAgentMentions';
 export { reserveAgentMentionHandles, uniqueAgentMentionCandidates } from './uniqueAgentMentions';
 
 export {
@@ -185,19 +185,11 @@ export function sharedCloudAgentMentionCandidatesForConversation(
   if (!conversationHasParticipantMentionScope(conversation)) return [];
   const localOwnerAccountId = normalizedOwnerKey(localAccountId);
   const localViewerIsParticipant = conversationImpliesLocalViewerParticipant(conversation);
-  const isGroup = conversationHasGroupMentionScope(conversation);
   const candidates = agents
-    // Another member's default agent is offered in group chats only, where
-    // co-members may mention it without being contacts
-    // (docs/contact-permissions.md). The viewer's own is the local agent.
-    .filter((agent) => !agent.isDefaultAgent
-      || (isGroup && normalizedOwnerKey(agent.ownerAccountId) !== localOwnerAccountId))
-    .filter((agent) => conversationContainsAccountId(conversation, agent.ownerAccountId)
-      || (localViewerIsParticipant && normalizedOwnerKey(agent.ownerAccountId) === localOwnerAccountId))
+    .filter((agent) => sharedAgentInScope(agent, conversationHasGroupMentionScope(conversation), localOwnerAccountId) && (conversationContainsAccountId(conversation, agent.ownerAccountId)
+      || (localViewerIsParticipant && normalizedOwnerKey(agent.ownerAccountId) === localOwnerAccountId)))
     .map((agent) => {
-      const displayLabel = agent.isDefaultAgent
-        ? defaultAgentDisplayName(agent.ownerDisplayName, agent.name)
-        : agent.name;
+      const displayLabel = sharedAgentDisplayLabel(agent);
       const handle = mentionHandleForLabel(displayLabel, agent.agentId);
       const owner = agent.ownerDisplayName?.trim() || agent.ownerAccountId;
       return {

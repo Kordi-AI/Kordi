@@ -1,3 +1,6 @@
+import type { SharedCloudAgentSummary } from '@/features/cloud/cloudAgents';
+import { defaultAgentDisplayName } from '@/lib/identityLabels';
+
 import type { CollaborationMentionCandidate, SharedCloudAgentMentionCandidate } from './mentions';
 import { mentionHandleForLabel, normalizeMentionLabel } from './mentionHandles';
 
@@ -75,4 +78,18 @@ export function ambiguousOwnerNames(candidates: readonly Pick<CollaborationMenti
     if (name) owners.set(name, (owners.get(name) ?? new Set()).add((peer.humanId || peer.nodeId || '').trim().toLowerCase()));
   }
   return new Set([...owners].filter(([, ids]) => ids.size > 1).map(([name]) => name));
+}
+
+/**
+ * Another member's default agent is offered in group chats only, where
+ * co-members may mention it without being contacts
+ * (docs/contact-permissions.md). The viewer's own is the local agent.
+ * `localOwnerKey` is the viewer's account id, trimmed and lowercased.
+ */
+export function sharedAgentInScope(agent: SharedCloudAgentSummary, isGroup: boolean, localOwnerKey: string) {
+  return !agent.isDefaultAgent || (isGroup && agent.ownerAccountId.trim().toLowerCase() !== localOwnerKey);
+}
+
+export function sharedAgentDisplayLabel(agent: SharedCloudAgentSummary) {
+  return agent.isDefaultAgent ? defaultAgentDisplayName(agent.ownerDisplayName, agent.name) : agent.name;
 }

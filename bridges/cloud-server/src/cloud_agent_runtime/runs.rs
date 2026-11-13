@@ -10,6 +10,7 @@ mod errors;
 pub(crate) mod exchanges;
 pub(crate) mod facilitator_handoff;
 mod feature_runs;
+mod group_member_target;
 mod group_mentions;
 mod group_target;
 pub(crate) mod identity;
@@ -28,9 +29,9 @@ pub(crate) mod subsessions;
 pub mod terminal_backfill;
 
 pub use authorization::{
-    claim_has_shared_cloud_agent_target, execution_agent_id, group_member_can_target_owner,
-    request_identity, requester_can_target_owner, requester_may_use_owner_agents,
-    validate_group_agent_claim, validate_shared_cloud_agent_claim,
+    claim_has_shared_cloud_agent_target, execution_agent_id, request_identity,
+    requester_can_target_owner, requester_may_use_owner_agents, validate_group_agent_claim,
+    validate_shared_cloud_agent_claim,
 };
 pub(crate) use claims::claimed_route_json;
 pub use claims::{
@@ -57,6 +58,7 @@ pub(crate) use errors::{
     agent_unavailable, error_response, run_error_response, runner_unauthorized,
 };
 pub use errors::{RunError, RunResult};
+pub use group_member_target::group_member_can_target_owner;
 pub use leases::{
     lease_canary_run, lease_next_run, mark_run_running, RunnerLeaseResponse, RunnerRunEnvelope,
     RunnerRunRequest, RunnerRunResponse,
