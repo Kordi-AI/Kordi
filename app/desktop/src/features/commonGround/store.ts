@@ -260,7 +260,7 @@ export class CommonGroundStore {
     if (!wasBuilding || owner.build.status === 'building') return;
     if (this.state.profilesOn) void profileOps.loadProfiles(this).catch(() => undefined);
     if (owner.build.status === 'failed') {
-      this.set({ notice: buildFailureMessage(owner.build.errorCode) });
+      this.set({ notice: buildFailureMessage(owner.build.errorCode, owner.build.unreadLinks?.length) });
     } else if (owner.card && this.top().name === 'build') {
       this.home();
     } else if (owner.card && this.top().name === 'home') {
