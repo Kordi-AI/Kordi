@@ -9,7 +9,7 @@
 //! - stall: the agent that owns a task stopped replying (see `ownership`).
 //!
 //! Card hooks (votes, reminders) and a member asking the System agent
-//! directly still wake it. Ordinary conversation is reviewed after it is quiet.
+//! directly still wake it; in Grounding groups only those and a stall do. Ordinary conversation is reviewed after it is quiet.
 //! Every trigger fires once: its marks join the sweep row's `hooks_fired`
 //! when the run finishes, so a retried run still has it and a finished one
 //! never repeats it.
@@ -106,6 +106,10 @@ pub(super) struct PassFacts<'a> {
     pub newest_card_created_at: Option<DateTime<Utc>>,
     pub found_loop: Option<Finding>,
     pub found_conflict: Option<Finding>,
+    /// A Grounding group: the System agent answers direct requests, card
+    /// hooks and a stalled agent task there, but never reviews the chat, a
+    /// loop or a conflict on its own.
+    pub requests_only: bool,
 }
 
 #[derive(Debug)]
@@ -118,7 +122,12 @@ pub(super) struct PassPlan {
 }
 
 /// Decides whether this pass runs the System agent and why.
-pub(super) fn decide(facts: PassFacts<'_>) -> PassPlan {
+pub(super) fn decide(mut facts: PassFacts<'_>) -> PassPlan {
+    if facts.requests_only {
+        facts.plan_talk = false;
+        facts.found_loop = None;
+        facts.found_conflict = None;
+    }
     let gate = facts.gate;
     let mut patch = Map::new();
     let mut marks = Map::new();

@@ -33,6 +33,7 @@ fn facts<'a>(gate: &'a Gate, hooks_fired: &'a Value) -> PassFacts<'a> {
         newest_card_created_at: None,
         found_loop: None,
         found_conflict: None,
+        requests_only: false,
     }
 }
 
@@ -182,6 +183,42 @@ fn card_hooks_and_direct_requests_still_wake_the_system_agent() {
     let plan = decide(asked);
     assert_eq!(plan.run, Some(Trigger::Request { rewind_to: Some(4) }));
     assert_eq!(plan.marks[DISCUSSION_KEY], Value::Null);
+}
+
+#[test]
+fn a_grounding_group_wakes_the_system_agent_only_when_asked() {
+    let quiet = quiet_for(15);
+    let empty = json!({});
+    let mut pass = facts(&quiet, &empty);
+    pass.requests_only = true;
+    pass.found_loop = Some(finding("loop"));
+    pass.found_conflict = Some(finding("conflict"));
+    let plan = decide(pass);
+    assert_eq!(plan.run, None, "no silence, loop or conflict run");
+    assert!(!plan.patch.contains_key(DISCUSSION_KEY), "nothing is held");
+    assert!(!plan.patch.contains_key(CHECK_AFTER_KEY), "nothing waits");
+
+    // A person's agent that stalled on a task someone gave it still gets help.
+    let stalled = Gate {
+        stepping_in: true,
+        agent_task: true,
+        ..quiet_for(15)
+    };
+    let mut pass = facts(&stalled, &empty);
+    pass.requests_only = true;
+    assert_eq!(decide(pass).run, Some(Trigger::Stall));
+
+    let mut asked = facts(&quiet, &empty);
+    asked.requests_only = true;
+    asked.asks_system_agent = true;
+    assert_eq!(
+        decide(asked).run,
+        Some(Trigger::Request { rewind_to: None })
+    );
+    let mut card = facts(&quiet, &empty);
+    card.requests_only = true;
+    card.hooks.push("card_changed".to_string());
+    assert_eq!(decide(card).run, Some(Trigger::Cards));
 }
 
 #[test]
