@@ -6,7 +6,7 @@ import type { SessionArtifact } from '@/kordi-app/types';
 import { openDesktopChatArtifact, openDesktopChatArtifactCopy } from '@/lib/desktopArtifactOpen';
 
 import { fileNameFromPath } from './artifactPreviewFormat';
-import { artifactDocumentApi } from './artifactThumbnail';
+import { artifactDocumentApi } from './artifactDocumentApi';
 
 export type OpenArtifactExternallyDeps = {
   api?: Pick<DocumentShareApi, 'getDocument' | 'getDocumentRaw'> | null;

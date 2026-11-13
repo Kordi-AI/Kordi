@@ -48,8 +48,9 @@
 .app-artifact-card-layout { padding: 1px 1px 16px; }
 .app-artifact-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 12px 10px; }
 
+/* A button shrinks to its content unless told otherwise; the card fills its grid cell. */
 .app-artifact-card {
-  display: flex; flex-direction: column; min-width: 0; padding: 0; border: 0; background: none; color: var(--utility-foreground);
+  display: flex; flex-direction: column; width: 100%; min-width: 0; padding: 0; border: 0; background: none; color: var(--utility-foreground);
   text-align: left; cursor: pointer;
 }
 .app-artifact-card-thumb {

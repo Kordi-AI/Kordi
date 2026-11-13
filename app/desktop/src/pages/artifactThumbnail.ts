@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
-import { documentShareApiForEnvironment, type DocumentShareApi } from '@/features/documents/documentShareApi';
+import type { DocumentShareApi } from '@/features/documents/documentShareApi';
 import { documentFormatForPath } from '@/features/documents/documentReaderModel';
 import { rememberDocumentTitle } from '@/features/documents/documentTitles';
 import type { SessionArtifact } from '@/kordi-app/types';
 
+import { artifactDocumentApi } from './artifactDocumentApi';
 import { artifactPreviewKind } from './artifactPreviewFormat';
 import { loadArtifactPreview } from './artifactPreviewLoader';
 
@@ -58,24 +59,6 @@ export function artifactThumbnailKey(artifact: SessionArtifact, baseRoot?: strin
 
 function clip(source: string) {
   return source.length > THUMBNAIL_SOURCE_CHARS ? source.slice(0, THUMBNAIL_SOURCE_CHARS) : source;
-}
-
-let apiOverride: ArtifactThumbnailContext['api'] | undefined;
-
-/** Lets tests and the login-free visual page read cloud documents from memory, for thumbnails and opening. */
-export function setArtifactThumbnailApiForPreview(api: ArtifactThumbnailContext['api'] | undefined) {
-  apiOverride = api;
-  cache.clear();
-}
-
-/** The server API for reading cloud documents, or the preview's in-memory one. */
-export function artifactDocumentApi() {
-  if (apiOverride !== undefined) return apiOverride;
-  try {
-    return documentShareApiForEnvironment();
-  } catch {
-    return null;
-  }
 }
 
 async function loadCloudDocument(artifact: SessionArtifact, api: NonNullable<ArtifactThumbnailContext['api']>): Promise<ArtifactThumbnailSource | null> {

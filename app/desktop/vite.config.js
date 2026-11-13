@@ -13,6 +13,8 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const DOCUMENT_EDITOR_SOURCE = /[\\/]src[\\/]features[\\/]documents[\\/]editor[\\/]/;
+// The Artifacts tab's card grid and thumbnails, loaded when the card layout first shows.
+const ARTIFACT_CARDS_SOURCE = /[\\/]src[\\/]pages[\\/](?:ArtifactCard|ArtifactCardGrid|artifactThumbnail)\.tsx?$/;
 const HELP_CENTER_SOURCE = /[\\/]src[\\/]features[\\/]onboarding[\\/](?:HelpMenu|HelpTour|helpTourSteps|helpTourGeometry|HelpPermissions|HelpReleaseNotes|helpContent|permissionAccess)\.[tj]sx?$/;
 const DOCUMENT_EDITOR_PACKAGES = /[\\/]node_modules[\\/](?:@tiptap|prosemirror-[a-z-]+|marked|linkifyjs|orderedmap|rope-sequence|w3c-keyname|yjs|y-websocket|y-protocols|lib0)[\\/]/;
 
@@ -67,7 +69,8 @@ export function desktopViteConfig({ command, mode }, environment) {
               { name: 'desktop-features', test: (id) => /[\\/]src[\\/]features[\\/]/.test(id) && !DOCUMENT_EDITOR_SOURCE.test(id) && !HELP_CENTER_SOURCE.test(id), maxSize: 650_000 },
               // After the app groups, so modules the app shares with the editor stay in app chunks.
               { name: 'document-editor', test: (id) => DOCUMENT_EDITOR_PACKAGES.test(id) || DOCUMENT_EDITOR_SOURCE.test(id) },
-              { name: 'workspace-ui', test: /[\\/]src[\\/](?:app|components|kordi-app|pages)[\\/]/ },
+              // The Artifacts card grid stays out, so its dynamic import keeps it in its own lazy chunk.
+              { name: 'workspace-ui', test: (id) => /[\\/]src[\\/](?:app|components|kordi-app|pages)[\\/]/.test(id) && !ARTIFACT_CARDS_SOURCE.test(id) },
               // Assign shared dependencies first so Help does not pull startup code into its lazy chunk.
               { name: 'help-center', minSize: 0, test: HELP_CENTER_SOURCE },
             ],

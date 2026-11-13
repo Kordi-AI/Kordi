@@ -13,7 +13,7 @@ import { PREVIEW_CONVERSATION_MEMORY_SCOPE_ID, createPreviewMemoryClient } from 
 import type { DocumentResponse } from '../../src/features/documents/documentShareTypes';
 import type { Conversation, SessionArtifact } from '../../src/kordi-app/types';
 import { ARTIFACT_LAYOUT_STORAGE_KEY } from '../../src/pages/artifactLayoutPreference';
-import { setArtifactThumbnailApiForPreview } from '../../src/pages/artifactThumbnail';
+import { setArtifactDocumentApiForPreview } from '../../src/pages/artifactDocumentApi';
 import { isNativeDesktopShell } from '../../src/lib/desktop';
 import { ChatDetailPanel } from '../../src/pages/ChatDetailPanel';
 import { ChatMemoryTab } from '../../src/pages/ChatMemoryTab';
@@ -58,7 +58,7 @@ const SIGNUP_PAGE = `<!doctype html><html><body style="margin:0;font-family:syst
 <form style="width:380px;background:#fff;border-radius:16px;padding:32px;box-shadow:0 8px 30px rgba(0,0,0,.08)"><h2 style="margin:0 0 18px">Create your team</h2>
 ${['Team name', 'Work email'].map((label) => `<label style="display:block;margin-bottom:14px;font-size:14px">${label}<div style="margin-top:6px;height:38px;border:1px solid #ddd;border-radius:8px"></div></label>`).join('')}
 <div style="height:40px;border-radius:8px;background:#2d6cdf"></div></form></body></html>`;
-setArtifactThumbnailApiForPreview({
+setArtifactDocumentApiForPreview({
   getDocument: async (attachmentId) => {
     const document = CLOUD_MARKDOWN[attachmentId];
     if (!document) throw new Error('Not in the preview');
