@@ -2,7 +2,8 @@
 //! ([`super::decide`]), reads what changed, and queues at most one
 //! automatic update per card. Claims use `SKIP LOCKED` and push the card's
 //! next look a minute out, so sweeps on several servers never take the same
-//! card. Automatic updates never use the manual build rate limit.
+//! card. Automatic updates never use the manual build rate limit. The same
+//! tick then matches changed cards again (`matching::rematch`).
 
 use chrono::{DateTime, Duration, Utc};
 use sqlx_core::{query::query, query_as::query_as};
@@ -11,11 +12,12 @@ use sqlx_postgres::PgPool;
 use super::config::AutoRebuildConfig;
 use super::decide::{decide, CardState, Decision, Hold};
 use super::{delta, prompt, AUTO_PREFIX};
+use crate::auth::rate_limit::CloudRateLimiter;
 use crate::common_ground::card::{
     self, CardRow, AUTO_IN_FLIGHT_SQL, BUILD_IN_FLIGHT_SQL, CAUGHT_UP_SQL,
 };
-use crate::common_ground::profiles;
 use crate::common_ground::runs::{self, NewRun};
+use crate::common_ground::{matching, profiles};
 
 /// Cards one sweep looks at.
 const BATCH: i64 = 20;
@@ -105,10 +107,13 @@ async fn claim(pool: &PgPool) -> sqlx_core::Result<Vec<Claimed>> {
         .collect())
 }
 
-/// One sweep. A card's failure is logged and does not hold up the others.
+/// One sweep: automatic updates, then matching changed cards again, charged
+/// to `rate_limiter` like any match run. A card's failure is logged and
+/// does not hold up the others.
 pub(in crate::common_ground) async fn sweep(
     pool: &PgPool,
     service: &crate::system_agent::SystemAgentConfig,
+    rate_limiter: &CloudRateLimiter,
     config: &AutoRebuildConfig,
 ) -> sqlx_core::Result<Vec<(String, Outcome)>> {
     let mut outcomes = Vec::new();
@@ -133,6 +138,9 @@ pub(in crate::common_ground) async fn sweep(
                 eprintln!("[common-ground] Automatic update check failed for one card: {error}")
             }
         }
+    }
+    if let Err(error) = matching::rematch(pool, service, rate_limiter).await {
+        eprintln!("[common-ground] Matching changed cards again failed: {error}");
     }
     Ok(outcomes)
 }

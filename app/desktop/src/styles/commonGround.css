@@ -170,12 +170,6 @@ button.cg-tag-text { cursor: pointer; }
 .cg-hint { margin-top: 8px; color: var(--utility-muted-text); font-size: 12px; text-align: center; }
 .cg-next-step { margin: 14px 2px 0; color: var(--utility-muted-text); }
 
-.cg-members { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 12px 8px; margin-top: 20px; }
-.cg-member { display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 6px; padding: 6px 2px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; font-size: 12px; }
-button.cg-member { cursor: pointer; }
-button.cg-member:hover { background: var(--cg-fill); }
-.cg-member > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 .cg-form { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
 .cg-form-row { display: flex; gap: 8px; }
 .cg-pick-list { display: flex; max-height: 260px; flex-direction: column; overflow-y: auto; border: 1px solid var(--cg-line); border-radius: 10px; }

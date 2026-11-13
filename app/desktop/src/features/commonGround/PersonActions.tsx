@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarPlus, Check, Clock, MessageCircle, Sparkles, UserPlus } from 'lucide-react';
+import { CalendarPlus, Check, Clock, MessageCircle, UserPlus } from 'lucide-react';
 
 import { DetailTile, DetailTiles } from '@/kordi-app/contacts/ContactDetailParts';
 import type { CgHost } from './host';
@@ -14,12 +14,11 @@ const ICON = 'h-5 w-5';
  * The tile row under a person's hero: Add (or Requested, Accept), Meet and Chat, driven
  * by the relationship the server sent. Hidden only when the server has no action routes.
  */
-export function PersonActions({ person, state, store, host, onFind }: {
+export function PersonActions({ person, state, store, host }: {
   person: CgPerson;
   state: CgState;
   store: CommonGroundStore;
   host: CgHost;
-  onFind?: () => void;
 }) {
   const [meeting, setMeeting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -54,7 +53,6 @@ export function PersonActions({ person, state, store, host, onFind }: {
   };
 
   const tiles = [
-    onFind ? <DetailTile key="find" icon={<Sparkles className={ICON} aria-hidden="true" />} label="Find common ground" onClick={onFind} /> : null,
     contactTile(),
     showMeet ? <DetailTile key="meet" icon={<CalendarPlus className={ICON} aria-hidden="true" />} label="Meet" disabled={!contact || busy} onClick={() => setMeeting(true)} /> : null,
     showChat ? <DetailTile key="chat" icon={<MessageCircle className={ICON} aria-hidden="true" />} label="Chat" disabled={!contact || busy} onClick={openChat} /> : null,

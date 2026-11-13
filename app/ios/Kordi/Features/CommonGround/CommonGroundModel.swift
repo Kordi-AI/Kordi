@@ -15,6 +15,10 @@ final class CommonGroundModel: ObservableObject {
     static let buildNotStarted = "Could not start building. Try again."
     nonisolated static let lobbyPollInterval: Duration = .seconds(2)
     nonisolated static let matchPollInterval: Duration = .seconds(3)
+    /// The matching poll once a sync hint showed that hints arrive.
+    nonisolated static let hintedMatchPollInterval: Duration = .seconds(10)
+    /// An open room's ready Results look again this often, in case a hint was missed.
+    nonisolated static let fallbackPollInterval: Duration = .seconds(60)
     /// Home reloads cards on appear and on foreground at most this often.
     nonisolated static let syncInterval: TimeInterval = 30
     /// Typed tags stay short enough to read at a glance.
@@ -69,6 +73,11 @@ final class CommonGroundModel: ObservableObject {
     var lastSync: Date?
     /// The one-time move of designs kept on this device, run in the background.
     var designMove: Task<Void, Never>?
+    /// Whether a sync hint has arrived, so polls can slow down; set in CommonGroundSyncHints.swift.
+    var hintsArrived: Bool
+    /// The refresh loops of screens on display, woken by sync hints.
+    var hintWakes: [CommonGroundHintWake] = []
+    private var hintObserver: NSObjectProtocol?
 
     init(me: CommonGroundPerson, profilesEnabled: Bool = false, memoriesEnabled: Bool = false, cardChoicesEnabled: Bool = false,
          nearbyEnabled: Bool = false, defaults: UserDefaults = .standard, context: @escaping Context) {
@@ -79,6 +88,17 @@ final class CommonGroundModel: ObservableObject {
         self.cardChoicesEnabled = cardChoicesEnabled
         self.nearbyEnabled = nearbyEnabled
         self.defaults = defaults
+        hintsArrived = CommonGroundSyncHint.arrivedThisSession
+        hintObserver = NotificationCenter.default.addObserver(
+            forName: .kordiCommonGroundHint, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let hint = notification.object as? CommonGroundSyncHint else { return }
+            MainActor.assumeIsolated { self?.receive(hint) }
+        }
+    }
+
+    deinit {
+        if let hintObserver { NotificationCenter.default.removeObserver(hintObserver) }
     }
 
     /// The profile card calls act on; nil before profiles.
@@ -446,14 +466,15 @@ final class CommonGroundModel: ObservableObject {
     }
 
     /// A completed match can change when someone joins or changes their
-    /// shared card. Refresh membership and cached results while visible;
-    /// the server reuses completed matches whose inputs have not changed.
-    func followRoomResults(_ code: String, every interval: Duration = matchPollInterval) async {
-        while !Task.isCancelled {
-            guard await refreshRoom(code), !Task.isCancelled else { return }
+    /// shared card. Refresh membership and cached results while visible: on
+    /// each room or match hint, and on `resultsPollInterval` (or `interval`)
+    /// in case one is missed. The server reuses completed matches whose
+    /// inputs have not changed. A closed room is refreshed once.
+    func followRoomResults(_ code: String, every interval: Duration? = nil) async {
+        await follow(.results(code), every: { interval ?? resultsPollInterval(code) }) {
+            guard await refreshRoom(code), !Task.isCancelled else { return false }
             await loadResults(code, quiet: true)
-            guard !Task.isCancelled, !isClosed(code) else { return }
-            do { try await Task.sleep(for: interval) } catch { return }
+            return !Task.isCancelled && !isClosed(code)
         }
     }
 

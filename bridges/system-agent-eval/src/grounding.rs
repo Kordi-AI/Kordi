@@ -1,6 +1,7 @@
 //! Grounding card builds: the server's redaction and instructions, the
 //! runner's Common ground completion on the same service credential, and the
-//! server's reply parsing. No database is involved.
+//! server's reply parsing. No database is involved. Match runs use the same
+//! completion (`complete`).
 
 use chrono::{DateTime, Duration, Utc};
 use kordi_cloud_agent_runner::client::CloudAgentRun;
@@ -103,40 +104,17 @@ pub async fn build(
         &now.date_naive().to_string(),
         &evidence,
     );
-    let run: CloudAgentRun = serde_json::from_value(json!({
-        "runId": format!("{}eval_{}", kordi_cloud_server::common_ground::RUN_PREFIX,
-            uuid::Uuid::new_v4().simple()),
-        "status": "leased", "prompt": card.user_prompt, "systemPrompt": card.system_prompt,
-        "ownerAccountId": config.account_id, "requesterAccountId": config.account_id,
-        "sessionId": "grounding-quality-test", "sandboxId": null,
-        "runtimeRoute": config.model_routing(), "providerAuthAvailable": true,
-    }))?;
-    let client = EvalClient::new(
-        None,
-        "system-agent-eval",
-        provider_material(config, engine).await?,
-    );
-    let stub = StubProvider::new(
-        fixture
-            .stub
-            .iter()
-            .map(|text| json!({"final": text}))
-            .collect(),
-        Default::default(),
-    );
-    let live = OpenAiCompatibleProvider::default();
-    let runner_engine = engine.runner_engine();
-    let (result, latency, usage) = timed(async {
-        if engine == Engine::Stub {
-            generate(&client, &stub, runner_engine, &run).await
-        } else {
-            generate(&client, &live, runner_engine, &run).await
-        }
-    })
-    .await;
+    let (result, latency_ms, usage) = complete(
+        config,
+        engine,
+        &card.system_prompt,
+        &card.user_prompt,
+        fixture.stub.as_deref(),
+    )
+    .await?;
     let mut outcome = BuildOutcome {
-        latency_ms: latency,
-        usage: (engine != Engine::Stub).then(|| usage.into()),
+        latency_ms,
+        usage,
         ..BuildOutcome::default()
     };
     match result {
@@ -150,4 +128,49 @@ pub async fn build(
         Err(error) => outcome.error = Some(crate::redact::provider_error(&error)),
     }
     Ok(outcome)
+}
+
+/// One Common ground completion as the server queues it: the prompts on the
+/// System agent's credential, answered by `stub` on the stub engine and by
+/// the configured provider otherwise. Returns the reply or the provider
+/// error, the latency, and the usage a real provider reported.
+pub(crate) async fn complete(
+    config: &SystemAgentConfig,
+    engine: Engine,
+    system_prompt: &str,
+    user_prompt: &str,
+    stub: Option<&str>,
+) -> anyhow::Result<(Result<String, String>, u64, Option<UsageRecord>)> {
+    let run: CloudAgentRun = serde_json::from_value(json!({
+        "runId": format!("{}eval_{}", kordi_cloud_server::common_ground::RUN_PREFIX,
+            uuid::Uuid::new_v4().simple()),
+        "status": "leased", "prompt": user_prompt, "systemPrompt": system_prompt,
+        "ownerAccountId": config.account_id, "requesterAccountId": config.account_id,
+        "sessionId": "grounding-quality-test", "sandboxId": null,
+        "runtimeRoute": config.model_routing(), "providerAuthAvailable": true,
+    }))?;
+    let client = EvalClient::new(
+        None,
+        "system-agent-eval",
+        provider_material(config, engine).await?,
+    );
+    let stub = StubProvider::new(
+        stub.iter().map(|text| json!({"final": text})).collect(),
+        Default::default(),
+    );
+    let live = OpenAiCompatibleProvider::default();
+    let runner_engine = engine.runner_engine();
+    let (result, latency, usage) = timed(async {
+        if engine == Engine::Stub {
+            generate(&client, &stub, runner_engine, &run).await
+        } else {
+            generate(&client, &live, runner_engine, &run).await
+        }
+    })
+    .await;
+    Ok((
+        result,
+        latency,
+        (engine != Engine::Stub).then(|| usage.into()),
+    ))
 }

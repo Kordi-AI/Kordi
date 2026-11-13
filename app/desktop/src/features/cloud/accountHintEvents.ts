@@ -13,12 +13,18 @@
  * and `common_ground.nearby.alert` refresh open Grounding Nearby views
  * (`features/commonGround/nearbyHints`). `common_ground.card.updated` (a card
  * build finished, by hand or automatically) refreshes an open Grounding page
- * (`features/commonGround/cardHints`).
+ * (`features/commonGround/cardHints`). `common_ground.room.updated` (a room's
+ * members, matching, themes or a member's card changed) and
+ * `common_ground.matches.updated` (a match for this account finished or
+ * failed) refresh the open Grounding room, match page or Rooms list
+ * (`features/commonGround/roomHints`).
  */
 export const ACCOUNT_HINT_EVENT_TYPES: ReadonlySet<string> = new Set([
   'common_ground.card.updated',
+  'common_ground.matches.updated',
   'common_ground.nearby.alert',
   'common_ground.nearby.updated',
+  'common_ground.room.updated',
   'digest.run_requested',
   'document.agent_request',
   'personal_agent.eval_requested',

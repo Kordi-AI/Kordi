@@ -96,6 +96,10 @@ struct CommonGroundHome: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.refreshHome(); await model.refreshNearbySummary() } }
         }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await model.followRoomHints()
+        }
         .task(id: model.isBuilding) { await model.waitForBuild() }
         .sheet(item: $joinCode, onDismiss: {
             code = ""

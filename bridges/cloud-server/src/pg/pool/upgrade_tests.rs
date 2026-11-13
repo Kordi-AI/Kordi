@@ -10,6 +10,7 @@ mod agent_avatar_tests;
 mod apple_token_tests;
 mod common_ground_daily_tests;
 mod common_ground_nearby_tests;
+mod common_ground_rematch_tests;
 mod common_ground_sources_tests;
 mod common_ground_tests;
 mod connectors_tests;

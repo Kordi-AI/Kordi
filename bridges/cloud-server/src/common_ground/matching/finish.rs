@@ -1,6 +1,6 @@
 //! Storing what a finished match or room-theme run found, and failing runs.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::{json, Value};
 use sqlx_core::{query::query, query_as::query_as};
@@ -8,7 +8,7 @@ use sqlx_postgres::PgPool;
 use uuid::Uuid;
 
 use super::store::members_key;
-use super::{prompt, result, SharedCard};
+use super::{prompt, reads_for_either, result, reversed, MatchResult, SharedCard};
 use crate::common_ground::runs;
 
 type RunRow = (String, Option<String>, Option<Uuid>, Value);
@@ -50,27 +50,23 @@ pub(in crate::common_ground) async fn complete(
         };
         // Cards that changed while the run worked are matched again later.
         if is_current(viewer_card) {
+            let both_ways = both_ways(pool, viewer_card, others).await?;
             for (other, found) in others.iter().zip(found) {
                 if !is_current(other) {
                     continue;
                 }
-                query(
-                    "INSERT INTO cloud_common_ground_matches
-                         (viewer_account_id, other_account_id, viewer_profile_id, other_profile_id,
-                          viewer_revision, other_revision, result_json)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)
-                     ON CONFLICT (viewer_profile_id, other_profile_id) DO UPDATE SET
-                         viewer_revision = EXCLUDED.viewer_revision, other_revision = EXCLUDED.other_revision,
-                         result_json = EXCLUDED.result_json, computed_at = now()",
+                let names = [viewer_card.name.as_str(), other.name.as_str()];
+                if both_ways.contains(&other.account_id) && reads_for_either(&found, &names) {
+                    let mirrored = result(other, viewer_card, reversed(&found));
+                    store(&mut tx, other, viewer_card, &mirrored, true).await?;
+                }
+                store(
+                    &mut tx,
+                    viewer_card,
+                    other,
+                    &result(viewer_card, other, found),
+                    false,
                 )
-                .bind(&viewer_card.account_id)
-                .bind(&other.account_id)
-                .bind(&viewer_card.profile_id)
-                .bind(&other.profile_id)
-                .bind(viewer_card.revision)
-                .bind(other.revision)
-                .bind(json!(result(viewer_card, other, found)))
-                .execute(&mut *tx)
                 .await?;
             }
         }
@@ -80,6 +76,7 @@ pub(in crate::common_ground) async fn complete(
                 .await?;
             crate::common_ground::nearby::run_finished(&mut tx, viewer).await?;
         }
+        tell_others(&mut tx, others).await?;
     } else if let Some(room_id) = room_id {
         let Some(themes) = prompt::parse_themes(text, cards.len()) else {
             drop(tx);
@@ -130,8 +127,9 @@ pub(in crate::common_ground) async fn fail(
     if !runs::mark_failed(&mut tx, run_id, runner_id, code, "Matching failed.").await? {
         return Ok(());
     }
-    let row: Option<(Option<String>, Option<Uuid>)> = query_as(
-        "SELECT viewer_account_id, room_id FROM cloud_common_ground_match_runs WHERE run_id = $1 AND finished_at IS NULL",
+    let row: Option<(Option<String>, Option<Uuid>, Value)> = query_as(
+        "SELECT viewer_account_id, room_id, cards_json FROM cloud_common_ground_match_runs
+         WHERE run_id = $1 AND finished_at IS NULL",
     )
     .bind(run_id)
     .fetch_optional(&mut *tx)
@@ -140,7 +138,7 @@ pub(in crate::common_ground) async fn fail(
         return Ok(());
     }
     match row {
-        Some((Some(viewer), _)) => {
+        Some((Some(viewer), _, cards)) => {
             crate::common_ground::hint(
                 &mut tx,
                 &viewer,
@@ -149,11 +147,92 @@ pub(in crate::common_ground) async fn fail(
             )
             .await?;
             crate::common_ground::nearby::run_finished(&mut tx, &viewer).await?;
+            let cards: Vec<SharedCard> = serde_json::from_value(cards).unwrap_or_default();
+            tell_others(&mut tx, cards.get(1..).unwrap_or_default()).await?;
         }
-        Some((None, Some(room_id))) => notify_room(&mut tx, room_id).await?,
+        Some((None, Some(room_id), _)) => notify_room(&mut tx, room_id).await?,
         _ => {}
     }
     tx.commit().await
+}
+
+/// The other people of a match run who get its finding too: none unless the
+/// viewer allowed AI use of their card for other people's requests, and
+/// only those who still allow it themselves (`crate::ai_consent`).
+async fn both_ways(
+    pool: &PgPool,
+    viewer: &SharedCard,
+    others: &[SharedCard],
+) -> sqlx_core::Result<HashSet<String>> {
+    let ids: Vec<String> = std::iter::once(viewer)
+        .chain(others)
+        .map(|card| card.account_id.clone())
+        .collect();
+    let excluded = crate::ai_consent::not_allowed_among(pool, &ids).await?;
+    if excluded.contains(&viewer.account_id) {
+        return Ok(HashSet::new());
+    }
+    Ok(ids
+        .into_iter()
+        .skip(1)
+        .filter(|id| !excluded.contains(id))
+        .collect())
+}
+
+/// Stores `result` for `viewer` with `other` at the revisions of both cards.
+/// A `mirrored` result, read from the other side's run, never replaces one
+/// already computed for the same two revisions, so a score never changes
+/// under someone who has it. `opened_at` is left alone either way.
+async fn store(
+    tx: &mut sqlx_core::transaction::Transaction<'_, sqlx_postgres::Postgres>,
+    viewer: &SharedCard,
+    other: &SharedCard,
+    result: &MatchResult,
+    mirrored: bool,
+) -> sqlx_core::Result<()> {
+    query(
+        "INSERT INTO cloud_common_ground_matches AS stored
+             (viewer_account_id, other_account_id, viewer_profile_id, other_profile_id,
+              viewer_revision, other_revision, result_json)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (viewer_profile_id, other_profile_id) DO UPDATE SET
+             viewer_revision = EXCLUDED.viewer_revision, other_revision = EXCLUDED.other_revision,
+             result_json = EXCLUDED.result_json, computed_at = now()
+         WHERE NOT $8::boolean OR stored.viewer_revision <> EXCLUDED.viewer_revision
+             OR stored.other_revision <> EXCLUDED.other_revision",
+    )
+    .bind(&viewer.account_id)
+    .bind(&other.account_id)
+    .bind(&viewer.profile_id)
+    .bind(&other.profile_id)
+    .bind(viewer.revision)
+    .bind(other.revision)
+    .bind(json!(result))
+    .bind(mirrored)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Tells everyone else a finished match run read to refresh: it may have
+/// stored their side of the pair, and a person whose request waited on it
+/// (`store::queue_matches`) queues their own run when it did not.
+async fn tell_others(
+    tx: &mut sqlx_core::transaction::Transaction<'_, sqlx_postgres::Postgres>,
+    others: &[SharedCard],
+) -> sqlx_core::Result<()> {
+    for other in others {
+        let payload = json!({ "profileId": other.profile_id });
+        crate::common_ground::hint(
+            tx,
+            &other.account_id,
+            "common_ground.matches.updated",
+            payload,
+        )
+        .await?;
+        crate::common_ground::nearby::run_finished(tx, &other.account_id).await?;
+    }
+    Ok(())
 }
 
 /// Marks an open run finished and drops the cards it read: other people's

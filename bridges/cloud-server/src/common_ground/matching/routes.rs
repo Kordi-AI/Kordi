@@ -43,8 +43,9 @@ fn status(pending: Option<Pending>) -> &'static str {
 /// `POST /v1/cloud/common-ground/rooms/:code/results`: everyone in the room
 /// ranked by match with you, the themes several people share, and the
 /// suggested group. People still being matched are left out until ready;
-/// `status` is "matching" until everything is in. A closed room shows what
-/// was stored for it and never queues a run.
+/// `status` is "matching" until everything is in, and the last themes stay
+/// while new ones are found. A closed room shows what was stored for it and
+/// never queues a run.
 pub(in crate::common_ground) async fn results(
     State(state): State<Arc<ServerState>>,
     Extension(rate_limiter): Extension<Arc<CloudRateLimiter>>,
@@ -152,8 +153,9 @@ pub(in crate::common_ground) async fn results(
         Ok(themes) => themes,
         Err(error) => return db_error(error),
     };
-    // A closed room keeps themes computed with people who no longer share.
-    let visible = themes.map(|themes| visible_themes(themes, &visible_cards));
+    // An open room's themes count only for the current theme members; a
+    // closed room keeps themes computed with people who no longer share.
+    let mut visible = themes.map(|themes| visible_themes(themes, &visible_cards));
     let needs_themes = open && visible.is_none() && theme_members.len() >= 2;
     // Each queued run is charged; polling while one works or pauses is free.
     let mut pending = None;
@@ -187,7 +189,22 @@ pub(in crate::common_ground) async fn results(
         )
         .await;
         match queued {
-            Ok(Queued::Pending(state)) => pending = pending.or(Some(state)),
+            Ok(Queued::Pending(state)) => {
+                pending = pending.or(Some(state));
+                // Until the new themes land, the last ones stay for the people
+                // the viewer sees and the run reads. Their labels may come from
+                // earlier cards, so only a pending run keeps them up.
+                let seen: Vec<SharedCard> = theme_members
+                    .iter()
+                    .filter(|c| !hidden.contains(&c.account_id))
+                    .cloned()
+                    .collect();
+                visible = match store::latest_themes(pool, room_id).await {
+                    Ok(themes) => themes.map(|themes| visible_themes(themes, &seen)),
+                    Err(error) => return db_error(error),
+                };
+            }
+            // No run can replace them, so the previous themes go.
             Ok(Queued::Skipped) => {}
             Ok(Queued::Limited(retry_after)) => return limited(retry_after),
             Err(error) => return db_error(error),

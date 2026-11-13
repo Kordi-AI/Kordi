@@ -1,17 +1,19 @@
 // Common ground state for one signed-in account: the screen stack, the
 // owner's card, rooms, results and matches. Polling is driven by `poll()`,
 // which refreshes whatever the top screen is waiting on and returns the delay
-// before the next refresh, or null when nothing is pending.
+// before the next refresh, or null when nothing is pending; room and match
+// hints from the sync stream refresh the open screen sooner (`storeHints`).
 
 import { BUILD_NOT_STARTED, buildFailureMessage, emptySourcesMessage } from './buildRequest';
 import { CommonGroundError, commonGroundErrorCode, commonGroundErrorMessage, isRouteMissing, isTransientFailure, type CommonGroundClient } from './client';
 import type { CgProfileMemory } from './profiles';
 import { BUILD_CHECK_MS, startedBuild } from './storeBuild';
 import * as autoOps from './storeAutoRebuild';
+import * as hintOps from './storeHints';
 import * as pairOps from './storePairing';
 import * as profileOps from './storeProfiles';
 import * as roomOps from './storeRooms';
-import { reconcileRooms, refreshScreen } from './storeRefresh';
+import { pollTop, reconcileRooms, refreshScreen } from './storeRefresh';
 import type {
   CgBuildRequest, CgCardLook, CgCreateRoomInput, CgJoinInput, CgMatch, CgMeetInput, CgOwnerView, CgPersonCard, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry,
   CgNearbyScreen, CgRelationship, CgResults, CgRoom, CgRoomSummary, CgTopicLists,
@@ -21,7 +23,6 @@ export type CgScreen =
   | { name: 'home' }
   | { name: 'build'; memory?: boolean }
   | { name: 'card' } | CgNearbyScreen
-  | { name: 'lobby'; code: string }
   | { name: 'results'; code: string }
   | { name: 'match'; accountId: string; profileId?: string }
   | { name: 'person'; accountId: string; profileId?: string };
@@ -65,8 +66,9 @@ export type CommonGroundStoreOptions = {
   buildCheckMs?: number;
 };
 
-export const LOBBY_POLL_MS = 2_000;
 export const MATCH_POLL_MS = 3_000;
+/** The matching poll delay once room and match hints arrive and polling is the fallback. */
+export const MATCH_FALLBACK_POLL_MS = 10_000;
 export const BUILD_POLL_MS = 3_000;
 export { BUILD_CHECK_MS, BUILD_START_CHECKS } from './storeBuild';
 /** The shortest gap between two refreshes from other devices. */
@@ -115,7 +117,9 @@ const BUILD_ERRORS: Record<string, string> = {
 export class CommonGroundStore {
   private state: CgState;
   private listeners = new Set<() => void>();
-  private disposed = false;
+  private closed = false;
+  /** True after `dispose()`: background refreshes stop. */
+  get disposed(): boolean { return this.closed; }
   private lastSync = Date.now();
   readonly memory: CgProfileMemory;
   private readonly buildCheckMs: number;
@@ -133,13 +137,13 @@ export class CommonGroundStore {
   };
 
   set(patch: Partial<CgState>) {
-    if (this.disposed) return;
+    if (this.closed) return;
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((listener) => listener());
   }
 
   dispose() {
-    this.disposed = true;
+    this.closed = true;
     this.listeners.clear();
   }
 
@@ -188,7 +192,7 @@ export class CommonGroundStore {
     void (reload ? this.loadHome() : this.loadRooms());
   }
 
-  loadScreen = (screen: CgScreen = this.top()) => refreshScreen(this, screen);
+  loadScreen = (screen: CgScreen = this.top()) => refreshScreen(this, screen).then(() => undefined);
 
   async loadHome(): Promise<void> {
     this.lastSync = Date.now();
@@ -221,7 +225,7 @@ export class CommonGroundStore {
       const owner = await this.client.card(profileId);
       autoOps.landFetchedOwner(this, profileId, before, owner);
       await this.loadActivity();
-      if (this.top().name !== 'home') await this.loadScreen();
+      if (this.top().name !== 'home') await hintOps.refreshShared(this, this.top());
       return true;
     } catch {
       return false;
@@ -229,7 +233,12 @@ export class CommonGroundStore {
   }
 
   private loadActivity() {
-    return Promise.all([this.loadRooms(), this.client.recent().then(({ people }) => this.set({ recent: people })).catch(() => undefined)]);
+    return Promise.all([this.loadRooms(), this.loadRecent()]);
+  }
+
+  /** Refreshes Recent; a failed request keeps the list shown. */
+  loadRecent(): Promise<void> {
+    return this.client.recent().then(({ people }) => this.set({ recent: people })).catch(() => undefined);
   }
 
   /** Refreshes the Rooms list; an older server without the route hides it. */
@@ -242,33 +251,8 @@ export class CommonGroundStore {
     }
   }
 
-  /** Refreshes what the top screen waits on; returns the next delay or null. */
-  async poll(): Promise<number | null> {
-    const screen = this.top();
-    try {
-      if (this.state.owner?.build.status === 'building') {
-        const profileId = this.state.profileId;
-        const owner = await this.client.card(profileId);
-        if (this.state.profileId === profileId) this.applyOwner(owner);
-        return owner.build.status === 'building' ? BUILD_POLL_MS : null;
-      }
-      const matching = () => {
-        const status = screen.name === 'results' ? this.state.results[screen.code]?.status
-          : screen.name === 'match' ? this.state.matches[personKey(screen.accountId, screen.profileId)]?.status : 'ready';
-        return !status || status === 'matching';
-      };
-      if (screen.name === 'lobby' || (matching() && (screen.name !== 'results' || !roomClosed(this.state, screen.code)))) {
-        await this.loadScreen(screen);
-        if (this.top() !== screen) return null;
-        return screen.name === 'lobby' ? LOBBY_POLL_MS : matching() ? MATCH_POLL_MS : null;
-      }
-    } catch {
-      return screen.name === 'lobby' ? LOBBY_POLL_MS : MATCH_POLL_MS;
-    }
-    if (autoOps.cardRefreshDue(this)) return autoOps.refreshCard(this);
-    await this.syncFromServer();
-    return null;
-  }
+  /** Refreshes what the top screen waits on; returns the next delay or null (`storeRefresh`). */
+  poll = () => pollTop(this);
 
   applyOwner(owner: CgOwnerView) {
     const wasBuilding = this.state.owner?.build.status === 'building';
@@ -308,7 +292,7 @@ export class CommonGroundStore {
 
   /** True once the card shows the build running; it then polls as usual. */
   private async followStartedBuild(profileId: string | null): Promise<boolean> {
-    const current = () => !this.disposed && this.state.profileId === profileId;
+    const current = () => !this.closed && this.state.profileId === profileId;
     const owner = await startedBuild(this.client, profileId, current, this.buildCheckMs);
     if (owner) this.applyOwner(owner);
     return Boolean(owner);
@@ -361,8 +345,11 @@ export class CommonGroundStore {
     try {
       this.set({ busy: 'join', notice: null });
       const room = await this.client.joinRoom(code, input);
-      this.set({ rooms: { ...this.state.rooms, [code]: room }, stack: [...this.state.stack, { name: 'lobby', code }] });
-      void this.loadRooms();
+      // Joining opens the room; asking for its results starts matching.
+      const screen: CgScreen = { name: 'results', code };
+      this.set({ busy: null, rooms: { ...this.state.rooms, [code]: room }, stack: [...this.state.stack, screen] });
+      // Results load after the rooms list, which would otherwise land over them.
+      void this.loadRooms().finally(() => { if (this.top() === screen) void this.loadScreen(screen); });
       return true;
     } catch (error) {
       const code = commonGroundErrorCode(error);
@@ -380,13 +367,6 @@ export class CommonGroundStore {
     const { [code]: _results, ...results } = this.state.results;
     this.set({ rooms, results, roomList: this.state.roomList.filter((room) => room.code !== code) });
     this.home();
-  }
-
-  async findCommonGround(code: string): Promise<void> {
-    const results = await this.run('find', () => this.client.results(code));
-    if (!results) return;
-    this.set({ results: { ...this.state.results, [code]: results } });
-    this.set({ stack: [...this.state.stack.slice(0, -1), { name: 'results', code }] });
   }
 
   /** The room behind four typed digits, before joining it. */

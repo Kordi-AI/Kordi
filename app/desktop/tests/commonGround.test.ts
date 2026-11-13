@@ -15,7 +15,7 @@ import { groupLine, meetTimes, topicGroupDraft } from '../src/features/commonGro
 import { HomeScreen } from '../src/features/commonGround/HomeScreen';
 import type { CgHost } from '../src/features/commonGround/host';
 import { canMeet, contactActionFor } from '../src/features/commonGround/relationship';
-import { CommonGroundStore, LOBBY_POLL_MS, MATCH_POLL_MS } from '../src/features/commonGround/store';
+import { CommonGroundStore, MATCH_POLL_MS } from '../src/features/commonGround/store';
 import type { CgOwnerView, CgPerson, CgRelationship } from '../src/features/commonGround/types';
 
 import { card, mockServer, owner, person, rel } from './helpers/commonGroundServer';
@@ -84,27 +84,46 @@ test('store: a build finishes on the card and polling stops', async () => {
   assert.deepEqual(store.getSnapshot().stack, [{ name: 'home' }]);
 });
 
-test('store: join, lobby polling, results polling until ready', async () => {
-  const room = { roomId: 'r', code: '4821', name: '', openedByYou: true, expiresAt: '', members: [person('a'), person('b')] };
+test('store: joining opens the room, which asks for its results and polls them until ready', async () => {
+  const room = { roomId: 'r', code: '4821', name: '', openedByYou: false, expiresAt: '', members: [person('a'), person('b')] };
+  const matching = { status: 200, body: { status: 'matching', people: [], topics: [], suggestion: null } };
   const { calls, client } = mockServer({
     'POST rooms/4821/join': { status: 200, body: room },
     'GET rooms/4821': { status: 200, body: room },
     'POST rooms/4821/results': [
-      { status: 200, body: { status: 'matching', people: [], topics: [], suggestion: null } },
+      matching,
+      matching,
       { status: 200, body: { status: 'ready', people: [{ person: person('a'), score: 80, headline: 'x' }], topics: [], suggestion: null } },
     ],
   });
+  const results = () => calls.filter((call) => call.url.endsWith('/results')).length;
   const store = new CommonGroundStore(client);
   assert.equal(await store.joinRoom('4821'), true);
-  assert.deepEqual(store.top(), { name: 'lobby', code: '4821' });
-  assert.equal(await store.poll(), LOBBY_POLL_MS);
-  await store.findCommonGround('4821');
-  assert.deepEqual(store.top(), { name: 'results', code: '4821' });
-  assert.equal(store.getSnapshot().stack.length, 2);
+  assert.deepEqual(store.getSnapshot().stack, [{ name: 'home' }, { name: 'results', code: '4821' }]);
+  assert.equal(store.getSnapshot().rooms['4821'].members.length, 2, 'the members show before any match');
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(results(), 1, 'nobody presses a button: opening the room asks for its results');
+  assert.equal(store.getSnapshot().results['4821'].status, 'matching');
+  assert.equal(await store.poll(), MATCH_POLL_MS);
   assert.equal(await store.poll(), null);
   assert.equal(store.getSnapshot().results['4821'].status, 'ready');
   assert.equal(await store.poll(), null);
-  assert.equal(calls.filter((call) => call.url.endsWith('/results')).length, 2);
+  assert.equal(results(), 3);
+});
+
+test('store: joining a room where matching already started opens it the same way', async () => {
+  const room = { roomId: 'r', code: '4821', name: '', openedByYou: false, expiresAt: '', members: [person('a')], matchingStarted: true };
+  const { client } = mockServer({
+    'POST rooms/4821/join': { status: 200, body: room },
+    'GET rooms/4821': { status: 200, body: room },
+    'POST rooms/4821/results': { status: 200, body: { status: 'ready', people: [], topics: [], suggestion: null } },
+  });
+  const store = new CommonGroundStore(client);
+  assert.equal(await store.joinRoom('4821'), true);
+  assert.deepEqual(store.top(), { name: 'results', code: '4821' });
+  assert.equal(store.getSnapshot().stack.length, 2);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(store.getSnapshot().results['4821'].status, 'ready');
 });
 
 test('store: joining without a card opens the build screen', async () => {
@@ -318,7 +337,7 @@ test('a topic group request carries the topic and the group keeps it', async () 
     'POST rooms/4821/group': { status: 200, body: { group: { groupSpaceId: 'g1', conversationId: 'c1', name: 'Retrieval', memberCount: 2 }, added: [], invited: [] } },
   });
   const store = new CommonGroundStore(client);
-  await store.findCommonGround('4821');
+  await store.loadScreen({ name: 'results', code: '4821' });
   assert.equal(store.getSnapshot().results['4821'].groups?.[0].topic, null);
   const created = await store.createGroup('4821', 'Retrieval', ['b'], 'Retrieval');
   assert.equal(created?.group.groupSpaceId, 'g1');

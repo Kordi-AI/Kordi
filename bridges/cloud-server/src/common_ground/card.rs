@@ -222,21 +222,7 @@ impl CardRow {
 
     /// Topics others may see: the four lists without hidden topics.
     pub fn shared_topics(&self) -> Topics {
-        let hidden: HashSet<&str> = self.hidden.iter().map(String::as_str).collect();
-        let keep = |list: &Vec<String>| -> Vec<String> {
-            list.iter()
-                .filter(|topic| !hidden.contains(topic.as_str()))
-                .cloned()
-                .collect()
-        };
-        Topics {
-            working_on: keep(&self.topics.working_on),
-            interests: keep(&self.topics.interests),
-            can_help: keep(&self.topics.can_help),
-            looking_for: keep(&self.topics.looking_for),
-            earlier: Vec::new(),
-            refs: BTreeMap::new(),
-        }
+        shared_topics(&self.topics, &self.hidden)
     }
 
     /// The owner's view, with references and the profile.
@@ -272,6 +258,25 @@ impl CardRow {
             "autoUpdating": self.auto_updating,
             "build": build,
         })
+    }
+}
+
+/// The four lists of `topics` without `hidden` ones, as others see them.
+pub(super) fn shared_topics(topics: &Topics, hidden: &[String]) -> Topics {
+    let hidden: HashSet<&str> = hidden.iter().map(String::as_str).collect();
+    let keep = |list: &Vec<String>| -> Vec<String> {
+        list.iter()
+            .filter(|topic| !hidden.contains(topic.as_str()))
+            .cloned()
+            .collect()
+    };
+    Topics {
+        working_on: keep(&topics.working_on),
+        interests: keep(&topics.interests),
+        can_help: keep(&topics.can_help),
+        looking_for: keep(&topics.looking_for),
+        earlier: Vec::new(),
+        refs: BTreeMap::new(),
     }
 }
 

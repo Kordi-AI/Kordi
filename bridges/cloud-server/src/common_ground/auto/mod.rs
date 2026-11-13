@@ -12,7 +12,8 @@
 //!
 //! An automatic update never shows as building, never sets a build error,
 //! and never uses the manual build rate limit; a manual build always wins
-//! over one in flight. See docs/common-ground.md.
+//! over one in flight. Each sweep also matches changed cards again
+//! (`matching::rematch`). See docs/common-ground.md.
 
 mod config;
 mod decide;
@@ -27,6 +28,7 @@ mod sweep;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::auth::rate_limit::CloudRateLimiter;
 use crate::server::ServerState;
 
 pub(super) use finish::{complete, fail};
@@ -49,8 +51,9 @@ pub(super) use sweep::{sweep, Outcome};
 /// Automatic update runs.
 pub(super) const AUTO_PREFIX: &str = "cg_auto_";
 
-/// Starts the sweep; it skips ticks while Grounding is unavailable.
-pub(super) fn spawn(state: Arc<ServerState>) {
+/// Starts the sweep; it skips ticks while Grounding is unavailable. Match
+/// runs it queues are charged to `rate_limiter`, the limiter the routes share.
+pub(super) fn spawn(state: Arc<ServerState>, rate_limiter: Arc<CloudRateLimiter>) {
     tokio::spawn(async move {
         let config = config::config();
         let mut timer = tokio::time::interval(Duration::from_secs(config.sweep_seconds));
@@ -60,7 +63,8 @@ pub(super) fn spawn(state: Arc<ServerState>) {
             let Some(service) = state.system_agent() else {
                 continue;
             };
-            if let Err(error) = sweep::sweep(state.db_pool(), service.config(), &config).await {
+            let swept = sweep::sweep(state.db_pool(), service.config(), &rate_limiter, &config);
+            if let Err(error) = swept.await {
                 eprintln!(
                     "[common-ground] Automatic update sweep failed; retrying on the next tick: {error}"
                 );

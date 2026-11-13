@@ -157,11 +157,11 @@ pub fn spawn_nearby(state: Arc<ServerState>, rate_limiter: Arc<CloudRateLimiter>
     }
 }
 
-/// Starts the sweep of cards with "Rebuild automatically" on when
-/// Grounding is available.
-pub fn spawn_auto_rebuild(state: Arc<ServerState>) {
+/// Starts the sweep of cards with "Rebuild automatically" on, which also
+/// matches changed cards again, when Grounding is available.
+pub fn spawn_auto_rebuild(state: Arc<ServerState>, rate_limiter: Arc<CloudRateLimiter>) {
     if available(&state) {
-        auto::spawn(state);
+        auto::spawn(state, rate_limiter);
     }
 }
 

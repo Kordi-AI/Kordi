@@ -240,12 +240,14 @@ pub(super) async fn complete(
         return Err(sqlx_core::Error::RowNotFound);
     }
     // A rebuild starts with nothing hidden: the topics are new. It reads
-    // everything, so what automatic updates had read no longer matters.
+    // everything, so what automatic updates had read no longer matters. The
+    // card's matches are run again (`matching::rematch`).
     query(
         "UPDATE cloud_common_ground_cards SET topics_json = $2, evidence_json = $3,
              hidden_json = '[]'::jsonb, active_run_id = NULL, build_evidence_json = NULL,
              build_candidates_json = NULL, build_error_code = NULL, built_at = now(),
-             auto_seen_at = NULL, revision = revision + 1, updated_at = now()
+             auto_seen_at = NULL, revision = revision + 1, rematch_at = now(),
+             updated_at = now()
          WHERE profile_id = $1 AND active_run_id = $4",
     )
     .bind(&profile_id)
@@ -264,6 +266,7 @@ pub(super) async fn complete(
     )
     .await?;
     tx.commit().await?;
+    super::rooms::announce_profile(pool, &profile_id).await;
     related::audit(pool, &account, &profile_id, added).await;
     Ok(())
 }

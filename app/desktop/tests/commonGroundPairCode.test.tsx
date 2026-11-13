@@ -57,7 +57,9 @@ test('pair code: four digits turn Create into Enter pair room, which joins with 
   const { calls, client } = mockServer({
     'GET rooms/5160/preview': { status: 200, body: { code: '5160', name: 'Poster session 2026', kind: 'custom', memberCount: 14 } },
     'POST rooms/5160/join': { status: 200, body: room('5160', { name: 'Poster session 2026' }) },
-    'GET rooms': { status: 200, body: { rooms: [] } },
+    'GET rooms': { status: 200, body: { rooms: [{ code: '5160', name: 'Poster session 2026', open: true, memberCount: 1, joinedAt: '', lastActivityAt: '', themeCount: 0 }] } },
+    'GET rooms/5160': { status: 200, body: room('5160', { name: 'Poster session 2026' }) },
+    'POST rooms/5160/results': { status: 200, body: { status: 'ready', people: [], topics: [], suggestion: null } },
   });
   const store = new CommonGroundStore(client, { profiles: true });
   store.set({ profiles: [work, workshops], profileId: 'cgp_work', owner: owner(), loaded: true });
@@ -70,8 +72,12 @@ test('pair code: four digits turn Create into Enter pair room, which joins with 
     assert.equal(host.querySelector('.cg-pair-confirm'), null);
     await press(host);
     assert.deepEqual(calls.find((call) => call.url.endsWith('/rooms/5160/join'))?.body, { profileId: 'cgp_ws', kind: 'custom' });
-    assert.deepEqual(store.top(), { name: 'lobby', code: '5160' });
+    assert.deepEqual(store.top(), { name: 'results', code: '5160' });
     assert.equal(button(host)?.textContent, 'Create');
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+    const at = (suffix: string) => calls.findIndex((call) => call.url.endsWith(suffix));
+    assert.ok(at('/rooms') >= 0 && at('/rooms/5160/results') > at('/rooms'), 'the room asks for its results after the rooms list');
+    assert.equal(store.getSnapshot().results['5160']?.status, 'ready');
   });
 });
 

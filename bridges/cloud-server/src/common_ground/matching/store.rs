@@ -1,20 +1,20 @@
 //! Queueing match and room-theme runs, and reading what they stored. Match
 //! results are kept per pair of profiles.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx_core::{query::query, query_as::query_as};
-use sqlx_postgres::PgPool;
+use sqlx_core::{query::query, query_as::query_as, transaction::Transaction};
+use sqlx_postgres::{PgPool, Postgres};
 use uuid::Uuid;
 
 use super::prompt::{self, MATCH_SYSTEM, ROOM_SYSTEM};
 use super::{MatchResult, SharedCard};
 use crate::auth::rate_limit::{CloudRateLimiter, RateLimitDecision};
 use crate::common_ground::runs::{self, NewRun, MATCH_PREFIX, ROOM_PREFIX};
-use crate::common_ground::MATCH_LIMIT;
+use crate::common_ground::{rooms, MATCH_LIMIT};
 
 /// People matched by one run; larger rooms fill in over several runs.
 pub(super) const MATCH_BATCH: usize = 8;
@@ -142,9 +142,55 @@ async fn blocking_run(
     }))
 }
 
+/// Serializes queueing for one room, so two members who ask at once never
+/// both queue the same pair or both announce the first run. Taken before
+/// any per-viewer lock.
+async fn lock_room(tx: &mut Transaction<'_, Postgres>, room_id: Uuid) -> sqlx_core::Result<()> {
+    query("SELECT pg_advisory_xact_lock(hashtext('common-ground-room-match:' || $1))")
+        .bind(room_id.to_string())
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+/// `stale` without the people whose own open match run already read the
+/// viewer's current card: that run stores the pair for the viewer too
+/// (`finish::complete`). Open means unfinished and in the window
+/// [`BLOCKING_RUN_SQL`] uses.
+async fn not_covered(
+    tx: &mut Transaction<'_, Postgres>,
+    viewer: &SharedCard,
+    stale: Vec<SharedCard>,
+) -> sqlx_core::Result<Vec<SharedCard>> {
+    let ids: Vec<&str> = stale.iter().map(|card| card.profile_id.as_str()).collect();
+    let runs: Vec<(String, Option<i64>)> = query_as(
+        "SELECT viewer_profile_id, (cards_json -> 0 ->> 'revision')::bigint
+         FROM cloud_common_ground_match_runs
+         WHERE kind = 'match' AND finished_at IS NULL
+           AND created_at > now() - interval '15 minutes' AND viewer_profile_id = ANY($1)
+           AND cards_json @> jsonb_build_array(
+               jsonb_build_object('profileId', $2::text, 'revision', $3::bigint))",
+    )
+    .bind(&ids)
+    .bind(&viewer.profile_id)
+    .bind(viewer.revision)
+    .fetch_all(&mut **tx)
+    .await?;
+    let covered: HashSet<(String, i64)> = runs
+        .into_iter()
+        .filter_map(|(profile, revision)| Some((profile, revision?)))
+        .collect();
+    Ok(stale
+        .into_iter()
+        .filter(|card| !covered.contains(&(card.profile_id.clone(), card.revision)))
+        .collect())
+}
+
 /// Queues a run matching `viewer` with up to [`MATCH_BATCH`] of `stale`,
-/// unless one is already working for this viewer profile. Only a queued run is
-/// charged to the viewer's matching budget.
+/// unless one is already working for this viewer profile. A person whose
+/// own open run already matches them with the viewer is left out; when
+/// that leaves nobody, the viewer waits for those runs. Only a queued run
+/// is charged to the viewer's matching budget.
 pub(in crate::common_ground) async fn queue_matches(
     pool: &PgPool,
     service: &crate::system_agent::SystemAgentConfig,
@@ -154,12 +200,39 @@ pub(in crate::common_ground) async fn queue_matches(
     room_id: Option<Uuid>,
     organization_id: Option<&str>,
 ) -> sqlx_core::Result<Queued> {
+    let queued = queue_new_matches(
+        pool,
+        service,
+        rate_limiter,
+        viewer,
+        stale,
+        room_id,
+        organization_id,
+    );
+    Ok(queued.await?.0)
+}
+
+/// [`queue_matches`], and whether this call queued the run: false when a
+/// run already at work, or other people's open runs, stand for it.
+pub(super) async fn queue_new_matches(
+    pool: &PgPool,
+    service: &crate::system_agent::SystemAgentConfig,
+    rate_limiter: &CloudRateLimiter,
+    viewer: &SharedCard,
+    stale: &[SharedCard],
+    room_id: Option<Uuid>,
+    organization_id: Option<&str>,
+) -> sqlx_core::Result<(Queued, bool)> {
     // The viewer asked, so only declining stops them; another person's
     // card reaches the model only when they allowed AI (`crate::ai_consent`).
     if crate::ai_consent::is_declined(pool, &viewer.account_id).await? {
-        return Ok(Queued::Skipped);
+        return Ok((Queued::Skipped, false));
     }
-    let ids: Vec<String> = stale.iter().map(|card| card.account_id.clone()).collect();
+    let ids: Vec<String> = stale
+        .iter()
+        .chain(std::iter::once(viewer))
+        .map(|card| card.account_id.clone())
+        .collect();
     let excluded = crate::ai_consent::not_allowed_among(pool, &ids).await?;
     let stale: Vec<SharedCard> = stale
         .iter()
@@ -167,18 +240,34 @@ pub(in crate::common_ground) async fn queue_matches(
         .cloned()
         .collect();
     if stale.is_empty() {
-        return Ok(Queued::Skipped);
+        return Ok((Queued::Skipped, false));
     }
     let mut tx = pool.begin().await?;
+    if let Some(room_id) = room_id {
+        lock_room(&mut tx, room_id).await?;
+    }
     query("SELECT pg_advisory_xact_lock(hashtext('common-ground-match:' || $1))")
         .bind(&viewer.profile_id)
         .execute(&mut *tx)
         .await?;
     if let Some(pending) = blocking_run(pool, "viewer_profile_id", &viewer.profile_id).await? {
-        return Ok(Queued::Pending(pending));
+        return Ok((Queued::Pending(pending), false));
+    }
+    // Another person's run stores the pair for the viewer only when the
+    // viewer allowed AI, as they did (`finish::both_ways`).
+    let stale = if excluded.contains(&viewer.account_id) {
+        stale
+    } else {
+        not_covered(&mut tx, viewer, stale).await?
+    };
+    if stale.is_empty() {
+        return Ok((Queued::Pending(Pending::Running), false));
     }
     if let Some(retry_after) = charge(rate_limiter, &viewer.account_id).await {
-        return Ok(Queued::Limited(retry_after));
+        return Ok((Queued::Limited(retry_after), false));
+    }
+    if let Some(room_id) = room_id {
+        rooms::announce_matching(&mut tx, room_id).await?;
     }
     let batch = &stale[..stale.len().min(MATCH_BATCH)];
     let run_id = runs::new_run_id(MATCH_PREFIX);
@@ -205,12 +294,11 @@ pub(in crate::common_ground) async fn queue_matches(
     };
     if !runs::insert(&mut tx, service, new_run).await? {
         // The resource pool's daily limit is used up until the next UTC day.
-        return Ok(Queued::Limited(
-            crate::resource_pools::usage::until_next_day(),
-        ));
+        let retry_after = crate::resource_pools::usage::until_next_day();
+        return Ok((Queued::Limited(retry_after), false));
     }
     tx.commit().await?;
-    Ok(Queued::Pending(Pending::Running))
+    Ok((Queued::Pending(Pending::Running), true))
 }
 
 /// Identifies a room's member set, shared profiles and card revisions.
@@ -240,7 +328,8 @@ pub(super) async fn stored_themes(
 }
 
 /// The room's last stored themes, whatever member set they were computed
-/// for. A closed room shows these as they were.
+/// for. A closed room shows these as they were; an open room shows them
+/// while a theme run replaces them.
 pub(super) async fn latest_themes(
     pool: &PgPool,
     room_id: Uuid,
@@ -279,6 +368,7 @@ pub(super) async fn queue_themes(
         return Ok(Queued::Skipped);
     }
     let mut tx = pool.begin().await?;
+    lock_room(&mut tx, room_id).await?;
     query("SELECT pg_advisory_xact_lock(hashtext('common-ground-room:' || $1))")
         .bind(room_id.to_string())
         .execute(&mut *tx)
@@ -289,6 +379,7 @@ pub(super) async fn queue_themes(
     if let Some(retry_after) = charge(rate_limiter, requester).await {
         return Ok(Queued::Limited(retry_after));
     }
+    rooms::announce_matching(&mut tx, room_id).await?;
     let run_id = runs::new_run_id(ROOM_PREFIX);
     query(
         "INSERT INTO cloud_common_ground_match_runs (run_id, kind, room_id, cards_json)

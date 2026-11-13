@@ -1,12 +1,15 @@
 //! The harness itself, driven by the scripted stub model. Grounding builds
-//! need no database and run in every CI pass; the System agent fixtures need a
-//! local PostgreSQL server, where each test creates and drops its own
-//! database, and run where CI provides one.
+//! and match runs need no database and run in every CI pass; the System
+//! agent fixtures need a local PostgreSQL server, where each test creates and
+//! drops its own database, and run where CI provides one.
 
 use kordi_system_agent_eval::database::DisposableDatabase;
 use kordi_system_agent_eval::fixture::{self, Fixture};
+use kordi_system_agent_eval::match_run::MatchPrompt;
+use kordi_system_agent_eval::match_suite::SHARED_WHY;
 use kordi_system_agent_eval::replay::Engine;
 use kordi_system_agent_eval::report::RunReport;
+use kordi_system_agent_eval::report_numbers::Number;
 use kordi_system_agent_eval::setup;
 use serde_json::json;
 
@@ -67,6 +70,141 @@ async fn grounding_fixtures_pass_with_the_stub_model() {
     assert_eq!(failures(&report), Vec::<String>::new());
     assert_eq!(report.summary.fixtures.passed, fixtures.len());
     assert!(report.summary.metrics["grounding"].total >= 8);
+}
+
+async fn match_with_stub(fixtures: &[Fixture], repeat: usize) -> RunReport {
+    let settings = setup::stub_settings();
+    let options = setup::RunOptions {
+        repeat,
+        match_prompt: MatchPrompt::Current,
+        prices: None,
+        now: chrono::Utc::now(),
+    };
+    setup::run_suite_with(
+        "stub-match",
+        fixtures,
+        &settings.pending.unprovisioned(),
+        None,
+        Engine::Stub,
+        &options,
+    )
+    .await
+    .unwrap()
+}
+
+fn number<'a>(report: &'a RunReport, name: &str) -> &'a Number {
+    report
+        .summary
+        .numbers
+        .iter()
+        .find(|number| number.name == name)
+        .unwrap_or_else(|| panic!("no {name} in {:#?}", report.summary.numbers))
+}
+
+#[tokio::test]
+async fn match_fixtures_pass_with_the_stub_model_on_every_repeat() {
+    let fixtures = fixtures("groundingMatch");
+    let report = match_with_stub(&fixtures, 2).await;
+    assert_eq!(failures(&report), Vec::<String>::new());
+    assert_eq!(report.summary.fixtures.passed, fixtures.len());
+    assert!(report
+        .fixtures
+        .iter()
+        .all(|fixture| fixture.passes.len() == 2));
+    assert!(report.summary.metrics["groundingMatch"].total >= 2 * 150);
+    assert_eq!(
+        report
+            .match_prompt
+            .as_ref()
+            .map(|prompt| prompt.name.as_str()),
+        Some("current")
+    );
+    // The stub gives every strong pair its gold pairs and nobody else anything.
+    for name in [
+        "match-lab/auc_strong_vs_none",
+        "match-lab/top3_hit_rate",
+        "match-lab/either_person_rate",
+        "match-names/either_person_rate",
+        "match-lab/direction_shared_jaccard",
+    ] {
+        let number = number(&report, name);
+        assert_eq!(number.per_repeat, vec![1.0, 1.0], "{name}");
+    }
+    assert_eq!(number(&report, "match-lab/dropped_pair_rate").value, 0.0);
+    assert_eq!(number(&report, "match-lab/top3_none_count").value, 0.0);
+    assert_eq!(
+        number(&report, "match-lab/direction_score_difference").value,
+        0.0
+    );
+}
+
+fn set_match_stub(fixtures: &mut [Fixture], id: &str, edit: impl FnOnce(&mut String, &[String])) {
+    for fixture in fixtures {
+        if let Fixture::GroundingMatch(run) = fixture {
+            if run.id == id {
+                let others: Vec<String> = run.others.iter().map(|p| p.id.clone()).collect();
+                edit(&mut run.stub, &others);
+                return;
+            }
+        }
+    }
+    panic!("no fixture {id}");
+}
+
+#[tokio::test]
+async fn scoring_catches_a_match_model_that_misbehaves() {
+    let ids = [
+        "match-lab-r1-p15-1",
+        "match-lab-r1-p01-1",
+        "match-lab-r2-p09-1",
+    ];
+    let mut fixtures: Vec<Fixture> = fixtures("groundingMatch")
+        .into_iter()
+        .filter(|fixture| ids.contains(&fixture.id()))
+        .collect();
+    // Dmitri's GPU memory work is a hard negative for Maya's agent memory.
+    set_match_stub(&mut fixtures, ids[0], |stub, others| {
+        let maya = others.iter().position(|id| id == "p01").unwrap();
+        *stub = json!({"people": [{"person": maya, "shared": [{
+            "mine": "GPU memory optimization for training",
+            "theirs": "Long-term memory for personal agents", "why": "Both work on memory"}],
+            "next_step": "Compare memory notes"}]})
+        .to_string();
+    });
+    // Every reason for Maya's strong partners addresses the reader.
+    set_match_stub(&mut fixtures, ids[1], |stub, _| {
+        *stub = stub.replace(SHARED_WHY, "Helps your research");
+    });
+    // A reply that names nobody fails the run.
+    set_match_stub(&mut fixtures, ids[2], |stub, _| {
+        *stub = json!({"people": []}).to_string();
+    });
+    let report = match_with_stub(&fixtures, 1).await;
+    let failed = failures(&report);
+    let has = |needle: &str| failed.iter().any(|failure| failure.contains(needle));
+    assert!(
+        has("match-lab-r1-p15-1 / pass 1 / hard negative p01 keeps nothing: kept shared"),
+        "{failed:#?}"
+    );
+    assert!(
+        has("match-lab-r2-p09-1 / pass 1 / reply becomes a match list: invalid_output"),
+        "{failed:#?}"
+    );
+    assert!(
+        !failed
+            .iter()
+            .any(|failure| failure.starts_with("match-lab-r1-p01-1")),
+        "wording alone fails no check: {failed:#?}"
+    );
+    let rate = number(&report, "match-lab/either_person_rate").value;
+    assert!(rate < 1.0, "{rate}");
+    assert!(number(&report, "match-lab/either_person_second_person_rate").value > 0.0);
+    assert_eq!(
+        number(&report, "match-lab/either_person_name_rate").value,
+        0.0
+    );
+    // The invented pair is kept and counts against the hard negative.
+    assert!(number(&report, "match-lab/auc_strong_vs_none").value < 1.0);
 }
 
 fn server_url() -> String {

@@ -52,7 +52,7 @@ pub(super) fn spawn_background_workers(
     crate::proactive::spawn(state.clone());
     crate::personal_agent::spawn(state.clone());
     crate::common_ground::spawn_nearby(state.clone(), rate_limiter.clone());
-    crate::common_ground::spawn_auto_rebuild(state.clone());
+    crate::common_ground::spawn_auto_rebuild(state.clone(), rate_limiter.clone());
     crate::plan_cards::projection::spawn(state.db_pool().clone());
     crate::chat_sync::retention::spawn_retention_worker(state.db_pool().clone());
     crate::cloud_agent_runtime::runs::terminal_backfill::spawn(state.db_pool().clone());

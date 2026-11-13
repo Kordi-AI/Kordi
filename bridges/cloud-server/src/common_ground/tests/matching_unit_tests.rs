@@ -4,7 +4,9 @@ use crate::common_ground::card::Topics;
 use crate::common_ground::matching::prompt::{
     match_prompt, parse_matches, parse_themes, room_prompt, Found,
 };
-use crate::common_ground::matching::{headline, score, suggestion, Reason, SharedCard, Trade};
+use crate::common_ground::matching::{
+    headline, reads_for_either, result, reversed, score, suggestion, Reason, SharedCard, Trade,
+};
 
 fn card(
     id: &str,
@@ -262,4 +264,119 @@ fn the_suggestion_prefers_a_group_of_three_with_you() {
     assert_eq!(suggestion(&themes, "you").unwrap().0, "Trio");
     assert_eq!(suggestion(&themes[..2], "you").unwrap().0, "Pair");
     assert!(suggestion(&themes[..1], "you").is_none());
+}
+
+fn trade(topic: &str, target: &str, why: &str) -> Trade {
+    Trade {
+        topic: topic.into(),
+        target: target.into(),
+        why: why.into(),
+    }
+}
+
+fn finding() -> Found {
+    Found {
+        shared: vec![Reason {
+            topic: "Retrieval".into(),
+            their_topic: "Memory for agents".into(),
+            why: "Both work on memory".into(),
+        }],
+        you_bring: vec![trade("Eval design", "Eval design help", "Eval skills fit")],
+        they_bring: vec![trade("GPU clusters", "GPU access", "Cluster time fits")],
+        next_step: "Compare benchmarks".into(),
+    }
+}
+
+#[test]
+fn a_reversed_finding_reads_from_the_other_side() {
+    let (you, them) = (viewer(), other());
+    let found = finding();
+    let back = reversed(&found);
+    assert_eq!(reversed(&back), found, "reversing twice changes nothing");
+    assert_eq!(
+        (
+            back.shared[0].topic.as_str(),
+            back.shared[0].their_topic.as_str()
+        ),
+        ("Memory for agents", "Retrieval")
+    );
+    assert_eq!(
+        (back.you_bring.clone(), back.they_bring.clone()),
+        (found.they_bring.clone(), found.you_bring.clone())
+    );
+    assert_eq!(back.next_step, found.next_step);
+
+    // Scored and headlined for the other person, with the cards swapped.
+    let mine = result(&you, &them, found.clone());
+    let theirs = result(&them, &you, back.clone());
+    assert_eq!(theirs.score, score(&them.topics, &you.topics, &back));
+    assert_eq!(
+        theirs.score, mine.score,
+        "the score weighs both sides alike"
+    );
+    assert_eq!(
+        (mine.headline.as_str(), theirs.headline.as_str()),
+        ("Memory for agents", "Retrieval")
+    );
+    assert_eq!(theirs.you_bring, mine.they_bring);
+    let trades_only = Found {
+        shared: Vec::new(),
+        ..found
+    };
+    assert_eq!(headline(&trades_only), "Can help with GPU clusters");
+    assert_eq!(
+        headline(&reversed(&trades_only)),
+        "Can help with Eval design"
+    );
+}
+
+#[test]
+fn only_text_without_you_or_names_reads_for_either_person() {
+    let names = ["Alex Chen", "Priya"];
+    let with = |why: &str, next_step: &str| {
+        let mut found = finding();
+        found.they_bring[0].why = why.into();
+        found.next_step = next_step.into();
+        found
+    };
+    assert!(reads_for_either(&finding(), &names));
+    assert!(
+        reads_for_either(
+            &with(
+                "Youth programs need compute",
+                "Plan a joint planning session"
+            ),
+            &["Ann"]
+        ),
+        "only whole words count"
+    );
+    assert!(reads_for_either(
+        &with("Alexander's lab has GPUs", "Meet"),
+        &names
+    ));
+    for (why, next_step) in [
+        ("You need compute", "Meet"),
+        ("Helps your evals", "Meet"),
+        ("Cluster time fits", "Show what you\u{2019}re building"),
+        ("Cluster time fits", "YOU'LL both learn"),
+        ("Priya needs evals", "Meet"),
+        ("Cluster time fits", "Ask chen about memory"),
+    ] {
+        assert!(
+            !reads_for_either(&with(why, next_step), &names),
+            "{why} / {next_step}"
+        );
+    }
+    let mut shared = finding();
+    shared.shared[0].why = "Yourself included".into();
+    assert!(!reads_for_either(&shared, &names));
+    // Han text: "evaluate with Wang Wei", and the name "Wang Wei".
+    let (text, name) = (
+        "\u{548c}\u{738b}\u{4f1f}\u{4e00}\u{8d77}\u{8bc4}\u{6d4b}",
+        "\u{738b}\u{4f1f}",
+    );
+    assert!(
+        !reads_for_either(&with(text, "Meet"), &[name]),
+        "a name in a script without spaces counts anywhere"
+    );
 }

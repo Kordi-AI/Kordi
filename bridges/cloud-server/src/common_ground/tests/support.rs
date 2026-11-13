@@ -214,6 +214,25 @@ pub(super) async fn answer_match(pool: &PgPool, viewer: &str) -> String {
     run_id
 }
 
+/// Answers the open room-theme run with these themes, each given by the
+/// account ids of its people. Returns the ids of the cards the run read.
+pub(super) async fn answer_themes(pool: &PgPool, themes: &[(&str, &[&String])]) -> Vec<String> {
+    let (run_id, read) = claim_open(pool, "room", None).await;
+    let themes: Vec<Value> = themes
+        .iter()
+        .map(|(label, people)| {
+            let people: Vec<usize> = people
+                .iter()
+                .map(|id| read.iter().position(|r| r == *id).unwrap())
+                .collect();
+            json!({"label": label, "people": people})
+        })
+        .collect();
+    let reply = json!({ "themes": themes }).to_string();
+    complete(pool, &run_id, RUNNER, &reply).await.unwrap();
+    read
+}
+
 /// Signed-in people with cards in one fresh room, in join order, with the
 /// app (the System agent configured) and the room code.
 pub(super) async fn people_in_a_room(

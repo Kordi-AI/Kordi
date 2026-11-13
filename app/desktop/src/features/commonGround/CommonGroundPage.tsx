@@ -6,7 +6,6 @@ import { BuildScreen } from './BuildScreen';
 import { CardScreen } from './CardScreen';
 import { HomeScreen } from './HomeScreen';
 import type { CgHost } from './host';
-import { LobbyScreen } from './LobbyScreen';
 import { MatchScreen } from './MatchScreen';
 import { NearbyPersonScreen } from './NearbyPersonScreen';
 import { NearbyScreen } from './NearbyScreen';
@@ -76,8 +75,6 @@ function CommonGroundPageBody({ store, host }: { store: CommonGroundStore; host:
     body = <BuildScreen key={buildScreenKey(state)} {...props} />;
   } else if (screen.name === 'card') {
     body = <CardScreen state={state} store={store} memoryRouting={host.memoryRouting} memoryCards={host.memoryCards} />;
-  } else if (screen.name === 'lobby') {
-    body = <LobbyScreen code={screen.code} {...props} />;
   } else if (screen.name === 'results') {
     body = <ResultsScreen code={screen.code} {...props} />;
   } else if (screen.name === 'match') {
