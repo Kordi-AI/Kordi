@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// A chat's Artifacts tab follows the Memory tab: the same centered empty state, and with
-// artifacts, New document and Add file in one row whose first icon sits on the list's edge.
+// A chat's Artifacts tab follows the Memory tab: the same centered empty state. With artifacts,
+// a toolbar (search, cards/list switch, New menu) sits on the Memory tab's text edge, and the
+// artifacts show as thumbnail cards or as one row each.
 
 test.use({ viewport: { width: 1100, height: 700 } });
 
@@ -46,24 +47,126 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('chat artifacts tab with artifacts lines up with its list (light)', async ({ page }) => {
-  await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
+async function memoryTextEdge(page: Page) {
   await page.goto('/tests/visual/chatArtifacts.html?tab=memory&theme=light');
-  const memoryTextEdge = (await page.locator('[data-memory-lesson]').first().boundingBox())?.x ?? -1;
+  return (await page.locator('[data-memory-lesson]').first().boundingBox())?.x ?? -1;
+}
 
+for (const theme of ['light', 'dark'] as const) {
+  test(`chat artifacts tab shows thumbnail cards (${theme})`, async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
+    const edge = await memoryTextEdge(page);
+    await page.goto(`/tests/visual/chatArtifacts.html?theme=${theme}`);
+    await expect(page.locator('[data-artifact-card="true"]')).toHaveCount(16);
+    // Every sample type draws a thumbnail: Markdown, HTML, JSON, Mermaid, SVG, Python, text, a PNG
+    // image, a PDF and a Word document (Quick Look thumbnails), TypeScript, and CSV.
+    await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(16);
+    await expect(page.locator('[data-artifact-card-title]').first()).toHaveText('Launch brief');
+    await expect(page.locator('[aria-current="true"]')).toHaveCount(0);
+    // Changed project files share the grid and say how they changed.
+    await expect(page.locator('[data-artifact-card-change]').first()).toHaveText('Modified');
+
+    const searchX = (await page.locator('.app-artifact-search').boundingBox())?.x ?? 0;
+    const cardX = (await page.locator('[data-artifact-card="true"]').first().boundingBox())?.x ?? 0;
+    for (const x of [searchX, cardX]) expect(Math.abs(x - edge)).toBeLessThan(3);
+    // Let the page frame paint before the capture.
+    await page.waitForTimeout(300);
+    await expect(page).toHaveScreenshot(`chatArtifacts-cards-${theme}.png`);
+  });
+}
+
+test('the New menu holds New document and Add file', async ({ page }) => {
   await page.goto('/tests/visual/chatArtifacts.html?theme=light');
-  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(3);
-  const entries = page.locator('[data-chat-document-entries="true"]');
-  await expect(entries.getByRole('button', { name: 'New document' })).toBeVisible();
-  await expect(page.getByText('Markdown and HTML documents', { exact: true })).toHaveClass(/\bsr-only\b/);
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  const menu = page.getByRole('menu');
+  await expect(menu.getByRole('menuitem', { name: 'New document' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Add file' })).toHaveAttribute('title', 'Markdown and HTML documents');
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+});
 
-  // The first icon, the section heading, and the rows' file marks share the Memory tab's text edge.
-  const iconX = (await entries.locator('svg').first().boundingBox())?.x ?? 0;
-  const headingX = (await page.locator('.app-detail-kicker').first().boundingBox())?.x ?? 0;
-  const badgeX = (await page.locator('[data-artifact-file-row="true"] span[title]').first().boundingBox())?.x ?? 0;
-  for (const x of [iconX, headingX, badgeX]) expect(Math.abs(x - memoryTextEdge)).toBeLessThan(1);
+test('the layout switch moves to the list and stays there after a reload (light)', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
+  await page.goto('/tests/visual/chatArtifacts.html?theme=light');
+  await page.getByRole('button', { name: 'List', exact: true }).click();
+  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(16);
+  await page.reload();
+  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(16);
+  await expect(page.getByRole('button', { name: 'List', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});
 
-  // Without a preview under it, the list is not cut short.
-  await expect(page.locator('[data-artifact-file-row="true"]').last()).toBeInViewport();
+test('chat artifacts list rows are one line and line up with the toolbar (light)', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
+  await page.goto('/tests/visual/chatArtifacts.html?theme=light&layout=list');
+  const rows = page.locator('[data-artifact-row-shell]');
+  await expect(rows).toHaveCount(16);
+  await expect(page.locator('[data-artifact-file-row="true"][aria-current="true"]')).toHaveCount(0);
+
+  // Picking a row opens it in the side panel; the row's fill then runs exactly from the search
+  // field's left edge to the New button's right edge.
+  await page.locator('[data-artifact-file-row="true"]').nth(2).click();
+  await expect(page.getByRole('complementary', { name: 'Document panel' })).toBeVisible();
+  await expect(page.locator('[data-artifact-preview-section="true"]')).toHaveCount(0);
+  const toolbar = await page.locator('[data-chat-document-entries="true"]').boundingBox();
+  const search = await page.locator('.app-artifact-search').boundingBox();
+  const picked = await rows.nth(2).boundingBox();
+  expect(Math.abs((picked?.x ?? 0) - (search?.x ?? 1))).toBeLessThan(1);
+  expect(Math.abs((picked?.x ?? 0) + (picked?.width ?? 0) - ((toolbar?.x ?? 0) + (toolbar?.width ?? 1)))).toBeLessThan(1);
+  // One line each: a compact row.
+  expect(picked?.height ?? 99).toBeLessThanOrEqual(33);
+
+  // The list has the whole height (nothing under it) and scrolls to its last row.
+  await rows.last().scrollIntoViewIfNeeded();
+  await expect(rows.last()).toBeInViewport();
+  await page.locator('[data-artifact-file-list="true"]').evaluate((list) => { list.scrollTop = 0; });
+  await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot('chatArtifacts-list-light.png');
+});
+
+test('files open in the side panel in the viewer for their type, filling it', async ({ page }) => {
+  await page.goto('/tests/visual/chatArtifacts.html?theme=light&layout=cards');
+  await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(16);
+  // Inactive tabs stay mounted but hidden; check the open one.
+  const panel = page.getByRole('complementary', { name: 'Document panel' }).locator('.app-companion-document-panel:not([hidden])');
+  const open = (name: string) => page.locator('[data-artifact-card="true"]').filter({ hasText: name }).first().click();
+
+  await open('headlines.ts');
+  await expect(panel.locator('[data-code-viewer] .cm-content')).toContainText('export function pickHeadline');
+  await expect(panel.locator('.app-document-source-info')).toHaveText('TypeScript · 14 lines');
+
+  await open('pricing.csv');
+  await expect(panel.locator('[data-table-viewer] th').nth(1)).toHaveText('Plan');
+  await expect(panel.locator('.app-document-source-info')).toHaveText('CSV · 4 rows');
+  await panel.getByRole('button', { name: 'Source', exact: true }).click();
+  await expect(panel.locator('[data-code-viewer]')).toBeVisible();
+
+  await open('launch-hero.png');
+  await expect(panel.locator('[data-image-viewer] img')).toBeVisible();
+  await expect(panel.locator('.app-document-source-info')).toContainText('PNG image · 1200 × 675');
+
+  await open('pricing-review.pdf');
+  await expect(panel.locator('iframe[data-pdf-viewer]')).toHaveAttribute('src', /^blob:/);
+  await expect(panel.locator('.app-document-source-info')).toHaveText(/^PDF · /);
+
+  await open('q4-plan.docx');
+  await expect(panel.locator('[data-file-card] .app-file-card-thumbnail')).toBeVisible();
+  await expect(panel.locator('.app-file-card-details').first()).toHaveText('Word document · 84 KB');
+
+  await open('launch-hero.png');
+  // The viewer fills the panel below its one toolbar line.
+  const viewer = await panel.locator('[data-image-viewer]').boundingBox();
+  const pane = await panel.boundingBox();
+  expect((viewer?.height ?? 0) / (pane?.height ?? 1)).toBeGreaterThan(0.85);
+});
+
+test('opening the side panel only reflows the cards; their size stays the same', async ({ page }) => {
+  await page.goto('/tests/visual/chatArtifacts.html?theme=light&layout=cards');
+  const thumb = page.locator('[data-artifact-card="true"] .app-artifact-card-thumb').first();
+  await expect(thumb).toBeVisible();
+  const before = await thumb.boundingBox();
+  await page.locator('[data-artifact-card="true"]').first().click();
+  await expect(page.getByRole('complementary', { name: 'Document panel' })).toBeVisible();
+  const after = await thumb.boundingBox();
+  expect(Math.round(after?.width ?? 0)).toBe(Math.round(before?.width ?? 1));
+  expect(Math.round(after?.height ?? 0)).toBe(Math.round(before?.height ?? 1));
 });

@@ -363,7 +363,6 @@ test('artifact preview window uses full-height preview rendering', () => {
   const markup = renderToStaticMarkup(createElement(ArtifactPreviewWindow, {
     preview,
     title: 'tmp_test_task_mermaid.md',
-    kindLabel: 'Markdown',
     onClose: () => undefined,
   }));
 
@@ -385,13 +384,14 @@ test('artifact preview exposes a larger preview window surface', () => {
   const markup = renderToStaticMarkup(createElement(ArtifactPreviewWindow, {
     preview,
     title: 'tmp_test_task.py',
-    kindLabel: 'Source',
     onClose: () => undefined,
   }));
 
   assert.match(markup, /role="dialog"/);
   assert.match(markup, /aria-label="Artifact preview window"/);
   assert.doesNotMatch(markup, />Preview window</);
+  // One quiet line: the file name and Close, with no type badge or icon tile.
+  assert.doesNotMatch(markup, /uppercase|>Source<|lucide-maximize/);
   assert.match(markup, /tmp_test_task.py/);
   assert.match(markup, /Hello from preview/);
   assert.match(markup, /aria-label="Close preview window"/);

@@ -93,3 +93,28 @@ test('Vite development serves only with an explicit non-production API origin', 
     else process.env.VITE_KORDI_PRODUCTION_DEBUG_ACK = previousAck;
   }
 });
+
+test('the code viewer stays out of the startup chunks, split along dependencies', async () => {
+  const resolvedConfig = typeof config === 'function'
+    ? await config({ command: 'build', mode: 'production' })
+    : config;
+  const groups = resolvedConfig.build?.rolldownOptions?.output?.codeSplitting?.groups ?? [];
+  const group = (name) => groups.find((entry) => entry.name === name);
+  const matches = (entry, id) => (typeof entry.test === 'function' ? entry.test(id) : entry.test.test(id));
+  const core = '/repo/node_modules/.pnpm/@codemirror+view@6/node_modules/@codemirror/view/dist/index.js';
+  const lezer = '/repo/node_modules/.pnpm/@lezer+common@1/node_modules/@lezer/common/dist/index.js';
+  const grammar = '/repo/node_modules/.pnpm/@lezer+python@1/node_modules/@lezer/python/dist/index.js';
+  const language = '/repo/node_modules/.pnpm/@codemirror+lang-python@6/node_modules/@codemirror/lang-python/dist/index.js';
+  const keyname = '/repo/node_modules/.pnpm/w3c-keyname@2/node_modules/w3c-keyname/index.js';
+  const wrapper = '/repo/app/desktop/src/features/documents/viewers/CodeViewer.tsx';
+
+  for (const id of [core, lezer, grammar, language]) assert.equal(matches(group('vendor'), id), false, `${id} is not in vendor`);
+  assert.equal(matches(group('vendor'), keyname), true, 'the editor and the code viewer share w3c-keyname through vendor');
+  assert.equal(matches(group('code-viewer'), core), true);
+  assert.equal(matches(group('code-viewer'), lezer), true);
+  assert.equal(matches(group('code-viewer'), grammar), false, 'grammars are not in the core chunk');
+  assert.equal(matches(group('code-grammars'), grammar), true);
+  assert.equal(matches(group('code-grammars'), language), true);
+  assert.equal(matches(group('code-grammars'), lezer), false, 'the core is not in the grammars chunk');
+  assert.equal(matches(group('desktop-features'), wrapper), false, 'the wrapper is the lazy entry, not a features module');
+});

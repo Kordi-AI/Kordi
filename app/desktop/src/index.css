@@ -12,6 +12,7 @@
 @import './styles/shell-composer.css';
 @import './styles/shell-expressive-picker.css';
 @import './styles/shell-inspector.css';
+@import './styles/artifact-cards.css';
 @import './styles/shell-glass.css';
 @import './styles/shell-popovers.css';
 @import './styles/model-effort-picker.css';
@@ -27,6 +28,7 @@
 @import './styles/document-tabs.css';
 @import './styles/document-tab-picker.css';
 @import './styles/document-source.css';
+@import './styles/document-viewers.css';
 @import './styles/shell-calls.css';
 @import './styles/shell-bubbles.css';
 @import './styles/plan-card.css';

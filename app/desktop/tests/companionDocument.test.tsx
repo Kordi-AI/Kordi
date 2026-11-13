@@ -104,14 +104,17 @@ test('folding a document retains its reader; expanding restores it and closing r
   });
 });
 
-test('selecting a code artifact keeps the inline preview', async () => {
+test('selecting a code artifact opens it in the side panel source view, with nothing under the list', async () => {
   await withJsdomRoot(async (mount) => {
     const root = await mount(createElement(Harness));
     await click(row(root, 'app.ts'));
     const page = root.querySelector('[data-view]') as HTMLElement;
-    assert.equal(page.dataset.view, 'chat');
-    assert.ok(root.querySelector('[data-artifact-preview-section="true"]'), 'code keeps the inline preview');
-    assert.equal(root.querySelector('[aria-label="Document panel"]'), null);
+    assert.equal(page.dataset.view, 'document', 'the companion switches to the open file');
+    assert.equal(root.querySelector('[data-artifact-preview-section="true"]'), null, 'no preview under the list');
+    const pane = root.querySelector('[aria-label="Document panel"]');
+    assert.ok(pane, 'code opens in the companion pane');
+    assert.ok(pane.querySelector('[role="tab"]')?.textContent?.includes('app.ts'));
+    assert.equal(pane.querySelector('.app-document-reader'), null, 'code uses the source view, not the document reader');
   });
 });
 
@@ -284,14 +287,16 @@ test('plain text wraps by default while source code retains horizontal scrolling
       createElement(CompanionSourceView, { preview: { ...preview, path: 'config.json' }, onReload: () => {} }),
       createElement(CompanionSourceView, { preview: { ...preview, path: 'project.v2/README' }, onReload: () => {} }),
     ));
-    const sources = root.querySelectorAll<HTMLElement>('.app-companion-source');
-    assert.equal(sources[0].dataset.wrap, 'true');
-    assert.equal(sources[1].dataset.wrap, 'false');
-    assert.match(root.querySelectorAll('.app-document-source-toolbar')[2].textContent ?? '', /^Source/);
-    assert.equal(sources[0].querySelector('code')?.textContent, preview.lines[0].text);
+    const toolbars = root.querySelectorAll<HTMLElement>('.app-document-source-toolbar');
+    const wrapButton = (index: number) => Array.from(toolbars[index].querySelectorAll('button')).find((button) => button.textContent === 'Wrap lines');
+    assert.equal(wrapButton(0)?.getAttribute('aria-pressed'), 'true', 'plain text wraps');
+    assert.equal(wrapButton(1)?.getAttribute('aria-pressed'), 'false', 'source code scrolls sideways');
+    assert.match(toolbars[2].textContent ?? '', /^Source/);
+    const viewers = root.querySelectorAll<HTMLElement>('.app-companion-viewer');
+    assert.match(viewers[0].textContent ?? '', /A long line with <script>literal text<\/script>/, 'markup shows as text');
     assert.equal(root.querySelector('script'), null);
-    await click(root.querySelector('.app-document-source-toolbar button'));
-    assert.equal(sources[0].dataset.wrap, 'false');
-    assert.match(sources[0].textContent ?? '', /Preview truncated/);
+    await click(wrapButton(0) ?? null);
+    assert.equal(wrapButton(0)?.getAttribute('aria-pressed'), 'false');
+    assert.match(viewers[0].textContent ?? '', /Preview truncated/);
   });
 });

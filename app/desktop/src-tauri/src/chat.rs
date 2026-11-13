@@ -32,6 +32,7 @@ pub(crate) mod model_options;
 mod models;
 pub(crate) mod proactive_run_folder;
 pub(crate) mod project_actions;
+pub(crate) mod quick_look;
 pub(crate) mod session_actions;
 mod session_commands;
 mod session_lifecycle;

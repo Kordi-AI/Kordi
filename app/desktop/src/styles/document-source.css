@@ -13,3 +13,6 @@
 .app-companion-source-line code { white-space: pre; }
 .app-companion-source[data-wrap='true'] pre { width: 100%; }
 .app-companion-source[data-wrap='true'] code { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.app-companion-document-panel > .app-companion-status { padding: 14px 16px; }
+.app-companion-status-actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 2px; }
+.app-companion-status-actions button { display: inline-flex; align-items: center; gap: 4px; }

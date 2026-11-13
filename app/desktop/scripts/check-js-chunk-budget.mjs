@@ -81,7 +81,16 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // Slack channel choices in Connectors settings add 6.0 kB, so it moves to 5.908 MB.
 // Grounding room and match hints (refresh on a hint, one shared refresh per screen and the slower
 // fallback polling) add up to 3 kB, so it moves to 5.911 MB and the web app to 5.939 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_911_000;
+// The Artifacts tab's card grid (a lazy 7.9 kB chunk), toolbar, compact list rows, and opening
+// files in their default app add 20.4 kB, so it moves to 5.932 MB.
+// Opening every artifact in the companion pane and the source view's type names, Copy, and
+// open actions add 0.9 kB, so it moves to 5.934 MB.
+// The companion pane's table and image viewers, their styles, reading image artifacts from the Mac,
+// and the code viewer's small entry module add 14 kB (CodeMirror itself has its own cap below), so
+// it moves to 5.95 MB.
+// The PDF viewer, the file card with Quick Look, and loading Quick Look thumbnails add 5.9 kB, so it
+// moves to 5.956 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_956_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -115,13 +124,22 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // Scoped history, indexed browser message storage, and targeted pin loading add up to 12 kB.
 // The shared Slack channel choices add the same 6.0 kB to the browser target.
 // The Grounding room and match hints add up to 3 kB here too.
-const MAX_WEB_APP_DIST_BYTES = 5_939_000;
+// The same Artifacts cards, toolbar, and list rows add 20.2 kB there, so it moves to 5.959 MB.
+// The same companion routing and source view actions add 0.7 kB there, so it moves to 5.961 MB.
+// The same table and image viewers, their styles, and the code viewer's entry module add 14.6 kB
+// there, so it moves to 5.977 MB.
+// The same PDF viewer and file card add 4.5 kB there, so it moves to 5.983 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_983_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
 // The document editor (Tiptap, ProseMirror, Markdown parser) is one lazy chunk that loads with the
 // first opened document. It gets its own cap, like the atlases, without relaxing the app budget.
 const MAX_DOCUMENT_EDITOR_BYTES = 750_000;
+// The read-only code viewer (the CodeMirror core and about 25 grammars, without completion or lint)
+// loads when a file first opens in the companion pane, in two chunks (the core and the grammars)
+// under the per-chunk budget. It gets its own cap, like the editor.
+const MAX_CODE_VIEWER_BYTES = 900_000;
 // Product guides and permission setup load only when Help opens. Bound their
 // JavaScript and CSS together, keeping the existing app/startup budget intact.
 const MAX_HELP_CENTER_BYTES = 50_000;
@@ -197,6 +215,11 @@ try {
   if (editorBytes > MAX_DOCUMENT_EDITOR_BYTES || editorChunks.length > 1) {
     throw new Error(`The document editor chunk exceeds its separate ${formatKb(MAX_DOCUMENT_EDITOR_BYTES)} budget (${formatKb(editorBytes)}).`);
   }
+  const codeViewerChunks = chunks.filter((chunk) => /^code-(?:viewer|grammars)-[\w-]+\.js$/.test(chunk.name));
+  const codeViewerBytes = codeViewerChunks.reduce((total, chunk) => total + chunk.bytes, 0);
+  if (codeViewerBytes > MAX_CODE_VIEWER_BYTES || codeViewerChunks.length > 2) {
+    throw new Error(`The code viewer chunk exceeds its separate ${formatKb(MAX_CODE_VIEWER_BYTES)} budget (${formatKb(codeViewerBytes)}).`);
+  }
   const helpFiles = (await readdir(assetsDir)).filter((name) => /^help-center-[\w-]+\.(?:js|css)$/.test(name));
   const helpSizes = await Promise.all(helpFiles.map(async (name) => (await stat(path.join(assetsDir, name))).size));
   const helpBytes = helpSizes.reduce((total, size) => total + size, 0);
@@ -212,7 +235,7 @@ try {
       throw new Error(`Help must load on demand, but ${chunk.name} imports it eagerly.`);
     }
   }
-  if (distBytes - atlasBytes - editorBytes - helpBytes - licenseBytes > applicationBudget) {
+  if (distBytes - atlasBytes - editorBytes - codeViewerBytes - helpBytes - licenseBytes > applicationBudget) {
     console.error(`Application bundle budget exceeded. Maximum allowed size is ${formatKb(applicationBudget)}.`);
     console.error(`- dist: ${formatKb(distBytes)}`);
     process.exit(1);
@@ -222,6 +245,7 @@ try {
   if (licenseBytes) console.log(`Offline license documents: ${formatKb(licenseBytes)} of ${formatKb(MAX_LICENSE_BYTES)}.`);
   if (atlasBytes) console.log(`Bundled Noto thumbnails: ${formatKb(atlasBytes)} of ${formatKb(MAX_NOTO_THUMBNAIL_BYTES)}.`);
   if (editorBytes) console.log(`Document editor chunk: ${formatKb(editorBytes)} of ${formatKb(MAX_DOCUMENT_EDITOR_BYTES)}.`);
+  if (codeViewerBytes) console.log(`Code viewer chunks: ${formatKb(codeViewerBytes)} of ${formatKb(MAX_CODE_VIEWER_BYTES)}.`);
   if (helpBytes) console.log(`Help center: ${formatKb(helpBytes)} of ${formatKb(MAX_HELP_CENTER_BYTES)}.`);
 } catch (error) {
   if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {

@@ -44,6 +44,15 @@ export function openArtifactInCompanion(artifact: SessionArtifact, previewBaseRo
   return openCompanionDocument({ artifact, preview: null, previewBaseRoot: previewBaseRoot ?? null });
 }
 
+/**
+ * Opens any artifact as a tab in the companion pane: Markdown and HTML in the document reader,
+ * every other file in the read-only source view. This is the one place a chat opens artifacts.
+ */
+export function openArtifactInSidePanel(artifact: SessionArtifact, previewBaseRoot?: string | null): boolean {
+  const sourceView = !documentFormatForPath(artifact.path);
+  return openCompanionDocument({ artifact, preview: null, previewBaseRoot: previewBaseRoot ?? null, ...(sourceView ? { sourceView } : {}) });
+}
+
 /** A Markdown or HTML file with a cloud copy: it opens in the document reader, never as a download. */
 export function isReaderAttachment(attachment: Pick<MessageAttachment, 'attachmentId' | 'name'>) {
   return Boolean(attachment.attachmentId?.trim() && documentFormatForPath(attachment.name));

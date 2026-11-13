@@ -1,6 +1,5 @@
 import { fileNameFromPath, extensionLabel, languageFromPath, artifactPreviewKind } from './artifactPreviewFormat';
-import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
-import { loadArtifactPreview } from './artifactPreviewLoader';
+import { artifactPreviewsAvailable, loadArtifactPreview } from '@/features/documents/artifactPreviewLoader';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Braces, ChevronLeft, FileText, FolderOpen, Globe2, LoaderCircle, Maximize2, X } from 'lucide-react';
 import { ErrorLine } from '@/components/ui/ErrorLine';
@@ -9,12 +8,14 @@ import type { ConversationParticipant, DesktopArtifactDirectory, DesktopArtifact
 import { fetchDesktopChatArtifactDirectory } from '@/lib/desktop';
 import { cn } from '@/lib/utils';
 import { ArtifactDocumentSection } from '@/features/documents/ArtifactDocumentSection';
-import { documentFormatForPath, isDocumentReaderArtifact } from '@/features/documents/documentReaderModel';
-import { openArtifactInCompanion } from '@/features/documents/companionDocument';
+import { isDocumentReaderArtifact } from '@/features/documents/documentReaderModel';
+import { openArtifactInSidePanel } from '@/features/documents/companionDocument';
 import { useDocumentReaderHost } from '@/features/documents/documentReaderHost';
 import { artifactPreviewDocumentSource, type ArtifactPreviewMode } from './artifactPreviewDocument';
 import { ArtifactDataTable } from './artifactDataTable';
-import { ArtifactListRow } from './ArtifactListRow';
+import { ArtifactListSection } from './ArtifactListSection';
+import { compactArtifactLocation } from './artifactRowModel';
+import { useOpenArtifactExternally } from '@/features/documents/openArtifactExternally';
 import { ARTIFACT_MARKDOWN_PREVIEW_CLASS, artifactFromDirectoryEntry, formattedJsonSource, formatFileSize } from './artifactPreviewText';
 
 type ArtifactInspectorProps = {
@@ -29,21 +30,6 @@ type ArtifactInspectorProps = {
   /** People of the conversation, to show who created an artifact. */
   participants?: ConversationParticipant[];
 };
-
-function parentPathFromPath(path: string) {
-  const parts = path.split('/').filter(Boolean);
-  parts.pop();
-  return parts;
-}
-
-function compactArtifactLocation(path: string, fileName = fileNameFromPath(path)) {
-  const parts = parentPathFromPath(path);
-  if (parts.length === 0) return '';
-  const visibleCount = path.startsWith('/') ? 1 : 2;
-  const visibleParts = parts.slice(-visibleCount).filter((part) => part !== fileName);
-  if (visibleParts.length === 0) return '';
-  return parts.length > visibleParts.length ? `…/${visibleParts.join('/')}` : visibleParts.join('/');
-}
 
 function artifactIcon(kind: SessionArtifact['kind'], path = '') {
   const extension = extensionLabel(path, kind);
@@ -144,48 +130,14 @@ function artifactCategory(artifact: SessionArtifact): NonNullable<SessionArtifac
   return artifact.category ?? 'artifact';
 }
 
-type ArtifactListSectionProps = {
-  title: string;
-  section: 'generated' | 'related' | 'memory';
-  description?: string;
-  artifacts: SessionArtifact[];
-  activeArtifact: SessionArtifact | null;
-  onSelect: (artifactId: string) => void;
-  participants?: ConversationParticipant[];
-};
-
-function ArtifactListSection({ title, section, description, artifacts, activeArtifact, onSelect, participants }: ArtifactListSectionProps) {
-  if (artifacts.length === 0) return null;
-
-  return (
-    <section className="app-detail-section" data-artifact-section={section}>
-      {title ? <div className="app-detail-kicker">{title}</div> : null}
-      {description ? <div className="mb-2 text-[11px] leading-5 text-[color:var(--utility-muted-text)]">{description}</div> : null}
-      <div className="-mx-2 flex flex-col gap-px">
-        {artifacts.map((artifact) => (
-          <ArtifactListRow
-            key={artifact.id}
-            artifact={{ ...artifact, name: artifact.name || fileNameFromPath(artifact.path) }}
-            location={compactArtifactLocation(artifact.path, artifact.name || fileNameFromPath(artifact.path))}
-            isActive={activeArtifact?.id === artifact.id}
-            participants={participants ?? []}
-            onSelect={() => onSelect(artifact.id)}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
+/** A file opened large: one quiet line with its name and Close, then the preview. */
 export function ArtifactPreviewWindow({
   preview,
   title,
-  kindLabel,
   onClose,
 }: {
   preview: DesktopArtifactPreview;
   title: string;
-  kindLabel: string;
   onClose: () => void;
 }) {
   return (
@@ -194,29 +146,19 @@ export function ArtifactPreviewWindow({
         role="dialog"
         aria-modal="true"
         aria-label="Artifact preview window"
-        className="app-transient-surface app-artifact-preview-window-panel mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-[24px] border"
+        className="app-transient-surface app-artifact-preview-window-panel mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-[16px] border"
       >
-        <div className="app-transient-divider app-artifact-preview-window-header flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="app-transient-icon grid h-7 w-7 shrink-0 place-items-center rounded-lg">
-              <Maximize2 className="h-3.5 w-3.5" />
-            </div>
-            <div className="min-w-0 truncate text-[13px] font-medium leading-5 text-[color:var(--utility-foreground)]">{title}</div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="app-transient-icon rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.12em]">
-              {kindLabel}
-            </span>
-            <button
-              type="button"
-              onClick={onClose}
-              className="app-button-quiet grid h-8 w-8 place-items-center rounded-xl p-0"
-              aria-label="Close preview window"
-              title="Close preview window"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+        <div className="app-transient-divider app-artifact-preview-window-header flex shrink-0 items-center justify-between gap-3 border-b py-1.5 pr-2 pl-4">
+          <div className="min-w-0 truncate text-[13px] leading-5 text-[color:var(--utility-foreground)]">{title}</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="app-button-quiet grid h-7 w-7 shrink-0 place-items-center rounded-md p-0"
+            aria-label="Close preview window"
+            title="Close preview window"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
         <div className="app-artifact-preview-window-body min-h-0 flex-1 overflow-auto">
           {renderArtifactPreview(preview, 'window')}
@@ -246,6 +188,8 @@ export function ArtifactInspector({
   const [isBrowserLoading, setIsBrowserLoading] = useState(false);
   const [browserSelectedArtifact, setBrowserSelectedArtifact] = useState<SessionArtifact | null>(null);
   const [previewWindowOpen, setPreviewWindowOpen] = useState(false);
+  const [pickedArtifactId, setPickedArtifactId] = useState<string | null>(null);
+  const { open: openExternally, error: openError } = useOpenArtifactExternally(isNativeShell, previewBaseRoot);
 
   const folderBrowserRootPath = folderBrowserRoot?.trim() ?? '';
   const effectiveBrowserPath = useMemo(() => {
@@ -262,14 +206,18 @@ export function ArtifactInspector({
     [activeArtifactId, artifacts, generatedArtifacts, relatedArtifacts],
   );
   const previewArtifact = browserSelectedArtifact ?? activeArtifact;
-  // In chats, Markdown and HTML open in the companion pane instead of inline.
+  // In chats, every artifact opens as a tab in the companion pane, so nothing previews under the list.
   const documentsInCompanion = Boolean(useDocumentReaderHost().opensDocumentsInCompanion);
-  const opensInCompanion = documentsInCompanion && Boolean(documentFormatForPath(previewArtifact?.path));
+  const opensInCompanion = documentsInCompanion && Boolean(previewArtifact);
+  // A document that opens in the companion is marked only once picked here, so the list does not
+  // start with a filled row; anything previewed below the list stays marked.
+  const listActiveArtifact = opensInCompanion && pickedArtifactId !== activeArtifact?.id ? null : activeArtifact;
   const selectListArtifact = (artifactId: string) => {
+    setPickedArtifactId(artifactId);
     setBrowserSelectedArtifact(null);
     onSelectArtifact(artifactId);
     const artifact = artifacts.find((entry) => entry.id === artifactId);
-    if (artifact && documentsInCompanion) openArtifactInCompanion(artifact, artifact.pinned ? null : previewBaseRoot);
+    if (artifact && documentsInCompanion) openArtifactInSidePanel(artifact, artifact.pinned ? null : previewBaseRoot);
   };
   const effectivePreviewBaseRoot = previewArtifact?.pinned ? null : previewBaseRoot;
   const activePreviewKey = previewArtifact
@@ -351,7 +299,7 @@ export function ArtifactInspector({
   useEffect(() => {
     setPreviewError(null);
 
-    if (!previewArtifact?.id || !activePreviewKey || (!isNativeShell && !isBrowserAppRuntime()) || cachedPreview || opensInCompanion) {
+    if (!previewArtifact?.id || !activePreviewKey || !artifactPreviewsAvailable(isNativeShell) || cachedPreview || opensInCompanion) {
       setIsPreviewLoading(false);
       return;
     }
@@ -384,7 +332,7 @@ export function ArtifactInspector({
 
   return (
     <div data-artifact-inspector="true" className="flex h-full min-h-0 flex-col">
-      <div data-artifact-file-list="true" className={cn('shrink-0 overflow-y-auto overflow-x-hidden pr-1', previewArtifact && !opensInCompanion ? 'max-h-[38%]' /* room for the preview */ : 'max-h-full')}>
+      <div data-artifact-file-list="true" className={cn('shrink-0 overflow-y-auto overflow-x-hidden', previewArtifact && !opensInCompanion ? 'max-h-[38%]' /* room for the preview */ : 'max-h-full')}>
         {folderBrowserRootPath ? (
           <section className="app-detail-section">
           <div className="app-detail-kicker">Project folder</div>
@@ -430,7 +378,7 @@ export function ArtifactInspector({
                         return;
                       }
                       setBrowserSelectedArtifact(artifactFromDirectoryEntry(entry));
-                      if (documentsInCompanion) openArtifactInCompanion(artifactFromDirectoryEntry(entry), null);
+                      if (documentsInCompanion) openArtifactInSidePanel(artifactFromDirectoryEntry(entry), null);
                     }}
                     className={cn(
                       'app-inspector-source-row w-full text-left transition',
@@ -459,23 +407,26 @@ export function ArtifactInspector({
           </section>
         ) : null}
 
+        {openError ? <ErrorLine className="mb-2">{openError}</ErrorLine> : null}
         {generatedArtifacts.length > 0 || relatedArtifacts.length > 0 ? (
           <>
           <ArtifactListSection
-            title={generatedArtifacts.length > 0 ? 'Generated artifacts' : ''}
+            title=""
             section="generated"
             artifacts={generatedArtifacts}
-            activeArtifact={activeArtifact}
+            activeArtifact={listActiveArtifact}
             participants={participants}
             onSelect={selectListArtifact}
+            onOpenExternal={openExternally}
           />
           <ArtifactListSection
-            title="Related changed files"
+            title="Changed files"
             section="related"
             artifacts={relatedArtifacts}
-            activeArtifact={activeArtifact}
+            activeArtifact={listActiveArtifact}
             participants={participants}
             onSelect={selectListArtifact}
+            onOpenExternal={openExternally}
           />
           </>
         ) : emptyMessage === null ? null : (
@@ -551,7 +502,6 @@ export function ArtifactInspector({
         <ArtifactPreviewWindow
           preview={cachedPreview}
           title={previewFileName || cachedPreview.path}
-          kindLabel={previewKindLabel}
           onClose={() => setPreviewWindowOpen(false)}
         />
       ) : null}

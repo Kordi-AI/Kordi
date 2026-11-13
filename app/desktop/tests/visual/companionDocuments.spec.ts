@@ -70,7 +70,8 @@ for (const theme of ['light', 'dark']) {
  const errors: string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await openDocumentFixture(page, 6, theme);
  await page.getByRole('button',{name:'Wrap lines',exact:true}).click();
- const source=page.locator('.app-companion-source:visible');
+ // The code viewer scrolls in its own scroller; the open tab's one is the visible one.
+ const source=page.locator('.app-companion-document-panel:not([hidden]) [data-code-viewer] .cm-scroller');
  await source.evaluate(e=>{e.scrollLeft=160;(e as HTMLElement).dataset.retainedReader='true';});
  const left=await source.evaluate(e=>e.scrollLeft);
  await page.getByRole('button',{name:'Fold pane',exact:true}).last().click();

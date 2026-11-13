@@ -115,6 +115,165 @@ fn artifact_file_kind(path: &Path) -> &'static str {
     }
 }
 
+/// Opens an artifact in its default app, such as a Markdown editor or the browser for HTML. The path
+/// resolves like a preview: inside the project root when one is set.
+#[tauri::command]
+pub async fn desktop_chat_artifact_open(
+    path: String,
+    base_root: Option<String>,
+) -> Result<String, String> {
+    let resolved_path = resolve_artifact_preview_path(&path, base_root.as_deref())?;
+    if !resolved_path.is_file() {
+        return Err(format!(
+            "Artifact file not found: {}",
+            resolved_path.display()
+        ));
+    }
+    crate::external_open::open_with_default_app(&resolved_path)?;
+    Ok(resolved_path.display().to_string())
+}
+
+/// The last path segment of `name`, so a copy never lands outside its folder.
+fn open_copy_file_name(name: &str) -> String {
+    Path::new(name.trim())
+        .file_name()
+        .and_then(|value| value.to_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "." && *value != "..")
+        .unwrap_or("Document.md")
+        .to_string()
+}
+
+/// Writes a fresh copy of a shared document to a new temporary folder, under its own file name,
+/// and opens it in its default app. Each open gets its own folder, so the copy is never stale.
+#[tauri::command]
+pub async fn desktop_chat_artifact_open_copy(
+    name: String,
+    contents: String,
+) -> Result<String, String> {
+    let directory = std::env::temp_dir()
+        .join("kordi-open")
+        .join(uuid::Uuid::new_v4().to_string());
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let path = directory.join(open_copy_file_name(&name));
+    std::fs::write(&path, contents.as_bytes()).map_err(|error| error.to_string())?;
+    crate::external_open::open_with_default_app(&path)?;
+    Ok(path.display().to_string())
+}
+
+/// Largest file the image and PDF viewers read into memory; bigger ones open in Quick Look or
+/// their default app instead.
+const MAX_ARTIFACT_VIEWER_BYTES: u64 = 48 * 1024 * 1024;
+
+/// The binary types the viewers draw (images WebKit decodes, and PDF), by extension.
+fn artifact_viewer_mime_type(path: &Path) -> Option<&'static str> {
+    let extension = path.extension()?.to_str()?.to_lowercase();
+    Some(match extension.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "avif" => "image/avif",
+        "heic" => "image/heic",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "pdf" => "application/pdf",
+        _ => return None,
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopArtifactBytes {
+    path: String,
+    mime_type: String,
+    size_bytes: u64,
+    data_base64: String,
+}
+
+fn resolve_artifact_file(path: &str, base_root: Option<&str>) -> Result<PathBuf, String> {
+    let resolved_path = resolve_artifact_preview_path(path, base_root)?;
+    if !resolved_path.is_file() {
+        return Err(format!(
+            "Artifact file not found: {}",
+            resolved_path.display()
+        ));
+    }
+    Ok(resolved_path)
+}
+
+/// Reads an image or PDF artifact for its viewer and for card thumbnails. The path resolves like a
+/// preview: inside the project root when one is set.
+#[tauri::command]
+pub async fn desktop_chat_artifact_bytes(
+    path: String,
+    base_root: Option<String>,
+) -> Result<DesktopArtifactBytes, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let resolved_path = resolve_artifact_file(&path, base_root.as_deref())?;
+    let mime_type = artifact_viewer_mime_type(&resolved_path)
+        .ok_or_else(|| "This file is not one the viewer can show.".to_string())?;
+    let size_bytes = std::fs::metadata(&resolved_path)
+        .map_err(|err| err.to_string())?
+        .len();
+    if size_bytes > MAX_ARTIFACT_VIEWER_BYTES {
+        return Err("This file is too large to preview here.".to_string());
+    }
+    let bytes = std::fs::read(&resolved_path).map_err(|err| err.to_string())?;
+    Ok(DesktopArtifactBytes {
+        path: resolved_path.display().to_string(),
+        mime_type: mime_type.to_string(),
+        size_bytes,
+        data_base64: STANDARD.encode(bytes),
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopArtifactThumbnail {
+    png_base64: String,
+    size_bytes: u64,
+}
+
+/// A Quick Look thumbnail of any artifact Quick Look understands (PDF, Office, Keynote, images,
+/// video), as a base64 PNG for its card, with the file's size for the file card.
+#[tauri::command]
+pub async fn desktop_chat_artifact_thumbnail(
+    path: String,
+    base_root: Option<String>,
+) -> Result<DesktopArtifactThumbnail, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let resolved_path = resolve_artifact_file(&path, base_root.as_deref())?;
+    let size_bytes = std::fs::metadata(&resolved_path)
+        .map_err(|err| err.to_string())?
+        .len();
+    let png = tokio::task::spawn_blocking(move || super::quick_look::thumbnail_png(&resolved_path))
+        .await
+        .map_err(|err| err.to_string())??;
+    Ok(DesktopArtifactThumbnail {
+        png_base64: STANDARD.encode(png),
+        size_bytes,
+    })
+}
+
+/// Shows an artifact in the system Quick Look panel, for formats the app does not draw itself.
+#[tauri::command]
+pub async fn desktop_chat_artifact_quick_look(
+    app: tauri::AppHandle,
+    path: String,
+    base_root: Option<String>,
+) -> Result<(), String> {
+    let resolved_path = resolve_artifact_file(&path, base_root.as_deref())?;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let _ = sender.send(super::quick_look::show_quick_look(&resolved_path));
+    })
+    .map_err(|err| err.to_string())?;
+    receiver.await.map_err(|err| err.to_string())?
+}
+
 #[tauri::command]
 pub async fn desktop_chat_artifact_preview(
     path: String,
@@ -263,6 +422,33 @@ mod tests {
             normalize_path_lexically(Path::new("/tmp/project/./src/../README.md")),
             PathBuf::from("/tmp/project/README.md"),
         );
+    }
+
+    #[test]
+    fn artifact_viewer_mime_type_covers_drawable_files_only() {
+        assert_eq!(
+            artifact_viewer_mime_type(Path::new("a/hero.PNG")),
+            Some("image/png")
+        );
+        assert_eq!(
+            artifact_viewer_mime_type(Path::new("photo.jpeg")),
+            Some("image/jpeg")
+        );
+        assert_eq!(
+            artifact_viewer_mime_type(Path::new("deck.PDF")),
+            Some("application/pdf")
+        );
+        assert_eq!(artifact_viewer_mime_type(Path::new("logo.svg")), None);
+        assert_eq!(artifact_viewer_mime_type(Path::new("plan.docx")), None);
+        assert_eq!(artifact_viewer_mime_type(Path::new("README")), None);
+    }
+
+    #[test]
+    fn open_copy_file_name_keeps_only_the_last_segment() {
+        assert_eq!(open_copy_file_name("notes/plan.md"), "plan.md");
+        assert_eq!(open_copy_file_name("../../etc/passwd"), "passwd");
+        assert_eq!(open_copy_file_name(" .. "), "Document.md");
+        assert_eq!(open_copy_file_name(""), "Document.md");
     }
 
     #[test]
