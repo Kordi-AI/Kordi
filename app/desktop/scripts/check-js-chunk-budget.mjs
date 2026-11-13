@@ -78,7 +78,8 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // The optimized front-facing System portrait replaces the SVG, adding less than 25 kB.
 // Multi-category memory labels, choices and import preservation add up to 2 kB.
 // Facilitator decision, Memory, and assignment cards add 7.1 kB across the shared UI and sync code.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_902_000;
+// Slack channel choices in Connectors settings add 6.0 kB, so it moves to 5.908 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_908_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
