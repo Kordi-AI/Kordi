@@ -271,7 +271,6 @@ impl HttpCloudAgentRunClient {
     }
 }
 
-
 #[async_trait]
 impl CloudAgentRunClient for HttpCloudAgentRunClient {
     async fn plan_card(
