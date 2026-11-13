@@ -178,7 +178,22 @@ async fn run_omp_with_config<C: CloudAgentRunClient + Sync>(
         }),
     };
     let outcomes = host.outcomes.into_inner().unwrap_or_default();
-    Ok((run_reply_text(result.text, &outcomes)?, state))
+    let text = omp_reply_text(result.text, &result.messages);
+    Ok((run_reply_text(text, &outcomes)?, state))
+}
+
+/// The reply of a run: the text of all its assistant messages under the shared
+/// turn reply rule (`kordi_core::types::compose_turn_reply`), so a summary the
+/// model wrote before its last tool call is not lost behind the final answer.
+/// The worker's own text is only the last message's.
+fn omp_reply_text(final_text: String, messages: &[Value]) -> String {
+    let reply =
+        kordi_core::types::compose_turn_reply(&kordi_core::types::assistant_text_parts(messages));
+    if reply.is_empty() {
+        final_text
+    } else {
+        reply
+    }
 }
 
 /// A model the provider refuses for this account is its own failure: trying

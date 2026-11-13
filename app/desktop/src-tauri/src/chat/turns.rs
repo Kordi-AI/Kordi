@@ -258,6 +258,16 @@ pub(super) fn apply_desktop_turn_event(
             state.status = "writing".to_string();
             state.message = "Writing response…".to_string();
             state.error = None;
+            // Text after a tool call or in a new message is a new paragraph of
+            // the streamed reply, as in the stored reply.
+            let continues = matches!(state.segments.last(),
+                Some(kordi_core::types::TurnSegment::Text { text, .. }) if !text.is_empty());
+            if !continues && !text.is_empty() && !state.assistant_text.trim_end().is_empty() {
+                state
+                    .assistant_text
+                    .truncate(state.assistant_text.trim_end().len());
+                state.assistant_text.push_str("\n\n");
+            }
             state.assistant_text.push_str(text);
             kordi_core::types::TurnSegment::append_text(&mut state.segments, text);
         }),

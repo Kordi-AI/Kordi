@@ -329,3 +329,34 @@ fn a_refused_model_is_its_own_failure() {
     let error = omp_run_error(&RuntimeError::Worker("provider_http_429".into()));
     assert!(matches!(error, ModelLoopError::Provider(_)));
 }
+
+#[test]
+fn reply_keeps_text_written_before_the_last_tool_call() {
+    let summary = "You have 50 GitHub notifications; three review requests wait on you.";
+    let question = "Please paste the Slack channel link you want me to check.";
+    let messages = vec![
+        json!({"role":"assistant","content":[
+            {"type":"thinking","thinking":"GitHub first."},
+            {"type":"toolCall","id":"call-1","name":"github_notifications","arguments":{}}
+        ]}),
+        json!({"role":"toolResult","toolCallId":"call-1","content":[{"type":"text","text":"50"}]}),
+        json!({"role":"assistant","content":[
+            {"type":"text","text":"Checking Slack:"},
+            {"type":"text","text":summary},
+            {"type":"toolCall","id":"call-2","name":"reach_out","arguments":{}}
+        ]}),
+        json!({"role":"toolResult","toolCallId":"call-2","isError":true,"content":[{"type":"text","text":"failed"}]}),
+        json!({"role":"assistant","content":[{"type":"text","text":question}]}),
+    ];
+    assert_eq!(
+        omp_reply_text(question.into(), &messages),
+        format!("{summary}\n\n{question}")
+    );
+    // A reserved outcome stays the whole reply.
+    let waiting = r#"{"agentExchangeOutcome":"waiting"}"#;
+    let mut outcome = messages.clone();
+    outcome[4] = json!({"role":"assistant","content":[{"type":"text","text":waiting}]});
+    assert_eq!(omp_reply_text(waiting.into(), &outcome), waiting);
+    // Without assistant text the worker's text stands.
+    assert_eq!(omp_reply_text(String::new(), &messages[..2]), "");
+}
