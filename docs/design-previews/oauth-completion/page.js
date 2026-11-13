@@ -151,7 +151,8 @@ export function script(requestId) {
         var provider = '';
         try {
           var encoded = (params.get('kordi_connector') || '').replace(/-/g, '+').replace(/_/g, '/');
-          provider = names[JSON.parse(atob(encoded)).provider] || '';
+          var id = JSON.parse(atob(encoded)).provider;
+          provider = Object.prototype.hasOwnProperty.call(names, id) ? names[id] : '';
         } catch (error) {}
         root.setAttribute('data-kind', 'connector');
         document.querySelectorAll('[data-provider]').forEach(function(node) {

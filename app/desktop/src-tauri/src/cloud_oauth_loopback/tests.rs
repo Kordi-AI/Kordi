@@ -70,6 +70,8 @@ mod completion_page_tests {
         assert!(html.contains("params.has('kordi_connector')"));
         assert!(html.contains("params.has('kordi_connector_error')"));
         assert!(html.contains("JSON.parse(atob(encoded)).provider"));
+        // Only listed providers are named; inherited keys such as `constructor` are not.
+        assert!(html.contains("Object.prototype.hasOwnProperty.call(names, id)"));
         for (id, name) in [
             ("github", "GitHub"),
             ("gmail", "Gmail"),
