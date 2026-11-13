@@ -17,6 +17,18 @@ export class ConnectorGoneError extends Error {
   }
 }
 
+/** The connection predates the scopes that list channels; a reconnect adds them. */
+export class ConnectorNeedsReconnectError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConnectorNeedsReconnectError';
+  }
+}
+
+export function isConnectorNeedsReconnect(error: unknown): boolean {
+  return error instanceof ConnectorNeedsReconnectError;
+}
+
 export function isConnectorFlowCanceled(error: unknown): boolean {
   return error instanceof ConnectorFlowCanceledError;
 }

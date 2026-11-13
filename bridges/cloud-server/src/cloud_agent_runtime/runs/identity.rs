@@ -46,14 +46,28 @@ pub(crate) async fn identity_for_run(pool: &PgPool, run_id: &str) -> RunResult<V
     // A short note for the tail of this turn's context: the current time, the
     // members when they changed, and whom reach_out can reach. It never goes
     // into the system prompt, which stays the same from run to run.
+    // The owner's private chat has no members note, but whom the run can
+    // reach is listed there too, since the tool's guidance points to it.
     if !facilitator_assignment {
-        if let Some((note, digest)) = super::conversation_context::note(pool, run_id).await? {
-            let note = match super::exchanges::reachable(pool, run_id).await? {
-                Some(reachable) => format!("{note}\nYou can reach_out to: {reachable}"),
-                None => note,
-            };
+        let reach = super::exchanges::reachable(pool, run_id)
+            .await?
+            .map(|reachable| super::exchanges::reach_note(&reachable));
+        let note = match super::conversation_context::note(pool, run_id).await? {
+            Some((note, digest)) => {
+                identity["conversationMembersDigest"] = Value::String(digest);
+                Some(match reach {
+                    Some(reach) => format!("{note}\n{reach}"),
+                    None => note,
+                })
+            }
+            // Names and handles in the list come from members, so the list
+            // keeps the same untrusted-data framing as the members note.
+            None => {
+                reach.map(|reach| format!("{} {reach}", super::conversation_context::NOTE_FRAMING))
+            }
+        };
+        if let Some(note) = note {
             identity["conversationContext"] = Value::String(note);
-            identity["conversationMembersDigest"] = Value::String(digest);
         }
     }
     // The current request decides the reply's language, not history or memory.

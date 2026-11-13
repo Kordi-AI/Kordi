@@ -139,6 +139,12 @@ struct ConnectorDetailView: View {
             .accessibilityIdentifier("connector-act-toggle")
         }
 
+        if definition.providerId == .slack && store.client.supportsChannels {
+            ConnectorChannelsSection(definition: definition, store: store) {
+                consent = .connect(definition, reauth: true)
+            }
+        }
+
         if !store.agents.isEmpty {
             SettingsDivider()
             SettingsSectionTitle("Agents")

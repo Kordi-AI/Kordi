@@ -6,6 +6,7 @@ import { ErrorLine, withoutTryAgain } from '@/components/ui/errors';
 import { SettingsRow, SettingsSection } from '@/kordi-app/components/settingsLayout';
 import { settingsType } from '@/kordi-app/components/settingsType';
 
+import { ConnectorChannelsSection } from './ConnectorChannelsSection';
 import { ConnectorDetailView } from './ConnectorDetailView';
 import { ConnectorDialogs } from './ConnectorDialogs';
 import type { ConnectorsClient } from './connectorsClient';
@@ -434,6 +435,16 @@ export function ConnectorsSettingsPanel({
           busy={busyProviderId === selectedDefinition.providerId}
           backButtonRef={backButtonRef}
           primaryAction={primaryAction(selectedDefinition, states[selectedDefinition.providerId])}
+          channelsSection={(
+            <ConnectorChannelsSection
+              definition={selectedDefinition}
+              state={states[selectedDefinition.providerId]}
+              client={client}
+              busy={busyProviderId === selectedDefinition.providerId}
+              onSaved={(next) => { applyState(next); setStatusMessage('Channels saved.'); }}
+              onReconnect={() => setDialog({ kind: 'connect', providerId: selectedDefinition.providerId, reauth: true })}
+            />
+          )}
           onBack={backToList}
           onToggleAct={(state, enabled) => toggleAct(selectedDefinition, state, enabled)}
           onSetAgentGrant={(agent, granted) => setAgentGrant(selectedDefinition, agent, granted)}

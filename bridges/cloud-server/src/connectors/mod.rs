@@ -19,6 +19,7 @@ pub mod polling;
 pub mod providers;
 mod refresh;
 pub mod routes;
+mod setting_options;
 mod settings;
 pub mod store;
 pub mod tool_schemas;
