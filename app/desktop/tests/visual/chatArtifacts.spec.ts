@@ -57,10 +57,10 @@ for (const theme of ['light', 'dark'] as const) {
     await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
     const edge = await memoryTextEdge(page);
     await page.goto(`/tests/visual/chatArtifacts.html?theme=${theme}`);
-    await expect(page.locator('[data-artifact-card="true"]')).toHaveCount(13);
-    // Every sample type draws its first lines: Markdown, HTML, JSON, Mermaid, SVG, Python, text,
-    // TypeScript, and CSV.
-    await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(13);
+    await expect(page.locator('[data-artifact-card="true"]')).toHaveCount(14);
+    // Every sample type draws a thumbnail: Markdown, HTML, JSON, Mermaid, SVG, Python, text, a PNG
+    // image, TypeScript, and CSV.
+    await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(14);
     await expect(page.locator('[data-artifact-card-title]').first()).toHaveText('Launch brief');
     await expect(page.locator('[aria-current="true"]')).toHaveCount(0);
     // Changed project files share the grid and say how they changed.
@@ -89,9 +89,9 @@ test('the layout switch moves to the list and stays there after a reload (light)
   await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
   await page.goto('/tests/visual/chatArtifacts.html?theme=light');
   await page.getByRole('button', { name: 'List', exact: true }).click();
-  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(13);
+  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(14);
   await page.reload();
-  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(13);
+  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(14);
   await expect(page.getByRole('button', { name: 'List', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -99,7 +99,7 @@ test('chat artifacts list rows are one line and line up with the toolbar (light)
   await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
   await page.goto('/tests/visual/chatArtifacts.html?theme=light&layout=list');
   const rows = page.locator('[data-artifact-row-shell]');
-  await expect(rows).toHaveCount(13);
+  await expect(rows).toHaveCount(14);
   await expect(page.locator('[data-artifact-file-row="true"][aria-current="true"]')).toHaveCount(0);
 
   // Picking a row opens it in the side panel; the row's fill then runs exactly from the search
@@ -118,4 +118,31 @@ test('chat artifacts list rows are one line and line up with the toolbar (light)
   await expect(rows.last()).toBeInViewport();
   await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot('chatArtifacts-list-light.png');
+});
+
+test('files open in the side panel in the viewer for their type, filling it', async ({ page }) => {
+  await page.goto('/tests/visual/chatArtifacts.html?theme=light&layout=cards');
+  await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(14);
+  // Inactive tabs stay mounted but hidden; check the open one.
+  const panel = page.getByRole('complementary', { name: 'Document panel' }).locator('.app-companion-document-panel:not([hidden])');
+  const open = (name: string) => page.locator('[data-artifact-card="true"]').filter({ hasText: name }).first().click();
+
+  await open('headlines.ts');
+  await expect(panel.locator('[data-code-viewer] .cm-content')).toContainText('export function pickHeadline');
+  await expect(panel.locator('.app-document-source-info')).toHaveText('TypeScript · 14 lines');
+
+  await open('pricing.csv');
+  await expect(panel.locator('[data-table-viewer] th').nth(1)).toHaveText('Plan');
+  await expect(panel.locator('.app-document-source-info')).toHaveText('CSV · 4 rows');
+  await panel.getByRole('button', { name: 'Source', exact: true }).click();
+  await expect(panel.locator('[data-code-viewer]')).toBeVisible();
+
+  await open('launch-hero.png');
+  await expect(panel.locator('[data-image-viewer] img')).toBeVisible();
+  await expect(panel.locator('.app-document-source-info')).toContainText('PNG image · 1200 × 675');
+
+  // The viewer fills the panel below its one toolbar line.
+  const viewer = await panel.locator('[data-image-viewer]').boundingBox();
+  const pane = await panel.boundingBox();
+  expect((viewer?.height ?? 0) / (pane?.height ?? 1)).toBeGreaterThan(0.85);
 });

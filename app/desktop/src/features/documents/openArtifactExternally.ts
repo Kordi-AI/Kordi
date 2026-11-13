@@ -5,7 +5,7 @@ import { documentFormatForPath } from '@/features/documents/documentReaderModel'
 import type { SessionArtifact } from '@/kordi-app/types';
 import { openDesktopChatArtifact, openDesktopChatArtifactCopy } from '@/lib/desktopArtifactOpen';
 
-import { fileNameFromPath } from './artifactPreviewFormat';
+import { fileNameFromPath } from '@/pages/artifactPreviewFormat';
 import { artifactDocumentApi } from './artifactDocumentApi';
 
 export type OpenArtifactExternallyDeps = {

@@ -12,7 +12,7 @@ import { ArtifactCard, ArtifactThumbnailView } from '../src/pages/ArtifactCard';
 import { readStoredArtifactLayout } from '../src/pages/artifactLayoutPreference';
 import { ArtifactListRow } from '../src/pages/ArtifactListRow';
 import { artifactThumbnailKey, loadArtifactThumbnail, THUMBNAIL_SOURCE_CHARS } from '../src/pages/artifactThumbnail';
-import { openArtifactExternally } from '../src/pages/openArtifactExternally';
+import { openArtifactExternally } from '../src/features/documents/openArtifactExternally';
 
 const doc = (id: string, path: string, extra: Partial<SessionArtifact> = {}): SessionArtifact => ({
   id, path, name: path.split('/').pop() ?? path, kind: 'document', category: 'artifact', summary: 'Created', ...extra,
@@ -165,19 +165,29 @@ test('every artifact opens in the side panel: documents in the reader, other fil
 test('the source view names the type plainly and offers a way out for files it cannot show', () => {
   const preview = (path: string) => ({ path, truncated: false, lines: [{ number: 1, text: 'x' }] });
   const view = (props: Parameters<typeof CompanionSourceView>[0]) => renderToStaticMarkup(createElement(CompanionSourceView, props));
-  assert.match(view({ preview: preview('src/app.ts'), onReload: () => {} }), /<span>TypeScript<span aria-hidden="true">·<\/span>1 line<\/span>/);
-  assert.match(view({ preview: preview('data/prices.csv'), onReload: () => {} }), />CSV</);
-  assert.match(view({ preview: preview('notes/a.txt'), onReload: () => {} }), />Plain text</);
+  assert.match(view({ preview: preview('src/app.ts'), onReload: () => {} }), /app-document-source-info">TypeScript · 1 line</);
+  assert.match(view({ preview: preview('data/prices.csv'), onReload: () => {} }), />CSV · 0 rows</);
+  assert.match(view({ preview: preview('notes/a.txt'), onReload: () => {} }), />Plain text · 1 line</);
   const withOpen = view({ preview: preview('src/app.py'), onReload: () => {}, onOpenExternal: () => {} });
-  assert.match(withOpen, />Python</);
+  assert.match(withOpen, />Python · 1 line</);
   assert.match(withOpen, />Copy</);
   assert.match(withOpen, />Open in default app</);
   assert.doesNotMatch(view({ preview: preview('src/app.py'), onReload: () => {} }), /Open in default app/, 'only where the file can be reached');
 
-  const image = view({ preview: null, path: 'shots/hero.png', onReload: () => {}, onOpenExternal: () => {} });
-  assert.match(image, /No preview for PNG files yet\./);
-  assert.match(image, />Open in default app</);
-  assert.doesNotMatch(image, />Retry</, 'retrying will not help an image');
+  const pdf = view({ preview: null, path: 'decks/pricing.pdf', onReload: () => {}, onOpenExternal: () => {} });
+  assert.match(pdf, /No preview for PDF files yet\./);
+  assert.match(pdf, />Open in default app</);
+  assert.doesNotMatch(pdf, />Retry</, 'retrying will not help a PDF');
+
+  // Images and tables get their own viewers that fill the panel.
+  const image = view({ preview: null, image: { src: 'data:image/png;base64,AAAA', sizeBytes: 2048 }, path: 'shots/hero.png', onReload: () => {} });
+  assert.match(image, /data-image-viewer=""/);
+  assert.match(image, /PNG image · 2 KB/);
+  const table = view({ preview: { path: 'data/prices.csv', truncated: false, lines: [{ number: 1, text: 'Plan,Seats' }, { number: 2, text: 'Free,3' }, { number: 3, text: 'Team,25' }] }, onReload: () => {} });
+  assert.match(table, /data-table-viewer=""/);
+  assert.match(table, /CSV · 2 rows/);
+  assert.match(table, /aria-pressed="true"[^>]*>Table</);
+  assert.match(table, /<td class="app-table-viewer-numeric">25<\/td>/, 'numeric columns align right');
   const missing = view({ preview: null, path: 'src/gone.ts', onReload: () => {} });
   assert.match(missing, /This file is unavailable on this device\./);
   assert.match(missing, />Retry</);

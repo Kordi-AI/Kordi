@@ -2,6 +2,7 @@ import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
 
 import type { DesktopArtifactPreview } from '@/kordi-app/types';
 import { fetchDesktopChatArtifactPreview } from '@/lib/desktop';
+import { fetchDesktopChatArtifactImage } from '@/lib/desktopArtifactOpen';
 
 type ArtifactPreviewInput = {
   isNativeShell: boolean; path: string; attachmentId?: string | null; baseRoot?: string | null;
@@ -32,4 +33,22 @@ export async function loadArtifactPreview(input: ArtifactPreviewInput) {
     return fetchBrowserArtifactPreview(input.path, input.attachmentId);
   }
   throw new Error('Artifact previews are available in the desktop app.');
+}
+
+/** An image artifact ready to draw: a data or object URL, with its byte size when known. */
+export type ArtifactImage = { src: string; sizeBytes: number | null };
+
+let imageOverride: ((input: { path: string; attachmentId?: string | null }) => Promise<ArtifactImage>) | undefined;
+
+/** Lets the login-free visual page serve sample images. */
+export function setArtifactImageLoaderForPreview(loader: typeof imageOverride) {
+  imageOverride = loader;
+}
+
+/** Reads an image artifact from this Mac for the image viewer and card thumbnails. */
+export async function loadArtifactImage(input: { isNativeShell: boolean; path: string; attachmentId?: string | null; baseRoot?: string | null }): Promise<ArtifactImage> {
+  if (imageOverride) return imageOverride(input);
+  if (!input.isNativeShell) throw new Error('Images are available in the desktop app.');
+  const image = await fetchDesktopChatArtifactImage(input.path, input.baseRoot);
+  return { src: `data:${image.mimeType};base64,${image.dataBase64}`, sizeBytes: image.sizeBytes };
 }

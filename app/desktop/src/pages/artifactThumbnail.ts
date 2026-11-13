@@ -5,9 +5,9 @@ import { documentFormatForPath } from '@/features/documents/documentReaderModel'
 import { rememberDocumentTitle } from '@/features/documents/documentTitles';
 import type { SessionArtifact } from '@/kordi-app/types';
 
-import { artifactDocumentApi } from './artifactDocumentApi';
+import { artifactDocumentApi } from '@/features/documents/artifactDocumentApi';
 import { artifactPreviewKind } from './artifactPreviewFormat';
-import { artifactPreviewsAvailable, loadArtifactPreview } from './artifactPreviewLoader';
+import { artifactPreviewsAvailable, loadArtifactImage, loadArtifactPreview } from '@/features/documents/artifactPreviewLoader';
 
 export type ArtifactThumbnailKind = ReturnType<typeof artifactPreviewKind>;
 
@@ -83,8 +83,16 @@ async function loadLocalFile(artifact: SessionArtifact, context: ArtifactThumbna
 
 /** Reads the top of an artifact: the cloud copy of a shared document first, then the file on this Mac. */
 export async function loadArtifactThumbnail(artifact: SessionArtifact, context: ArtifactThumbnailContext): Promise<ArtifactThumbnailSource | null> {
-  // Images are binary; the card shows the file-type mark instead of reading them as text.
-  if (artifactPreviewKind(artifact.path) === 'image') return null;
+  // Images are read as bytes, never as text; without the Mac they show the file-type mark.
+  if (artifactPreviewKind(artifact.path) === 'image') {
+    if (!artifactPreviewsAvailable(context.isNativeShell)) return null;
+    try {
+      const image = await loadArtifactImage({ isNativeShell: context.isNativeShell, path: artifact.path, attachmentId: artifact.attachmentId, baseRoot: artifact.pinned ? null : context.baseRoot });
+      return { kind: 'image', source: image.src };
+    } catch {
+      return null;
+    }
+  }
   const api = context.api === undefined ? artifactDocumentApi() : context.api;
   if (api && artifact.attachmentId?.trim() && documentFormatForPath(artifact.path)) {
     try {

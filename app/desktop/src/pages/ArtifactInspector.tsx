@@ -1,5 +1,5 @@
 import { fileNameFromPath, extensionLabel, languageFromPath, artifactPreviewKind } from './artifactPreviewFormat';
-import { artifactPreviewsAvailable, loadArtifactPreview } from './artifactPreviewLoader';
+import { artifactPreviewsAvailable, loadArtifactPreview } from '@/features/documents/artifactPreviewLoader';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Braces, ChevronLeft, FileText, FolderOpen, Globe2, LoaderCircle, Maximize2, X } from 'lucide-react';
 import { ErrorLine } from '@/components/ui/ErrorLine';
@@ -15,7 +15,7 @@ import { artifactPreviewDocumentSource, type ArtifactPreviewMode } from './artif
 import { ArtifactDataTable } from './artifactDataTable';
 import { ArtifactListSection } from './ArtifactListSection';
 import { compactArtifactLocation } from './artifactRowModel';
-import { useOpenArtifactExternally } from './openArtifactExternally';
+import { useOpenArtifactExternally } from '@/features/documents/openArtifactExternally';
 import { ARTIFACT_MARKDOWN_PREVIEW_CLASS, artifactFromDirectoryEntry, formattedJsonSource, formatFileSize } from './artifactPreviewText';
 
 type ArtifactInspectorProps = {

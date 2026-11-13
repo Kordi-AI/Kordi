@@ -1172,6 +1172,28 @@ honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc | MIT | https://proxy.gola
 @babel/types 7.29.0 | MIT | https://registry.npmjs.org/@babel/types/-/types-7.29.0.tgz | Authors: The Babel Team (https://babel.dev/team)
 @bramus/specificity 2.4.2 | MIT | https://registry.npmjs.org/@bramus/specificity/-/specificity-2.4.2.tgz
 @bufbuild/protobuf 1.10.1 | (Apache-2.0 AND BSD-3-Clause) | https://registry.npmjs.org/@bufbuild/protobuf/-/protobuf-1.10.1.tgz
+@codemirror/autocomplete 6.20.4 | MIT | https://registry.npmjs.org/@codemirror/autocomplete/-/autocomplete-6.20.4.tgz
+@codemirror/commands 6.11.1 | MIT | https://registry.npmjs.org/@codemirror/commands/-/commands-6.11.1.tgz
+@codemirror/lang-cpp 6.0.3 | MIT | https://registry.npmjs.org/@codemirror/lang-cpp/-/lang-cpp-6.0.3.tgz
+@codemirror/lang-css 6.3.1 | MIT | https://registry.npmjs.org/@codemirror/lang-css/-/lang-css-6.3.1.tgz
+@codemirror/lang-go 6.0.1 | MIT | https://registry.npmjs.org/@codemirror/lang-go/-/lang-go-6.0.1.tgz
+@codemirror/lang-html 6.4.12 | MIT | https://registry.npmjs.org/@codemirror/lang-html/-/lang-html-6.4.12.tgz
+@codemirror/lang-java 6.0.2 | MIT | https://registry.npmjs.org/@codemirror/lang-java/-/lang-java-6.0.2.tgz
+@codemirror/lang-javascript 6.2.5 | MIT | https://registry.npmjs.org/@codemirror/lang-javascript/-/lang-javascript-6.2.5.tgz
+@codemirror/lang-json 6.0.2 | MIT | https://registry.npmjs.org/@codemirror/lang-json/-/lang-json-6.0.2.tgz
+@codemirror/lang-markdown 6.5.2 | MIT | https://registry.npmjs.org/@codemirror/lang-markdown/-/lang-markdown-6.5.2.tgz
+@codemirror/lang-python 6.2.1 | MIT | https://registry.npmjs.org/@codemirror/lang-python/-/lang-python-6.2.1.tgz
+@codemirror/lang-rust 6.0.2 | MIT | https://registry.npmjs.org/@codemirror/lang-rust/-/lang-rust-6.0.2.tgz
+@codemirror/lang-sql 6.10.0 | MIT | https://registry.npmjs.org/@codemirror/lang-sql/-/lang-sql-6.10.0.tgz
+@codemirror/lang-xml 6.1.0 | MIT | https://registry.npmjs.org/@codemirror/lang-xml/-/lang-xml-6.1.0.tgz
+@codemirror/lang-yaml 6.1.3 | MIT | https://registry.npmjs.org/@codemirror/lang-yaml/-/lang-yaml-6.1.3.tgz
+@codemirror/language 6.13.1 | MIT | https://registry.npmjs.org/@codemirror/language/-/language-6.13.1.tgz
+@codemirror/legacy-modes 6.5.5 | MIT | https://registry.npmjs.org/@codemirror/legacy-modes/-/legacy-modes-6.5.5.tgz
+@codemirror/lint 6.9.7 | MIT | https://registry.npmjs.org/@codemirror/lint/-/lint-6.9.7.tgz
+@codemirror/search 6.7.2 | MIT | https://registry.npmjs.org/@codemirror/search/-/search-6.7.2.tgz
+@codemirror/state 6.7.6 | MIT | https://registry.npmjs.org/@codemirror/state/-/state-6.7.6.tgz
+@codemirror/streamparser 6.0.0 | MIT | https://registry.npmjs.org/@codemirror/streamparser/-/streamparser-6.0.0.tgz
+@codemirror/view 6.43.15 | MIT | https://registry.npmjs.org/@codemirror/view/-/view-6.43.15.tgz
 @csstools/color-helpers 6.1.0 | MIT-0 | https://registry.npmjs.org/@csstools/color-helpers/-/color-helpers-6.1.0.tgz
 @csstools/css-calc 3.2.1 | MIT | https://registry.npmjs.org/@csstools/css-calc/-/css-calc-3.2.1.tgz
 @csstools/css-color-parser 4.1.9 | MIT | https://registry.npmjs.org/@csstools/css-color-parser/-/css-color-parser-4.1.9.tgz
@@ -1233,8 +1255,24 @@ honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc | MIT | https://proxy.gola
 @jridgewell/resolve-uri 3.1.2 | MIT | https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz
 @jridgewell/sourcemap-codec 1.5.5 | MIT | https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz
 @jridgewell/trace-mapping 0.3.31 | MIT | https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz
+@lezer/common 1.5.5 | MIT | https://registry.npmjs.org/@lezer/common/-/common-1.5.5.tgz
+@lezer/cpp 1.1.6 | MIT | https://registry.npmjs.org/@lezer/cpp/-/cpp-1.1.6.tgz
+@lezer/css 1.3.9 | MIT | https://registry.npmjs.org/@lezer/css/-/css-1.3.9.tgz
+@lezer/go 1.0.1 | MIT | https://registry.npmjs.org/@lezer/go/-/go-1.0.1.tgz
+@lezer/highlight 1.2.5 | MIT | https://registry.npmjs.org/@lezer/highlight/-/highlight-1.2.5.tgz
+@lezer/html 1.3.13 | MIT | https://registry.npmjs.org/@lezer/html/-/html-1.3.13.tgz
+@lezer/java 1.1.5 | MIT | https://registry.npmjs.org/@lezer/java/-/java-1.1.5.tgz
+@lezer/javascript 1.5.6 | MIT | https://registry.npmjs.org/@lezer/javascript/-/javascript-1.5.6.tgz
+@lezer/json 1.0.3 | MIT | https://registry.npmjs.org/@lezer/json/-/json-1.0.3.tgz
+@lezer/lr 1.4.12 | MIT | https://registry.npmjs.org/@lezer/lr/-/lr-1.4.12.tgz
+@lezer/markdown 1.8.1 | MIT | https://registry.npmjs.org/@lezer/markdown/-/markdown-1.8.1.tgz
+@lezer/python 1.1.19 | MIT | https://registry.npmjs.org/@lezer/python/-/python-1.1.19.tgz
+@lezer/rust 1.0.3 | MIT | https://registry.npmjs.org/@lezer/rust/-/rust-1.0.3.tgz
+@lezer/xml 1.0.6 | MIT | https://registry.npmjs.org/@lezer/xml/-/xml-1.0.6.tgz
+@lezer/yaml 1.0.4 | MIT | https://registry.npmjs.org/@lezer/yaml/-/yaml-1.0.4.tgz
 @livekit/mutex 1.1.1 | Apache-2.0 | https://registry.npmjs.org/@livekit/mutex/-/mutex-1.1.1.tgz
 @livekit/protocol 1.50.4 | Apache-2.0 | https://registry.npmjs.org/@livekit/protocol/-/protocol-1.50.4.tgz
+@marijn/find-cluster-break 1.0.4 | MIT | https://registry.npmjs.org/@marijn/find-cluster-break/-/find-cluster-break-1.0.4.tgz
 @napi-rs/wasm-runtime 1.1.4 | MIT | https://registry.npmjs.org/@napi-rs/wasm-runtime/-/wasm-runtime-1.1.4.tgz
 @oxc-project/types 0.124.0 | MIT | https://registry.npmjs.org/@oxc-project/types/-/types-0.124.0.tgz
 @playwright/test 1.61.1 | Apache-2.0 | https://registry.npmjs.org/@playwright/test/-/test-1.61.1.tgz
@@ -1396,6 +1434,7 @@ color-convert 2.0.1 | MIT | https://registry.npmjs.org/color-convert/-/color-con
 color-name 1.1.4 | MIT | https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz
 concat-map 0.0.1 | MIT | https://registry.npmjs.org/concat-map/-/concat-map-0.0.1.tgz
 convert-source-map 2.0.0 | MIT | https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz
+crelt 1.0.7 | MIT | https://registry.npmjs.org/crelt/-/crelt-1.0.7.tgz
 cross-spawn 7.0.6 | MIT | https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz
 css-tree 3.2.1 | MIT | https://registry.npmjs.org/css-tree/-/css-tree-3.2.1.tgz
 csstype 3.2.3 | MIT | https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz
@@ -1567,6 +1606,7 @@ source-map-js 1.2.1 | BSD-3-Clause | https://registry.npmjs.org/source-map-js/-/
 string_decoder 1.3.0 | MIT | https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz
 strip-json-comments 2.0.1 | MIT | https://registry.npmjs.org/strip-json-comments/-/strip-json-comments-2.0.1.tgz
 strip-json-comments 3.1.1 | MIT | https://registry.npmjs.org/strip-json-comments/-/strip-json-comments-3.1.1.tgz
+style-mod 4.1.4 | MIT | https://registry.npmjs.org/style-mod/-/style-mod-4.1.4.tgz
 supports-color 7.2.0 | MIT | https://registry.npmjs.org/supports-color/-/supports-color-7.2.0.tgz
 symbol-tree 3.2.4 | MIT | https://registry.npmjs.org/symbol-tree/-/symbol-tree-3.2.4.tgz
 tailwind-merge 3.5.0 | MIT | https://registry.npmjs.org/tailwind-merge/-/tailwind-merge-3.5.0.tgz
@@ -2579,6 +2619,31 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+Notice 05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07
+========================================================================
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
 
 Notice 0613408568889f5739e5ae252b722a2659c02002839ad970a63dc5e9174b27cf
@@ -8125,6 +8190,29 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
+
+
+Notice 23852ebf6aef7fadffc92514b3c5df163a8651f2c3ed0dbb494cb49d93bd5de5
+========================================================================
+Copyright (C) 2020 by Marijn Haverbeke <marijn@haverbeke.berlin>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
 
 Notice 23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d
@@ -16589,6 +16677,31 @@ Notice 54a744942eb3fa63a74d8d359989ed6962c04f3f10ff20cfa08ff8aa7efbe4e6
    limitations under the License.
 
 
+Notice 54bd812a6d334e0c438b78a43cea74b67e882739fd3450115ddc7c52be5706c1
+========================================================================
+MIT License
+
+Copyright (C) 2020 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
 Notice 553fffcd9b1cb158bc3e9edc35da85ca5c3b3d7d2e61c883ebcfa8a65814b583
 ========================================================================
 Copyright 2015 Nicholas Allegra (comex).
@@ -16641,6 +16754,31 @@ The MinIO project contains unmodified/modified subcomponents too with
 separate copyright notices and license terms. Your use of the source
 code for the these subcomponents is subject to the terms and conditions
 of the following licenses.
+
+
+Notice 568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba
+========================================================================
+MIT License
+
+Copyright (C) 2018 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
 
 Notice 5734ed989dfca1f625b40281ee9f4530f91b2411ec01cb748223e7eb87e201ab
@@ -48228,6 +48366,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
+Notice 7e744ae18ef84389d576469a5781172b0d50b7981111109f6da7cbc6b4188288
+========================================================================
+MIT License
+
+Copyright (C) 2020 by Marijn Haverbeke <marijn@haverbeke.berlin>, Arun Srinivasan <rulfzid@gmail.com>, and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
 Notice 7f4d8ae1bbfc175954345b1596873417dd9d9ecea31862137e5e2af0d0ccde64
 ========================================================================
 Copyright 2019 Atsushi Koge, Markus Westerlind
@@ -49463,6 +49625,31 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
+Notice 8ac9cfc9c82c397298c2139028d2474d8e0470f2092a97edddccf353bc5d4d36
+========================================================================
+MIT License
+
+Copyright (C) 2024 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
 Notice 8ada45cd9f843acf64e4722ae262c622a2b3b3007c7310ef36ac1061a30f6adb
 ========================================================================
                               Apache License
@@ -50011,6 +50198,30 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
+
+Notice 8cb910abd2a5463466b7c31958b39d6787ebf9e9f299598266b814bc90dd076b
+========================================================================
+MIT License
+
+Copyright (C) 2024 by Marijn Haverbeke <marijnh@gmail.com> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
 Notice 8ce0830173fdac609dfb4ea603fdc002c2f4af0dc9b1a005653f5da9cf534b18
 ========================================================================
@@ -51005,6 +51216,31 @@ licensed under the Apache License, Version 2.0 <LICENSE-APACHE> or
 Notice 934887691e05d69d7c86ad3f2c360980fa30c15b035e351f3c9865e99da4debc
 ========================================================================
 Copyright (c) 2016 Pyfisch
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+Notice 9360b00fdd091f05c783b568bdd46c679c41b72415599252de98949462ea1acb
+========================================================================
+MIT License
+
+Copyright (C) 2024 by Marijn Haverbeke <marijn@haverbeke.berlin>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -59934,6 +60170,29 @@ Notice cb3c929a05e6cbc9de9ab06a4c57eeb60ca8c724bef6c138c87d3a577e27aa14
 The MIT License (MIT)
 
 Copyright (c) 2017 Andrew Gallant
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+Notice cb4474e26547397169061d3586c00022cda5330a1b64fa13e872319f3b63aff1
+========================================================================
+Copyright (C) 2018 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

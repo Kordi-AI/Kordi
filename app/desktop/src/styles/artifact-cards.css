@@ -91,6 +91,7 @@
 }
 .app-artifact-card-table tr:first-child td { font-weight: 600; color: var(--artifact-card-ink); }
 
+.app-artifact-card-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 .app-artifact-card-glyph { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; }
 .app-artifact-card-type,
 .app-artifact-card-live,

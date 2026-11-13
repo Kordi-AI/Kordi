@@ -21905,6 +21905,358 @@
     },
     {
       "ecosystem": "pnpm",
+      "name": "@codemirror/autocomplete",
+      "version": "6.20.4",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/autocomplete/-/autocomplete-6.20.4.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-yF8RhOf2SXlg00+qtupzLhrglcas61boqaONiNcbPIebHCpJocpqTBA6dyrtUrQO47hqyTdeob/3XnYilT7TaQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/commands",
+      "version": "6.11.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/commands/-/commands-6.11.1.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-O/4hG3SC1YwcmQ0d2UVNDs+AsaNWd1iHVxbTeEBuqH+6bExAiPK3iS/BvpY6rZGURALv4ZD3sIgcCmRvw3ehBg==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-cpp",
+      "version": "6.0.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-cpp/-/lang-cpp-6.0.3.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-URM26M3vunFFn9/sm6rzqrBzDgfWuDixp85uTY49wKudToc2jTHUrKIGGKs+QWND+YLofNNZpxcNGRynFJfvgA==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-css",
+      "version": "6.3.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-css/-/lang-css-6.3.1.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-kr5fwBGiGtmz6l0LSJIbno9QrifNMUusivHbnA1H6Dmqy4HZFte3UAICix1VuKo0lMPKQr2rqB+0BkKi/S3Ejg==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-go",
+      "version": "6.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-go/-/lang-go-6.0.1.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-7fNvbyNylvqCphW9HD6WFnRpcDjr+KXX/FgqXy5H5ZS0eC5edDljukm/yNgYkwTsgp2busdod50AOTIy6Jikfg==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "8ac9cfc9c82c397298c2139028d2474d8e0470f2092a97edddccf353bc5d4d36"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-html",
+      "version": "6.4.12",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-html/-/lang-html-6.4.12.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-pw2ReWKUqSkbvh76RAT4NYxiogRu+PWkR2ukAwO9uOgrm8uipkzjtKKtNpyeAQwHOqxEeSvAXZ6vr3AfyB9y/w==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-java",
+      "version": "6.0.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-java/-/lang-java-6.0.2.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-m5Nt1mQ/cznJY7tMfQTJchmrjdjQ71IDs+55d1GAa8DGaB8JXWsVCkVT284C3RTASaY43YknrK2X3hPO/J3MOQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-javascript",
+      "version": "6.2.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-javascript/-/lang-javascript-6.2.5.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-zD4e5mS+50htS7F+TYjBPsiIFGanfVqg4HyUz6WNFikgOPf2BgKlx+TQedI1w6n/IqRBVBbBWmGFdLB/7uxO4A==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-json",
+      "version": "6.0.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-json/-/lang-json-6.0.2.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-x2OtO+AvwEHrEwR0FyyPtfDUiloG3rnVTSZV1W8UteaLL8/MajQd8DpvUb2YVzC+/T18aSDv0H9mu+xw0EStoQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-markdown",
+      "version": "6.5.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-markdown/-/lang-markdown-6.5.2.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-AwBOdkWYuA//WcM0xO5PfHPUcmz/O2i5o0Nsg1U69SII/loCJlFI1Romd9xp2HYb1kYJRGZotyqRghuHH5n8Kw==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-python",
+      "version": "6.2.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-python/-/lang-python-6.2.1.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-IRjC8RUBhn9mGR9ywecNhB51yePWCGgvHfY1lWN/Mrp3cKuHr0isDKia+9HnvhiWNnMpbGhWrkhuWOc09exRyw==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-rust",
+      "version": "6.0.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-rust/-/lang-rust-6.0.2.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-EZaGjCUegtiU7kSMvOfEZpaCReowEf3yNidYu7+vfuGTm9ow4mthAparY5hisJqOHmJowVH3Upu+eJlUji6qqA==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-sql",
+      "version": "6.10.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-sql/-/lang-sql-6.10.0.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-6ayPkEd/yRw0XKBx5uAiToSgGECo/GY2NoJIHXIIQh1EVwLuKoU8BP/qK0qH5NLXAbtJRLuT73hx7P9X34iO4w==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-xml",
+      "version": "6.1.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-xml/-/lang-xml-6.1.0.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-3z0blhicHLfwi2UgkZYRPioSgVTo9PV5GP5ducFH6FaHy0IAJRg+ixj5gTR1gnT/glAIC8xv4w2VL1LoZfs+Jg==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lang-yaml",
+      "version": "6.1.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lang-yaml/-/lang-yaml-6.1.3.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-AZ8DJBuXGVHybpBQhmZtgew5//4hv3tdkXnr3vDmOUMJRuB6vn/uuwtmTOTlqEaQFg3hQSVeA90NmvIQyUV6FQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "8ac9cfc9c82c397298c2139028d2474d8e0470f2092a97edddccf353bc5d4d36"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/language",
+      "version": "6.13.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/language/-/language-6.13.1.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-zfvU2r3TyylQLMj/te+5CnQ0rSqZi8B1oTCBbQkagcLW4Xc6imab6qN+pEJhsuNOLaJqiRyBXp9UhWA1DhVvDw==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/legacy-modes",
+      "version": "6.5.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/legacy-modes/-/legacy-modes-6.5.5.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-9ltT214oMb3Y1w5eAZMSigzrjzZnMI2Wa3Feq73rU/i4C56MkwrpfswfQYOr28C5pXr6dWwspNTMyeHXlzWMxg==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/lint",
+      "version": "6.9.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/lint/-/lint-6.9.7.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-28/+iWLYxKxsvGYhSYL7zaCZqLz5+FFFDq9tVsvGv9kv8RY4fFAchJ5WX9M3YrrRlTIsECjsXPqeNgnSmNP2dg==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/search",
+      "version": "6.7.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/search/-/search-6.7.2.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-gUYkYhT2+n/+VGZ+8EzE5WFkYZUZYm1VOKDudIsNqh42uRVQJ0a6Yss9sdKT3MeOYfuL1N6AZA57oza0Oyr0LA==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/state",
+      "version": "6.7.6",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/state/-/state-6.7.6.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-kAz+AncRtKuIknedxT1bq4XwXv4UowhbkHU1myPrtVb/jZtImWuV5BXzv5vK6i3kYACsdiZiQKFQQ5Mq7elW8w==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/streamparser",
+      "version": "6.0.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/streamparser/-/streamparser-6.0.0.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-JTFPF6xrfjt0mnfGPgzcLiMwYmvIyNaoizp8BYzv8FE8KrT6GBGDZ190rtt+O7Wke3gG/MFHyiY9YGNeimof4w==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@codemirror/view",
+      "version": "6.43.15",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@codemirror/view/-/view-6.43.15.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-HHsfpqFeHyXLs983pSRe38Xajs0vFWZQ2BuX0m7Ki8w3jZ5iD8cuR3lBz2/5/X53Dhf32SBHKh6rtSTB6tKeGw==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "05c6130cda97e7600ca91427a41e8a065efcf82365fc0293e7de80faec494c07"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
       "name": "@csstools/color-helpers",
       "version": "6.1.0",
       "license": "MIT-0",
@@ -22746,6 +23098,246 @@
     },
     {
       "ecosystem": "pnpm",
+      "name": "@lezer/common",
+      "version": "1.5.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/common/-/common-1.5.5.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-Pw7PVCndruF1pb3ebCxpSVpkMHSDjwRCLcTRw+RizUKco5QbWylwq2g4lnG/RYN7yTTQDXE9F77MwtkAyphrjg==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/cpp",
+      "version": "1.1.6",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/cpp/-/cpp-1.1.6.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-vh9gWWJOXFVY8HBHK3Twzq8MgwG2iN4GSyzBP9sCGTe37P15x2R14VaBQk0VA0ezTRN1KHYBBsHhvpGZ2Xy/pA==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "54bd812a6d334e0c438b78a43cea74b67e882739fd3450115ddc7c52be5706c1"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/css",
+      "version": "1.3.9",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/css/-/css-1.3.9.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-ZmzgvTOBdJWGIsY/ItAfN7UW8DV802oZG+jeG6E508SwEzz5YhuAajptpWPICvIyqYAD2+VjMdOS40GgGkyEOQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/go",
+      "version": "1.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/go/-/go-1.0.1.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-xToRsYxwsgJNHTgNdStpcvmbVuKxTapV0dM0wey1geMMRc9aggoVyKgzYp41D2/vVOx+Ii4hmE206kvxIXBVXQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "54bd812a6d334e0c438b78a43cea74b67e882739fd3450115ddc7c52be5706c1"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/highlight",
+      "version": "1.2.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/highlight/-/highlight-1.2.5.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-O1GMVKgtf5YspFaRzpmqkVgMtIk2HG9uMAbH6wdAIdNh3TVzCsch/+cRi+6l2//UGDKe6NB9BW3cvuR5ezMQ0w==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/html",
+      "version": "1.3.13",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/html/-/html-1.3.13.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-oI7n6NJml729m7pjm9lvLvmXbdoMoi2f+1pwSDJkl9d68zGr7a9Btz8NdHTGQZtW2DA25ybeuv/SyDb9D5tseg==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/java",
+      "version": "1.1.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/java/-/java-1.1.5.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-JppTd1iKHpeNlLYw/Zl8JX7zSY5HqAzK4zZ05lpn8l8Sk7Fo5KAKiDiMiezKoT5lfeC2xZf8HeKp1tSctj4G6Q==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "54bd812a6d334e0c438b78a43cea74b67e882739fd3450115ddc7c52be5706c1"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/javascript",
+      "version": "1.5.6",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/javascript/-/javascript-1.5.6.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-sEvOqpl4vJQca0NugSQK02vQPbc5KrvoojnYGoqqFgFO0MtcYhwGiHKVEB+LuXYJnfyXo4QPA8ztbrEa4Fw5NA==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/json",
+      "version": "1.0.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/json/-/json-1.0.3.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-BP9KzdF9Y35PDpv04r0VeSTKDeox5vVr3efE7eBbx3r4s3oNLfunchejZhjArmeieBH+nVOpgIiBJpEAv8ilqQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "7e744ae18ef84389d576469a5781172b0d50b7981111109f6da7cbc6b4188288"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/lr",
+      "version": "1.4.12",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/lr/-/lr-1.4.12.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-On9HU4oMMiHPMkQDgoTnGahjgG5n/MkN38CgG77sMraKLL+3JBbeQNi1FcCXV9QRqwF9/BUXP3caHyJC1fBOTQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/markdown",
+      "version": "1.8.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/markdown/-/markdown-1.8.1.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-M5YmEcKWO4mJ45Y1hECwqyu8cLv25EiXOK554PVOvDOWOP0olwelHHQUWr9sjF+d1bENVhy0nfJ8E57XZUTiXg==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "54bd812a6d334e0c438b78a43cea74b67e882739fd3450115ddc7c52be5706c1"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/python",
+      "version": "1.1.19",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/python/-/python-1.1.19.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-MhQIURHRytsNzP/YXnqpYKW6la6voAH3kyplTOOiCdjyFY6cWWGFVmYVdHIPrElqSDf4iCDktQCockB9FxuhzQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "54bd812a6d334e0c438b78a43cea74b67e882739fd3450115ddc7c52be5706c1"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/rust",
+      "version": "1.0.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/rust/-/rust-1.0.3.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-XxErOjZzQ7yJt1agUT4fu9qQvESZ3acgoxpPaPTPOiUx+duCjaVAtZGFIgphkHxlN05djdVAIOy/wItShMEjqQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/xml",
+      "version": "1.0.6",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/xml/-/xml-1.0.6.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-CdDwirL0OEaStFue/66ZmFSeppuL6Dwjlk8qk153mSQwiSH/Dlri4GNymrNWnUmPl2Um7QfV1FO9KFUyX3Twww==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "568902fb66eaf1f11750e966b33fd7b5d7c618e65af09f35ef843635bcf5f1ba"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@lezer/yaml",
+      "version": "1.0.4",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@lezer/yaml/-/yaml-1.0.4.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-2lrrHqxalACEbxIbsjhqGpSW8kWpUKuY6RHgnSAFZa6qK62wvnPxA8hGOwOoDbwHcOFs5M4o27mjGu+P7TvBmw==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "8cb910abd2a5463466b7c31958b39d6787ebf9e9f299598266b814bc90dd076b"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
       "name": "@livekit/mutex",
       "version": "1.1.1",
       "license": "Apache-2.0",
@@ -22773,6 +23365,22 @@
         {
           "file": "package/LICENSE",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "@marijn/find-cluster-break",
+      "version": "1.0.4",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@marijn/find-cluster-break/-/find-cluster-break-1.0.4.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-Wy0V7+SGUjnF9/TkiM1hKVDPj7jKXduPNboMVtHTA8dySMURWqfg/JZ9E2Sq8JgSJmkl7k7Qe9FLeMSrSraWmQ==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "9360b00fdd091f05c783b568bdd46c679c41b72415599252de98949462ea1acb"
         }
       ]
     },
@@ -25211,6 +25819,22 @@
         {
           "file": "package/LICENSE",
           "sha256": "1fa6ee8bb95a81ae3d73a5bd074a3ac380ffec13697051063ca1a601921b91db"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "crelt",
+      "version": "1.0.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/crelt/-/crelt-1.0.7.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-aK6BbWfhf4U/wCcLHKPJl/xa6VkVstRaPywWtMKGwuOLc/wZTyQYuoxgvZnNsBvv7Kg3YTBQYYBCggcviQczuA==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "23852ebf6aef7fadffc92514b3c5df163a8651f2c3ed0dbb494cb49d93bd5de5"
         }
       ]
     },
@@ -27941,6 +28565,22 @@
         {
           "file": "package/license",
           "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+        }
+      ]
+    },
+    {
+      "ecosystem": "pnpm",
+      "name": "style-mod",
+      "version": "4.1.4",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/style-mod/-/style-mod-4.1.4.tgz",
+      "authors": [],
+      "evidence": "upstream-notices",
+      "integrity": "sha512-XXWIQt633/EpAFx8aZDOTjBzrCaGmhvEQlQo6MVPfa2OzO2cWo+4hV9h+6UkHYlXGfy+ODXKUdP7Pthmcu5ATw==",
+      "notices": [
+        {
+          "file": "package/LICENSE",
+          "sha256": "cb4474e26547397169061d3586c00022cda5330a1b64fa13e872319f3b63aff1"
         }
       ]
     },

@@ -16,7 +16,16 @@ const DOCUMENT_EDITOR_SOURCE = /[\\/]src[\\/]features[\\/]documents[\\/]editor[\
 // The Artifacts tab's card grid and thumbnails, loaded when the card layout first shows.
 const ARTIFACT_CARDS_SOURCE = /[\\/]src[\\/]pages[\\/](?:ArtifactCard|ArtifactCardGrid|artifactThumbnail)\.tsx?$/;
 const HELP_CENTER_SOURCE = /[\\/]src[\\/]features[\\/]onboarding[\\/](?:HelpMenu|HelpTour|helpTourSteps|helpTourGeometry|HelpPermissions|HelpReleaseNotes|helpContent|permissionAccess)\.[tj]sx?$/;
-const DOCUMENT_EDITOR_PACKAGES = /[\\/]node_modules[\\/](?:@tiptap|prosemirror-[a-z-]+|marked|linkifyjs|orderedmap|rope-sequence|w3c-keyname|yjs|y-websocket|y-protocols|lib0)[\\/]/;
+// w3c-keyname stays in vendor: the editor and the code viewer both use it, and neither should load the other.
+const DOCUMENT_EDITOR_PACKAGES = /[\\/]node_modules[\\/](?:@tiptap|prosemirror-[a-z-]+|marked|linkifyjs|orderedmap|rope-sequence|yjs|y-websocket|y-protocols|lib0)[\\/]/;
+// The read-only code viewer loads when a file first opens, in two chunks split along dependencies so
+// they never import each other in a cycle: the CodeMirror core, and the grammars that build on it.
+const CODE_VIEWER_CORE = /[\\/]node_modules[\\/](?:@codemirror[\\/](?:view|state|language|search|commands)|@lezer[\\/](?:common|lr|highlight)|@marijn|style-mod|crelt)[\\/]/;
+const CODE_VIEWER_GRAMMARS = /[\\/]node_modules[\\/](?:@codemirror[\\/](?:lang-[a-z]+|legacy-modes|autocomplete|lint|streamparser)|@lezer[\\/](?!common[\\/]|lr[\\/]|highlight[\\/])[a-z]+)[\\/]/;
+const CODE_VIEWER_PACKAGES = { test: (id) => CODE_VIEWER_CORE.test(id) || CODE_VIEWER_GRAMMARS.test(id) };
+// The wrapper stays out of both groups: it is the lazy entry that imports them.
+const CODE_VIEWER_SOURCE = /[\\/]src[\\/]features[\\/]documents[\\/]viewers[\\/](?:CodeViewer|codeViewerLanguages)\.tsx?$/;
+const CODE_GRAMMAR_SOURCE = /[\\/]src[\\/]features[\\/]documents[\\/]viewers[\\/]codeViewerLanguages\.ts$/;
 
 export function desktopViteConfig({ command, mode }, environment) {
   const env = environment ?? { ...loadEnv(mode, __dirname, ''), ...process.env }
@@ -51,7 +60,7 @@ export function desktopViteConfig({ command, mode }, environment) {
               // with the first opened document. Packages the app shares (floating UI, uuid) stay in vendor.
               // The QR encoder loads with the first Grounding Pair popover.
               { name: 'qr-encoder', minSize: 0, test: /(?:^|[\\/])node_modules[\\/]qrcode-generator[\\/]/ },
-              { name: 'vendor', test: (id) => /(?:^|[\\/])node_modules[\\/]/.test(id) && !DOCUMENT_EDITOR_PACKAGES.test(id) },
+              { name: 'vendor', test: (id) => /(?:^|[\\/])node_modules[\\/]/.test(id) && !DOCUMENT_EDITOR_PACKAGES.test(id) && !CODE_VIEWER_PACKAGES.test(id) },
               { name: 'emoji-catalog', test: /[\\/]shared[\\/]noto-emoji[\\/]catalog\.json$/ },
               // The add-account login page loads when a sign-in method is opened.
               { name: 'auth-login', minSize: 0, test: /[\\/]src[\\/]kordi-app[\\/]auth[\\/](?:AuthLoginPage\.tsx|useProviderLogin\.ts)$/ },
@@ -66,9 +75,11 @@ export function desktopViteConfig({ command, mode }, environment) {
               { name: 'contact-common-ground', minSize: 0, test: /[\\/]src[\\/]kordi-app[\\/]contacts[\\/](?:ContactCommonGround\.tsx|contactMatch\.ts)$/ },
               // Split before the 700 kB chunk budget, as agent-factory is.
               { name: 'cloud-features', test: /[\\/]src[\\/]features[\\/]cloud[\\/]/, maxSize: 650_000 },
-              { name: 'desktop-features', test: (id) => /[\\/]src[\\/]features[\\/]/.test(id) && !DOCUMENT_EDITOR_SOURCE.test(id) && !HELP_CENTER_SOURCE.test(id), maxSize: 650_000 },
+              { name: 'desktop-features', test: (id) => /[\\/]src[\\/]features[\\/]/.test(id) && !DOCUMENT_EDITOR_SOURCE.test(id) && !HELP_CENTER_SOURCE.test(id) && !CODE_VIEWER_SOURCE.test(id), maxSize: 650_000 },
               // After the app groups, so modules the app shares with the editor stay in app chunks.
               { name: 'document-editor', test: (id) => DOCUMENT_EDITOR_PACKAGES.test(id) || DOCUMENT_EDITOR_SOURCE.test(id) },
+              { name: 'code-viewer', test: CODE_VIEWER_CORE },
+              { name: 'code-grammars', test: (id) => CODE_VIEWER_GRAMMARS.test(id) || CODE_GRAMMAR_SOURCE.test(id) },
               // The Artifacts card grid stays out, so its dynamic import keeps it in its own lazy chunk.
               { name: 'workspace-ui', test: (id) => /[\\/]src[\\/](?:app|components|kordi-app|pages)[\\/]/.test(id) && !ARTIFACT_CARDS_SOURCE.test(id) },
               // Assign shared dependencies first so Help does not pull startup code into its lazy chunk.

@@ -8,9 +8,9 @@ import type { ConversationParticipant, DesktopArtifactPreview, SessionArtifact }
 import { ArtifactCard } from './ArtifactCard';
 import { ArtifactPreviewWindow } from './ArtifactInspector';
 import { fileNameFromPath } from './artifactPreviewFormat';
-import { loadArtifactPreview } from './artifactPreviewLoader';
+import { loadArtifactPreview } from '@/features/documents/artifactPreviewLoader';
 import type { ArtifactThumbnailContext } from './artifactThumbnail';
-import { useOpenArtifactExternally } from './openArtifactExternally';
+import { useOpenArtifactExternally } from '@/features/documents/openArtifactExternally';
 
 type ArtifactCardGridProps = {
   isNativeShell: boolean;

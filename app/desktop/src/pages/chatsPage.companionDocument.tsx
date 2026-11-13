@@ -15,11 +15,12 @@ import { dispatchDocumentSessionOpen } from '@/features/documents/documentShareT
 import type { CompanionDocumentTabsModel } from '@/features/documents/useCompanionDocument';
 import type { DesktopArtifactPreview } from '@/kordi-app/types';
 import { isNativeDesktopShell } from '@/lib/desktop';
-import { hasArtifactPreviewLoaderForPreview, loadArtifactPreview } from '@/pages/artifactPreviewLoader';
-import { openArtifactExternally } from '@/pages/openArtifactExternally';
+import { hasArtifactPreviewLoaderForPreview, loadArtifactImage, loadArtifactPreview, type ArtifactImage } from '@/features/documents/artifactPreviewLoader';
+import { companionViewerKind } from '@/features/documents/viewers/viewerKind';
+import { openArtifactExternally } from '@/features/documents/openArtifactExternally';
 import { CompanionTitlebar } from './CompanionTitlebar';
 
-type LoadedPreview = { key: string; preview: DesktopArtifactPreview | null };
+type LoadedPreview = { key: string; preview: DesktopArtifactPreview | null; image?: ArtifactImage | null };
 
 /** One open document: its reader, fed from the file on this Mac when there is one. */
 function CompanionDocumentReader({ document, api, onTitle, onRenameAvailable }: {
@@ -35,9 +36,30 @@ function CompanionDocumentReader({ document, api, onTitle, onRenameAvailable }: 
   // The login-free visual page serves sample files the same way the Mac reads real ones.
   const canReadLocally = !document.preview && document.readLocally !== false && (nativeShell || hasArtifactPreviewLoaderForPreview());
   const cloudSourceId = document.sourceView ? artifact.attachmentId : null;
+  // Raster images are read as bytes for the image viewer, never as text.
+  const readsImage = Boolean(document.sourceView) && companionViewerKind(artifact.path) === 'image';
   const [loaded, setLoaded] = useState<LoadedPreview | null>(null);
   useEffect(() => {
-    if (!canReadLocally && !cloudSourceId) return undefined;
+    if (!readsImage || (!canReadLocally && !cloudSourceId)) return undefined;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    const request = cloudSourceId ? (async () => {
+      const session = await loadSession();
+      if (!session?.token) throw new Error('Not signed in.');
+      const blob = await defaultCloudAuthClient().downloadAttachmentContent(session.token, cloudSourceId);
+      objectUrl = URL.createObjectURL(blob);
+      return { src: objectUrl, sizeBytes: blob.size };
+    })() : loadArtifactImage({ isNativeShell: nativeShell, path: artifact.path, attachmentId: artifact.attachmentId, baseRoot: document.previewBaseRoot ?? null });
+    request
+      .then((image) => { if (!cancelled) setLoaded({ key, preview: null, image }); })
+      .catch(() => { if (!cancelled) setLoaded({ key, preview: null, image: null }); });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [artifact.attachmentId, artifact.path, canReadLocally, cloudSourceId, document.previewBaseRoot, key, nativeShell, readsImage, reloads]);
+  useEffect(() => {
+    if (readsImage || (!canReadLocally && !cloudSourceId)) return undefined;
     let cancelled = false;
     const request = cloudSourceId ? (async () => {
       const session = await loadSession();
@@ -52,7 +74,7 @@ function CompanionDocumentReader({ document, api, onTitle, onRenameAvailable }: 
       .then((preview) => { if (!cancelled) setLoaded({ key, preview }); })
       .catch(() => { if (!cancelled) setLoaded({ key, preview: null }); });
     return () => { cancelled = true; };
-  }, [artifact.attachmentId, artifact.path, canReadLocally, cloudSourceId, document.previewBaseRoot, key, nativeShell, reloads]);
+  }, [artifact.attachmentId, artifact.path, canReadLocally, cloudSourceId, document.previewBaseRoot, key, nativeShell, readsImage, reloads]);
   const reportTitle = useCallback((title: string) => onTitle(artifact.id, title), [artifact.id, onTitle]);
   const reportRename = useCallback((rename: ((title: string) => void) | null) => onRenameAvailable(artifact.id, rename), [artifact.id, onRenameAvailable]);
   const reload = useCallback(() => setReloads((count) => count + 1), []);
@@ -65,7 +87,8 @@ function CompanionDocumentReader({ document, api, onTitle, onRenameAvailable }: 
   const openExternally = nativeShell && document.readLocally !== false
     ? () => { void openArtifactExternally(artifact, document.previewBaseRoot ?? null).catch(() => undefined); }
     : undefined;
-  if (document.sourceView) return <CompanionSourceView preview={preview} path={artifact.path} onReload={reload} onOpenExternal={openExternally} />;
+  const image = loaded?.key === key ? loaded.image ?? null : null;
+  if (document.sourceView) return <CompanionSourceView preview={preview} image={image} path={artifact.path} onReload={reload} onOpenExternal={openExternally} />;
   return (
     <DocumentReader
       api={api}

@@ -66,6 +66,9 @@ export function ArtifactThumbnailView({ thumbnail, path }: { thumbnail: Artifact
       </ScaledPage>
     );
   }
+  if (kind === 'image') {
+    return <img className="app-artifact-card-image" src={source} alt="" draggable={false} />;
+  }
   if (kind === 'html' || kind === 'svg') {
     return (
       <ScaledPage layoutWidth={LAYOUT_WIDTH[kind]} className="app-artifact-card-web">

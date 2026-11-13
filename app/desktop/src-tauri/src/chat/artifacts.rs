@@ -161,6 +161,65 @@ pub async fn desktop_chat_artifact_open_copy(
     Ok(path.display().to_string())
 }
 
+/// Largest image the viewer reads into memory; bigger ones open in their default app instead.
+const MAX_ARTIFACT_IMAGE_BYTES: u64 = 32 * 1024 * 1024;
+
+/// The image types WebKit can draw, by extension.
+fn artifact_image_mime_type(path: &Path) -> Option<&'static str> {
+    let extension = path.extension()?.to_str()?.to_lowercase();
+    Some(match extension.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "avif" => "image/avif",
+        "heic" => "image/heic",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        _ => return None,
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopArtifactImage {
+    path: String,
+    mime_type: String,
+    size_bytes: u64,
+    data_base64: String,
+}
+
+/// Reads an image artifact for the image viewer and card thumbnails. The path resolves like a
+/// preview: inside the project root when one is set.
+#[tauri::command]
+pub async fn desktop_chat_artifact_image(
+    path: String,
+    base_root: Option<String>,
+) -> Result<DesktopArtifactImage, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let resolved_path = resolve_artifact_preview_path(&path, base_root.as_deref())?;
+    let mime_type = artifact_image_mime_type(&resolved_path)
+        .ok_or_else(|| "This file is not an image the viewer can show.".to_string())?;
+    let metadata = std::fs::metadata(&resolved_path).map_err(|err| {
+        if err.kind() == std::io::ErrorKind::NotFound {
+            format!("Artifact file not found: {}", resolved_path.display())
+        } else {
+            err.to_string()
+        }
+    })?;
+    if metadata.len() > MAX_ARTIFACT_IMAGE_BYTES {
+        return Err("This image is too large to preview here.".to_string());
+    }
+    let bytes = std::fs::read(&resolved_path).map_err(|err| err.to_string())?;
+    Ok(DesktopArtifactImage {
+        path: resolved_path.display().to_string(),
+        mime_type: mime_type.to_string(),
+        size_bytes: metadata.len(),
+        data_base64: STANDARD.encode(bytes),
+    })
+}
+
 #[tauri::command]
 pub async fn desktop_chat_artifact_preview(
     path: String,
@@ -309,6 +368,21 @@ mod tests {
             normalize_path_lexically(Path::new("/tmp/project/./src/../README.md")),
             PathBuf::from("/tmp/project/README.md"),
         );
+    }
+
+    #[test]
+    fn artifact_image_mime_type_covers_drawable_images_only() {
+        assert_eq!(
+            artifact_image_mime_type(Path::new("a/hero.PNG")),
+            Some("image/png")
+        );
+        assert_eq!(
+            artifact_image_mime_type(Path::new("photo.jpeg")),
+            Some("image/jpeg")
+        );
+        assert_eq!(artifact_image_mime_type(Path::new("logo.svg")), None);
+        assert_eq!(artifact_image_mime_type(Path::new("deck.pdf")), None);
+        assert_eq!(artifact_image_mime_type(Path::new("README")), None);
     }
 
     #[test]

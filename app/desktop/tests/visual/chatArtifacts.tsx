@@ -13,8 +13,8 @@ import { PREVIEW_CONVERSATION_MEMORY_SCOPE_ID, createPreviewMemoryClient } from 
 import type { DocumentResponse } from '../../src/features/documents/documentShareTypes';
 import type { Conversation, SessionArtifact } from '../../src/kordi-app/types';
 import { ARTIFACT_LAYOUT_STORAGE_KEY } from '../../src/pages/artifactLayoutPreference';
-import { setArtifactDocumentApiForPreview } from '../../src/pages/artifactDocumentApi';
-import { setArtifactPreviewLoaderForPreview } from '../../src/pages/artifactPreviewLoader';
+import { setArtifactDocumentApiForPreview } from '../../src/features/documents/artifactDocumentApi';
+import { setArtifactImageLoaderForPreview, setArtifactPreviewLoaderForPreview } from '../../src/features/documents/artifactPreviewLoader';
 import { isNativeDesktopShell } from '../../src/lib/desktop';
 import type { CompanionDocument } from '../../src/features/documents/companionDocument';
 import { useCompanionDocument, useCompanionDocumentRequests } from '../../src/features/documents/useCompanionDocument';
@@ -163,6 +163,36 @@ setArtifactPreviewLoaderForPreview(async ({ path, attachmentId }) => {
   return { path, truncated: false, lines: text.split('\n').map((line, index) => ({ number: index + 1, text: line })) };
 });
 
+// A sample raster image, drawn at runtime so the repository holds no binary fixture.
+function sampleHeroImage() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1200;
+  canvas.height = 675;
+  const context = canvas.getContext('2d');
+  if (!context) return '';
+  const gradient = context.createLinearGradient(0, 0, 1200, 675);
+  gradient.addColorStop(0, '#1f2937');
+  gradient.addColorStop(1, '#7c3aed');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 1200, 675);
+  context.fillStyle = '#f59e0b';
+  context.beginPath();
+  context.arc(300, 337, 130, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = '#f9fafb';
+  context.font = '700 72px -apple-system, system-ui, sans-serif';
+  context.fillText('Shared documents', 480, 320);
+  context.font = '400 36px -apple-system, system-ui, sans-serif';
+  context.fillText('Everything your agent writes, in one place', 482, 390);
+  return canvas.toDataURL('image/png');
+}
+
+setArtifactImageLoaderForPreview(async ({ path }) => {
+  if (path !== 'shots/launch-hero.png') throw new Error('No such file or directory (os error 2)');
+  const src = sampleHeroImage();
+  return { src, sizeBytes: Math.round((src.length * 3) / 4) };
+});
+
 // The preview stands in for a server that reports memory routes.
 publishMemoryVersion(1);
 
@@ -201,6 +231,7 @@ const artifacts: SessionArtifact[] = empty ? [] : [
   { id: 'badge', path: 'brand/launch-badge.svg', name: 'launch-badge.svg', kind: 'file', category: 'artifact', summary: 'Created', timeLabel: 'Sun' },
   { id: 'clean-events', path: 'scripts/clean_events.py', name: 'clean_events.py', kind: 'code', category: 'artifact', summary: 'Created', timeLabel: 'Sun' },
   { id: 'standup', path: 'notes/standup.txt', name: 'standup.txt', kind: 'document', category: 'artifact', summary: 'Created', timeLabel: 'Nov 8' },
+  { id: 'launch-hero', path: 'shots/launch-hero.png', name: 'launch-hero.png', kind: 'file', category: 'artifact', summary: 'Created', timeLabel: 'Sun', createdByAccountId: 'acct_priya' },
   { id: 'headline-test', path: 'src/headlines.ts', name: 'headlines.ts', kind: 'code', category: 'related', summary: 'Modified', timeLabel: '09:41' },
   { id: 'pricing-data', path: 'data/pricing.csv', name: 'pricing.csv', kind: 'file', category: 'related', summary: 'Created', timeLabel: '09:30' },
 ];
