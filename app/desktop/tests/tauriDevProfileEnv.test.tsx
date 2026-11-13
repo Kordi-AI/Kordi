@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 import {
@@ -172,4 +176,42 @@ test('macOS previews run the debug binary from a signed app bundle so permission
   const runner = readFileSync(new URL('../scripts/macos-dev-app-runner.sh', import.meta.url), 'utf8');
   assert.match(runner, /CFBundleIdentifier/);
   assert.match(runner, /codesign --force --sign -/);
+});
+
+test('the macOS dev runner starts the app as its own privacy-responsible process and keeps the fallbacks', () => {
+  const runner = readFileSync(new URL('../scripts/macos-dev-app-runner.sh', import.meta.url), 'utf8');
+  const helper = readFileSync(new URL('../scripts/macos-disclaim-exec.c', import.meta.url), 'utf8');
+  assert.match(runner, /exec "\$helper" "\$app\/Contents\/MacOS\/\$exe" "\$@"/, 'the bundle runs through the disclaim helper');
+  assert.match(runner, /KORDI_DEV_APP_DISCLAIM/, 'the helper can be turned off');
+  assert.match(runner, /exec "\$app\/Contents\/MacOS\/\$exe" "\$@"/, 'without the helper the bundle still starts');
+  assert.match(runner, /exec "\$binary" "\$@"\s*$/, 'the bare binary stays the last fallback');
+  // Exec semantics keep the pid, output and signals that Tauri dev relies on.
+  assert.match(helper, /responsibility_spawnattrs_setdisclaim\(&attrs, 1\)/);
+  assert.match(helper, /POSIX_SPAWN_SETEXEC/);
+  assert.match(helper, /execv\(argv\[1\], argv \+ 1\)/);
+});
+
+test('the macOS dev runner passes arguments, environment, output and exit status through the bundle', { skip: process.platform !== 'darwin' }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kordi-dev-runner-'));
+  try {
+    const binary = join(dir, 'kordi-desktop');
+    writeFileSync(binary, '#!/bin/sh\necho "pid=$$ path=$0 args=$#:$1 env=$KORDI_RUNNER_PROBE"\necho stderr-line >&2\nexit 7\n');
+    chmodSync(binary, 0o755);
+    const runner = fileURLToPath(new URL('../scripts/macos-dev-app-runner.sh', import.meta.url));
+    const result = spawnSync('/bin/bash', ['-c', 'echo "runner=$$"; exec "$0" "$@"', runner, binary, 'a b', 'c'], {
+      encoding: 'utf8',
+      env: { ...process.env, KORDI_DEV_BUNDLE_IDENTIFIER: 'io.kordi.cloud.runner-test', KORDI_DEV_BUNDLE_NAME: 'Kordi Runner Test', KORDI_RUNNER_PROBE: 'kept' },
+    });
+    assert.equal(result.status, 7, result.stderr);
+    assert.match(result.stderr, /stderr-line/);
+    const runnerPid = /runner=(\d+)/.exec(result.stdout)?.[1];
+    assert.match(result.stdout, new RegExp(`pid=${runnerPid} `), 'the app replaces the runner process');
+    assert.match(result.stdout, /path=\S*\/Kordi Runner Test\.app\/Contents\/MacOS\/kordi-desktop/);
+    assert.match(result.stdout, /args=2:a b env=kept/);
+    if (spawnSync('/bin/sh', ['-c', 'command -v cc'], { encoding: 'utf8' }).status === 0) {
+      assert.ok(existsSync(join(dir, 'dev-app-bundles/.launcher/macos-disclaim-exec')), 'the disclaim helper was built');
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
