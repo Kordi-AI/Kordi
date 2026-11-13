@@ -1,141 +1,129 @@
 mod completion_page_tests {
     use super::super::{completion_page_html, KORDI_FAVICON_DATA_URL};
 
+    fn visible_copy_rules(html: &str) -> usize {
+        html.matches("[data-copy~=\"").count()
+    }
+
     #[test]
-    fn renders_kordi_wordmark_and_boots_in_loading_state() {
+    fn renders_kordi_header_and_boots_as_account_loading() {
         let html = completion_page_html("cloud_oauth_abc123");
 
-        // Page boots into the loading state via the data attribute on <html>,
-        // so the success / error markup is pre-rendered but hidden until JS
-        // toggles the attribute. That keeps the layout stable across states.
-        assert!(
-            html.contains("data-status=\"loading\""),
-            "page should boot in loading state"
-        );
-        assert!(
-            !html.contains("auth-label"),
-            "page should not render a visible label chip"
-        );
-
+        // The page boots in the account loading state; the script switches the
+        // kind for connector grants and the status once the POST resolves.
+        assert!(html.contains("data-status=\"loading\" data-kind=\"account\""));
+        assert!(html.contains("<header class=\"mast\">"));
         assert!(html.contains("<span>kordi</span>"));
         assert!(html.contains("rel=\"icon\" type=\"image/svg+xml\""));
         assert!(html.contains(KORDI_FAVICON_DATA_URL));
         assert!(html.contains("mask='url(#kordi-bird-cut)'"));
-        assert!(!html.contains("<circle cx=\"18\" cy=\"10\""));
-        assert!(html.contains("&copy; Kordi 2026"));
-        assert!(!html.contains("state-marker"));
+        assert!(html.contains("fill='#f7b32b'"), "bird keeps its amber beak");
+        assert!(html.contains("<title>Sign in · Kordi</title>"));
+        assert!(html.contains("role=\"status\" aria-live=\"polite\""));
 
-        // All three copy blocks are pre-rendered so the swap between them is
-        // just an attribute flip, never a layout shift.
-        for title in [
-            "data-title-loading",
-            "data-title-success",
-            "data-title-error",
+        // Every kind and status pair has pre-rendered copy and one CSS rule,
+        // so switching states never shifts the layout.
+        for copy in [
+            "account-loading",
+            "account-success",
+            "account-error",
+            "connector-loading",
+            "connector-success",
+            "connector-error",
         ] {
-            assert!(html.contains(title), "missing title state: {title}");
+            assert!(
+                html.contains(&format!("data-copy=\"{copy}\"")),
+                "missing title: {copy}"
+            );
         }
-        for sub in ["data-sub-loading", "data-sub-success", "data-sub-error"] {
-            assert!(html.contains(sub), "missing subtitle state: {sub}");
-        }
+        assert_eq!(visible_copy_rules(&html), 6);
     }
 
     #[test]
-    fn copy_matches_brand_voice_for_each_state() {
+    fn account_copy_is_a_title_and_one_short_line() {
         let html = completion_page_html("cloud_oauth_abc123");
 
-        assert!(!html.contains("KORDI LOGIN"));
-        assert!(html.contains("Completing sign-in"));
-        assert!(html.contains("Signed in"));
-        assert!(html.contains("Couldn’t sign in"));
+        assert!(html.contains(">Signing in…</h1>"));
+        assert!(html.contains(">You’re signed in</h1>"));
+        assert!(html.contains(">Couldn’t sign in</h1>"));
+        assert!(html.contains("You can close this tab and go back to Kordi."));
+        assert!(html.contains("Go back to Kordi and try again."));
+        for removed in [
+            "Signed in.",
+            "Your account is connected",
+            "Finishing the secure browser handoff",
+            "Kordi sign-in",
+            "&copy; Kordi 2026",
+            "Close window",
+            "<button",
+            "Authentication Successful",
+            "KORDI LOGIN",
+        ] {
+            assert!(!html.contains(removed), "unexpected copy: {removed}");
+        }
+    }
+
+    #[test]
+    fn connector_grants_name_the_provider_from_the_fragment() {
+        let html = completion_page_html("cloud_oauth_connector");
+
+        assert!(html.contains("params.has('kordi_connector')"));
+        assert!(html.contains("params.has('kordi_connector_error')"));
+        assert!(html.contains("JSON.parse(atob(encoded)).provider"));
+        for (id, name) in [
+            ("github", "GitHub"),
+            ("gmail", "Gmail"),
+            ("google_calendar", "Google Calendar"),
+            ("slack", "Slack"),
+            ("outlook", "Outlook"),
+        ] {
+            assert!(
+                html.contains(&format!("{id}: '{name}'")),
+                "missing provider: {id}"
+            );
+        }
+        assert!(
+            html.contains("Connecting <span data-provider=\"your account\">your account</span>…")
+        );
+        assert!(html.contains("<span data-provider=\"Account\">Account</span> connected"));
         assert!(html
-            .contains("Your account is connected. You can close this window and return to Kordi."));
-        assert!(html.contains("Finishing the secure browser handoff to Kordi."));
-        assert!(html.contains("Return to Kordi and try signing in again."));
-        assert!(!html.contains("Kordi is ready in the app"));
-        assert!(!html.contains("This window will update automatically"));
-        assert!(!html.contains("No account changes were made"));
-        assert!(!html.contains("Close window"));
-        assert!(!html.contains("<button"));
-        assert!(
-            !html.contains("Authentication Successful") && !html.contains("Login Successful"),
-            "cloud login callback should use direct signed-in copy"
-        );
-        assert!(
-            !html.contains("READY"),
-            "status should not use the large repeated pill treatment"
-        );
-        assert!(
-            !html.contains("Kordi sign-in complete"),
-            "success title should not repeat the wordmark"
-        );
+            .contains("Couldn’t connect <span data-provider=\"your account\">your account</span>"));
+        assert!(html.contains("'Connect ' + provider"));
+        // Provider names are written as text, never parsed as markup.
+        assert!(html.contains("node.textContent ="));
+        assert!(!html.contains("innerHTML"));
     }
 
     #[test]
-    fn script_posts_to_complete_endpoint_with_request_id() {
+    fn script_posts_the_fragment_and_reports_fragment_errors() {
         let html = completion_page_html("cloud_oauth_xyz789");
-        assert!(
-            html.contains("/complete/cloud_oauth_xyz789"),
-            "completion POST should target the request-specific endpoint"
-        );
-        assert!(
-            html.contains("method: 'POST'"),
-            "completion ping must be a POST so the loopback server flips status"
-        );
+        assert!(html.contains("fetch('/complete/cloud_oauth_xyz789'"));
+        assert!(html.contains("method: 'POST'"));
+        assert!(html.contains("body: window.location.hash || ''"));
+        assert!(html.contains("params.has('kordi_cloud_oauth_error')"));
+        assert!(html.contains("res.ok && !failed ? 'success' : 'error'"));
     }
 
     #[test]
-    fn page_carries_brand_palette_and_dark_mode_support() {
+    fn page_uses_the_kordi_web_palette_type_and_dark_mode() {
         let html = completion_page_html("cloud_oauth_palette");
 
-        // The callback uses the same warm paper, ink, rules, and simple
-        // header/content/footer structure as Kordi's public web surfaces.
-        assert!(
-            html.contains("--paper: #faf9f7"),
-            "light mode should use the Kordi paper surface"
-        );
-        assert!(
-            html.contains("--paper: #191814"),
-            "dark mode should use the Kordi dark paper surface"
-        );
-        assert!(html.contains("grid-template-rows: auto 1fr auto"));
-        assert!(html.contains("text-align: center"));
-        assert!(
-            html.contains("prefers-color-scheme: dark"),
-            "dark mode must be supported"
-        );
+        assert!(html.contains("--paper: #fcfaf8"));
+        assert!(html.contains("--cardinal: #8c1515"));
+        assert!(html.contains("--paper: #191817"));
+        assert!(html.contains("prefers-color-scheme: dark"));
+        assert!(html.contains(
+            "--sans: Geist, -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif"
+        ));
+        assert!(html.contains("font-size: clamp(2.5rem, 1.6rem + 2.6vw, 3.75rem);"));
+        assert!(html.contains("font-weight: 600;"));
+        assert!(html.contains("border-top-color: var(--cardinal)"));
+        assert!(html.contains("prefers-reduced-motion: reduce"));
+        assert!(!html.contains("Iowan Old Style"));
+        assert!(!html.contains("Palatino"));
+        assert!(!html.contains("text-transform: uppercase"));
         assert!(!html.contains("linear-gradient"));
         assert!(!html.contains("filter: blur"));
-        assert!(!html.contains("animation:"));
-    }
-
-    #[test]
-    fn uses_self_contained_kordi_typography_and_scale() {
-        let html = completion_page_html("cloud_oauth_font");
-
-        assert!(
-            html.contains("-apple-system, BlinkMacSystemFont"),
-            "body copy should use the platform system stack"
-        );
-        assert!(
-            html.contains("\"Iowan Old Style\", \"Palatino Linotype\", Palatino, Georgia, serif"),
-            "display copy should use the self-contained Kordi serif stack"
-        );
-        assert!(
-            !html.contains("text-transform: uppercase"),
-            "callback label should not force the kordi wordmark into capitals"
-        );
-        assert!(
-            html.contains("font-size: clamp(48px, 8vw, 72px);"),
-            "callback title should use the approved Kordi display scale"
-        );
-        assert!(
-            html.contains("font-size: 15px;"),
-            "callback subtitle should use the shared compact callback scale"
-        );
-        assert!(
-            !html.contains("Avenir Next"),
-            "callback page should not use the previous display font"
-        );
     }
 
     #[test]
@@ -144,21 +132,26 @@ mod completion_page_tests {
 
         // The loopback server can't proxy external assets and we don't want
         // the callback page to phone home, so the page must be self-contained.
-        for forbidden in ["fonts.googleapis", "fonts.gstatic", "cdn.", "https://"] {
+        for forbidden in [
+            "fonts.googleapis",
+            "fonts.gstatic",
+            "cdn.",
+            "https://",
+            "url(\"",
+            "@font-face",
+        ] {
             assert!(
                 !html.contains(forbidden),
-                "callback page must not reference external URL: {forbidden}"
+                "callback page must not reference external resources: {forbidden}"
             );
         }
 
-        // Anti-slop checks: gradient-fill text and side-stripe borders are
-        // bans from the Kordi design context (.impeccable.md).
         assert!(!html.contains("background-clip: text"));
         assert!(!html.contains("border-left: 4px"));
         assert!(!html.contains("border-left: 3px"));
         assert!(!html.contains("class=\"card\""));
-        // Only the bird mark's beak, tail and wing paths; the removed
-        // status icon must stay removed.
+        assert!(!html.contains("outline:"), "no focus rings on this page");
+        // Only the bird mark's beak, tail and wing paths: no status icons.
         assert_eq!(html.matches("<path").count(), 3);
     }
 }

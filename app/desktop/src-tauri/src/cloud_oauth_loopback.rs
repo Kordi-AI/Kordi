@@ -262,38 +262,33 @@ fn completion_page_html(request_id: &str) -> String {
 fn completion_page_document(status: &str, script: &str) -> String {
     format!(
         r#"<!doctype html>
-<html lang="en" data-status="{status}">
+<html lang="en" data-status="{status}" data-kind="account">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light dark" />
   <link rel="icon" type="image/svg+xml" href="{favicon}" />
-  <title>Kordi sign-in</title>
+  <title>Sign in · Kordi</title>
   <style>{style}</style>
 </head>
 <body>
-  <div class="page">
-    <header>
-      <div class="wrap">
-        <div class="brand" aria-label="Kordi">
-          <svg viewBox='64 58 384 384' aria-hidden='true'><mask id='kordi-bird-cut' maskUnits='userSpaceOnUse' x='-100' y='-100' width='712' height='712'><ellipse cx='262' cy='292' rx='150' ry='136' fill='#fff'/><path d='M400,342 C436,322 462,272 470,204 C448,236 420,244 386,218Z' fill='#fff' stroke='#fff' stroke-width='4' stroke-linejoin='round'/><circle cx='194' cy='266' r='17'/><path d='M269.6,333.2 C292,299.6 348,282 397.6,285.2 C381.6,325.2 336.8,357.2 288.8,355.6 C272.8,354 264.8,344.4 269.6,333.2Z'/></mask><g transform='translate(256,250) scale(0.94) translate(-270,-292)'><path d='M120,276 L82,294 L120,312Z' fill='currentColor' stroke='currentColor' stroke-width='12' stroke-linejoin='round'/><rect x='-100' y='-100' width='712' height='712' fill='currentColor' mask='url(#kordi-bird-cut)'/></g></svg>
-          <span>kordi</span>
-        </div>
-      </div>
-    </header>
-    <main class="wrap" role="status" aria-live="polite">
-      <section class="copy">
-        <h1 data-title-loading>Completing sign-in.</h1>
-        <h1 data-title-success>Signed in.</h1>
-        <h1 data-title-error>Couldn’t sign in.</h1>
-
-        <p data-sub-loading>Finishing the secure browser handoff to Kordi.</p>
-        <p data-sub-success>Your account is connected. You can close this window and return to Kordi.</p>
-        <p data-sub-error>Return to Kordi and try signing in again.</p>
-      </section>
-    </main>
-    <footer>&copy; Kordi 2026</footer>
-  </div>
+  <header class="mast">
+    <div class="brand" aria-label="Kordi">
+      <svg viewBox='64 58 384 384' aria-hidden='true'><mask id='kordi-bird-cut' maskUnits='userSpaceOnUse' x='-100' y='-100' width='712' height='712'><ellipse cx='262' cy='292' rx='150' ry='136' fill='#fff'/><path d='M400,342 C436,322 462,272 470,204 C448,236 420,244 386,218Z' fill='#fff' stroke='#fff' stroke-width='4' stroke-linejoin='round'/><circle cx='194' cy='266' r='17'/><path d='M269.6,333.2 C292,299.6 348,282 397.6,285.2 C381.6,325.2 336.8,357.2 288.8,355.6 C272.8,354 264.8,344.4 269.6,333.2Z'/></mask><g transform='translate(256,250) scale(0.94) translate(-270,-292)'><path d='M120,276 L82,294 L120,312Z' fill='#f7b32b' stroke='#f7b32b' stroke-width='12' stroke-linejoin='round'/><rect x='-100' y='-100' width='712' height='712' fill='currentColor' mask='url(#kordi-bird-cut)'/></g></svg>
+      <span>kordi</span>
+    </div>
+  </header>
+  <main role="status" aria-live="polite">
+    <span class="spinner" aria-hidden="true"></span>
+    <h1 data-copy="account-loading">Signing in…</h1>
+    <h1 data-copy="account-success">You’re signed in</h1>
+    <h1 data-copy="account-error">Couldn’t sign in</h1>
+    <h1 data-copy="connector-loading">Connecting <span data-provider="your account">your account</span>…</h1>
+    <h1 data-copy="connector-success"><span data-provider="Account">Account</span> connected</h1>
+    <h1 data-copy="connector-error">Couldn’t connect <span data-provider="your account">your account</span></h1>
+    <p data-copy="account-success connector-success">You can close this tab and go back to Kordi.</p>
+    <p data-copy="account-error connector-error">Go back to Kordi and try again.</p>
+  </main>
   <script>{script}</script>
 </body>
 </html>"#,
@@ -303,100 +298,118 @@ fn completion_page_document(status: &str, script: &str) -> String {
 }
 
 // This callback is served by a short-lived loopback listener, so it must remain
-// self-contained. Its visual language mirrors Kordi's public web surfaces
-// without loading external fonts or assets.
+// self-contained: no fonts, images or scripts load from anywhere. It follows the
+// kordi.ai log-in pages (header, title scale, cardinal spinner) and uses Geist
+// when it is installed, otherwise the platform sans-serif.
 fn completion_page_css() -> &'static str {
     r#"
     :root {
-      color-scheme: light dark;
-      --paper: #faf9f7;
-      --ink: #1a1714;
-      --ink-muted: #655e56;
-      --footer-ink: #81786f;
-      --rule: rgba(26, 23, 20, .09);
+      color-scheme: light;
+      --paper: #fcfaf8;
+      --ink: #191817;
+      --muted: #6d6865;
+      --rule: #e8ddd8;
+      --cardinal: #8c1515;
+      --bird: #1f1a17;
+      --sans: Geist, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --paper: #191817;
+        --ink: #f6f1ed;
+        --muted: #bcb3ae;
+        --rule: #3a3431;
+        --cardinal: #e5837a;
+        --bird: #f6f1ed;
+      }
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --paper: #191817;
+      --ink: #f6f1ed;
+      --muted: #bcb3ae;
+      --rule: #3a3431;
+      --cardinal: #e5837a;
+      --bird: #f6f1ed;
     }
 
     * { box-sizing: border-box; }
     html, body { min-height: 100%; margin: 0; }
     body {
       min-height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      font-family: var(--sans);
       color: var(--ink);
       background: var(--paper);
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
-      text-rendering: geometricPrecision;
     }
 
-    .page {
-      min-height: 100vh;
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-    }
-    .wrap { width: min(calc(100% - 4.25rem), 520px); margin-inline: auto; }
-    header { min-height: 68px; display: flex; align-items: center; border-bottom: 1px solid var(--rule); }
-    header .wrap { width: min(calc(100% - 4.25rem), 1312px); }
-    .brand {
-      width: fit-content;
-      display: inline-flex;
+    .mast {
+      width: min(calc(100% - 4.25rem), 1312px);
+      min-height: 80px;
+      margin-inline: auto;
+      display: flex;
       align-items: center;
-      gap: 10px;
-      color: var(--ink);
-      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-      font-size: 24px;
-      line-height: 1;
     }
-    .brand svg { width: 30px; height: 30px; flex: 0 0 auto; }
-    main { display: flex; align-items: center; padding-block: 3.5rem 4.5rem; }
-    .copy { width: 100%; }
-    h1 {
+    .brand { display: inline-flex; align-items: center; gap: .6rem; color: var(--bird); }
+    .brand svg { width: 39px; height: 39px; flex: none; }
+    .brand span { color: var(--ink); font-size: 1.65rem; font-weight: 600; letter-spacing: -.045em; line-height: 1; }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: clamp(56px, 14vh, 140px) 1.75rem 56px;
+      text-align: center;
+    }
+    .spinner {
       display: none;
-      max-width: 11ch;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 24px;
+      border: 2px solid var(--rule);
+      border-top-color: var(--cardinal);
+      border-radius: 50%;
+      animation: spin 700ms linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+    [data-status="loading"] .spinner { display: block; }
+
+    h1 {
+      max-width: 14ch;
       margin: 0;
-      color: var(--ink);
-      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-      font-size: clamp(48px, 8vw, 72px);
-      font-weight: 400;
-      line-height: .98;
-      letter-spacing: -.035em;
+      font-size: clamp(2.5rem, 1.6rem + 2.6vw, 3.75rem);
+      font-weight: 600;
+      line-height: 1.06;
+      letter-spacing: -.045em;
       text-wrap: balance;
     }
     p {
-      display: none;
-      max-width: 43ch;
-      margin: 18px 0 0;
-      color: var(--ink-muted);
-      font-size: 15px;
-      line-height: 1.65;
+      max-width: 34ch;
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: 1.0625rem;
+      line-height: 1.6;
       text-wrap: balance;
     }
-    [data-status="loading"] [data-title-loading],
-    [data-status="loading"] [data-sub-loading],
-    [data-status="success"] [data-title-success],
-    [data-status="success"] [data-sub-success],
-    [data-status="error"]   [data-title-error],
-    [data-status="error"]   [data-sub-error] { display: block; }
-    footer {
-      padding: 16px 34px 18px;
-      border-top: 1px solid var(--rule);
-      color: var(--footer-ink);
-      font-size: 11px;
-      text-align: center;
-    }
+    [data-copy] { display: none; }
+    [data-kind="account"][data-status="loading"] [data-copy~="account-loading"],
+    [data-kind="account"][data-status="success"] [data-copy~="account-success"],
+    [data-kind="account"][data-status="error"] [data-copy~="account-error"],
+    [data-kind="connector"][data-status="loading"] [data-copy~="connector-loading"],
+    [data-kind="connector"][data-status="success"] [data-copy~="connector-success"],
+    [data-kind="connector"][data-status="error"] [data-copy~="connector-error"] { display: block; }
 
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --paper: #191814;
-        --ink: #f2efe9;
-        --ink-muted: #b8b0a7;
-        --footer-ink: #938b82;
-        --rule: rgba(242, 239, 233, .09);
-      }
-    }
     @media (max-width: 520px) {
-      .wrap, header .wrap { width: calc(100% - 3.5rem); }
-      main { align-items: flex-start; padding-block: 5.5rem 3.5rem; }
-      h1 { font-size: clamp(48px, 16vw, 62px); }
+      .mast { width: calc(100% - 3.5rem); min-height: 68px; }
+      .brand svg { width: 32px; height: 32px; }
+      .brand span { font-size: 1.45rem; }
+      h1 { font-size: clamp(2.125rem, 9vw, 2.75rem); }
     }
     "#
 }
@@ -405,18 +418,40 @@ fn completion_page_script(request_id: &str) -> String {
     format!(
         r#"
     (function() {{
-      const root = document.documentElement;
-      // The page boots in `loading` state via the data attribute on <html>;
-      // we toggle to `success` / `error` after the POST resolves so CSS can
-      // swap the visible title + subtitle without any flash.
-      function setStatus(next) {{ root.setAttribute('data-status', next); }}
+      var root = document.documentElement;
+      var params = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+      var names = {{
+        github: 'GitHub',
+        gmail: 'Gmail',
+        google_calendar: 'Google Calendar',
+        slack: 'Slack',
+        outlook: 'Outlook'
+      }};
+      var failed = params.has('kordi_cloud_oauth_error') || params.has('kordi_connector_error');
 
+      // A connector grant names its provider in the base64url JSON fragment.
+      if (params.has('kordi_connector') || params.has('kordi_connector_error')) {{
+        var provider = '';
+        try {{
+          var encoded = (params.get('kordi_connector') || '').replace(/-/g, '+').replace(/_/g, '/');
+          provider = names[JSON.parse(atob(encoded)).provider] || '';
+        }} catch (error) {{}}
+        root.setAttribute('data-kind', 'connector');
+        document.querySelectorAll('[data-provider]').forEach(function(node) {{
+          node.textContent = provider || node.getAttribute('data-provider');
+        }});
+        document.title = (provider ? 'Connect ' + provider : 'Connect') + ' · Kordi';
+      }}
+
+      // The page boots in `loading` via the attribute on <html> and flips to
+      // `success` or `error` once the app has the callback fragment.
+      function setStatus(next) {{ root.setAttribute('data-status', next); }}
       fetch('/complete/{request_id}', {{
         method: 'POST',
         headers: {{ 'content-type': 'text/plain' }},
         body: window.location.hash || '',
       }})
-        .then(function(res) {{ setStatus(res && res.ok ? 'success' : 'error'); }})
+        .then(function(res) {{ setStatus(res && res.ok && !failed ? 'success' : 'error'); }})
         .catch(function() {{ setStatus('error'); }});
     }})();
     "#

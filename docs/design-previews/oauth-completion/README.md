@@ -31,3 +31,8 @@ The Embedded Geist option needs `geist-400.ttf` and `geist-600.ttf` copied from 
 homepage repo (`research-preview/public/assets/fonts/`) into `fonts/`, which is not
 committed. It shows what the page would look like with Geist embedded as a data URL
 instead of the system stack.
+
+The owner approved this design on 2026-11-13. The desktop loopback page and the CLI
+provider callback page (`agent/crates/cli/src/oauth/provider_callback.html`) now use it,
+with the system stack (Geist when installed, otherwise the platform sans-serif) rather
+than an embedded font.
