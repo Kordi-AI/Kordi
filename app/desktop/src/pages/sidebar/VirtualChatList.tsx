@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { VirtualParticipantSpaceList } from './VirtualParticipantSpaceList';
-import { CHANNEL_HEIGHT, participantSpaceBlocks } from './participantSpaceLayout';
+import { CHANNEL_HEIGHT, participantSpaceBlockKey, participantSpaceBlocks } from './participantSpaceLayout';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -93,9 +93,9 @@ export function VirtualChatList({
     count: groupChannels ? blocks.length : rows.length,
     getScrollElement: () => internalScrollRef.current,
     estimateSize: (index) => groupChannels
-      ? estimatedChatSidebarRowSize(blocks[index].header) + blocks[index].channels.reduce((total, row) => total + (compactChannels ? estimatedChatSidebarRowSize(row) : CHANNEL_HEIGHT), 0)
+      ? (blocks[index].header ? estimatedChatSidebarRowSize(blocks[index].header) : 0) + blocks[index].channels.reduce((total, row) => total + (compactChannels ? estimatedChatSidebarRowSize(row) : CHANNEL_HEIGHT), 0)
       : estimatedChatSidebarRowSize(rows[index]),
-    getItemKey: (index) => (groupChannels ? blocks[index]?.header.key : rows[index]?.key) ?? `missing:${index}`,
+    getItemKey: (index) => (groupChannels ? (blocks[index] ? participantSpaceBlockKey(blocks[index]) : undefined) : rows[index]?.key) ?? `missing:${index}`,
     overscan: groupChannels ? 4 : rows.length <= 100 ? rows.length : 24,
     useFlushSync: false,
     directDomUpdates: !groupChannels,

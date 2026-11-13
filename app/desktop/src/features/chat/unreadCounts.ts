@@ -1,3 +1,6 @@
+import { isUnmaterializedAgentConversation } from '@/features/chat/participantSpaces';
+import type { Conversation } from '@/kordi-app/types';
+
 type UnreadSession = {
   id: string;
   canonicalSessionId?: string | null;
@@ -40,4 +43,14 @@ export function sessionsForGlobalAttention<T extends UnreadSession>(
     !hiddenSessionIds.has(session.id)
     && !hiddenSessionIds.has(preferenceId(session))
   ));
+}
+
+// Unread badges count only chats the sidebar can show. Blank agent chats stay
+// out of the Agent list, so an unread count on one could never be cleared.
+export function sessionsForUnreadBadges<T extends Conversation>(
+  sessions: readonly T[],
+  hiddenSessionIds: ReadonlySet<string>,
+): T[] {
+  return sessionsForGlobalAttention(sessions, hiddenSessionIds)
+    .filter((session) => !isUnmaterializedAgentConversation(session));
 }
