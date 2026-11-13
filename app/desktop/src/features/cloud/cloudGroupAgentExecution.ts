@@ -399,33 +399,19 @@ export async function respondToCloudGroupAgentMention(
   // result replaces it. Ending the row here would hide it from the owner while
   // every other member still sees it waiting.
   if (agentExchangeTurnIsWaiting(finalTurn)) {
-    setCanonicalState((current) => input.stateOps.removeTimeoutPlaceholder(
-      current,
-      `msg:cloud-agent-offline:${message.id}:${account.accountId}`,
-    ) ?? current);
+    setCanonicalState((current) => input.stateOps.removeTimeoutPlaceholder(current, `msg:cloud-agent-offline:${message.id}:${account.accountId}`) ?? current);
   } else {
-    const terminalUpsertSpan = beginChatPerformanceSpan(
-      'cloud-agent-terminal-upsert',
-    );
+    const terminalUpsertSpan = beginChatPerformanceSpan('cloud-agent-terminal-upsert');
     let persistedResponseMessage;
     try {
-      persistedResponseMessage = await upsertCanonicalMessageFast(
-        responseRequest,
-      );
-      finishChatPerformanceSpan(terminalUpsertSpan, {
-        resultClass: succeeded ? 'success' : 'failed',
-      });
+      persistedResponseMessage = await upsertCanonicalMessageFast(responseRequest);
+      finishChatPerformanceSpan(terminalUpsertSpan, { resultClass: succeeded ? 'success' : 'failed' });
     } catch (error) {
-      finishChatPerformanceSpan(terminalUpsertSpan, {
-        resultClass: 'failed',
-      });
+      finishChatPerformanceSpan(terminalUpsertSpan, { resultClass: 'failed' });
       throw error;
     }
     throwIfCloudAgentTurnAborted(signal);
-    clearCloudGroupAgentPendingState(
-      input,
-      persistedResponseMessage,
-    );
+    clearCloudGroupAgentPendingState(input, persistedResponseMessage);
   }
   // A reply that mentions another agent hands nothing off (reach_out does).
   const agentHandoff = null;
