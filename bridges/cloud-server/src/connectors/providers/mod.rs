@@ -23,6 +23,7 @@ pub mod http;
 mod oauth2;
 pub mod service;
 pub mod slack;
+pub mod slack_channels;
 mod specs;
 #[cfg(test)]
 pub(crate) mod stub;
@@ -30,7 +31,7 @@ pub(crate) mod stub;
 #[cfg(test)]
 pub(crate) use oauth2::token_grant_from_json;
 pub use oauth2::OAuth2ConnectorProvider;
-pub use service::{ServiceAdapter, ServiceProvider};
+pub use service::{ServiceAdapter, ServiceProvider, SettingOptionsError};
 pub use specs::{
     provider_spec, GITHUB, GMAIL, GOOGLE_CALENDAR, NOT_YET_AVAILABLE_PROVIDERS, PROVIDER_SPECS,
     SLACK,
@@ -346,6 +347,27 @@ pub trait ConnectorProvider: Send + Sync {
             Some(map) if map.is_empty() => Ok(settings.clone()),
             _ => Err(format!("{} has no settings.", self.spec().display_name)),
         }
+    }
+
+    /// Choices the person can pick for settings (Slack: the channels they
+    /// can see). `granted` is the connector's stored read scopes.
+    async fn setting_options(
+        &self,
+        _secret: &ConnectorSecret,
+        _granted: &[String],
+    ) -> Result<Value, SettingOptionsError> {
+        Err(SettingOptionsError::Unsupported)
+    }
+
+    /// Adjusts a tool's description and argument schema for one connector's
+    /// settings before the tool goes on a lease (Slack: the chosen channels).
+    fn tailor_tool(
+        &self,
+        _tool: &str,
+        _settings: &Value,
+        _description: &mut String,
+        _schema: &mut Value,
+    ) {
     }
 
     /// The provider account behind a fresh credential, stored at grant time

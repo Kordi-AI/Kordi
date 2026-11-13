@@ -456,6 +456,7 @@
 		E208840EC7A9D6819C5BC429 /* CommonGroundDeviceAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200F6B7F78667004B33236FA /* CommonGroundDeviceAccess.swift */; };
 		E209B4E4DD968CF6AD4028E2 /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87791B7244F602AE37144B7B /* Conversation.swift */; };
 		E3345CAA477EC4E183C6A705 /* SharedDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57159288C397649C9EFA2CC3 /* SharedDocument.swift */; };
+		E42A2820938A4FF61791A985 /* ConnectorChannelsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 938A4EACFD00E790B4040BDE /* ConnectorChannelsSection.swift */; };
 		E4AC073444D24CC4B6775118 /* CommonGroundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC9D282C0E391AFB2885E0C1 /* CommonGroundTests.swift */; };
 		E522BAFC88E2486E83D8D185 /* CloudAPIClient+ContactProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84338335ED5C3245CFA8E68 /* CloudAPIClient+ContactProfile.swift */; };
 		E705F5FA36A8B10EF4881FE2 /* AccountEmailVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFD06B611CEDD523B38F105A /* AccountEmailVerificationTests.swift */; };
@@ -498,6 +499,7 @@
 		FBE280EC3A6D9ACF063D7C39 /* KordiLinkHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0218E2113CE6E59C3A85E1 /* KordiLinkHandling.swift */; };
 		FC3045E30BD491DD37EA6D29 /* CommonGroundModel+People.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB395962AF148CEF676D32E /* CommonGroundModel+People.swift */; };
 		FD3010FF6602042B8580A25B /* CommonGroundActionTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DAB97125AFD45B7F994A49A /* CommonGroundActionTypes.swift */; };
+		FD41B8125D74DB593CBB94BC /* ConnectorChannelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7F93881FE2528473792A1AD /* ConnectorChannelsTests.swift */; };
 		FD5B3FEC4C203C259378AB38 /* CloudOAuthCallbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8A9FFC456D58053BB00863A /* CloudOAuthCallbackTests.swift */; };
 		FDA1CA373CE0A4957DE0F998 /* DocumentForwardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75003FC35484D74E742DA4F /* DocumentForwardingTests.swift */; };
 		FDE452E6AF0FB5E60E2E94D4 /* CloudAPIClient+CommonGroundNearby.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CC408DCBEA7775ACD45101C /* CloudAPIClient+CommonGroundNearby.swift */; };
@@ -833,6 +835,7 @@
 		91F583054F514DF4B9CE1523 /* ProviderAuthenticationDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderAuthenticationDetailView.swift; sourceTree = "<group>"; };
 		9342AD4F8DA861194BABA573 /* ConversationReadVisibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationReadVisibility.swift; sourceTree = "<group>"; };
 		935EFE99E0807E1CF8BE8FA7 /* ComposerMentionMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerMentionMenuTests.swift; sourceTree = "<group>"; };
+		938A4EACFD00E790B4040BDE /* ConnectorChannelsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorChannelsSection.swift; sourceTree = "<group>"; };
 		93E7D1D9539E63FCEE1942B3 /* DistributionTestFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistributionTestFixture.swift; sourceTree = "<group>"; };
 		942DF88B34C4810542A55879 /* AppIconSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconSettingsTests.swift; sourceTree = "<group>"; };
 		947D36AE16CB8FC9349B6169 /* EmojiAnimationDiskCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiAnimationDiskCache.swift; sourceTree = "<group>"; };
@@ -999,6 +1002,7 @@
 		E73D9AC825DC3BC458F81028 /* ConversationTrajectoryViewport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTrajectoryViewport.swift; sourceTree = "<group>"; };
 		E75003FC35484D74E742DA4F /* DocumentForwardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentForwardingTests.swift; sourceTree = "<group>"; };
 		E7805CAF02455FD762B57398 /* CommonGroundCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundCardView.swift; sourceTree = "<group>"; };
+		E7F93881FE2528473792A1AD /* ConnectorChannelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorChannelsTests.swift; sourceTree = "<group>"; };
 		E82504028486B67BF05F7A51 /* ShareExtensionSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionSupportTests.swift; sourceTree = "<group>"; };
 		E89F1206EB556B444390594D /* Kordi.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Kordi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E9710C8878BC6B3B5D15A24A /* MessageNotificationCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageNotificationCleanupTests.swift; sourceTree = "<group>"; };
@@ -1409,6 +1413,7 @@
 			children = (
 				7A4D3A905ED69987690821A5 /* CloudConnectorsClient.swift */,
 				2428C7194E60C10BB2220EAA /* ConnectorActivityView.swift */,
+				938A4EACFD00E790B4040BDE /* ConnectorChannelsSection.swift */,
 				48C933E64AB182D0C9D4561A /* ConnectorDetailView.swift */,
 				62C13F3A5F2EE6E5B8CFAD5E /* ConnectorsClient.swift */,
 				09DB0E33545CF187A0A499EC /* ConnectorsModel.swift */,
@@ -1604,6 +1609,7 @@
 				935EFE99E0807E1CF8BE8FA7 /* ComposerMentionMenuTests.swift */,
 				EFB88FF6B392D071AA24EB46 /* ComposerMentionTargetCatalogTests.swift */,
 				50F81413AD9566BB9C65BFA1 /* ComposerTextInputIntegrationTests.swift */,
+				E7F93881FE2528473792A1AD /* ConnectorChannelsTests.swift */,
 				415D506669236EB1BE457B68 /* ConnectorsModelTests.swift */,
 				3D3832E4F40194B89E79AB6E /* ConnectorsSettingsLinkTests.swift */,
 				7EAFC364140D5A6229EC819F /* ContactProfileMatchTests.swift */,
@@ -2202,6 +2208,7 @@
 				237035D2841A8F001F917D78 /* ComposerMentionMenuTests.swift in Sources */,
 				ED22FF9AFFB08C5A52F41716 /* ComposerMentionTargetCatalogTests.swift in Sources */,
 				2F0D50358CAA5018BE57AB6B /* ComposerTextInputIntegrationTests.swift in Sources */,
+				FD41B8125D74DB593CBB94BC /* ConnectorChannelsTests.swift in Sources */,
 				5C1EC1453E25A89022265980 /* ConnectorsModelTests.swift in Sources */,
 				F4F141F34DFE5671DF935368 /* ConnectorsSettingsLinkTests.swift in Sources */,
 				5279C7AE232AE58BCA9965D5 /* ContactProfileMatchTests.swift in Sources */,
@@ -2438,6 +2445,7 @@
 				6F2D0803E1F21DA091A51FF8 /* ComposerView.swift in Sources */,
 				77BE0E3F258B0477B5F13232 /* ConnectivityRecoveryObserver.swift in Sources */,
 				50987C956B98A62D3A9B1A20 /* ConnectorActivityView.swift in Sources */,
+				E42A2820938A4FF61791A985 /* ConnectorChannelsSection.swift in Sources */,
 				69B60317B1A3F374C6950257 /* ConnectorDetailView.swift in Sources */,
 				0FB8C0C9566E5071F7CC2B84 /* ConnectorsClient.swift in Sources */,
 				7695AC84ED76E082FEB83793 /* ConnectorsModel.swift in Sources */,

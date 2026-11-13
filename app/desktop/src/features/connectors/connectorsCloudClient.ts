@@ -13,8 +13,9 @@ import {
 } from '@/features/cloud/cloudConnectorsClient';
 import { loadSession } from '@/features/cloud/session';
 
+import { channelOptionsFromServer, channelSettings, chosenChannelsFromSettings } from './connectorChannels';
 import type { ConnectorsClient } from './connectorsClient';
-import { ConnectorGoneError } from './connectorsErrors';
+import { ConnectorGoneError, ConnectorNeedsReconnectError } from './connectorsErrors';
 import {
   connectorCatalog,
   connectorDefinition,
@@ -59,7 +60,7 @@ function emptyState(providerId: ConnectorProviderId): ConnectorState {
 export type CloudConnectorsApi = Pick<
   CloudConnectorsHttpClient,
   'list' | 'listAgents' | 'startOAuth' | 'completeOAuth' | 'setAct' | 'setAgents' | 'audit' | 'delete'
->;
+> & Partial<Pick<CloudConnectorsHttpClient, 'settingOptions' | 'setSettings'>>;
 
 export {
   CONNECTOR_OAUTH_TIMEOUT_MS,
@@ -123,6 +124,7 @@ export function connectorStateFromSummary(
     actEnabled: summary.actEnabled,
     agentIds: [...summary.agentIds],
     lastEventAt: typeof summary.lastEventAt === 'string' && summary.lastEventAt ? summary.lastEventAt : null,
+    ...(providerId === 'slack' ? { channels: chosenChannelsFromSettings(summary.settings) } : {}),
   };
 }
 
@@ -401,6 +403,30 @@ export function createCloudConnectorsClient(options: CloudConnectorsClientOption
       const token = await loadToken();
       await refresh(token);
       return stateFor(providerId);
+    },
+    async listChannels(providerId) {
+      const { settingOptions } = http;
+      if (!settingOptions) throw new Error('Channels cannot be chosen on this server.');
+      return withConnector(providerId, async (token, connector) => {
+        try {
+          const options = await settingOptions.call(http, token, connector.connectorId);
+          return channelOptionsFromServer(options?.channels);
+        } catch (caught) {
+          const code = cloudConnectorErrorCode(caught);
+          if (code === 'connector_scope_missing' || code === 'connector_not_connected') {
+            throw new ConnectorNeedsReconnectError(`Reconnect ${connectorDefinition(providerId).name} to choose channels.`);
+          }
+          throw caught;
+        }
+      });
+    },
+    saveChannels(providerId, channels) {
+      const { setSettings } = http;
+      if (!setSettings) return Promise.reject(new Error('Channels cannot be chosen on this server.'));
+      return withConnector(providerId, async (token, connector) => {
+        const response = await setSettings.call(http, token, connector.connectorId, channelSettings(channels));
+        return remember(response.connector) ?? stateFor(providerId);
+      });
     },
   };
 }

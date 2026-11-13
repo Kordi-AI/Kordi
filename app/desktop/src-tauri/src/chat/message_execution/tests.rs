@@ -1,6 +1,6 @@
 use super::{
-    latest_turn_assistant_entry_id, reserve_shared_request, shared_request_runtime_session_id,
-    DesktopChatManager,
+    finished_turn_reply_text, latest_turn_assistant, latest_turn_assistant_entry_id,
+    reserve_shared_request, shared_request_runtime_session_id, DesktopChatManager,
 };
 use kordi_cli::desktop_runtime::DesktopChatMessage;
 
@@ -71,5 +71,37 @@ fn current_turn_assistant_entry_id_returns_the_new_reply() {
     assert_eq!(
         latest_turn_assistant_entry_id(&messages).as_deref(),
         Some("entry:new")
+    );
+}
+
+#[test]
+fn finished_turn_reply_is_the_current_turns_stored_reply() {
+    let mut reply = message("assistant", Some("entry:new"));
+    reply.text = "Here is your GitHub summary.\n\nPlease paste the Slack channel link.".into();
+    let mut earlier = message("assistant", Some("entry:old"));
+    earlier.text = "An older answer.".into();
+    let messages = vec![
+        earlier.clone(),
+        message("user", Some("entry:user")),
+        reply.clone(),
+    ];
+
+    let assistant = latest_turn_assistant(&messages);
+    assert_eq!(
+        finished_turn_reply_text(assistant).as_deref(),
+        Some(reply.text.as_str())
+    );
+    // A turn with no reply of its own never borrows an earlier one.
+    let unanswered = vec![earlier, message("user", Some("entry:user"))];
+    assert_eq!(
+        finished_turn_reply_text(latest_turn_assistant(&unanswered)),
+        None
+    );
+    // A failed or empty reply keeps the streamed text.
+    reply.failed = true;
+    assert_eq!(finished_turn_reply_text(Some(&reply)), None);
+    assert_eq!(
+        finished_turn_reply_text(Some(&message("assistant", None))),
+        None
     );
 }

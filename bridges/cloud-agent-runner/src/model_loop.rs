@@ -6,6 +6,7 @@ pub(crate) mod omp;
 mod plan_card;
 mod prompt;
 mod provider;
+mod reach_out;
 mod reply;
 
 pub use omp::run_omp_model_loop;
@@ -242,11 +243,7 @@ pub(crate) async fn execute_model_tool<C: CloudAgentRunClient + Sync>(
         return client
             .agent_exchange(&run.run_id, &call.id, call.arguments.clone())
             .await
-            .map_err(|_| {
-                Value::String(
-                    "The agent request was not confirmed. Do not claim it was sent.".into(),
-                )
-            });
+            .map_err(|error| reach_out::failure(&error.to_string()).into());
     }
     if call.name == kordi_tools::plan_card::NAME {
         return plan_card::call(client, run, call).await;

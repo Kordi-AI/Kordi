@@ -32,6 +32,11 @@ final class ConnectorsStore: ObservableObject {
         }
     }
 
+    /// Records a state a screen received directly, such as saved channels.
+    func apply(_ state: ConnectorState) {
+        states[state.providerId] = state
+    }
+
     /// Runs a state-changing call. Returns true on success.
     @discardableResult
     func perform(

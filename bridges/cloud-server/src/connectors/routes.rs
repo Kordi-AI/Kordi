@@ -39,6 +39,10 @@ pub fn routes(state: Arc<ServerState>) -> Router {
             "/v1/cloud/connectors/:id/settings",
             put(super::settings::set_settings),
         )
+        .route(
+            "/v1/cloud/connectors/:id/settings/options",
+            get(super::setting_options::setting_options_route),
+        )
         .route("/v1/cloud/connectors/:id/audit", get(list_audit))
         .route(
             "/v1/cloud/connectors/:id/audit/declined",

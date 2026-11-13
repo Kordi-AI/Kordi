@@ -76,6 +76,8 @@ pub(super) fn append_agent_message(
                 match item {
                     AssistantContent::Text { text } => {
                         if !text.trim().is_empty() {
+                            // Each text block is its own part of the reply.
+                            kordi_core::types::TurnSegment::start_text(&mut turn.segments);
                             kordi_core::types::TurnSegment::append_text(&mut turn.segments, &text);
                             turn.assistant_text_parts.push(text);
                         }

@@ -51,7 +51,13 @@ export type ConnectorState = {
    * permission is missing. Omitted (false) for service connectors.
    */
   enabled?: boolean;
+  /** Slack only: the channels chosen for Kordi, with names when known. */
+  channels?: ConnectorChannel[];
 };
+
+export type ConnectorChannel = { id: string; name: string | null };
+/** A channel the person can choose, as the provider lists it. */
+export type ConnectorChannelOption = { id: string; name: string; isPrivate: boolean };
 
 export type ConnectorAgent = { agentId: string; name: string; isDefault: boolean };
 
