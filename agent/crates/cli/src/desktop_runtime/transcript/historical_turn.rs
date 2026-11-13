@@ -46,7 +46,10 @@ pub(super) fn flush_historical_turn(
         return;
     }
 
-    let assistant_text = turn.assistant_text_parts.join("\n\n");
+    // The reply keeps the turn's earlier user-facing text with the final
+    // answer last; see `kordi_core::types::fold_turn_reply_segments`.
+    let mut segments = turn.segments;
+    let assistant_text = kordi_core::types::fold_turn_reply_segments(&mut segments);
     let thinking_text = turn.thinking_parts.join("\n\n");
     let interrupted = !turn.cancelled && turn.awaiting_final_response;
     let failed = turn.failed || interrupted;
@@ -68,7 +71,7 @@ pub(super) fn flush_historical_turn(
         cancelled: turn.cancelled,
         attachments: Vec::new(),
         thinking_text: (!thinking_text.trim().is_empty()).then_some(thinking_text),
-        segments: turn.segments,
+        segments,
         tools: turn.tools,
         entry_id: turn.last_entry_id,
     });

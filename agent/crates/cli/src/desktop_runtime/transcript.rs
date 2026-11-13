@@ -27,6 +27,9 @@ pub(in crate::desktop_runtime) fn load_session_messages(
 }
 
 #[cfg(test)]
+mod turn_reply_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use anyhow::Result;
@@ -273,9 +276,14 @@ mod tests {
         let assistant = messages.last().expect("assistant message");
         assert!(!assistant.failed);
         let segments = serde_json::to_value(&assistant.segments)?;
-        assert_eq!(segments[0]["text"], "Inspecting the example.");
+        // The earlier text moves into the reply, which the last segment shows.
+        assert_eq!(segments[0]["text"], "");
         assert_eq!(segments[1]["toolId"], "tool-1");
-        assert_eq!(segments[2]["text"], "Final report");
+        assert_eq!(
+            segments[2]["text"],
+            "Inspecting the example.\n\nFinal report"
+        );
+        assert_eq!(assistant.text, "Inspecting the example.\n\nFinal report");
         let tool = assistant.tools.first().expect("tool snapshot");
         assert_eq!(tool.tool_layer.as_deref(), Some("observation"));
         assert_eq!(

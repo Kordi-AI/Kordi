@@ -384,17 +384,25 @@ fn fail_chat_request(snapshot: &Arc<Mutex<DesktopChatTurnSnapshot>>, error: Stri
     });
 }
 
+fn latest_turn_assistant(messages: &[DesktopChatMessage]) -> Option<&DesktopChatMessage> {
+    messages
+        .iter()
+        .rev()
+        .take_while(|message| !message.role.trim().eq_ignore_ascii_case("user"))
+        .find(|message| message.role.trim().eq_ignore_ascii_case("assistant"))
+}
+
+/// The reply of a finished turn as its transcript stores it: it keeps text
+/// written before the turn's last tool call (see
+/// `kordi_core::types::fold_turn_reply_segments`), while the streamed text runs
+/// every message's text together without breaks.
+fn finished_turn_reply_text(assistant: Option<&DesktopChatMessage>) -> Option<String> {
+    let message = assistant.filter(|message| !message.failed && !message.cancelled)?;
+    (!message.text.trim().is_empty()).then(|| message.text.clone())
+}
+
 fn latest_turn_assistant_entry_id(messages: &[DesktopChatMessage]) -> Option<String> {
-    for message in messages.iter().rev() {
-        let role = message.role.trim();
-        if role.eq_ignore_ascii_case("user") {
-            return None;
-        }
-        if role.eq_ignore_ascii_case("assistant") {
-            return message.entry_id.clone();
-        }
-    }
-    None
+    latest_turn_assistant(messages).and_then(|message| message.entry_id.clone())
 }
 
 async fn finish_turn(
@@ -422,13 +430,11 @@ async fn finish_turn(
         }
         Ok(detail) => {
             let transcript_entry_id = latest_turn_assistant_entry_id(&detail.messages);
-            let segments = detail
-                .messages
-                .iter()
-                .rev()
-                .find(|message| message.role == "assistant")
+            let assistant = latest_turn_assistant(&detail.messages);
+            let segments = assistant
                 .map(|message| message.segments.clone())
                 .unwrap_or_default();
+            let reply_text = finished_turn_reply_text(assistant);
             sync_completed_session(cwd, session_id, session_handle, is_agent_builder_session).await;
             let task_tools = {
                 let session = session_handle.lock().await;
@@ -443,6 +449,9 @@ async fn finish_turn(
                 }
                 if !segments.is_empty() {
                     state.segments = segments;
+                }
+                if let Some(text) = reply_text {
+                    state.assistant_text = text;
                 }
                 state.status = "succeeded".to_string();
                 state.message = "Response complete".to_string();
