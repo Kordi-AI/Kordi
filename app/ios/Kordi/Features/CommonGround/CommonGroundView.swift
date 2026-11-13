@@ -125,6 +125,7 @@ struct CommonGroundView: View {
         .overlay(alignment: .top) { CommonGroundToast(text: $model.notice) }
         .environmentObject(model)
         .environment(\.commonGroundOpenConversation, onOpenConversation)
+        .environment(\.commonGroundSignedIn, model.me)
         .tint(chatTheme.accent)
     }
 
