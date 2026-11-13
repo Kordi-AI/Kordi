@@ -522,3 +522,117 @@ test('buildCollaborationMentionTargetsByScope includes group-only people but onl
   assert.equal(targets.project.some((target) => target.targetKind === 'all'), false);
   assert.equal(targets.chat.some((target) => target.label === "Bob's Kordi"), false);
 });
+
+function nonContactGroup(): { state: DesktopCollaborationState; group: Conversation } {
+  const state = collaborationState();
+  state.activeHostId = 'cloud';
+  state.hosts = [{
+    ...state.hosts[0],
+    id: 'cloud',
+    nodeId: 'acct_bea',
+    humanId: 'acct_bea',
+    ownerName: 'Bea',
+    displayName: 'Bea',
+    agents: [{ ...state.hosts[0].agents[0], id: 'cloud-local-agent', nodeId: 'acct_bea', runtime: 'kordi-desktop' }],
+    // Bea joined from a Grounding room invitation: Alex is not a contact.
+    visiblePeers: [],
+    visiblePeerCount: 0,
+  }];
+  const group = {
+    id: 'session:group:room',
+    canonicalSessionId: 'session:group:room',
+    name: 'Room group',
+    type: 'owned-agent',
+    subtitle: '',
+    unread: 0,
+    collaborationSources: ['cloud'],
+    trust: 'Cloud',
+    directness: 'Group chat',
+    participantSpaceId: 'group:room',
+    participants: ['Bea', 'Alex Rivera'],
+    canonicalParticipants: [
+      { id: 'human:acct_bea', name: 'Bea', kind: 'human', role: 'self', source: 'local', humanId: 'acct_bea', sourceIdentityId: 'acct_bea' },
+      { id: 'human:acct_alex', name: 'Alex Rivera', kind: 'human', role: 'person', source: 'bridge', sourceHostId: 'cloud', humanId: 'acct_alex', sourceIdentityId: 'acct_alex' },
+    ],
+    messages: [],
+  } as Conversation;
+  return { state, group };
+}
+
+function defaultAgentSummary(ownerAccountId: string, ownerDisplayName: string) {
+  return {
+    agentId: `cloud-agent:${ownerAccountId}`,
+    ownerAccountId,
+    ownerDisplayName,
+    accessScope: 'participant_conversations' as const,
+    name: 'Kordi',
+    role: 'Default agent',
+    description: null,
+    avatarUrl: null,
+    avatar: {
+      entityType: 'agent',
+      entityId: `cloud-agent:${ownerAccountId}`,
+      source: 'generated' as const,
+      style: 'thumbs' as const,
+      seed: `default-agent-${ownerAccountId}`,
+      rendererVersion: 'test',
+      uploadedAsset: null,
+      version: 1,
+      updatedAt: '2026-11-13T00:00:00Z',
+    },
+    updatedAt: '2026-11-13T00:00:00Z',
+    isDefaultAgent: true,
+  };
+}
+
+test('buildCollaborationMentionTargetsByScope offers a non-contact group member’s default agent', () => {
+  const { state, group } = nonContactGroup();
+  const targets = buildCollaborationMentionTargetsByScope({
+    isNativeShell: true,
+    desktopCollaborationState: state,
+    desktopChatState: desktopChatState(),
+    activeConvMentionScope: group,
+    sharedCloudAgents: [defaultAgentSummary('acct_alex', 'Alex Rivera'), defaultAgentSummary('acct_bea', 'Bea')],
+  });
+
+  const agents = targets.chat.filter((target) => target.targetKind === 'agent');
+  const alexAgent = agents.find((target) => target.agentId === 'cloud-agent:acct_alex');
+  assert.equal(alexAgent?.label, "Alex Rivera's Kordi");
+  assert.equal(alexAgent?.detail, 'Owner · Alex Rivera');
+  assert.equal(alexAgent?.humanId, 'acct_alex');
+  // The viewer's own default agent stays the local agent, listed once.
+  assert.equal(agents.some((target) => target.agentId === 'cloud-agent:acct_bea'), false);
+  assert.equal(agents.length, 2);
+  // Outside group chats, a default agent comes only from the contact list.
+  const projectTargets = targets.project.filter((target) => target.targetKind === 'agent' && target.agentId === 'cloud-agent:acct_alex');
+  assert.equal(projectTargets.length, 0);
+});
+
+test('buildCollaborationMentionTargetsByScope lists a contact’s default agent once', () => {
+  const { state, group } = nonContactGroup();
+  state.hosts[0].visiblePeers = [{
+    endpoint: 'cloud',
+    nodeId: 'acct_alex',
+    displayName: "Alex Rivera's Kordi",
+    ownerName: 'Alex Rivera',
+    runtime: 'kordi-desktop',
+    humanId: 'acct_alex',
+    agentId: 'cloud-agent:acct_alex',
+    isDefaultAgent: true,
+    isContact: true,
+    contactRequestStatus: 'approved',
+    sharedProjects: [],
+  }];
+  state.hosts[0].visiblePeerCount = 1;
+  const targets = buildCollaborationMentionTargetsByScope({
+    isNativeShell: true,
+    desktopCollaborationState: state,
+    desktopChatState: desktopChatState(),
+    activeConvMentionScope: group,
+    sharedCloudAgents: [defaultAgentSummary('acct_alex', 'Alex Rivera')],
+  });
+  const alexAgents = targets.chat.filter((target) => target.targetKind === 'agent' && target.agentId === 'cloud-agent:acct_alex');
+  assert.equal(alexAgents.length, 1);
+  assert.equal(alexAgents[0]?.sourceHostId, 'cloud');
+  assert.equal(alexAgents[0]?.runtime, 'kordi-desktop');
+});

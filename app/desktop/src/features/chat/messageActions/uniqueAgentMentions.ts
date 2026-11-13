@@ -50,9 +50,19 @@ export function uniqueAgentMentionCandidates(
   reservedHandles: readonly string[] = [],
 ) {
   const used = new Set(reservedHandles.map((handle) => normalizeMentionLabel(mentionHandleForLabel(handle))));
+  // A contact's default agent is already listed from the contact; the
+  // co-member listing of the same agent is not a second agent.
+  const collaborationAgentIds = new Set(collaboration
+    .filter((candidate) => candidate.targetKind === 'agent')
+    .map((candidate) => candidate.peer.agentId?.trim())
+    .filter(Boolean));
   return {
     collaboration: reserveAgentMentionHandles(collaboration, used, (candidate) => identitySuffixForCandidate(candidate)),
-    shared: reserveAgentMentionHandles(shared, used, (candidate) => candidate.targetOwnerAccountId),
+    shared: reserveAgentMentionHandles(
+      shared.filter((candidate) => !collaborationAgentIds.has(candidate.targetAgentId)),
+      used,
+      (candidate) => candidate.targetOwnerAccountId,
+    ),
   };
 }
 

@@ -185,11 +185,19 @@ export function sharedCloudAgentMentionCandidatesForConversation(
   if (!conversationHasParticipantMentionScope(conversation)) return [];
   const localOwnerAccountId = normalizedOwnerKey(localAccountId);
   const localViewerIsParticipant = conversationImpliesLocalViewerParticipant(conversation);
+  const isGroup = conversationHasGroupMentionScope(conversation);
   const candidates = agents
+    // Another member's default agent is offered in group chats only, where
+    // co-members may mention it without being contacts
+    // (docs/contact-permissions.md). The viewer's own is the local agent.
+    .filter((agent) => !agent.isDefaultAgent
+      || (isGroup && normalizedOwnerKey(agent.ownerAccountId) !== localOwnerAccountId))
     .filter((agent) => conversationContainsAccountId(conversation, agent.ownerAccountId)
       || (localViewerIsParticipant && normalizedOwnerKey(agent.ownerAccountId) === localOwnerAccountId))
     .map((agent) => {
-      const displayLabel = agent.name;
+      const displayLabel = agent.isDefaultAgent
+        ? defaultAgentDisplayName(agent.ownerDisplayName, agent.name)
+        : agent.name;
       const handle = mentionHandleForLabel(displayLabel, agent.agentId);
       const owner = agent.ownerDisplayName?.trim() || agent.ownerAccountId;
       return {

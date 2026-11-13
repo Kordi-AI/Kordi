@@ -334,6 +334,7 @@ final class AppModel: ObservableObject {
     private var canonicalConversationIDBySessionID: [String: String] = [:]
     @Published private var ownedCloudAgents: [CloudAgent] = []
     @Published private var sharedCloudAgents: [CloudAgent] = []
+    @Published private var groupMemberDefaultAgents: [CloudGroupMemberDefaultAgent] = []
     private var hiddenCloudSessionIds = Set<String>()
     private var deletedCloudSessionIds = Set<String>()
     private var sessionVisibilityMutationRevision = 0
@@ -790,6 +791,7 @@ final class AppModel: ObservableObject {
         canonicalConversationIDBySessionID = [:]
         ownedCloudAgents = []
         sharedCloudAgents = []
+        groupMemberDefaultAgents = []
         connectorsClientCache = nil
         connectorsVersion = nil
         connectorsCapabilityNeedsRetry = true
@@ -3704,7 +3706,8 @@ final class AppModel: ObservableObject {
             conversation: conversation,
             ownedAgents: ownedCloudAgents,
             sharedAgents: sharedCloudAgents,
-            contacts: contacts
+            contacts: contacts,
+            groupMemberDefaultAgents: groupMemberDefaultAgents
         )
     }
 
@@ -3727,6 +3730,19 @@ final class AppModel: ObservableObject {
                   sessionIdentity.contains(token),
                   self.account?.accountId == accountID else { return }
             replaceSharedCloudAgents(refreshedAgents, forOwnerAccountIDs: ownerAccountIDs)
+            // Co-members who are not contacts: their default agents.
+            if conversation.kind == .group {
+                let defaults = try await api.listGroupMemberDefaultAgents(
+                    token: token,
+                    ownerAccountIds: ownerAccountIDs
+                )
+                guard !Task.isCancelled,
+                      sessionIdentity.contains(token),
+                      self.account?.accountId == accountID else { return }
+                let refreshedOwners = Set(ownerAccountIDs)
+                let next = groupMemberDefaultAgents.filter { !refreshedOwners.contains($0.ownerAccountId) } + defaults
+                if next != groupMemberDefaultAgents { groupMemberDefaultAgents = next }
+            }
         } catch {
             if CloudTransportErrorPolicy.isCancellation(error) || Task.isCancelled { return }
             // Mention refresh is best effort. Keep the last usable catalog and
