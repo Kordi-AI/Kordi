@@ -1,6 +1,7 @@
-//! The fallback message: documents no reply took, posted in their group as
-//! the agent's own message, with the same identity as the agent's replies
-//! (`senderKind: "agent"` and the agent's id, sent by its owner's account).
+//! The document message: documents no reply took, or a background session's
+//! documents, posted in their group as the agent's own message, with the same
+//! identity as the agent's replies (`senderKind: "agent"` and the agent's id,
+//! sent by its owner's account).
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde_json::{json, Map, Value};
