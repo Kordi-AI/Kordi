@@ -9,7 +9,9 @@
 //! is recorded once. The cursor moves only after a successful poll, and only
 //! as far as the newest event actually stored.
 
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::Mutex;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use sqlx_core::query::query;
@@ -19,7 +21,7 @@ use sqlx_postgres::PgPool;
 use super::events::{record_event, NewConnectorEvent};
 use super::models::{ConnectorRecord, CONNECTOR_COLUMNS};
 use super::providers::{PolledEvent, ProviderError};
-use super::refresh::usable_secret;
+use super::refresh::{usable_secret, UnusableSecret};
 use super::store::{self, StoreResult};
 use super::ConnectorRuntime;
 
@@ -144,6 +146,12 @@ async fn poll_connector(
     };
     let secret = match usable_secret(pool, runtime, provider.as_ref(), &record.connector_id).await {
         Ok(secret) => secret,
+        Err(UnusableSecret::ClientNotConfigured) => {
+            // Every sweep would fail the same way until an operator adds the
+            // provider's OAuth client, so say it once per provider and move on.
+            note_client_not_configured(&record.provider);
+            return outcome;
+        }
         Err(error) => {
             eprintln!("[connectors] poll {}: {error}", record.connector_id);
             outcome.failed = true;
@@ -282,6 +290,21 @@ async fn note_failure(pool: &PgPool, record: &ConnectorRecord, error: &ProviderE
     );
     if matches!(error, ProviderError::Unauthorized) {
         let _ = store::mark_needs_reauth(pool, &record.connector_id).await;
+    }
+}
+
+/// Logs once per provider per process that polling skips its connectors
+/// because this server has no OAuth client to refresh their tokens.
+fn note_client_not_configured(provider: &str) {
+    static NOTED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
+    let first = NOTED
+        .lock()
+        .map(|mut noted| noted.insert(provider.to_string()))
+        .unwrap_or(false);
+    if first {
+        eprintln!(
+            "[connectors] skipping {provider} polling: its OAuth client is not configured on this server"
+        );
     }
 }
 

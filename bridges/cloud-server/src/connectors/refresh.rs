@@ -149,6 +149,28 @@ async fn refresh_locked(
     Ok(refreshed)
 }
 
+/// Why the polling job has no usable credential for a connector.
+#[derive(Debug)]
+pub(crate) enum UnusableSecret {
+    /// This server has no OAuth client for the provider, so the expired
+    /// token cannot be refreshed. Not the connector's fault: polling skips it
+    /// until the client is configured.
+    ClientNotConfigured,
+    /// Any other failure, as a fixed phrase safe to log.
+    Failed(String),
+}
+
+impl std::fmt::Display for UnusableSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ClientNotConfigured => {
+                f.write_str("the connector OAuth client is not configured")
+            }
+            Self::Failed(phrase) => f.write_str(phrase),
+        }
+    }
+}
+
 /// A decrypted, current credential for the polling job and subscription
 /// renewal, refreshed through the locked step when it is about to expire.
 pub(crate) async fn usable_secret(
@@ -156,17 +178,21 @@ pub(crate) async fn usable_secret(
     runtime: &ConnectorRuntime,
     provider: &dyn ConnectorProvider,
     connector_id: &str,
-) -> Result<ConnectorSecret, String> {
-    let cipher = runtime
-        .cipher
-        .as_deref()
-        .ok_or_else(|| "connector encryption is not configured".to_string())?;
+) -> Result<ConnectorSecret, UnusableSecret> {
+    let cipher = runtime.cipher.as_deref().ok_or_else(|| {
+        UnusableSecret::Failed("connector encryption is not configured".to_string())
+    })?;
     let secret = load_secret(pool, cipher, connector_id)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| UnusableSecret::Failed(error.to_string()))?;
     refresh_if_needed(pool, cipher, provider, connector_id, secret)
         .await
-        .map_err(|failure| failure.audit_phrase().to_string())
+        .map_err(|failure| match failure {
+            RefreshFailure::Provider(ProviderError::NotConfigured(_)) => {
+                UnusableSecret::ClientNotConfigured
+            }
+            failure => UnusableSecret::Failed(failure.audit_phrase().to_string()),
+        })
 }
 
 /// Runs one tool with the connector's settings. When the provider answers
