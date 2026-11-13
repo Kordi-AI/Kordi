@@ -113,3 +113,24 @@ test('the join request card is read from a System message and shows its state', 
   assert.ok(cancelled);
   assert.match(renderToStaticMarkup(createElement(GroupJoinRequestCardContent, { snapshot: cancelled })), /Withdrawn/);
 });
+
+test('the join request card resolves kordi-avatar markers instead of loading them as images', () => {
+  const marker = 'kordi-avatar://dicebear-rust-10.6.0-styles-10.5.0/lorelei/chen_seed?version=1';
+  const card = normalizeGroupJoinRequestCard({ ...block, requester: { accountId: 'acct_chen', name: 'Chen Li', avatarUrl: marker } });
+  assert.ok(card);
+  const markup = renderToStaticMarkup(createElement(GroupJoinRequestCardContent, { snapshot: card }));
+  assert.doesNotMatch(markup, /src="kordi-avatar:/);
+  assert.match(markup, /boring-marble-v1\/chen_seed\.png/);
+
+  const uploaded = normalizeGroupJoinRequestCard({ ...block, requester: { accountId: 'acct_chen', name: 'Chen Li', avatarUrl: 'https://images.example.test/chen.png' } });
+  assert.ok(uploaded);
+  assert.match(renderToStaticMarkup(createElement(GroupJoinRequestCardContent, { snapshot: uploaded })), /https:\/\/images.example.test\/chen\.png/);
+});
+
+test('approver rows in the room resolve kordi-avatar markers', async () => {
+  const marker = 'kordi-avatar://dicebear-rust-10.6.0-styles-10.5.0/lorelei/chen_seed?version=1';
+  const { markup } = await render([group({ joined: true, requests: [{ requestId: 'req_1', person: { ...person('acct_chen'), name: 'Chen Li', avatarUrl: marker }, createdAt: '2026-11-13T10:00:00Z' }] })]);
+  const html = markup();
+  assert.doesNotMatch(html, /src="kordi-avatar:/);
+  assert.match(html, /boring-marble-v1\/chen_seed\.png/);
+});

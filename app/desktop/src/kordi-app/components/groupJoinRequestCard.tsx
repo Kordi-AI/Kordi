@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { groupJoinRequestRequest, type GroupJoinRequestCard } from '@/features/cloud/groupJoinRequest';
 import { cachedSessionSnapshot, CLOUD_SESSION_CHANGED_EVENT, loadSession } from '@/features/cloud/session';
-
-function initials(name: string) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('');
-}
+import { IdentityAvatar } from './IdentityAvatar';
 
 function firstName(name: string | null) {
   return name?.trim().split(/\s+/)[0] ?? '';
@@ -74,8 +71,9 @@ export function GroupJoinRequestCardContent({ snapshot }: { snapshot: GroupJoinR
   return (
     <section className="app-plan-card app-join-request-card" aria-label={`${requester.name} asked to join`} aria-busy={busy}>
       <div className="app-plan-card-head">
-        <span className="app-plan-card-avatar app-join-request-avatar" aria-hidden="true">
-          {requester.avatarUrl ? <img className="app-plan-card-avatar-image" src={requester.avatarUrl} alt="" /> : initials(requester.name)}
+        {/* The shared avatar resolves kordi-avatar:// markers and remote pictures, and falls back to the generated avatar. */}
+        <span className="app-join-request-avatar" aria-hidden="true">
+          <IdentityAvatar kind="human" seed={requester.accountId} name={requester.name} imageUrl={requester.avatarUrl} cornerRadius="50%" className="h-full w-full" />
         </span>
         <div className="app-plan-card-heading">
           <div className="app-plan-card-title">{requester.name} asked to join</div>
