@@ -233,7 +233,12 @@ export class CommonGroundStore {
   }
 
   private loadActivity() {
-    return Promise.all([this.loadRooms(), this.client.recent().then(({ people }) => this.set({ recent: people })).catch(() => undefined)]);
+    return Promise.all([this.loadRooms(), this.loadRecent()]);
+  }
+
+  /** Refreshes Recent; a failed request keeps the list shown. */
+  loadRecent(): Promise<void> {
+    return this.client.recent().then(({ people }) => this.set({ recent: people })).catch(() => undefined);
   }
 
   /** Refreshes the Rooms list; an older server without the route hides it. */

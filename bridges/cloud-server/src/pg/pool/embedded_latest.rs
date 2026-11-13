@@ -31,4 +31,9 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "0198_agent_exchange_wait_limit.sql"
     ),
     migration!(199, "facilitator cards", "0199_facilitator_cards.sql"),
+    migration!(
+        200,
+        "common ground rematch",
+        "0200_common_ground_rematch.sql"
+    ),
 ];

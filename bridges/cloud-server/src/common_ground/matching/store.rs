@@ -200,10 +200,33 @@ pub(in crate::common_ground) async fn queue_matches(
     room_id: Option<Uuid>,
     organization_id: Option<&str>,
 ) -> sqlx_core::Result<Queued> {
+    let queued = queue_new_matches(
+        pool,
+        service,
+        rate_limiter,
+        viewer,
+        stale,
+        room_id,
+        organization_id,
+    );
+    Ok(queued.await?.0)
+}
+
+/// [`queue_matches`], and whether this call queued the run: false when a
+/// run already at work, or other people's open runs, stand for it.
+pub(super) async fn queue_new_matches(
+    pool: &PgPool,
+    service: &crate::system_agent::SystemAgentConfig,
+    rate_limiter: &CloudRateLimiter,
+    viewer: &SharedCard,
+    stale: &[SharedCard],
+    room_id: Option<Uuid>,
+    organization_id: Option<&str>,
+) -> sqlx_core::Result<(Queued, bool)> {
     // The viewer asked, so only declining stops them; another person's
     // card reaches the model only when they allowed AI (`crate::ai_consent`).
     if crate::ai_consent::is_declined(pool, &viewer.account_id).await? {
-        return Ok(Queued::Skipped);
+        return Ok((Queued::Skipped, false));
     }
     let ids: Vec<String> = stale
         .iter()
@@ -217,7 +240,7 @@ pub(in crate::common_ground) async fn queue_matches(
         .cloned()
         .collect();
     if stale.is_empty() {
-        return Ok(Queued::Skipped);
+        return Ok((Queued::Skipped, false));
     }
     let mut tx = pool.begin().await?;
     if let Some(room_id) = room_id {
@@ -228,7 +251,7 @@ pub(in crate::common_ground) async fn queue_matches(
         .execute(&mut *tx)
         .await?;
     if let Some(pending) = blocking_run(pool, "viewer_profile_id", &viewer.profile_id).await? {
-        return Ok(Queued::Pending(pending));
+        return Ok((Queued::Pending(pending), false));
     }
     // Another person's run stores the pair for the viewer only when the
     // viewer allowed AI, as they did (`finish::both_ways`).
@@ -238,10 +261,10 @@ pub(in crate::common_ground) async fn queue_matches(
         not_covered(&mut tx, viewer, stale).await?
     };
     if stale.is_empty() {
-        return Ok(Queued::Pending(Pending::Running));
+        return Ok((Queued::Pending(Pending::Running), false));
     }
     if let Some(retry_after) = charge(rate_limiter, &viewer.account_id).await {
-        return Ok(Queued::Limited(retry_after));
+        return Ok((Queued::Limited(retry_after), false));
     }
     if let Some(room_id) = room_id {
         rooms::announce_matching(&mut tx, room_id).await?;
@@ -271,12 +294,11 @@ pub(in crate::common_ground) async fn queue_matches(
     };
     if !runs::insert(&mut tx, service, new_run).await? {
         // The resource pool's daily limit is used up until the next UTC day.
-        return Ok(Queued::Limited(
-            crate::resource_pools::usage::until_next_day(),
-        ));
+        let retry_after = crate::resource_pools::usage::until_next_day();
+        return Ok((Queued::Limited(retry_after), false));
     }
     tx.commit().await?;
-    Ok(Queued::Pending(Pending::Running))
+    Ok((Queued::Pending(Pending::Running), true))
 }
 
 /// Identifies a room's member set, shared profiles and card revisions.

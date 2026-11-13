@@ -218,18 +218,26 @@ test('a match hint refreshes a match page that is still matching; a room hint do
   assert.equal(store.getSnapshot().matches.acct_b.score, 40);
 });
 
-test('on Home a room hint refreshes the Rooms list; a match hint there and other screens ignore hints', async () => {
+test('on Home a room hint refreshes the Rooms list and a match hint Recent; other screens ignore hints', async () => {
   const summary = { code: '4821', name: '', open: true, memberCount: 3, joinedAt: '', lastActivityAt: '', themeCount: 2 };
-  const { calls, client } = mockServer({ 'GET rooms': { status: 200, body: { rooms: [summary] } } });
+  const { calls, client } = mockServer({
+    'GET rooms': { status: 200, body: { rooms: [summary] } },
+    'GET recent': { status: 200, body: { people: [{ person: person('acct_b'), score: 72, headline: 'Agent memory' }] } },
+  });
   const store = new CommonGroundStore(client);
-  store.set({ loaded: true, owner: owner() });
+  store.set({ loaded: true, owner: owner(), recent: [{ person: person('acct_b'), score: null, headline: null }] });
+  const routes = () => calls.map((call) => call.url.split('/common-ground/')[1]);
   await receiveRoomHints(store, matchHint);
-  assert.equal(calls.length, 0);
+  assert.deepEqual(store.getSnapshot().recent.map((entry) => entry.score), [72], 'a match refreshed after a card update shows its score again');
+  assert.deepEqual(routes(), ['recent']);
   await receiveRoomHints(store, roomHint('4821'));
   assert.deepEqual(store.getSnapshot().roomList.map((entry) => entry.memberCount), [3]);
+  assert.deepEqual(routes(), ['recent', 'rooms']);
+  await receiveRoomHints(store, { codes: ['4821'], matches: true });
+  assert.deepEqual(routes().slice(2).sort(), ['recent', 'rooms']);
   store.set({ stack: [home, { name: 'card' }] });
   await receiveRoomHints(store, { codes: ['4821'], matches: true });
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 4);
 });
 
 test('a hint waits for a user action and for the window to show, and does nothing after dispose', async () => {

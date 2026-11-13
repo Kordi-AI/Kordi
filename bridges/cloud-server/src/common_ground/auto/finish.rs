@@ -84,11 +84,13 @@ pub(in crate::common_ground) async fn complete(
         .await?;
         return tx.commit().await;
     };
+    // A change also marks the card's matches to run again (`matching::rematch`).
     query(
         "UPDATE cloud_common_ground_cards SET topics_json = $3, evidence_json = $4,
              hidden_json = $5, revision = revision + 1,
              built_at = GREATEST(built_at, auto_started_at), auto_seen_at = auto_started_at,
-             auto_run_id = NULL, auto_evidence_json = NULL, updated_at = now()
+             auto_run_id = NULL, auto_evidence_json = NULL, rematch_at = now(),
+             updated_at = now()
          WHERE profile_id = $1 AND auto_run_id = $2",
     )
     .bind(&profile_id)

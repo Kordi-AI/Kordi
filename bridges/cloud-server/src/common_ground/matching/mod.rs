@@ -3,16 +3,19 @@
 //! topic pairs; the server checks every pair against the cards, scores it,
 //! and keeps the result for the pair of profiles and the card revisions it
 //! was computed from. A finding that reads the same to either person is
-//! kept for both of them, so each pair runs once.
+//! kept for both of them, so each pair runs once. A card that changed is
+//! matched again with the people it is still linked to (`rematch`).
 
 mod finish;
 pub(super) mod prompt;
 mod recent;
+mod rematch;
 mod routes;
 mod store;
 
 pub(super) use finish::{complete, fail};
 pub(super) use recent::recent;
+pub(super) use rematch::rematch;
 pub(super) use routes::{match_detail, results};
 pub(super) use store::{fresh_results, queue_matches, stored_results, Pending, Queued};
 
