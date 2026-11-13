@@ -225,7 +225,16 @@ export type CgGroup = {
   topic?: string | null;
   /** Humans only, creator first, up to eight; missing on older servers. */
   members?: CgPerson[];
+  /** Whether you may ask to join; absent on servers without join requests. */
+  canAskToJoin?: boolean;
+  /** Your latest request to join this group from this room. */
+  joinRequest?: { requestId: string; status: CgJoinRequestStatus } | null;
+  /** Pending requests, for the people who can approve them. */
+  requests?: CgPendingJoinRequest[];
 };
+
+export type CgJoinRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
+export type CgPendingJoinRequest = { requestId: string; person: CgPerson; createdAt: string };
 
 export type CgInvitation = { invitationRef: string; groupSpaceId: string; name: string; from: CgPerson; createdAt: string };
 

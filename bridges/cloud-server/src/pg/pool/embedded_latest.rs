@@ -36,4 +36,9 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "common ground rematch",
         "0200_common_ground_rematch.sql"
     ),
+    migration!(
+        201,
+        "common ground room join requests",
+        "0201_common_ground_room_join_requests.sql"
+    ),
 ];

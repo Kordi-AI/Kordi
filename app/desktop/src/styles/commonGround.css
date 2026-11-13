@@ -58,6 +58,12 @@
   content: ""; position: absolute; top: 0; right: 0; left: 12px; border-top: 1px solid var(--cg-line);
 }
 .cg-row.is-button { cursor: pointer; }
+.cg-row-nested > .cg-row { padding-left: 52px; }
+.cg-row-nested > .cg-row::before,
+.cg-row-nested + .cg-row::before {
+  content: ""; position: absolute; top: 0; right: 0; left: 52px; border-top: 1px solid var(--cg-line);
+}
+.cg-row-nested + .cg-row::before { left: 12px; }
 .cg-row.is-button:hover { background: var(--cg-fill); }
 .cg-row-text { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .cg-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }

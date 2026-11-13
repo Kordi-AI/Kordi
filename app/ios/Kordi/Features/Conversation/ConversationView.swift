@@ -1525,7 +1525,21 @@ struct ConversationView: View {
                 ConversationTimestampDivider(date: message.createdAt)
             }
 
-            if message.isSystemNotice {
+            if let joinRequest = message.groupJoinRequest {
+                // The card replaces the notice's plain-text line.
+                GroupJoinRequestCardView(
+                    snapshot: joinRequest,
+                    accountId: model.account?.accountId,
+                    memberName: { accountId in
+                        conversation.groupParticipants.first { $0.accountId == accountId }?.displayName
+                    },
+                    request: { id, action in
+                        try await model.groupJoinRequest(id: id, action: action)
+                    }
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            } else if message.isSystemNotice {
                 SystemNoticeRow(text: AgentModelPresentation.notice(message))
                     .padding(.vertical, 8)
             } else {

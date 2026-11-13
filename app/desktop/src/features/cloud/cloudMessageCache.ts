@@ -1,4 +1,5 @@
 import { normalizeFacilitatorCard } from './facilitatorCard';
+import { normalizeGroupJoinRequestCard } from './groupJoinRequest';
 import { normalizePlanCardSnapshot } from './planCardSnapshot';
 import type { CloudMessage, CloudMessageAttachment } from './authClient';
 import {
@@ -101,6 +102,7 @@ function normalizedMessage(accountId: string, value: unknown): CloudMessage | nu
   const voiceMessage = cloudVoiceMessageMetadataOnly(record.voiceMessage);
   const planCard = normalizePlanCardSnapshot(record.planCard);
   const facilitatorCard = normalizeFacilitatorCard(record.facilitatorCard);
+  const groupJoinRequest = normalizeGroupJoinRequestCard(record.groupJoinRequest);
   const canonicalHistoryLocalMessageId = cleanText(record.canonicalHistoryLocalMessageId);
   const conversationSequence = Number.isSafeInteger(record.conversationSequence)
     && Number(record.conversationSequence) > 0 ? Number(record.conversationSequence) : null;
@@ -125,6 +127,7 @@ function normalizedMessage(accountId: string, value: unknown): CloudMessage | nu
     ...(voiceMessage ? { voiceMessage } : {}),
     ...(planCard ? { planCard } : {}),
     ...(facilitatorCard ? { facilitatorCard } : {}),
+    ...(groupJoinRequest ? { groupJoinRequest } : {}),
     ...(canonicalHistoryLocalMessageId ? { canonicalHistoryLocalMessageId } : {}),
     ...(conversationSequence ? { conversationSequence } : {}),
     ...(version ? { version } : {}),

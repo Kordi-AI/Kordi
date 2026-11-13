@@ -2857,6 +2857,17 @@ final class AppModel: ObservableObject {
         return card
     }
 
+    /// A Grounding group join request; `action` is "approve" or "decline".
+    func groupJoinRequest(id: String, action: String?) async throws -> GroupJoinRequestCard {
+        guard !previewMode, let token else {
+            throw CloudAPIError(code: "no_session", message: "Sign in to answer the request.", statusCode: 401)
+        }
+        let request = try await api.groupJoinRequest(token: token, requestId: id, action: action)
+        guard sessionIdentity.contains(token) else { throw CancellationError() }
+        if action != nil { cloudSyncPasses.wake() }
+        return request
+    }
+
     func toggleReaction(
         _ reaction: String,
         on message: ChatMessage,
@@ -6645,6 +6656,7 @@ final class AppModel: ObservableObject {
                     voiceMessage: wire.voiceMessage,
                     planCard: wire.planCard,
                     facilitatorCard: facilitatorCard,
+                    groupJoinRequest: KordiSystemIdentity.isSystem(accountId: wire.fromAccountId) ? wire.groupJoinRequest : nil,
                     reactions: wire.reactions,
                     attachmentReactions: wire.attachmentReactions
                 )
@@ -7764,6 +7776,7 @@ final class AppModel: ObservableObject {
                     voiceMessage: message.voiceMessage,
                     planCard: message.planCard,
                     facilitatorCard: message.facilitatorCard,
+                    groupJoinRequest: message.groupJoinRequest,
                     conversationId: message.conversationId,
                     conversationSequence: message.conversationSequence,
                     version: message.version,

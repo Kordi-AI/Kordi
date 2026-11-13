@@ -140,6 +140,40 @@ extension CloudAPIClient {
         )
     }
 
+    // MARK: Join requests
+
+    /// Asks to join a group started from the room; approvers decide.
+    func askToJoinCommonGroundGroup(token: String, code: String, groupSpaceId: String) async throws -> GroupJoinRequestCard {
+        struct Body: Encodable { let groupSpaceId: String }
+        let response: GroupJoinRequestResponse = try await send(
+            path: cg("rooms/\(cgSegment(code))/join-requests"), method: "POST", token: token,
+            body: Body(groupSpaceId: groupSpaceId), fallback: "Could not send the request."
+        )
+        return response.request
+    }
+
+    /// Withdraws the viewer's own pending request.
+    func cancelCommonGroundJoinRequest(token: String, code: String, requestId: String) async throws -> GroupJoinRequestCard {
+        let response: GroupJoinRequestResponse = try await send(
+            path: cg("rooms/\(cgSegment(code))/join-requests/\(cgSegment(requestId))"), method: "DELETE", token: token,
+            fallback: "Could not cancel the request."
+        )
+        return response.request
+    }
+
+    /// The request's current state, or `action` ("approve" or "decline") applied by an approver.
+    func groupJoinRequest(token: String, requestId: String, action: String? = nil) async throws -> GroupJoinRequestCard {
+        struct Body: Encodable { let action: String }
+        let path = cg("join-requests/\(cgSegment(requestId))")
+        let response: GroupJoinRequestResponse
+        if let action {
+            response = try await send(path: path, method: "POST", token: token, body: Body(action: action), fallback: "Could not answer the request.")
+        } else {
+            response = try await send(path: path, method: "GET", token: token, fallback: "Could not load the request.")
+        }
+        return response.request
+    }
+
     // MARK: People
 
     /// `profileId` is the viewer's profile to see them through.

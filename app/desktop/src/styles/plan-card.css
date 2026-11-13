@@ -111,3 +111,7 @@
 .app-facilitator-option[aria-pressed="true"] { border-color: var(--app-chat-accent); }
 .app-facilitator-option span:last-child { flex: none; color: var(--utility-muted-text, var(--app-chat-meta-peer)); }
 .app-facilitator-card .app-plan-card-actions:empty { display: none; }
+/* Join request card: a room member asking to join a group. */
+.app-join-request-card .app-plan-card-head { align-items: center; }
+.app-join-request-avatar { width: 24px; height: 24px; font-size: 10px; }
+.app-join-request-state { text-align: right; }

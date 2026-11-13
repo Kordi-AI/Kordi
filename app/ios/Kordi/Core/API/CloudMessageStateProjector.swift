@@ -177,6 +177,7 @@ enum CloudMessageStateProjector {
                     voiceMessage: message.voiceMessage,
                     planCard: message.planCard,
                     facilitatorCard: message.facilitatorCard,
+                    groupJoinRequest: message.groupJoinRequest,
                     conversationId: message.conversationId,
                     conversationSequence: message.conversationSequence,
                     version: message.version,

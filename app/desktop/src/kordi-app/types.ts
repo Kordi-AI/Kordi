@@ -744,7 +744,7 @@ export type DesktopCollaborationConversationMessage = {
   attachments?: MessageAttachment[];
   mentions?: MessageMention[];
   messageAction?: MessageActionMetadata | null;
-  messageKind?: string | null; voiceMessage?: Message['voiceMessage']; readReceiptSummary?: Message['readReceiptSummary']; planCard?: Message['planCard']; facilitatorCard?: Message['facilitatorCard'];
+  messageKind?: string | null; voiceMessage?: Message['voiceMessage']; readReceiptSummary?: Message['readReceiptSummary']; planCard?: Message['planCard']; facilitatorCard?: Message['facilitatorCard']; groupJoinRequest?: Message['groupJoinRequest'];
   localTurn?: DesktopChatTurnSnapshot | null; reactionConversationId?: string | null; reactionTargetMessageId?: string | null; cloudMessageVersion?: number | null; editedAt?: string | null; reactions?: Array<{ value: string; accountIds: string[] }>; failureCode?: string | null;
 };
 export type DesktopCollaborationSessionThreadMessage = {

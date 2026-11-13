@@ -38,7 +38,7 @@ use axum::{
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Extension, Json, Router,
 };
 use serde_json::{json, Value};
@@ -117,6 +117,14 @@ pub(super) const MEET_LIMIT: AccountActionLimit = AccountActionLimit {
 /// Groups started from rooms per account.
 pub(super) const GROUP_LIMIT: AccountActionLimit = AccountActionLimit {
     action: "common-ground-group",
+    limit: 10,
+    window: Duration::from_secs(60 * 60),
+};
+
+/// New requests to join a group started from a room, per account. Asking
+/// again while a request is pending is not charged.
+pub(super) const JOIN_REQUEST_LIMIT: AccountActionLimit = AccountActionLimit {
+    action: "common-ground-join-request",
     limit: 10,
     window: Duration::from_secs(60 * 60),
 };
@@ -261,6 +269,18 @@ pub fn routes(state: Arc<ServerState>, rate_limiter: Arc<CloudRateLimiter>) -> R
         .route(
             "/v1/cloud/common-ground/rooms/:code/invitations/:invitation_ref/join",
             post(actions::join),
+        )
+        .route(
+            "/v1/cloud/common-ground/rooms/:code/join-requests",
+            post(actions::ask_to_join),
+        )
+        .route(
+            "/v1/cloud/common-ground/rooms/:code/join-requests/:request_id",
+            delete(actions::cancel_join_request),
+        )
+        .route(
+            "/v1/cloud/common-ground/join-requests/:request_id",
+            get(actions::read_join_request).post(actions::decide_join_request),
         )
         .merge(nearby::routes())
         .route_layer(middleware::from_fn_with_state(
