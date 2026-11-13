@@ -5,6 +5,8 @@
 use super::store::Parent;
 use super::RunError;
 use serde_json::Value;
+use sqlx_core::query_as::query_as;
+use sqlx_postgres::PgPool;
 
 /// The person who asked is not among those this run may ask, as in the
 /// owner's private chat, where every message already reaches the agent.
@@ -23,23 +25,72 @@ pub(super) fn rejected(message: &'static str) -> RunError {
     RunError::ContextUnavailable(message)
 }
 
-fn names_requester(parent: &Parent, target: &str) -> bool {
-    target.trim() == parent.requester
+/// Whether `target` names the requester: their account id, their public
+/// handle, or their mention handle (the display name's letters and digits),
+/// with or without a leading `@`.
+fn matches_requester(
+    requester: &str,
+    name: Option<&str>,
+    public_handle: Option<&str>,
+    target: &str,
+) -> bool {
+    let target = target.trim();
+    if target == requester {
+        return true;
+    }
+    let key = super::person::normalized(target.trim_start_matches('@'));
+    !key.is_empty()
+        && [name, public_handle]
+            .into_iter()
+            .flatten()
+            .any(|value| super::person::normalized(value) == key)
+}
+
+/// Whether `target` names the requester, reading their name and handle only
+/// when the target is not their account id. A failed read counts as no.
+async fn names_requester(pool: &PgPool, parent: &Parent, target: &str) -> bool {
+    if target.trim() == parent.requester {
+        return true;
+    }
+    let row: Option<(Option<String>, Option<String>)> =
+        query_as("SELECT display_name,public_handle FROM cloud_accounts WHERE account_id=$1")
+            .bind(&parent.requester)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+    row.is_some_and(|(name, handle)| {
+        matches_requester(
+            &parent.requester,
+            name.as_deref(),
+            handle.as_deref(),
+            target,
+        )
+    })
 }
 
 /// A person target this run may not ask.
-pub(super) fn person(parent: &Parent, target: &str) -> RunError {
-    rejected(if names_requester(parent, target) {
+pub(super) async fn person(pool: &PgPool, parent: &Parent, target: &str) -> RunError {
+    rejected(if names_requester(pool, parent, target).await {
         REQUESTER_IN_REPLY
     } else {
         UNKNOWN_PERSON
     })
 }
 
-/// An agent target this run may not reach. A bare account id of the
-/// requester is a person the run cannot ask, not an agent.
-pub(super) fn agent(parent: &Parent, target: &str) -> RunError {
-    rejected(if names_requester(parent, target) {
+/// A person this run may no longer ask, by account id, inside a transaction.
+pub(super) fn person_account(parent: &Parent, account_id: &str) -> RunError {
+    rejected(if account_id == parent.requester {
+        REQUESTER_IN_REPLY
+    } else {
+        UNKNOWN_PERSON
+    })
+}
+
+/// An agent target this run may not reach. The requester's account id or
+/// handle is a person the run cannot ask, not an agent.
+pub(super) async fn agent(pool: &PgPool, parent: &Parent, target: &str) -> RunError {
+    rejected(if names_requester(pool, parent, target).await {
         REQUESTER_IN_REPLY
     } else {
         UNKNOWN_AGENT
@@ -67,6 +118,18 @@ pub(crate) fn note(reachable: &Value) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn the_requester_is_named_by_id_or_handle() {
+        let named = |target| matches_requester("acct-1", Some("Ana Li"), Some("ana.li"), target);
+        assert!(named("acct-1"));
+        assert!(named(" @ana.li "));
+        assert!(named("@AnaLi"));
+        assert!(named("Ana Li"));
+        assert!(!named("@priya"));
+        assert!(!named("@"));
+        assert!(!matches_requester("acct-1", None, None, "@ana"));
+    }
 
     #[test]
     fn the_note_tells_the_agent_to_ask_an_unlisted_requester_in_its_reply() {

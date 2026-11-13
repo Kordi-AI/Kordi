@@ -36,7 +36,7 @@ fn compact(value: &str) -> String {
     value.nfkc().filter(|c| c.is_alphanumeric()).collect()
 }
 
-fn normalized(value: &str) -> String {
+pub(super) fn normalized(value: &str) -> String {
     compact(value)
         .chars()
         .flat_map(char::to_lowercase)
@@ -172,9 +172,10 @@ pub(super) async fn requested(
     let people = directory(pool, parent).await?;
     let person = resolve(&people, target);
     if kind == Some("person") {
-        return person
-            .map(|p| Some(p.clone()))
-            .map_err(|_| super::refusal::person(parent, target));
+        return match person {
+            Ok(person) => Ok(Some(person.clone())),
+            Err(_) => Err(super::refusal::person(pool, parent, target).await),
+        };
     }
     let Ok(person) = person else {
         return Ok(None);
@@ -200,7 +201,7 @@ pub(super) async fn send(
     // Revalidate the lease and membership after obtaining the root's budget lock.
     authorize(pool, &parent.run, Some((executor, account))).await?;
     if !reachable(&mut tx, parent, &person.account_id).await? {
-        return Err(super::refusal::person(parent, &person.account_id));
+        return Err(super::refusal::person_account(parent, &person.account_id));
     }
     let existing: Option<(Uuid, String, Option<String>, String)> = query_as("SELECT exchange_id,status,target_person_id,request_text FROM cloud_agent_exchanges WHERE parent_run_id=$1 AND (request_key=$2 OR (target_person_id=$3 AND request_text=$4))")
         .bind(&parent.run).bind(key).bind(&person.account_id).bind(text).fetch_optional(&mut *tx).await?;

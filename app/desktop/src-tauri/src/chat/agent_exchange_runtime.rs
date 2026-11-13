@@ -11,16 +11,18 @@ fn unavailable() -> KordiError {
 }
 
 /// A refused call keeps the server's error code and message, so the agent
-/// can correct it and the failure is diagnosable.
+/// can correct it and the failure is diagnosable. A server error keeps only
+/// its status code, since its message is not meant for the model (as on the
+/// cloud runner).
 fn refused(status: reqwest::StatusCode, body: &Value) -> KordiError {
-    let code = body["errorCode"]
-        .as_str()
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("http_{}", status.as_u16()));
-    KordiError::Tool(kordi_tools::reach_out::not_sent(
-        Some(&code),
-        body["message"].as_str(),
-    ))
+    let http_code = || format!("http_{}", status.as_u16());
+    let (code, message) = if status.is_server_error() {
+        (http_code(), None)
+    } else {
+        let code = body["errorCode"].as_str().map(str::to_owned);
+        (code.unwrap_or_else(http_code), body["message"].as_str())
+    };
+    KordiError::Tool(kordi_tools::reach_out::not_sent(Some(&code), message))
 }
 struct Transport {
     lease: DesktopCloudExecutionLease,
@@ -235,6 +237,12 @@ mod tests {
         assert!(text.contains("Do not claim that a request was sent."));
         let bare = refused(reqwest::StatusCode::BAD_GATEWAY, &Value::Null).to_string();
         assert!(bare.contains("(http_502)"));
+        // A server error's own code and message never reach the model.
+        let internal = json!({"errorCode":"database_error","message":"relation missing"});
+        let text = refused(reqwest::StatusCode::INTERNAL_SERVER_ERROR, &internal).to_string();
+        assert!(text.contains("(http_500)"), "{text}");
+        assert!(!text.contains("relation missing") && !text.contains("database_error"));
+        assert!(text.contains("Do not claim that a request was sent."));
     }
 
     #[test]

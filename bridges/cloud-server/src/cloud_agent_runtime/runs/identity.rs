@@ -60,7 +60,11 @@ pub(crate) async fn identity_for_run(pool: &PgPool, run_id: &str) -> RunResult<V
                     None => note,
                 })
             }
-            None => reach,
+            // Names and handles in the list come from members, so the list
+            // keeps the same untrusted-data framing as the members note.
+            None => {
+                reach.map(|reach| format!("{} {reach}", super::conversation_context::NOTE_FRAMING))
+            }
         };
         if let Some(note) = note {
             identity["conversationContext"] = Value::String(note);

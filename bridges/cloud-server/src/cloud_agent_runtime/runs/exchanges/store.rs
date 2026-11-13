@@ -253,8 +253,10 @@ pub(super) async fn send(
         return Err(super::refusal::rejected(super::refusal::ANSWERING));
     }
     let targets = directory(pool, parent).await?;
-    let target = resolve_target(&targets, target_ref)
-        .map_err(|_| super::refusal::agent(parent, target_ref))?;
+    let target = match resolve_target(&targets, target_ref) {
+        Ok(target) => target,
+        Err(_) => return Err(super::refusal::agent(pool, parent, target_ref).await),
+    };
     // Another person's agent runs only when its owner allowed AI; the
     // requester's own agents only when they did not decline it.
     let ready = if target.owner_account_id == parent.requester {
