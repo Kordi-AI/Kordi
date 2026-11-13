@@ -1,4 +1,5 @@
 import type { Dispatch,SetStateAction } from 'react';
+import { notifySubsessionActivity } from '@/features/cloud/subsessionActivity';
 import { useEffect,useMemo,useRef,useState } from 'react';
 import { type CompanionSessionState,type ComposerSelector,emptyState,normalizeStateForCandidates } from "./chatCompanionState";
 
@@ -289,6 +290,7 @@ export function useChatCompanionSession({
             ...current, drafts: current.drafts[id]?.trim() === text ? { ...current.drafts, [id]: '' } : current.drafts,
           }));
           subsession.reload();
+          notifySubsessionActivity(id);
           scheduleTranscriptScrollToBottom(transcriptScrollRef);
         } catch { setSubsessionSendError({ id, message: 'Could not send. Your message is kept below; try again.' }); }
         finally { sendingRef.current = false; setSubsessionSending(false); }

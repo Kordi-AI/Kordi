@@ -91,6 +91,7 @@ async fn running_turn_lookup_is_session_scoped() {
         retry_reason: None,
         transcript_refresh_required: false,
         background_follow_up: None,
+        stop_reason: None,
     }));
     manager.turns.lock().await.insert(
         "turn-a".to_string(),
@@ -98,6 +99,7 @@ async fn running_turn_lookup_is_session_scoped() {
             snapshot,
             cancel: tokio_util::sync::CancellationToken::new(),
             execution_lease_deadline: Arc::new(Mutex::new(None)),
+            lease_refusal: Default::default(),
         },
     );
 
@@ -136,9 +138,11 @@ async fn concurrent_turn_admission_queues_per_canonical_session() {
                 retry_reason: None,
                 transcript_refresh_required: false,
                 background_follow_up: None,
+                stop_reason: None,
             })),
             cancel: tokio_util::sync::CancellationToken::new(),
             execution_lease_deadline: Arc::new(Mutex::new(None)),
+            lease_refusal: Default::default(),
         }
     }
 
@@ -193,16 +197,34 @@ async fn concurrent_turn_admission_queues_per_canonical_session() {
         .get("group-request")
         .unwrap()
         .clone();
-    super::turns::renew_execution_lease(&manager, "group-request", now_millis() + 100)
-        .await
-        .unwrap();
+    super::turns::renew_execution_lease(
+        &manager,
+        "group-request",
+        now_millis() + 100,
+        Some(DesktopSyncRefusal {
+            status: 409,
+            code: "subsession_version_conflict".into(),
+        }),
+    )
+    .await
+    .unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(400)).await;
     assert!(
         watched.cancel.is_cancelled(),
         "native execution must stop without a renderer heartbeat"
     );
+    assert_eq!(
+        watched.snapshot.lock().unwrap().stop_reason,
+        Some(DesktopTurnStopReason {
+            kind: "lease_lapsed".into(),
+            account_id: None,
+            status: Some(409),
+            code: Some("subsession_version_conflict".into()),
+        }),
+        "a lapsed lease names the last refused update"
+    );
     assert!(
-        super::turns::renew_execution_lease(&manager, "group-request", now_millis() + 30_000)
+        super::turns::renew_execution_lease(&manager, "group-request", now_millis() + 30_000, None)
             .await
             .is_err(),
         "expired leases cannot revive an executor"

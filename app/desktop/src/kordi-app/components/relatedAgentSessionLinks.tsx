@@ -1,12 +1,14 @@
 import { ChevronDown, ChevronRight, MoreHorizontal } from 'lucide-react';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { useAgentSubsession } from '@/features/cloud/useAgentSubsession';
 import { agentSubsessionStatusNotice } from '@/features/cloud/agentSubsessionTasks';
+import { subscribeSubsessionSyncState, subsessionSyncState } from '@/features/cloud/agentSubsessionSync';
+import { stoppedLabel, unsyncedLabel } from '@/features/chat/backgroundStopReason';
 import { useBackgroundSessionControl } from '@/features/chat/useBackgroundSessionControl';
 
 import {
+  backgroundSessionRowExecution,
   normalizedRelatedAgentSessionStatus,
-  runStatusFromTurn,
   type RelatedAgentSession,
   type RelatedAgentSessionRunStatus,
 } from '@/features/chat/relatedAgentSessions';
@@ -129,12 +131,18 @@ function SubsessionLink({ session, first, last, hidden, status, onStatus, onOpen
     };
   }, [menuOpen]);
   const snapshot = control.remoteSnapshot;
-  const localTurn = control.turn && (!snapshot?.startedAtMs || !control.turn.startedAtMs || snapshot.startedAtMs <= control.turn.startedAtMs) ? control.turn : null;
-  const resolved = localTurn ? runStatusFromTurn(localTurn) : snapshot ? normalizedRelatedAgentSessionStatus(snapshot.status) : status ?? normalizedRelatedAgentSessionStatus(session.status);
+  const execution = backgroundSessionRowExecution(control.turn, snapshot);
+  const localTurn = execution?.localTurn ?? null;
+  const resolved = execution?.status ?? status ?? normalizedRelatedAgentSessionStatus(session.status);
   const presentation = STATUS[resolved];
   // A folded group still counts what each row is doing.
   useEffect(() => { onStatus(session.sessionId, resolved); }, [onStatus, resolved, session.sessionId]);
-  const notice = control.stopping ? 'Stopping…' : localTurn ? null : error ? 'Sync unavailable' : snapshot ? agentSubsessionStatusNotice(snapshot) : null;
+  const readSync = () => subsessionSyncState(session.sessionId);
+  const sync = useSyncExternalStore(subscribeSubsessionSyncState, readSync, readSync);
+  const notice = control.stopping ? 'Stopping…'
+    : resolved === 'stopped' ? stoppedLabel(localTurn?.stopReason ?? snapshot?.stopReason, accountId)
+    : localTurn ? resolved === 'running' && !sync.synced ? unsyncedLabel(sync.refusal) : null
+      : error ? 'Sync unavailable' : snapshot ? agentSubsessionStatusNotice(snapshot) : null;
   const title = snapshot?.title ?? session.title;
   const open = () => { setMenuOpen(false); onOpen?.(session.sessionId, true); };
   return <div ref={rowRef} className="group relative flex h-[26px] min-w-0 items-center gap-2 pl-[22px] pr-1"

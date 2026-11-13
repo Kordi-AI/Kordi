@@ -202,3 +202,85 @@ fn owner_model_choice_keeps_the_background_session_account() -> Result<()> {
     assert!(other_provider.is_err());
     Ok(())
 }
+
+fn append_message(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+    parent: Option<EntryId>,
+    message: AgentMessage,
+) -> Result<EntryId> {
+    let id = EntryId::generate();
+    kordi_session::store::append_entry(
+        conn,
+        session_id,
+        &SessionEntry::Message {
+            base: EntryBase {
+                id: id.clone(),
+                parent_id: parent,
+                timestamp: chrono::Utc::now(),
+            },
+            message,
+        },
+    )?;
+    Ok(id)
+}
+
+fn user(text: &str) -> AgentMessage {
+    AgentMessage::User(UserMessage {
+        content: vec![ContentBlock::Text { text: text.into() }],
+        timestamp: 1000,
+    })
+}
+
+fn aborted() -> AgentMessage {
+    AgentMessage::Assistant(AssistantMessage {
+        content: Vec::new(),
+        provider: "test".into(),
+        model: "test".into(),
+        usage: Usage::default(),
+        stop_reason: StopReason::Aborted,
+        error_message: None,
+        timestamp: 2000,
+    })
+}
+
+#[test]
+fn a_recorded_stop_reason_stays_off_the_transcript_and_ends_with_the_next_request() -> Result<()> {
+    let conn = kordi_session::store::open_memory()?;
+    let id = kordi_session::store::create_session_with_parent_and_message(
+        &conn,
+        "/tmp/test",
+        Some("parent"),
+        Some("request"),
+    )?;
+    kordi_session::store::update_session_scope(&conn, &id, "runtime", "/tmp/test", None)?;
+    let brief = append_message(&conn, &id, None, user("Review the literature"))?;
+    let stopped = append_message(&conn, &id, Some(brief), aborted())?;
+    let reason = serde_json::json!({"kind":"lease_lapsed","status":409,"code":"subsession_version_conflict"});
+    record_stop_reason_in_store(&conn, &id, &reason)?;
+
+    let snapshot = background_snapshot_from_store(&conn, &id)?;
+    assert_eq!(snapshot.status, "stopped");
+    assert_eq!(snapshot.stop_reason, Some(reason));
+    assert!(!snapshot.interrupted);
+    let leaf = kordi_session::store::get_session(&conn, &id)?
+        .unwrap()
+        .leaf_id;
+    assert_eq!(
+        leaf.as_deref(),
+        Some(stopped.as_str()),
+        "the leaf stays on the transcript"
+    );
+    let path = kordi_session::tree::active_path(&conn, &id)?;
+    assert!(path.iter().all(|row| row.entry_type != "custom"));
+
+    // A later request on this session starts without the old reason.
+    append_message(&conn, &id, Some(stopped), user("Continue"))?;
+    let snapshot = background_snapshot_from_store(&conn, &id)?;
+    assert_eq!(snapshot.stop_reason, None);
+    assert!(
+        snapshot.interrupted,
+        "a request without an end was interrupted"
+    );
+    Ok(())
+}

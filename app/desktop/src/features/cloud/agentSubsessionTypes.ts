@@ -9,6 +9,8 @@ export type NativeAgentSubsession = {
   sessionId: string; parentSessionId: string; parentRequestId: string | null;
   title: string; status: string; messages: AgentSubsessionMessage[];
   turnId?: string | null; activity?: { tools?: import('@/kordi-app/types').DesktopChatToolSnapshot[] };
+  /** Why a stopped execution ended. */
+  stopReason?: import('@/features/chat/backgroundStopReason').TurnStopReason | null;
 };
 export type CloudAgentSubsession = Omit<NativeAgentSubsession, 'parentRequestId'> & {
   parentRequestId: string; ownerAccountId: string; agentId: string;
@@ -19,7 +21,7 @@ export type CloudAgentSubsession = Omit<NativeAgentSubsession, 'parentRequestId'
   participants?: Array<{accountId:string;displayName:string;avatarUrl?:string|null;avatarSeed?:string|null}>;
 };
 
-export type AgentSubsessionTask = Pick<CloudAgentSubsession, 'sessionId' | 'parentSessionId' | 'parentRequestId' | 'agentId' | 'ownerAccountId' | 'ownerDisplayName' | 'agentDisplayName' | 'agentAvatarUrl' | 'title' | 'status'> & {
+export type AgentSubsessionTask = Pick<CloudAgentSubsession, 'sessionId' | 'parentSessionId' | 'parentRequestId' | 'agentId' | 'ownerAccountId' | 'ownerDisplayName' | 'agentDisplayName' | 'agentAvatarUrl' | 'title' | 'status' | 'stopReason'> & {
   executionBackend: 'desktop' | 'cloud';
   startedAtMs: number | null;
   finishedAtMs: number | null;

@@ -2,6 +2,7 @@ import { createContext, useEffect, useState } from 'react';
 import { CloudAuthClient, CloudAuthError } from './authClient';
 import { CLOUD_SESSION_CHANGED_EVENT, loadSession } from './session';
 import type { CloudAgentSubsession } from './agentSubsessionTypes';
+import { onSubsessionActivity } from './subsessionActivity';
 
 export const AgentSubsessionNavigationContext = createContext<((id: string) => void) | null>(null);
 
@@ -22,11 +23,21 @@ export function useAgentSubsession(id: string | null, includeMessages = false) {
     let current: CloudAgentSubsession | null = null;
     let accountId: string | null = null;
     let failures = 0;
+    let emptySessionReads = 0;
     const client = new CloudAuthClient();
+    // One pending poll at a time, also when a hint starts a read early.
+    const schedule = (ms: number) => { if (timer) clearTimeout(timer); timer = setTimeout(() => { void load(); }, ms); };
     const load = async () => {
       try {
         const session = await loadSession();
-        if (!session || (accountId && session.accountId !== accountId)) { setSnapshot(null); setError({ id, message: 'Sign in to view this task.' }); return; }
+        if (session && accountId && session.accountId !== accountId) { setSnapshot(null); setError({ id, message: 'Sign in to view this task.' }); return; }
+        if (!session) {
+          // One empty read can be a save in progress; keep looking.
+          if (++emptySessionReads >= 3) { setSnapshot(null); current = null; setError({ id, message: 'Sign in to view this task.' }); }
+          if (!cancelled) schedule(1500);
+          return;
+        }
+        emptySessionReads = 0;
         accountId = session.accountId;
         let next = await client.getAgentSubsession(session.token, id, includeMessages && current == null);
         if (includeMessages && current && next.version !== current.version) next = await client.getAgentSubsession(session.token, id, true);
@@ -41,10 +52,14 @@ export function useAgentSubsession(id: string | null, includeMessages = false) {
         failures = failure instanceof CloudAuthError && [401, 403, 404].includes(failure.status ?? 0) ? 3 : failures + 1;
         if (failures >= 3) { setSnapshot(null); current = null; setError({ id, message: 'This task is not available. Check access or try again after synchronization.' }); }
       }
-      if (!cancelled) timer = setTimeout(() => { void load(); }, includeMessages || current?.status === 'running' || !current ? 1500 : 10000);
+      if (!cancelled) schedule(includeMessages || current?.status === 'running' || current?.queued || !current ? 1500 : 10000);
     };
     void load();
-    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+    // A continue or a follow-up turn on this Mac: read the record now.
+    const stopListening = onSubsessionActivity(id, () => {
+      if (!cancelled) schedule(0);
+    });
+    return () => { cancelled = true; stopListening(); if (timer) clearTimeout(timer); };
   }, [id, includeMessages, retry]);
   return { snapshot: snapshot?.sessionId === id ? snapshot : null, accountId: viewerAccountId, error: error?.id === id ? error?.message ?? null : null, reload: () => { setError(null); setRetry((value) => value + 1); } };
 }

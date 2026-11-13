@@ -139,6 +139,7 @@ pub(super) async fn start_message(
         retry_reason: None,
         transcript_refresh_required: false,
         background_follow_up: None,
+        stop_reason: None,
     }));
     let cancel = tokio_util::sync::CancellationToken::new();
 
@@ -149,11 +150,14 @@ pub(super) async fn start_message(
             snapshot: snapshot.clone(),
             cancel: cancel.clone(),
             execution_lease_deadline: Arc::new(Mutex::new(None)),
+            lease_refusal: Default::default(),
         },
     )
     .await?;
     if let Some(deadline) = execution_lease_deadline_ms {
-        if let Err(error) = super::turns::renew_execution_lease(manager, &turn_id, deadline).await {
+        if let Err(error) =
+            super::turns::renew_execution_lease(manager, &turn_id, deadline, None).await
+        {
             cancel.cancel();
             fail_turn(&snapshot, error.clone());
             return Err(error);
@@ -414,6 +418,9 @@ async fn finish_turn(
     cancel: &tokio_util::sync::CancellationToken,
     result: Result<DesktopChatSessionDetail, String>,
 ) {
+    if cancel.is_cancelled() {
+        record_background_stop_reason(snapshot, session_id);
+    }
     match result {
         Ok(detail) if cancel.is_cancelled() => {
             let transcript_entry_id = latest_turn_assistant_entry_id(&detail.messages);
@@ -478,6 +485,27 @@ async fn finish_turn(
             sync_completed_session(cwd, session_id, session_handle, is_agent_builder_session).await;
             fail_chat_request(snapshot, error);
         }
+    }
+}
+
+/// Keeps why a background session's turn was stopped with its transcript, so
+/// the session row and the cloud record can name it after a restart. Other
+/// sessions have no such record.
+fn record_background_stop_reason(snapshot: &Arc<Mutex<DesktopChatTurnSnapshot>>, session_id: &str) {
+    let Some(reason) = snapshot
+        .lock()
+        .ok()
+        .and_then(|state| state.stop_reason.clone())
+    else {
+        return;
+    };
+    let Ok(value) = serde_json::to_value(&reason) else {
+        return;
+    };
+    if let Err(error) =
+        kordi_cli::desktop_runtime::record_background_stop_reason(session_id, &value)
+    {
+        eprintln!("[background-session] could not record why {session_id} stopped: {error}");
     }
 }
 

@@ -71,10 +71,12 @@ test('a slow or unreachable cloud does not stop a running background session', a
   }
 });
 
-test('an answer that refuses each attempt still lets the deadline pass', async () => {
+test('an answer that refuses each attempt keeps renewing the deadline', async () => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const oldGet = CloudAuthClient.prototype.getAgentSubsession;
   const oldPut = CloudAuthClient.prototype.putAgentSubsession;
+  const oldWarn = console.warn;
+  console.warn = () => undefined;
   const commands: string[] = [];
   let writes = 0;
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {
@@ -99,13 +101,13 @@ test('an answer that refuses each attempt still lets the deadline pass', async (
   try {
     await publishModelSubsession('child');
     let renewalsAfterRefusals = -1;
-    for (let wait = 0; wait < 400 && writes < 8; wait += 1) {
+    for (let wait = 0; wait < 2000 && writes < 8; wait += 1) {
       if (writes >= 3 && renewalsAfterRefusals < 0) renewalsAfterRefusals = commands.filter(command => command === 'desktop_chat_renew_execution_lease').length;
       await new Promise(resolve => setTimeout(resolve, 1));
     }
     const renewalsAtRecovery = commands.filter(command => command === 'desktop_chat_renew_execution_lease').length;
     assert(renewalsAfterRefusals >= 0, 'the loop retried the refused publish');
-    assert(renewalsAtRecovery - renewalsAfterRefusals <= 1, 'refused attempts do not renew the deadline');
+    assert(renewalsAtRecovery - renewalsAfterRefusals >= 3, 'refused attempts keep renewing the deadline');
     for (let wait = 0; wait < 400 && writes < 9; wait += 1) await new Promise(resolve => setTimeout(resolve, 1));
     assert(!commands.includes('desktop_chat_cancel_turn'));
   } finally {
@@ -114,6 +116,7 @@ test('an answer that refuses each attempt still lets the deadline pass', async (
     CloudAuthClient.prototype.getAgentSubsession = oldGet;
     CloudAuthClient.prototype.putAgentSubsession = oldPut;
     __setSessionBackendForTests(null);
+    console.warn = oldWarn;
     if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
     else Reflect.deleteProperty(globalThis, 'window');
   }

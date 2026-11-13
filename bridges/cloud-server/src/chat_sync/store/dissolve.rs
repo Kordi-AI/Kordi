@@ -158,7 +158,7 @@ async fn dissolve_conversations(
     .await?;
     query(
         "UPDATE cloud_agent_subsessions SET status = 'stopped', version = version + 1, \
-           updated_at = now() \
+           stop_reason = '{\"kind\":\"group_closed\"}'::jsonb, updated_at = now() \
          WHERE parent_conversation_id = ANY($1) AND status = 'running'",
     )
     .bind(&ids)

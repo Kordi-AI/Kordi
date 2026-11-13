@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use kordi_cli::turn_runner::TurnEvent;
 
+use super::models::{DesktopSyncRefusal, DesktopTurnStopReason};
 use super::{DesktopChatManager, DesktopChatToolSnapshot, DesktopChatTurnSnapshot};
 
 mod task_tools;
@@ -120,14 +121,32 @@ pub async fn desktop_chat_active_turns(
     active_turn_snapshots(manager.inner()).await
 }
 
+/// Records why a turn is being stopped. The first reason wins, and a turn
+/// that already ended keeps its outcome.
+pub(super) fn record_stop_reason(
+    snapshot: &Arc<Mutex<DesktopChatTurnSnapshot>>,
+    reason: Option<DesktopTurnStopReason>,
+) {
+    let Some(reason) = reason else {
+        return;
+    };
+    update_turn(snapshot, |state| {
+        if !state.completed && state.stop_reason.is_none() {
+            state.stop_reason = Some(reason);
+        }
+    });
+}
+
 pub(super) async fn cancel_turn_by_id(
     manager: &DesktopChatManager,
     turn_id: &str,
+    reason: Option<DesktopTurnStopReason>,
 ) -> Result<DesktopChatTurnSnapshot, String> {
     let turns = manager.turns.lock().await;
     let turn = turns
         .get(turn_id)
         .ok_or_else(|| format!("Unknown chat turn: {turn_id}"))?;
+    record_stop_reason(&turn.snapshot, reason);
     turn.cancel.cancel();
     update_turn(&turn.snapshot, |state| {
         if state.status == "queued" {
@@ -152,6 +171,7 @@ pub(super) async fn renew_execution_lease(
     manager: &DesktopChatManager,
     turn_id: &str,
     deadline_ms: i64,
+    refusal: Option<DesktopSyncRefusal>,
 ) -> Result<(), String> {
     let turn = manager
         .turns
@@ -160,9 +180,12 @@ pub(super) async fn renew_execution_lease(
         .get(turn_id)
         .cloned()
         .ok_or_else(|| "Unknown execution lease turn".to_string())?;
+    if let Ok(mut last) = turn.lease_refusal.lock() {
+        *last = refusal;
+    }
     let remaining = deadline_ms.saturating_sub(super::now_millis());
     if remaining <= 0 || turn.cancel.is_cancelled() {
-        turn.cancel.cancel();
+        lapse_execution_lease(&turn);
         return Err("Execution lease expired".into());
     }
     let mut deadline = turn
@@ -191,7 +214,7 @@ pub(super) async fn renew_execution_lease(
                     .and_then(|deadline| *deadline)
                     .is_some_and(|d| d > std::time::Instant::now());
                 if !valid {
-                    turn.cancel.cancel();
+                    lapse_execution_lease(&turn);
                     return;
                 }
             }
@@ -200,13 +223,33 @@ pub(super) async fn renew_execution_lease(
     Ok(())
 }
 
+/// Nothing renewed the turn's lease in time: stop it and say so.
+fn lapse_execution_lease(turn: &super::DesktopChatTurnHandle) {
+    let refusal = turn.lease_refusal.lock().ok().and_then(|last| last.clone());
+    eprintln!(
+        "[execution-lease] lease lapsed; stopping turn (last refusal: {})",
+        refusal
+            .as_ref()
+            .map_or("none".to_string(), |refusal| format!(
+                "{} {}",
+                refusal.status, refusal.code
+            ))
+    );
+    record_stop_reason(
+        &turn.snapshot,
+        Some(DesktopTurnStopReason::lease_lapsed(refusal.as_ref())),
+    );
+    turn.cancel.cancel();
+}
+
 #[tauri::command]
 pub async fn desktop_chat_renew_execution_lease(
     manager: tauri::State<'_, DesktopChatManager>,
     turn_id: String,
     deadline_ms: i64,
+    refusal: Option<DesktopSyncRefusal>,
 ) -> Result<(), String> {
-    renew_execution_lease(manager.inner(), &turn_id, deadline_ms).await
+    renew_execution_lease(manager.inner(), &turn_id, deadline_ms, refusal).await
 }
 
 pub(super) fn update_turn(

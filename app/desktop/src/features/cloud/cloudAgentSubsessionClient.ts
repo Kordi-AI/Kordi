@@ -29,7 +29,8 @@ export class CloudAgentSubsessionClient {
     return this.request(`/v1/cloud/agent-subsessions/${encodeURIComponent(value.sessionId)}`, {
       method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ parentSessionId: value.parentSessionId, parentRequestId: value.parentRequestId,
-        title: value.title, status: value.status, messages: value.messages, activity: value.activity, expectedVersion }),
+        title: value.title, status: value.status, messages: value.messages, activity: value.activity, expectedVersion,
+        ...(value.status === 'stopped' && value.stopReason ? { stopReason: value.stopReason } : {}) }),
     }, 'Could not synchronize this agent task.');
   }
   sendAgentSubsessionMessage(token: string, id: string, clientMessageId: string, text: string, mentions: unknown[]): Promise<CloudAgentSubsession> {

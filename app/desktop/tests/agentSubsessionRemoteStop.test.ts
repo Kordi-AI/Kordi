@@ -12,12 +12,17 @@ for (const conflict of [false, true]) {
     const oldPut = CloudAuthClient.prototype.putAgentSubsession;
     const commands: string[] = [];
     let reads = 0, writes = 0;
+    let cancelReason: unknown;
+    let renewedAfterStop = false;
+    const oldWarn = console.warn, oldInfo = console.info;
+    console.warn = () => undefined; console.info = () => undefined;
     Object.defineProperty(globalThis, 'window', { configurable: true, value: {
       setTimeout: (callback: () => void) => setTimeout(callback, 1),
       __TAURI_INTERNALS__: { invoke: async (command: string, args: Record<string, unknown>) => {
         commands.push(command);
         if (command === 'desktop_chat_subsession_snapshot') return { sessionId: 'child', parentSessionId: 'parent', parentRequestId: 'request', turnId: 'actual-turn', title: 'Review', status: 'running', messages: [] };
-        if (command === 'desktop_chat_cancel_turn') { assert.equal(args.turnId, 'actual-turn'); return {}; }
+        if (command === 'desktop_chat_cancel_turn') { assert.equal(args.turnId, 'actual-turn'); cancelReason = args.reason; return {}; }
+        if (command === 'desktop_chat_renew_execution_lease') { if (cancelReason !== undefined) renewedAfterStop = true; return null; }
         throw Error(`Unexpected command: ${command}`);
       } },
     } });
@@ -28,11 +33,15 @@ for (const conflict of [false, true]) {
       await publishModelSubsession('child');
       assert.equal(writes, conflict ? 1 : 0);
       assert.equal(commands.filter(command => command === 'desktop_chat_cancel_turn').length, 1);
-      assert(!commands.includes('desktop_chat_renew_execution_lease'), 'a stopped task must not retain its execution lease');
+      assert.deepEqual(cancelReason, { kind: 'cloud' }, 'a Stop recorded without a reason is named a cloud stop');
+      await new Promise(resolve => setTimeout(resolve, 20));
+      assert(!renewedAfterStop, 'a stopped task must not retain its execution lease');
+      if (!conflict) assert(!commands.includes('desktop_chat_renew_execution_lease'), 'a task known to be stopped is never renewed');
     } finally {
       CloudAuthClient.prototype.getAgentSubsession = oldGet;
       CloudAuthClient.prototype.putAgentSubsession = oldPut;
       __setSessionBackendForTests(null);
+      console.warn = oldWarn; console.info = oldInfo;
       if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
       else Reflect.deleteProperty(globalThis, 'window');
     }

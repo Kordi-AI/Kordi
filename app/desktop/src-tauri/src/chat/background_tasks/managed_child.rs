@@ -247,6 +247,7 @@ impl ManagedChildAgentRunner {
             status,
             &child_turn.assistant_text,
             child_turn.error.as_deref(),
+            child_turn.stop_reason.as_ref(),
         );
         let mut input = self.start_input(parent_session_id.to_string(), text, Vec::new());
         input.request_message_id = Some(id.clone());
@@ -323,7 +324,7 @@ impl ChildAgentRunner for ManagedChildAgentRunner {
             .await
             .insert(turn.id.clone());
         if let Err(error) = activate_background_runtime_session(&session_id) {
-            let _ = cancel_turn_by_id(&self.manager, &turn.id).await;
+            let _ = cancel_turn_by_id(&self.manager, &turn.id, None).await;
             return Err(error);
         }
         let task = ManagedTask {
@@ -404,9 +405,13 @@ impl ChildAgentRunner for ManagedChildAgentRunner {
             bail!("background task `{target}` was not found")
         };
         self.mark_outcome_reported(&task, "stopped").await;
-        cancel_turn_by_id(&self.manager, &task.turn_id)
-            .await
-            .map_err(anyhow::Error::msg)?;
+        cancel_turn_by_id(
+            &self.manager,
+            &task.turn_id,
+            Some(crate::chat::DesktopTurnStopReason::of_kind("agent")),
+        )
+        .await
+        .map_err(anyhow::Error::msg)?;
         Ok(())
     }
 

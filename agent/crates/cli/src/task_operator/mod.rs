@@ -19,6 +19,9 @@ use tokio::sync::Mutex;
 #[allow(unused_imports)]
 pub use inspection::BackgroundSessionInspection;
 pub(crate) use inspection::inspect_persisted_background_session;
+// Used by the desktop runtime, which the `kordi` binary does not compile.
+#[allow(unused_imports)]
+pub(crate) use inspection::INTERRUPTED_SUMMARY;
 use inspection::truncate_summary;
 use runner::SubprocessChildAgentRunner;
 #[allow(unused_imports)]
