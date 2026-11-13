@@ -141,6 +141,17 @@ where
     unread
 }
 
+/// True when every source is a link and none of them could be read, so a
+/// build would have nothing to work from.
+pub(super) fn nothing_read(evidence: &[Gathered], unread: &[UnreadLink]) -> bool {
+    !evidence.is_empty()
+        && evidence.iter().all(|item| {
+            item.url
+                .as_deref()
+                .is_some_and(|url| unread.iter().any(|link| link.url == url))
+        })
+}
+
 async fn fetch(url: String) -> Result<PageText, LinkFailure> {
     let page =
         kordi_tools::web_fetch::fetch_public_page(&url, LINK_TIMEOUT, USER_AGENT, MAX_PAGE_BYTES)
@@ -160,6 +171,11 @@ const SIGN_IN_PAGES: [&str; 4] = [
     "www.linkedin.com/authwall",
     "www.linkedin.com/login",
 ];
+
+/// Words of a page with no text whose script sends someone signed out to sign
+/// in. LinkedIn answers automated requests with such a page (often with status
+/// 999); a readable page that only links to sign-in is still read.
+const SIGN_IN_MARKERS: [&str; 1] = ["linkedin.com/authwall"];
 
 /// Words of a challenge page served instead of the content.
 const CHALLENGE_MARKERS: [&str; 5] = [
@@ -188,9 +204,14 @@ pub(super) fn classify(
     if landed.contains("google.com/sorry/") {
         return Err(LinkFailure::Blocked);
     }
+    let host = landed.split(['/', '?', '#']).next().unwrap_or_default();
+    let linkedin = host == "linkedin.com" || host.ends_with(".linkedin.com");
     match status {
         200..=299 => {}
         401 => return Err(LinkFailure::SignIn),
+        // LinkedIn's answer to a reader that is not signed in.
+        999 if linkedin => return Err(LinkFailure::SignIn),
+        999 => return Err(LinkFailure::Blocked),
         403 | 429 | 503 => return Err(LinkFailure::Blocked),
         404 | 410 => return Err(LinkFailure::NotFound),
         _ => return Err(LinkFailure::Unreadable),
@@ -229,7 +250,15 @@ pub(super) fn classify(
     };
     let text = page.text.split_whitespace().collect::<Vec<_>>().join(" ");
     if text.chars().count() < MIN_TEXT_CHARS {
-        return Err(LinkFailure::Unreadable);
+        // A shell page whose script only sends the reader to sign in.
+        let sign_in = SIGN_IN_MARKERS
+            .iter()
+            .any(|marker| lower_head.contains(marker));
+        return Err(if sign_in {
+            LinkFailure::SignIn
+        } else {
+            LinkFailure::Unreadable
+        });
     }
     Ok(PageText {
         title: page.title.map(|title| clean_inline(&title)),

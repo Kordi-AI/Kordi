@@ -254,12 +254,12 @@ async fn serve_connection(
 /// exchange the redirect and save the account after this response is sent.
 fn callback_page(provider_error: bool) -> String {
     let (heading, description) = if provider_error {
-        (
-            "Sign-in wasn’t completed.",
-            "Return to Kordi to review the result or try again.",
-        )
+        ("Couldn’t sign in", "Go back to Kordi and try again.")
     } else {
-        ("Signed in.", "You can return to Kordi.")
+        (
+            "You’re signed in",
+            "You can close this tab and go back to Kordi.",
+        )
     };
     render_auth_response_page(heading, description)
 }
