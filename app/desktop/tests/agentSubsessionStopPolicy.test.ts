@@ -244,6 +244,31 @@ test('a stopped task publishes why it stopped', async () => {
   }
 });
 
+test('a task that stopped during refusals still publishes why once the cloud accepts updates', async () => {
+  let writes = 0;
+  let stopped = false;
+  const published: NativeAgentSubsession[] = [];
+  const h = harness({
+    snapshot: () => (stopped ? { status: 'stopped', stopReason: { kind: 'lease_lapsed', status: 401, code: 'unauthorized' } } : {}),
+    put: async (value) => {
+      writes += 1;
+      // Refusals while it runs, then more after it stopped, then acceptance.
+      if (writes === 8) stopped = true;
+      if (writes >= 2 && writes < 8 + SUBSESSION_FINAL_PUBLISH_ATTEMPTS + 2) throw new CloudAuthError('unauthorized', 'Sign in again', 401);
+      published.push(value);
+      return { status: value.status, version: writes };
+    },
+  });
+  try {
+    await publishModelSubsession('child');
+    await h.until(() => published.some(value => value.status === 'stopped'), 'the stopped state reached the cloud');
+    assert.deepEqual(published.at(-1)?.stopReason, { kind: 'lease_lapsed', status: 401, code: 'unauthorized' });
+  } finally {
+    await settle();
+    h.restore();
+  }
+});
+
 test('a finished task stops retrying a final update the cloud keeps refusing', async () => {
   let writes = 0;
   const h = harness({

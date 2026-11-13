@@ -22,7 +22,11 @@ export const SUBSESSION_SYNC_STEP_MS = 1_500;
 export const SUBSESSION_SYNC_MAX_BACKOFF_MS = 30_000;
 /** Empty sign-in reads in a row that count as a sign-out. One empty read can be a storage race. */
 export const SUBSESSION_SIGNED_OUT_READS = 3;
-/** Refused attempts after which a finished task stops publishing its final state. */
+/**
+ * Refused attempts of a finished task's final state after which it stops
+ * publishing. A version conflict or an expired access token never counts:
+ * reloading the version or the access token clears it.
+ */
 export const SUBSESSION_FINAL_PUBLISH_ATTEMPTS = 6;
 
 /**
@@ -99,6 +103,7 @@ export async function publishModelSubsession(id: string): Promise<void> {
     let leaseTurnId: string | null = null;
     let refusal: SubsessionSyncRefusal | null = null;
     let refusals = 0;
+    let finalRefusals = 0;
     let emptySessionReads = 0;
     let publishedStatus: string | null = null;
     let unansweredStreak = 0;
@@ -211,7 +216,8 @@ export async function publishModelSubsession(id: string): Promise<void> {
             refusals += 1;
             setSyncState(id, refusal);
             console.warn(`[subsessions] the cloud refused an update of background session ${id}: ${refusal.status} ${refusal.code}`);
-            if (!runningTurnId && (refusal.code === 'subsession_is_terminal' || refusals >= SUBSESSION_FINAL_PUBLISH_ATTEMPTS)) {
+            if (!runningTurnId && ![401, 409].includes(refusal.status)) finalRefusals += 1;
+            if (!runningTurnId && (refusal.code === 'subsession_is_terminal' || finalRefusals >= SUBSESSION_FINAL_PUBLISH_ATTEMPTS)) {
               resolveFirst();
               return;
             }
