@@ -198,24 +198,8 @@ pub(in crate::common_ground) async fn results(
     }
     // Each queued run is charged; polling while one works or pauses is free.
     let mut pending = None;
-    if open && !stale.is_empty() {
-        let queued = store::queue_matches(
-            pool,
-            system_agent.config(),
-            &rate_limiter,
-            &viewer,
-            &stale,
-            Some(room_id),
-            organization_id,
-        )
-        .await;
-        match queued {
-            Ok(Queued::Pending(state)) => pending = Some(state),
-            Ok(Queued::Skipped) => {}
-            Ok(Queued::Limited(retry_after)) => return limited(retry_after),
-            Err(error) => return db_error(error),
-        }
-    }
+    // The theme run is queued first: runs are leased in the order they
+    // were queued, and one theme run serves the whole room.
     if needs_themes {
         let queued = store::queue_themes(
             pool,
@@ -239,6 +223,24 @@ pub(in crate::common_ground) async fn results(
                 };
             }
             // No run can replace them, so the previous themes go.
+            Ok(Queued::Skipped) => {}
+            Ok(Queued::Limited(retry_after)) => return limited(retry_after),
+            Err(error) => return db_error(error),
+        }
+    }
+    if open && !stale.is_empty() {
+        let queued = store::queue_matches(
+            pool,
+            system_agent.config(),
+            &rate_limiter,
+            &viewer,
+            &stale,
+            Some(room_id),
+            organization_id,
+        )
+        .await;
+        match queued {
+            Ok(Queued::Pending(state)) => pending = Some(state),
             Ok(Queued::Skipped) => {}
             Ok(Queued::Limited(retry_after)) => return limited(retry_after),
             Err(error) => return db_error(error),
