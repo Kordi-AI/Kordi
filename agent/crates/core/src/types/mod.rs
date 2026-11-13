@@ -20,6 +20,6 @@ pub use turn_segment::TurnSegment;
 
 mod turn_reply;
 pub use turn_reply::{
-    STATUS_PREAMBLE_MAX_CHARS, assistant_text_parts, compose_turn_reply, fold_turn_reply_segments,
-    is_status_preamble,
+    STATUS_PREAMBLE_MAX_CHARS, assistant_message_texts, assistant_text_parts, compose_turn_reply,
+    fold_turn_reply_segments, is_status_preamble,
 };

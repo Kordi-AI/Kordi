@@ -228,3 +228,45 @@ fn reply_keeps_the_summary_written_before_the_last_tool_call() -> Result<()> {
     assert_eq!(reply.tools.len(), 5);
     Ok(())
 }
+
+#[test]
+fn a_preamble_before_a_tool_call_stays_the_text_when_nothing_else_was_written() -> Result<()> {
+    let conn = kordi_session::store::open_memory()?;
+    let session_id = "desktop-reply-preamble-only";
+    kordi_session::store::create_session_with_id(&conn, session_id, "/tmp/kordi")?;
+    let user = AgentMessage::User(UserMessage {
+        content: vec![ContentBlock::Text {
+            text: "write the brief".to_string(),
+        }],
+        timestamp: 1_000,
+    });
+    append(&conn, session_id, user)?;
+    let first = vec![
+        AssistantContent::Text {
+            text: "Creating the brief now…".to_string(),
+        },
+        call("call-doc", "create_document"),
+    ];
+    append(
+        &conn,
+        session_id,
+        assistant(first, StopReason::ToolUse, 2_000),
+    )?;
+    append(
+        &conn,
+        session_id,
+        result("call-doc", "create_document", "created", false, 2_100),
+    )?;
+    append(
+        &conn,
+        session_id,
+        assistant(Vec::new(), StopReason::Stop, 3_000),
+    )?;
+
+    let messages = load_session_messages(&conn, session_id)?;
+    let reply = messages.last().expect("assistant turn");
+    assert!(!reply.failed && !reply.cancelled);
+    // Desktop has no other fallback, so the message is never left empty.
+    assert_eq!(reply.text, "Creating the brief now…");
+    Ok(())
+}

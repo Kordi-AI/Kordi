@@ -360,3 +360,46 @@ fn reply_keeps_text_written_before_the_last_tool_call() {
     // Without assistant text the worker's text stands.
     assert_eq!(omp_reply_text(String::new(), &messages[..2]), "");
 }
+
+#[test]
+fn text_before_a_tool_call_does_not_replace_the_tool_fallback() {
+    // "Creating the brief now…", create_document, then an empty last message.
+    let messages = vec![
+        json!({"role":"assistant","content":[
+            {"type":"text","text":"Creating the brief now…"},
+            {"type":"toolCall","id":"call-1","name":"create_document","arguments":{}}
+        ]}),
+        json!({"role":"toolResult","toolCallId":"call-1","content":[{"type":"text","text":"created"}]}),
+        json!({"role":"assistant","content":[]}),
+    ];
+    let text = omp_reply_text(String::new(), &messages);
+    assert_eq!(text, "");
+    let created = ToolOutcome::new(
+        "create_document",
+        &Ok(json!({"created": true, "title": "Brief"})),
+    );
+    assert_eq!(
+        run_reply_text(text, &[created]).unwrap(),
+        "Created “Brief”."
+    );
+
+    // "I'll ask Priya.", reach_out, and no closing text.
+    let messages = vec![
+        json!({"role":"assistant","content":[
+            {"type":"text","text":"I'll ask Priya."},
+            {"type":"toolCall","id":"call-2","name":"reach_out","arguments":{}}
+        ]}),
+        json!({"role":"toolResult","toolCallId":"call-2","content":[{"type":"text","text":"sent"}]}),
+        json!({"role":"assistant","content":[{"type":"text","text":"  "}]}),
+    ];
+    let text = omp_reply_text(String::new(), &messages);
+    assert_eq!(text, "");
+    let reached = ToolOutcome::new(
+        "reach_out",
+        &Ok(json!({"summary": "Asked Priya for the launch date."})),
+    );
+    assert_eq!(
+        run_reply_text(text, &[reached]).unwrap(),
+        "Asked Priya for the launch date."
+    );
+}

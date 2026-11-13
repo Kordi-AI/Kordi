@@ -144,6 +144,70 @@ fn assistant_text_parts_skip_reasoning_tools_and_other_roles() {
         json!({"role": "assistant", "content": [{"type": "text", "text": FINAL}]}),
     ];
     let parts = assistant_text_parts(&messages);
-    assert_eq!(parts, vec![SUMMARY.to_string(), FINAL.to_string()]);
+    // The first message wrote no text, so it adds one empty part.
+    assert_eq!(
+        parts,
+        vec![String::new(), SUMMARY.to_string(), FINAL.to_string()]
+    );
     assert_eq!(compose_turn_reply(&parts), format!("{SUMMARY}\n\n{FINAL}"));
+}
+
+#[test]
+fn a_preamble_before_a_tool_call_is_never_the_final_answer() {
+    // "Creating the brief now…", a tool call, then a message without text.
+    let messages = vec![
+        json!({"role": "assistant", "content": [
+            {"type": "text", "text": "Creating the brief now…"},
+            {"type": "toolCall", "id": "call-1", "name": "create_document", "arguments": {}}
+        ]}),
+        json!({"role": "toolResult", "content": [{"type": "text", "text": "created"}]}),
+        json!({"role": "assistant", "content": []}),
+    ];
+    let parts = assistant_text_parts(&messages);
+    assert_eq!(compose_turn_reply(&parts), "");
+    // Earlier substantive text is the reply instead.
+    assert_eq!(
+        compose_turn_reply(&[SUMMARY, "Opening Slack…", ""]),
+        SUMMARY
+    );
+    // As the turn's last text, a preamble is still the reply.
+    assert_eq!(compose_turn_reply(&["Opening Slack…"]), "Opening Slack…");
+
+    let mut segments = vec![
+        text("text:0", "Creating the brief now…"),
+        tool("create_document"),
+    ];
+    assert_eq!(fold_turn_reply_segments(&mut segments), "");
+    assert_eq!(segment_text(&segments[0]), "Creating the brief now…");
+
+    // Clients show the last text segment as the reply, so the reply replaces
+    // the trailing preamble there.
+    let mut segments = vec![
+        text("text:0", SUMMARY),
+        tool("github_notifications"),
+        text("text:2", "Checking Slack…"),
+        tool("local_app"),
+    ];
+    assert_eq!(fold_turn_reply_segments(&mut segments), SUMMARY);
+    assert_eq!(segment_text(&segments[0]), "");
+    assert_eq!(segment_text(&segments[2]), SUMMARY);
+}
+
+#[test]
+fn a_fenced_json_outcome_stays_alone() {
+    let fenced = "```json\n{\"agentExchangeOutcome\":\"waiting\"}\n```";
+    assert_eq!(compose_turn_reply(&[SUMMARY, fenced]), fenced);
+    let bare_fence = "```\n{\"agentExchangeOutcome\":\"waiting\"}\n```";
+    assert_eq!(compose_turn_reply(&[SUMMARY, bare_fence]), bare_fence);
+    // A fence with prose around it, or a list, is not an outcome.
+    let prose = "Here it is:\n```json\n{\"a\":1}\n```";
+    assert_eq!(
+        compose_turn_reply(&[SUMMARY, prose]),
+        format!("{SUMMARY}\n\n{prose}")
+    );
+    let list = "```json\n[1, 2]\n```";
+    assert_eq!(
+        compose_turn_reply(&[SUMMARY, list]),
+        format!("{SUMMARY}\n\n{list}")
+    );
 }

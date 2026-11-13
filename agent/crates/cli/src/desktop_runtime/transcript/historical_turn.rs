@@ -49,7 +49,13 @@ pub(super) fn flush_historical_turn(
     // The reply keeps the turn's earlier user-facing text with the final
     // answer last; see `kordi_core::types::fold_turn_reply_segments`.
     let mut segments = turn.segments;
-    let assistant_text = kordi_core::types::fold_turn_reply_segments(&mut segments);
+    let mut assistant_text = kordi_core::types::fold_turn_reply_segments(&mut segments);
+    if assistant_text.is_empty() {
+        // The rule leaves a turn whose only text is a status preamble before a
+        // tool call without a reply. Desktop has no other fallback, so that
+        // preamble stays the stored text rather than an empty message.
+        assistant_text = last_text_segment(&segments);
+    }
     let thinking_text = turn.thinking_parts.join("\n\n");
     let interrupted = !turn.cancelled && turn.awaiting_final_response;
     let failed = turn.failed || interrupted;
@@ -75,6 +81,19 @@ pub(super) fn flush_historical_turn(
         tools: turn.tools,
         entry_id: turn.last_entry_id,
     });
+}
+
+fn last_text_segment(segments: &[kordi_core::types::TurnSegment]) -> String {
+    segments
+        .iter()
+        .rev()
+        .find_map(|segment| match segment {
+            kordi_core::types::TurnSegment::Text { text, .. } if !text.trim().is_empty() => {
+                Some(text.trim().to_string())
+            }
+            _ => None,
+        })
+        .unwrap_or_default()
 }
 
 pub(super) fn tool_detail_label(details: &Option<serde_json::Value>) -> Option<String> {
