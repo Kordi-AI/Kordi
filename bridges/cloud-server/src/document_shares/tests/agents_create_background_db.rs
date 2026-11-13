@@ -12,9 +12,9 @@ use serde_json::json;
 use sqlx_core::query::query;
 use uuid::Uuid;
 
-use super::agents_create_fixture::*;
-use super::agents_fixture::*;
-use super::db_fixture::*;
+use super::super::agents_create_fixture::*;
+use super::super::agents_fixture::*;
+use super::super::db_fixture::*;
 use crate::connectors::delivery::deliver_to_run;
 
 /// A background session of the owner's agent under `parent_session_id`.
