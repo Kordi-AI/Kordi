@@ -1,7 +1,9 @@
 //! Slack: read and post in the channels the person chose for Kordi.
 //!
 //! The chosen channels live in the connector settings as
-//! `{ "channels": ["C123", ...] }`. Tools refuse any other channel.
+//! `{ "channels": ["C123", ...], "channelNames": { "C123": "general" } }`
+//! (names optional). Tools refuse any other channel. Listing choices and
+//! naming channels on the tools live in `slack_channels.rs`.
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
@@ -10,7 +12,7 @@ use serde_json::{json, Value};
 use super::http::{cap_text, limit_arg, list_at, required_str, str_arg, ProviderHttp};
 use super::{
     ConnectorSecret, ConnectorToolDescriptor, OAuth2ConnectorProvider, PolledEvent, ProviderError,
-    ServiceAdapter, ServiceProvider, MAX_POLL_EVENTS, POLL_PAGE_SIZE, SLACK,
+    ServiceAdapter, ServiceProvider, SettingOptionsError, MAX_POLL_EVENTS, POLL_PAGE_SIZE, SLACK,
 };
 use crate::connectors::models::ConnectorToolGroup;
 
@@ -100,11 +102,12 @@ pub fn chosen_channels(settings: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Validates `{ "channels": [...] }`: known keys only, at most 50 distinct
-/// channel ids.
+/// Validates `{ "channels": [...], "channelNames": {...} }`: known keys
+/// only, at most 50 distinct channel ids, names only for chosen channels.
 pub fn validate_slack_settings(settings: &Value) -> Result<Value, String> {
     let map = settings.as_object().ok_or("Settings must be an object.")?;
-    if let Some(key) = map.keys().find(|key| key.as_str() != "channels") {
+    let known = |key: &str| key == "channels" || key == "channelNames";
+    if let Some(key) = map.keys().find(|key| !known(key)) {
         return Err(format!("Unknown Slack setting {key:?}."));
     }
     let raw = match map.get("channels") {
@@ -126,7 +129,11 @@ pub fn validate_slack_settings(settings: &Value) -> Result<Value, String> {
     if channels.len() > MAX_CHANNELS {
         return Err(format!("Choose at most {MAX_CHANNELS} channels."));
     }
-    Ok(json!({ "channels": channels }))
+    let names = super::slack_channels::validate_names(map.get("channelNames"), &channels)?;
+    if names.is_empty() {
+        return Ok(json!({ "channels": channels }));
+    }
+    Ok(json!({ "channels": channels, "channelNames": names }))
 }
 
 fn chosen_channel<'a>(args: &'a Value, settings: &Value) -> Result<&'a str, ProviderError> {
@@ -141,7 +148,7 @@ fn chosen_channel<'a>(args: &'a Value, settings: &Value) -> Result<&'a str, Prov
 
 /// Slack answers HTTP 200 with `ok: false`; credential errors become
 /// `Unauthorized` so the broker can refresh or ask for a reconnect.
-fn slack_ok(body: Value) -> Result<Value, ProviderError> {
+pub(super) fn slack_ok(body: Value) -> Result<Value, ProviderError> {
     if body.get("ok").and_then(Value::as_bool) == Some(true) {
         return Ok(body);
     }
@@ -260,6 +267,24 @@ impl ServiceAdapter for SlackAdapter {
 
     fn validate_settings(&self, settings: &Value) -> Option<Result<Value, String>> {
         Some(validate_slack_settings(settings))
+    }
+
+    async fn setting_options(
+        &self,
+        secret: &ConnectorSecret,
+        granted: &[String],
+    ) -> Result<Value, SettingOptionsError> {
+        super::slack_channels::list_channels(&self.api, &secret.access_token, granted).await
+    }
+
+    fn tailor_tool(
+        &self,
+        tool: &str,
+        settings: &Value,
+        description: &mut String,
+        schema: &mut Value,
+    ) {
+        super::slack_channels::tailor_tool(tool, settings, description, schema);
     }
 
     /// Messages since `since` in the chosen channels, page by page, at most
