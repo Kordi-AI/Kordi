@@ -49,8 +49,13 @@ system-configuration = "0.7"
 block2 = "0.6"
 objc2 = "0.6"
 objc2-avf-audio = { version = "0.3.2", default-features = false, features = ["AVAudioBuffer", "AVAudioChannelLayout", "AVAudioEngine", "AVAudioFile", "AVAudioFormat", "AVAudioIONode", "AVAudioNode", "AVAudioSettings", "AVAudioTime", "AVAudioTypes", "block2"] }
-objc2-foundation = { version = "0.3", features = ["NSArray", "NSBundle", "NSCalendar", "NSDate", "NSError", "NSLocale", "NSNotification", "NSOperation", "NSPredicate", "NSProcessInfo", "NSString", "NSURL", "block2"] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSBundle", "NSCalendar", "NSData", "NSDate", "NSDictionary", "NSError", "NSLocale", "NSNotification", "NSOperation", "NSPredicate", "NSProcessInfo", "NSString", "NSURL", "block2"] }
 objc2-speech = "0.3.2"
+objc2-quick-look-thumbnailing = { version = "0.3.2", default-features = false, features = ["std", "block2", "objc2-core-foundation", "objc2-core-graphics", "QLThumbnailGenerator", "QLThumbnailGenerationRequest", "QLThumbnailRepresentation", "QLThumbnailErrors"] }
+objc2-quick-look-ui = { version = "0.3.2", default-features = false, features = ["std", "objc2-app-kit", "QLPreviewPanel", "QLPreviewItem"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "objc2-core-graphics", "NSBitmapImageRep", "NSImageRep", "NSPanel", "NSWindow", "NSResponder", "NSGraphics"] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std", "CFCGTypes"] }
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGImage"] }
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

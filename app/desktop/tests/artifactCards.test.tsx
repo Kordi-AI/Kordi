@@ -13,6 +13,7 @@ import { readStoredArtifactLayout } from '../src/pages/artifactLayoutPreference'
 import { ArtifactListRow } from '../src/pages/ArtifactListRow';
 import { artifactThumbnailKey, loadArtifactThumbnail, THUMBNAIL_SOURCE_CHARS } from '../src/pages/artifactThumbnail';
 import { openArtifactExternally } from '../src/features/documents/openArtifactExternally';
+import { setArtifactFileLoadersForPreview, setArtifactImageLoaderForPreview, setArtifactPreviewLoaderForPreview } from '../src/features/documents/artifactPreviewLoader';
 
 const doc = (id: string, path: string, extra: Partial<SessionArtifact> = {}): SessionArtifact => ({
   id, path, name: path.split('/').pop() ?? path, kind: 'document', category: 'artifact', summary: 'Created', ...extra,
@@ -174,10 +175,23 @@ test('the source view names the type plainly and offers a way out for files it c
   assert.match(withOpen, />Open in default app</);
   assert.doesNotMatch(view({ preview: preview('src/app.py'), onReload: () => {} }), /Open in default app/, 'only where the file can be reached');
 
-  const pdf = view({ preview: null, path: 'decks/pricing.pdf', onReload: () => {}, onOpenExternal: () => {} });
-  assert.match(pdf, /No preview for PDF files yet\./);
-  assert.match(pdf, />Open in default app</);
-  assert.doesNotMatch(pdf, />Retry</, 'retrying will not help a PDF');
+  // A PDF draws in WebKit's own viewer; a document Quick Look understands gets a file card.
+  const pdf = view({ preview: null, pdf: { src: 'blob:pdf', sizeBytes: 2_200_000 }, path: 'decks/pricing.pdf', onReload: () => {}, onQuickLook: () => {}, onOpenExternal: () => {} });
+  assert.match(pdf, /<iframe class="app-pdf-viewer" data-pdf-viewer="" title="pricing\.pdf" src="blob:pdf">/);
+  assert.match(pdf, /app-document-source-info">PDF · 2\.1 MB</);
+  assert.match(pdf, />Quick Look</);
+  const unreadablePdf = view({ preview: null, path: 'decks/pricing.pdf', onReload: () => {}, onOpenExternal: () => {} });
+  assert.match(unreadablePdf, /This file is unavailable on this device\./);
+  assert.match(unreadablePdf, />Open in default app</);
+  const card = view({ preview: null, thumbnail: { src: 'data:image/png;base64,AAAA', sizeBytes: 86_016 }, path: 'docs/q4-plan.docx', onReload: () => {}, onQuickLook: () => {}, onOpenExternal: () => {} });
+  assert.match(card, /data-file-card=""/);
+  assert.match(card, /class="app-file-card-thumbnail" src="data:image\/png;base64,AAAA"/);
+  assert.match(card, />q4-plan\.docx</);
+  assert.match(card, />Word document · 84 KB</);
+  assert.match(card, /app-file-card-primary"[^>]*>.*Quick Look/);
+  const webCard = view({ preview: null, path: 'media/demo.mov', onReload: () => {} });
+  assert.match(webCard, />Video</);
+  assert.match(webCard, /Open this file in the Kordi desktop app\./, 'outside the desktop app there is no Quick Look');
 
   // Images and tables get their own viewers that fill the panel.
   const image = view({ preview: null, image: { src: 'data:image/png;base64,AAAA', sizeBytes: 2048 }, path: 'shots/hero.png', onReload: () => {} });
@@ -191,4 +205,25 @@ test('the source view names the type plainly and offers a way out for files it c
   const missing = view({ preview: null, path: 'src/gone.ts', onReload: () => {} });
   assert.match(missing, /This file is unavailable on this device\./);
   assert.match(missing, />Retry</);
+});
+
+test('images, PDFs, and documents get Quick Look thumbnails, and an image falls back to its own bytes', async () => {
+  setArtifactPreviewLoaderForPreview(async ({ path }) => ({ path, truncated: false, lines: [{ number: 1, text: 'x' }] }));
+  setArtifactImageLoaderForPreview(async () => ({ src: 'data:image/png;base64,IMAGE', sizeBytes: 10 }));
+  setArtifactFileLoadersForPreview({
+    thumbnail: async ({ path }) => {
+      if (path.endsWith('.png')) throw new Error('Quick Look could not draw it');
+      return { src: `data:image/png;base64,${path.endsWith('.pdf') ? 'PDF' : 'DOC'}`, sizeBytes: 1 };
+    },
+  });
+  try {
+    const load = (path: string) => loadArtifactThumbnail(doc(path, path, { kind: 'file' }), { isNativeShell: false, api: null });
+    assert.deepEqual(await load('decks/pricing.pdf'), { kind: 'image', source: 'data:image/png;base64,PDF' });
+    assert.deepEqual(await load('docs/plan.docx'), { kind: 'image', source: 'data:image/png;base64,DOC' });
+    assert.deepEqual(await load('shots/hero.png'), { kind: 'image', source: 'data:image/png;base64,IMAGE' });
+  } finally {
+    setArtifactPreviewLoaderForPreview(undefined);
+    setArtifactImageLoaderForPreview(undefined);
+    setArtifactFileLoadersForPreview({});
+  }
 });

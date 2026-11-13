@@ -7,7 +7,8 @@ import type { SessionArtifact } from '@/kordi-app/types';
 
 import { artifactDocumentApi } from '@/features/documents/artifactDocumentApi';
 import { artifactPreviewKind } from './artifactPreviewFormat';
-import { artifactPreviewsAvailable, loadArtifactImage, loadArtifactPreview } from '@/features/documents/artifactPreviewLoader';
+import { artifactPreviewsAvailable, loadArtifactImage, loadArtifactPreview, loadArtifactQuickLookThumbnail } from '@/features/documents/artifactPreviewLoader';
+import { companionViewerKind } from '@/features/documents/viewers/viewerKind';
 
 export type ArtifactThumbnailKind = ReturnType<typeof artifactPreviewKind>;
 
@@ -83,12 +84,19 @@ async function loadLocalFile(artifact: SessionArtifact, context: ArtifactThumbna
 
 /** Reads the top of an artifact: the cloud copy of a shared document first, then the file on this Mac. */
 export async function loadArtifactThumbnail(artifact: SessionArtifact, context: ArtifactThumbnailContext): Promise<ArtifactThumbnailSource | null> {
-  // Images are read as bytes, never as text; without the Mac they show the file-type mark.
-  if (artifactPreviewKind(artifact.path) === 'image') {
+  // Images, PDFs, and documents get Quick Look thumbnails on the Mac, never a text read. An image
+  // Quick Look cannot draw falls back to its own bytes; without the Mac they show the type mark.
+  const viewer = companionViewerKind(artifact.path);
+  if (viewer === 'image' || viewer === 'pdf' || viewer === 'file') {
     if (!artifactPreviewsAvailable(context.isNativeShell)) return null;
+    const input = { isNativeShell: context.isNativeShell, path: artifact.path, attachmentId: artifact.attachmentId, baseRoot: artifact.pinned ? null : context.baseRoot };
     try {
-      const image = await loadArtifactImage({ isNativeShell: context.isNativeShell, path: artifact.path, attachmentId: artifact.attachmentId, baseRoot: artifact.pinned ? null : context.baseRoot });
-      return { kind: 'image', source: image.src };
+      return { kind: 'image', source: (await loadArtifactQuickLookThumbnail(input)).src };
+    } catch {
+      if (viewer !== 'image') return null;
+    }
+    try {
+      return { kind: 'image', source: (await loadArtifactImage(input)).src };
     } catch {
       return null;
     }

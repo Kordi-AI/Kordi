@@ -1,11 +1,13 @@
-import { ArrowUpRight, Copy, WrapText } from 'lucide-react';
+import { ArrowUpRight, Copy, Eye, WrapText } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import type { DesktopArtifactPreview } from '@/kordi-app/types';
-import type { ArtifactImage } from './artifactPreviewLoader';
+import type { ArtifactImage, ArtifactQuickLookThumbnail } from './artifactPreviewLoader';
 
+import { FileCard } from './viewers/FileCard';
 import { ImageViewer } from './viewers/ImageViewer';
+import { PdfViewer } from './viewers/PdfViewer';
 import { parseDelimited } from './viewers/delimitedText';
-import { companionViewerKind, extensionOf, NO_PREVIEW } from './viewers/viewerKind';
+import { companionViewerKind, extensionOf } from './viewers/viewerKind';
 import { TableViewer } from './viewers/TableViewer';
 
 // The code viewer (CodeMirror and its grammars) loads in its own chunk the first time a file opens.
@@ -19,6 +21,10 @@ const FORMAT_NAMES: Record<string, string> = {
   cpp: 'C++', cs: 'C#', php: 'PHP', sh: 'Shell', zsh: 'Shell', bash: 'Shell', sql: 'SQL',
   json: 'JSON', yaml: 'YAML', yml: 'YAML', toml: 'TOML', xml: 'XML', csv: 'CSV', tsv: 'TSV',
   html: 'HTML', htm: 'HTML', css: 'CSS', scss: 'SCSS', svg: 'SVG', mmd: 'Mermaid', mermaid: 'Mermaid',
+  pdf: 'PDF', doc: 'Word document', docx: 'Word document', rtf: 'Rich text document', xls: 'Excel spreadsheet', xlsx: 'Excel spreadsheet',
+  ppt: 'PowerPoint presentation', pptx: 'PowerPoint presentation', key: 'Keynote presentation', pages: 'Pages document', numbers: 'Numbers spreadsheet',
+  mov: 'Video', mp4: 'Video', m4v: 'Video', webm: 'Video', mp3: 'Audio', m4a: 'Audio', wav: 'Audio', aiff: 'Audio', flac: 'Audio',
+  zip: 'ZIP archive', gz: 'Archive', tar: 'Archive', tgz: 'Archive', dmg: 'Disk image', epub: 'EPUB book',
   png: 'PNG image', jpg: 'JPEG image', jpeg: 'JPEG image', gif: 'GIF image', webp: 'WebP image', avif: 'AVIF image', heic: 'HEIC image',
 };
 function indentedJson(text: string) {
@@ -54,15 +60,21 @@ function useCopied() {
  * text in the read-only code viewer, CSV and TSV as a table, SVG and images in the image viewer.
  * Tables and SVG switch to their source. Never executes a file or renders source as HTML.
  */
-export function CompanionSourceView({ preview, path, image, onReload, onOpenExternal }: {
+export function CompanionSourceView({ preview, path, image, pdf, thumbnail, onReload, onOpenExternal, onQuickLook }: {
   preview: DesktopArtifactPreview | null;
   /** The file's path, for the type and the empty state when it could not be read. */
   path?: string | null;
   /** A raster image, read as bytes rather than text. */
   image?: ArtifactImage | null;
+  /** A PDF as an object URL, read as bytes. */
+  pdf?: ArtifactImage | null;
+  /** The Quick Look thumbnail and size of a file the panel shows as a card. */
+  thumbnail?: ArtifactQuickLookThumbnail | null;
   onReload: () => void;
   /** Opens the file in its default app; shown when given. */
   onOpenExternal?: () => void;
+  /** Shows the file in the system Quick Look panel; shown when given. */
+  onQuickLook?: () => void;
 }) {
   const filePath = preview?.path ?? path ?? '';
   const extension = extensionOf(filePath);
@@ -80,15 +92,30 @@ export function CompanionSourceView({ preview, path, image, onReload, onOpenExte
     <button type="button" onClick={onOpenExternal}><ArrowUpRight size={14} aria-hidden="true" />Open in default app</button>
   ) : null;
 
+  const quickLookButton = onQuickLook ? (
+    <button type="button" onClick={onQuickLook}><Eye size={14} aria-hidden="true" />Quick Look</button>
+  ) : null;
+
+  if (kind === 'file') {
+    const details = [format, thumbnail?.sizeBytes ? formatBytes(thumbnail.sizeBytes) : null].filter(Boolean).join(' · ');
+    return <FileCard name={name} details={details} thumbnail={thumbnail?.src} onQuickLook={onQuickLook} onOpenExternal={onOpenExternal} />;
+  }
+  if (kind === 'pdf') {
+    if (!pdf) return <EmptyState onReload={onReload} actions={<>{quickLookButton}{openButton}</>} />;
+    return <>
+      <Toolbar info={[format, pdf.sizeBytes ? formatBytes(pdf.sizeBytes) : null].filter(Boolean).join(' · ')}>{quickLookButton}{openButton}</Toolbar>
+      <div className="app-companion-viewer"><PdfViewer src={pdf.src} name={name} /></div>
+    </>;
+  }
   if (kind === 'image') {
-    if (!image) return <EmptyState noPreview={false} format={format} onReload={onReload} openButton={openButton} />;
+    if (!image) return <EmptyState onReload={onReload} actions={openButton} />;
     const details = [format, imageSize ? `${imageSize.width} × ${imageSize.height}` : null, image.sizeBytes ? formatBytes(image.sizeBytes) : null].filter(Boolean).join(' · ');
     return <>
       <Toolbar info={details}>{openButton}</Toolbar>
       <ImageViewer src={image.src} name={name} onSize={setImageSize} />
     </>;
   }
-  if (!preview) return <EmptyState noPreview={NO_PREVIEW.has(extension)} format={format} onReload={onReload} openButton={openButton} />;
+  if (!preview) return <EmptyState onReload={onReload} actions={openButton} />;
 
   const text = preview.lines.map((line) => line.text).join('\n');
   // Valid JSON reads indented; Copy still copies the file as written.
@@ -138,12 +165,12 @@ function Toolbar({ info, children }: { info: string; children: ReactNode }) {
   </div>;
 }
 
-function EmptyState({ noPreview, format, onReload, openButton }: { noPreview: boolean; format: string; onReload: () => void; openButton: ReactNode }) {
+function EmptyState({ onReload, actions }: { onReload: () => void; actions: ReactNode }) {
   return <div className="app-companion-status" role="status">
-    <p>{noPreview ? `No preview for ${format} files yet.` : 'This file is unavailable on this device.'}</p>
+    <p>This file is unavailable on this device.</p>
     <div className="app-companion-status-actions">
-      {openButton}
-      {noPreview ? null : <button type="button" onClick={onReload}>Retry</button>}
+      {actions}
+      <button type="button" onClick={onReload}>Retry</button>
     </div>
   </div>;
 }

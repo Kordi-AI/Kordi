@@ -2,7 +2,9 @@
 // the real destination tabs, detail page, Artifacts panel, and memory list.
 // `?tab=memory` opens the Memory tab, `?empty=1` previews a chat without
 // artifacts or memories, and `?layout=list` or `?layout=cards` saves that
-// layout first (otherwise the saved choice applies, cards by default). It makes no network calls and needs no session.
+// layout first (otherwise the saved choice applies, cards by default). In the desktop window,
+// `?realFiles=<absolute folder>` also lists review.pdf, plan.docx, and photo.png from that folder and
+// leaves all binary files to the real Mac commands, to check PDF, Quick Look, and thumbnails. It makes no network calls and needs no session.
 import './previewChatTheme';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -14,7 +16,7 @@ import type { DocumentResponse } from '../../src/features/documents/documentShar
 import type { Conversation, SessionArtifact } from '../../src/kordi-app/types';
 import { ARTIFACT_LAYOUT_STORAGE_KEY } from '../../src/pages/artifactLayoutPreference';
 import { setArtifactDocumentApiForPreview } from '../../src/features/documents/artifactDocumentApi';
-import { setArtifactImageLoaderForPreview, setArtifactPreviewLoaderForPreview } from '../../src/features/documents/artifactPreviewLoader';
+import { setArtifactFileLoadersForPreview, setArtifactImageLoaderForPreview, setArtifactPreviewLoaderForPreview } from '../../src/features/documents/artifactPreviewLoader';
 import { isNativeDesktopShell } from '../../src/lib/desktop';
 import type { CompanionDocument } from '../../src/features/documents/companionDocument';
 import { useCompanionDocument, useCompanionDocumentRequests } from '../../src/features/documents/useCompanionDocument';
@@ -26,6 +28,7 @@ import { SessionDestinationTabs } from '../../src/pages/chatsPage.destinations';
 import { CHAT_DETAIL_TABS } from '../../src/pages/chatsPage.destinationModel';
 
 const params = new URLSearchParams(window.location.search);
+const realFilesFolder = isNativeDesktopShell() ? params.get('realFiles')?.replace(/\/+$/, '') || null : null;
 const requestedTheme = params.get('theme');
 const empty = params.has('empty');
 const prefersLight = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: light)').matches;
@@ -187,10 +190,70 @@ function sampleHeroImage() {
   return canvas.toDataURL('image/png');
 }
 
-setArtifactImageLoaderForPreview(async ({ path }) => {
+if (!realFilesFolder) setArtifactImageLoaderForPreview(async ({ path }) => {
   if (path !== 'shots/launch-hero.png') throw new Error('No such file or directory (os error 2)');
   const src = sampleHeroImage();
   return { src, sizeBytes: Math.round((src.length * 3) / 4) };
+});
+
+// A two-page sample PDF, written out in code so the repository holds no binary fixture.
+function samplePdf() {
+  const pages = [
+    ['Pricing review', 'Plans for every team.', 'Free, Team, Business, and Enterprise.'],
+    ['Next steps', 'Publish the pricing page on Friday.', 'Review the launch brief together on Monday.'],
+  ];
+  const objects: string[] = [];
+  const fontId = 3 + pages.length * 2;
+  objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+  objects[2] = `<< /Type /Pages /Kids [${pages.map((_, index) => `${3 + index * 2} 0 R`).join(' ')}] /Count ${pages.length} >>`;
+  pages.forEach(([title, first, second], index) => {
+    const page = 3 + index * 2;
+    const stream = `BT /F1 28 Tf 72 700 Td (${title}) Tj /F1 14 Tf 0 -44 Td (${first}) Tj 0 -24 Td (${second}) Tj ET`;
+    objects[page] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${page + 1} 0 R >>`;
+    objects[page + 1] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  });
+  objects[fontId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+  let pdf = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  for (let id = 1; id < objects.length; id += 1) {
+    offsets[id] = pdf.length;
+    pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+  }
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}`;
+  pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return new Blob([pdf], { type: 'application/pdf' });
+}
+
+// Stand-ins for Quick Look thumbnails: a first page drawn at runtime.
+function samplePageThumbnail(title: string, lines: string[]) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 480;
+  canvas.height = 620;
+  const context = canvas.getContext('2d');
+  if (!context) return '';
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, 480, 620);
+  context.fillStyle = '#1d1d1f';
+  context.font = '700 34px -apple-system, system-ui, sans-serif';
+  context.fillText(title, 48, 96);
+  context.font = '400 18px -apple-system, system-ui, sans-serif';
+  lines.forEach((line, index) => context.fillText(line, 48, 150 + index * 32));
+  context.fillStyle = '#e5e7eb';
+  for (let row = 0; row < 9; row += 1) context.fillRect(48, 290 + row * 30, row % 3 === 2 ? 240 : 384, 10);
+  return canvas.toDataURL('image/png');
+}
+
+if (!realFilesFolder) setArtifactFileLoadersForPreview({
+  pdf: async ({ path }) => {
+    if (path !== 'decks/pricing-review.pdf') throw new Error('No such file or directory (os error 2)');
+    return samplePdf();
+  },
+  thumbnail: async ({ path }) => {
+    if (path === 'decks/pricing-review.pdf') return { src: samplePageThumbnail('Pricing review', ['Plans for every team.', 'Free, Team, Business, Enterprise.']), sizeBytes: samplePdf().size };
+    if (path === 'docs/q4-plan.docx') return { src: samplePageThumbnail('Q4 plan', ['Goals for the quarter', 'Owners and dates']), sizeBytes: 86_016 };
+    throw new Error('No Quick Look thumbnail in the preview.');
+  },
 });
 
 // The preview stands in for a server that reports memory routes.
@@ -232,6 +295,13 @@ const artifacts: SessionArtifact[] = empty ? [] : [
   { id: 'clean-events', path: 'scripts/clean_events.py', name: 'clean_events.py', kind: 'code', category: 'artifact', summary: 'Created', timeLabel: 'Sun' },
   { id: 'standup', path: 'notes/standup.txt', name: 'standup.txt', kind: 'document', category: 'artifact', summary: 'Created', timeLabel: 'Nov 8' },
   { id: 'launch-hero', path: 'shots/launch-hero.png', name: 'launch-hero.png', kind: 'file', category: 'artifact', summary: 'Created', timeLabel: 'Sun', createdByAccountId: 'acct_priya' },
+  { id: 'pricing-deck', path: 'decks/pricing-review.pdf', name: 'pricing-review.pdf', kind: 'document', category: 'artifact', summary: 'Created', timeLabel: 'Sat', createdByAccountId: 'acct_taylor' },
+  { id: 'q4-plan', path: 'docs/q4-plan.docx', name: 'q4-plan.docx', kind: 'document', category: 'artifact', summary: 'Created', timeLabel: 'Sat' },
+  ...(realFilesFolder ? [
+    { id: 'real-pdf', path: `${realFilesFolder}/review.pdf`, name: 'review.pdf', kind: 'document', category: 'artifact', summary: 'On this Mac', timeLabel: 'Now' },
+    { id: 'real-docx', path: `${realFilesFolder}/plan.docx`, name: 'plan.docx', kind: 'document', category: 'artifact', summary: 'On this Mac', timeLabel: 'Now' },
+    { id: 'real-png', path: `${realFilesFolder}/photo.png`, name: 'photo.png', kind: 'file', category: 'artifact', summary: 'On this Mac', timeLabel: 'Now' },
+  ] satisfies SessionArtifact[] : []),
   { id: 'headline-test', path: 'src/headlines.ts', name: 'headlines.ts', kind: 'code', category: 'related', summary: 'Modified', timeLabel: '09:41' },
   { id: 'pricing-data', path: 'data/pricing.csv', name: 'pricing.csv', kind: 'file', category: 'related', summary: 'Created', timeLabel: '09:30' },
 ];

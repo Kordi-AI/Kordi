@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Conservative lock inventory, including build, test and optional dependencies; not a shipped-code SBOM.",
   "inputs": {
-    "Cargo.lock": "e3b5f7f1c06c61397d39be6008da90e36d57bd4e80385e26d6aebbcbe5b832e3",
+    "Cargo.lock": "426784a282496ebfd5f24af43aba1570ee59246a0eb5935c56b13e7071ba7ffc",
     "pnpm-lock.yaml": "d08955de4da55ae39816528da37e980de8b4ed3c2d137a25c5eb2ee8bedee347",
     "shared/omp-runtime/bun.lock": "6bbc37e133176a56c14213bee15bfce9954e83d7dbaa5278095b35c04be3eda9",
     "bridges/cloud-temporal-bridge/go.mod": "c09969e162406833ad4a1c85524a1fbe4196fd84aea2ded9ef4c8b251da72c51",
@@ -10744,6 +10744,26 @@
       "version": "0.3.2",
       "license": "Zlib OR Apache-2.0 OR MIT",
       "source": "https://static.crates.io/crates/objc2-quartz-core/objc2-quartz-core-0.3.2.crate",
+      "authors": [],
+      "evidence": "manifest-and-canonical-license",
+      "notices": []
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "objc2-quick-look-thumbnailing",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/objc2-quick-look-thumbnailing/objc2-quick-look-thumbnailing-0.3.2.crate",
+      "authors": [],
+      "evidence": "manifest-and-canonical-license",
+      "notices": []
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "objc2-quick-look-ui",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "source": "https://static.crates.io/crates/objc2-quick-look-ui/objc2-quick-look-ui-0.3.2.crate",
       "authors": [],
       "evidence": "manifest-and-canonical-license",
       "notices": []

@@ -40,7 +40,7 @@ const theme = EditorView.theme({
   '.cm-searchMatch': { backgroundColor: 'var(--code-match)', borderRadius: '2px' },
   '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'var(--code-match-current)' },
   '.cm-matchingBracket': { backgroundColor: 'var(--code-match)', outline: 'none' },
-  '.cm-panels': { backgroundColor: 'var(--app-transcript-bg)', color: 'var(--utility-foreground)', borderColor: 'var(--app-control-border)' },
+  '.cm-panels': { backgroundColor: 'var(--viewer-surface)', color: 'var(--utility-foreground)', borderColor: 'var(--app-control-border)' },
   '.cm-panels-top': { borderBottom: '1px solid var(--app-control-border)' },
 });
 

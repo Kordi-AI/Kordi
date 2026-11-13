@@ -57,10 +57,10 @@ for (const theme of ['light', 'dark'] as const) {
     await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
     const edge = await memoryTextEdge(page);
     await page.goto(`/tests/visual/chatArtifacts.html?theme=${theme}`);
-    await expect(page.locator('[data-artifact-card="true"]')).toHaveCount(14);
+    await expect(page.locator('[data-artifact-card="true"]')).toHaveCount(16);
     // Every sample type draws a thumbnail: Markdown, HTML, JSON, Mermaid, SVG, Python, text, a PNG
-    // image, TypeScript, and CSV.
-    await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(14);
+    // image, a PDF and a Word document (Quick Look thumbnails), TypeScript, and CSV.
+    await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(16);
     await expect(page.locator('[data-artifact-card-title]').first()).toHaveText('Launch brief');
     await expect(page.locator('[aria-current="true"]')).toHaveCount(0);
     // Changed project files share the grid and say how they changed.
@@ -89,9 +89,9 @@ test('the layout switch moves to the list and stays there after a reload (light)
   await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
   await page.goto('/tests/visual/chatArtifacts.html?theme=light');
   await page.getByRole('button', { name: 'List', exact: true }).click();
-  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(14);
+  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(16);
   await page.reload();
-  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(14);
+  await expect(page.locator('[data-artifact-file-row="true"]')).toHaveCount(16);
   await expect(page.getByRole('button', { name: 'List', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -99,7 +99,7 @@ test('chat artifacts list rows are one line and line up with the toolbar (light)
   await page.clock.setFixedTime(new Date('2026-10-20T10:00:00Z'));
   await page.goto('/tests/visual/chatArtifacts.html?theme=light&layout=list');
   const rows = page.locator('[data-artifact-row-shell]');
-  await expect(rows).toHaveCount(14);
+  await expect(rows).toHaveCount(16);
   await expect(page.locator('[data-artifact-file-row="true"][aria-current="true"]')).toHaveCount(0);
 
   // Picking a row opens it in the side panel; the row's fill then runs exactly from the search
@@ -115,14 +115,17 @@ test('chat artifacts list rows are one line and line up with the toolbar (light)
   // One line each: a compact row.
   expect(picked?.height ?? 99).toBeLessThanOrEqual(33);
 
+  // The list has the whole height (nothing under it) and scrolls to its last row.
+  await rows.last().scrollIntoViewIfNeeded();
   await expect(rows.last()).toBeInViewport();
+  await page.locator('[data-artifact-file-list="true"]').evaluate((list) => { list.scrollTop = 0; });
   await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot('chatArtifacts-list-light.png');
 });
 
 test('files open in the side panel in the viewer for their type, filling it', async ({ page }) => {
   await page.goto('/tests/visual/chatArtifacts.html?theme=light&layout=cards');
-  await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(14);
+  await expect(page.locator('[data-thumbnail-status="ready"]')).toHaveCount(16);
   // Inactive tabs stay mounted but hidden; check the open one.
   const panel = page.getByRole('complementary', { name: 'Document panel' }).locator('.app-companion-document-panel:not([hidden])');
   const open = (name: string) => page.locator('[data-artifact-card="true"]').filter({ hasText: name }).first().click();
@@ -141,6 +144,15 @@ test('files open in the side panel in the viewer for their type, filling it', as
   await expect(panel.locator('[data-image-viewer] img')).toBeVisible();
   await expect(panel.locator('.app-document-source-info')).toContainText('PNG image · 1200 × 675');
 
+  await open('pricing-review.pdf');
+  await expect(panel.locator('iframe[data-pdf-viewer]')).toHaveAttribute('src', /^blob:/);
+  await expect(panel.locator('.app-document-source-info')).toHaveText(/^PDF · /);
+
+  await open('q4-plan.docx');
+  await expect(panel.locator('[data-file-card] .app-file-card-thumbnail')).toBeVisible();
+  await expect(panel.locator('.app-file-card-details').first()).toHaveText('Word document · 84 KB');
+
+  await open('launch-hero.png');
   // The viewer fills the panel below its one toolbar line.
   const viewer = await panel.locator('[data-image-viewer]').boundingBox();
   const pane = await panel.boundingBox();

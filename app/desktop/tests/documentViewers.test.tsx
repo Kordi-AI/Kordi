@@ -20,6 +20,10 @@ test('each file picks its viewer by type', () => {
   assert.equal(companionViewerKind('data/prices.TSV'), 'table');
   assert.equal(companionViewerKind('brand/logo.svg'), 'svg');
   assert.equal(companionViewerKind('shots/hero.jpeg'), 'image');
+  assert.equal(companionViewerKind('decks/pricing.PDF'), 'pdf');
+  for (const path of ['plan.docx', 'model.xlsx', 'deck.key', 'deck.pptx', 'clip.mov', 'voice.m4a', 'bundle.zip']) {
+    assert.equal(companionViewerKind(path), 'file', `${path} shows as a file card`);
+  }
   assert.equal(companionViewerKind('src/app.ts'), 'code');
   assert.equal(companionViewerKind('notes/README'), 'code');
 });

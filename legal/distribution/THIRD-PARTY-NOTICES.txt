@@ -581,6 +581,8 @@ objc2-io-surface 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://static.crates.io/cr
 objc2-map-kit 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://static.crates.io/crates/objc2-map-kit/objc2-map-kit-0.3.2.crate
 objc2-osa-kit 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://static.crates.io/crates/objc2-osa-kit/objc2-osa-kit-0.3.2.crate
 objc2-quartz-core 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://static.crates.io/crates/objc2-quartz-core/objc2-quartz-core-0.3.2.crate
+objc2-quick-look-thumbnailing 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://static.crates.io/crates/objc2-quick-look-thumbnailing/objc2-quick-look-thumbnailing-0.3.2.crate
+objc2-quick-look-ui 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://static.crates.io/crates/objc2-quick-look-ui/objc2-quick-look-ui-0.3.2.crate
 objc2-speech 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://static.crates.io/crates/objc2-speech/objc2-speech-0.3.2.crate
 objc2-ui-kit 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://static.crates.io/crates/objc2-ui-kit/objc2-ui-kit-0.3.2.crate
 objc2-user-notifications 0.3.2 | Zlib OR Apache-2.0 OR MIT | https://static.crates.io/crates/objc2-user-notifications/objc2-user-notifications-0.3.2.crate
