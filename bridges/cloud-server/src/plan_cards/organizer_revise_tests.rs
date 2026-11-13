@@ -167,7 +167,7 @@ async fn organizer_changes_the_time_over_http() {
     let error: Value = response.json().await.unwrap();
     assert_eq!(
         error["message"],
-        "Plan cards are proposed by the System agent."
+        "Plan cards are proposed by the Facilitator."
     );
 
     // A change of time keeps the same people.
