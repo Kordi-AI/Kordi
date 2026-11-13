@@ -105,3 +105,26 @@ test('page headers count items quietly and hide the count at zero', () => {
   assert.equal(sharedPageCountLabel('links', 9), '9 links');
   assert.equal(sharedPageCountLabel('links', 0), '');
 });
+
+test('a document carried by several messages is one file, at its latest time, credited to its first sender', () => {
+  const doc = { kind: 'file' as const, name: 'Untitled.md', mimeType: 'text/markdown', sizeBytes: 1, attachmentId: 'att_doc' };
+  const { files } = collectContactProfileSharedItems([
+    { id: 'a', role: 'person', sender: 'Priya Nair', senderIdentityId: 'acct_priya', time: '', timestampMs: at(10, 10), text: '', attachments: [doc] },
+    { id: 'b', role: 'user', isOwnMessage: true, time: '', timestampMs: at(10, 11), text: '', attachments: [doc, { kind: 'file', name: 'quote.pdf', localPath: '/tmp/quote.pdf' }] },
+    { id: 'c', role: 'owned-agent', sender: 'Agent', time: '', timestampMs: at(10, 12), text: '', attachments: [{ kind: 'file', name: 'quote.pdf', localPath: '/tmp/quote.pdf' }, { kind: 'file', name: 'loose.txt' }] },
+  ]);
+  assert.deepEqual(files.map((file) => [file.attachment.name, file.sender?.name ?? null]), [
+    ['loose.txt', null],
+    ['quote.pdf', 'You'],
+    ['Untitled.md', 'Priya Nair'],
+  ]);
+  assert.equal(files[2].sender?.key, 'acct_priya');
+  assert.equal(files[2].timestampMs, at(10, 11));
+});
+
+test('a file without an id or path is never merged with another', () => {
+  const { files } = collectContactProfileSharedItems([
+    { id: 'a', role: 'person', time: '', timestampMs: at(10, 10), text: '', attachments: [{ kind: 'file', name: 'notes.txt' }, { kind: 'file', name: 'notes.txt' }] },
+  ]);
+  assert.equal(files.length, 2);
+});

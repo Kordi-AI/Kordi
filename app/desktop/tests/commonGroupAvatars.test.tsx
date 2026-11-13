@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import type { CloudContactProfile, CloudContactProfileGroup } from '../src/features/cloud/contactProfileClient';
 import { SharedWithYouCard } from '../src/kordi-app/contacts/ContactProfileCards';
-import { commonGroupAvatar, commonGroupAvatarStack, commonGroupSpace } from '../src/kordi-app/contacts/commonGroupAvatars';
+import { commonGroupAvatar, commonGroupSpace } from '../src/kordi-app/contacts/commonGroupAvatars';
 import type { ParticipantSpaceViewModel } from '../src/kordi-app/types';
 
 function space(id: string, overrides: Partial<ParticipantSpaceViewModel> = {}): ParticipantSpaceViewModel {
@@ -67,27 +67,14 @@ test('the avatar uses the sidebar picture and member mosaic, else the server pic
   assert.deepEqual(unloaded.avatars, []);
 });
 
-test('the stack keeps the first three groups in server order', () => {
-  const groups = ['a', 'b', 'c', 'd'].map((id) => group(id));
-  const spaces = ['a', 'b', 'c', 'd'].map((id) => space(`group:${id}`));
-  assert.deepEqual(commonGroupAvatarStack(groups, spaces).map((avatar) => avatar.key), ['a', 'b', 'c']);
-  assert.deepEqual(commonGroupAvatarStack(groups, spaces, 1).map((avatar) => avatar.key), ['a']);
-  assert.deepEqual(commonGroupAvatarStack([], spaces), []);
-});
-
-test('Groups in common draws member mosaics instead of the generic glyph for loaded groups', () => {
+test('Groups in common is a count row like Photos, Files and Links, without group avatars', () => {
   const shared: CloudContactProfile['shared'] = { mediaCount: 0, linkCount: 0, documentCount: 0, groups: [group('gs_lab'), group('gs_gone')] };
-  const render = (spaces?: ParticipantSpaceViewModel[]) => renderToStaticMarkup(createElement(SharedWithYouCard, {
+  const markup = renderToStaticMarkup(createElement(SharedWithYouCard, {
     shared,
     onOpenGroup: () => undefined,
-    groupSpaces: spaces,
+    groupSpaces: [space('group:gs_lab')],
   }));
-  const stackOf = (markup: string) => markup.slice(markup.indexOf('app-contacts-group-avatars'));
-
-  const before = stackOf(render());
-  assert.equal((before.match(/lucide-users/g) ?? []).length, 2);
-
-  const after = stackOf(render([space('group:gs_lab')]));
-  assert.match(after, /https:\/\/example\.test\/group:gs_lab-a\.png/);
-  assert.equal((after.match(/lucide-users/g) ?? []).length, 1);
+  const row = markup.slice(markup.indexOf('Groups in common'));
+  assert.doesNotMatch(row, /app-group-avatar/);
+  assert.match(row, /app-contacts-shared-count[^>]*>2</);
 });
