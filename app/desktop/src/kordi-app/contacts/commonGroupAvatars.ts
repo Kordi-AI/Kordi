@@ -1,9 +1,6 @@
 import type { CloudContactProfileGroup } from '@/features/cloud/contactProfileClient';
 import type { ParticipantSpaceAvatar, ParticipantSpaceViewModel } from '../types';
 
-/** How many group avatars the Groups in common row stacks before its count. */
-export const COMMON_GROUP_STACK_LIMIT = 3;
-
 /** What a group avatar needs: the group's picture, else its members' mosaic, as the sidebar draws it. */
 export type CommonGroupAvatar = {
   key: string;
@@ -48,13 +45,4 @@ export function commonGroupAvatar(
     imageUrl: space?.groupAvatar?.imageUrl ?? group.avatarUrl ?? null,
     avatars: space?.avatarStack ?? [],
   };
-}
-
-/** Avatars for the first common groups, in the server's order, for the row's overlapping stack. */
-export function commonGroupAvatarStack(
-  groups: readonly CloudContactProfileGroup[],
-  spaces: readonly ParticipantSpaceViewModel[] | undefined,
-  limit = COMMON_GROUP_STACK_LIMIT,
-): CommonGroupAvatar[] {
-  return groups.slice(0, Math.max(0, limit)).map((group) => commonGroupAvatar(group, spaces));
 }

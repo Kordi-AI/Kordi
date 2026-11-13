@@ -1,3 +1,4 @@
+import { rememberDocumentTitle } from '../../src/features/documents/documentTitles';
 import type { Message, MessageAttachment } from '../../src/kordi-app/types';
 
 /** Synthetic shared media for the contact profile previews: no real people or files. */
@@ -18,8 +19,14 @@ function daysAgo(now: Date, monthOffset: number, day: number) {
   return new Date(now.getFullYear(), now.getMonth() - monthOffset, day, 10, 0).getTime();
 }
 
+/** A shared document first sent blank as Untitled.md, renamed since, and carried by two messages. */
+const SHARED_DOCUMENT: MessageAttachment = {
+  kind: 'file', name: 'Untitled.md', mimeType: 'text/markdown', sizeBytes: 1, attachmentId: 'att_visual_field_plan',
+};
+
 export function contactSharedVisualMessages(now = new Date()): Message[] {
   const thisMonth = Math.max(2, Math.min(now.getDate(), 28));
+  rememberDocumentTitle(SHARED_DOCUMENT.attachmentId, 'Field trial plan');
   return [
     {
       id: 'shared-1', role: 'person', sender: 'Maya Chen', time: '', timestampMs: daysAgo(now, 1, 9),
@@ -34,12 +41,12 @@ export function contactSharedVisualMessages(now = new Date()): Message[] {
     {
       id: 'shared-3', role: 'person', sender: 'Maya Chen', time: '', timestampMs: daysAgo(now, 0, Math.max(1, thisMonth - 1)),
       text: 'Bench photos and the [Sim-to-real transfer survey](https://arxiv.org/abs/2610.01234)',
-      attachments: [photo(3), photo(4), photo(5), { kind: 'file', name: 'gripper-test.mp4', mimeType: 'video/mp4', previewUrl: swatch(6) }],
+      attachments: [photo(3), photo(4), photo(5), { kind: 'file', name: 'gripper-test.mp4', mimeType: 'video/mp4', previewUrl: swatch(6) }, SHARED_DOCUMENT],
     },
     {
       id: 'shared-4', role: 'user', sender: 'Me', time: '', timestampMs: daysAgo(now, 0, thisMonth),
       text: 'Draft is up, and the setup guide https://frankaemika.github.io/docs/setup',
-      attachments: [{ kind: 'file', name: 'Grant draft v3.pdf', mimeType: 'application/pdf', sizeBytes: 1_258_291 }],
+      attachments: [{ kind: 'file', name: 'Grant draft v3.pdf', mimeType: 'application/pdf', sizeBytes: 1_258_291 }, SHARED_DOCUMENT],
     },
   ];
 }

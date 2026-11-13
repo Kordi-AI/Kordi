@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import type { ContactProfileSharedPage } from '@/pages/contactProfileSharedItems';
 import { GroupAvatar } from '../components/GroupAvatar';
 import type { ParticipantSpaceViewModel } from '../types';
-import { commonGroupAvatar, commonGroupAvatarStack } from './commonGroupAvatars';
+import { commonGroupAvatar } from './commonGroupAvatars';
 import { usePopover } from './contactProfileHooks';
 import type { ContactSharedCounts } from './useContactSharedPages';
 
@@ -19,7 +19,6 @@ function SharedRow({
   icon,
   label,
   count,
-  extra,
   onClick,
   ariaHasPopup,
   ariaExpanded,
@@ -27,7 +26,6 @@ function SharedRow({
   icon: ReactNode;
   label: string;
   count: number;
-  extra?: ReactNode;
   onClick?: () => void;
   ariaHasPopup?: 'menu';
   ariaExpanded?: boolean;
@@ -44,7 +42,6 @@ function SharedRow({
     >
       <span className="app-contacts-muted shrink-0">{icon}</span>
       <span className="app-contacts-shared-label min-w-0 flex-1 truncate text-[14px]">{label}</span>
-      {extra}
       <span className="app-contacts-shared-count text-[13px] tabular-nums">{count}</span>
       <ChevronRight className="app-contacts-chevron h-[15px] w-[15px] shrink-0" aria-hidden="true" />
     </button>
@@ -57,14 +54,6 @@ function GroupsRow({ groups, groupSpaces, onOpenGroup }: {
   onOpenGroup?: (group: CloudContactProfileGroup) => void;
 }) {
   const { open, setOpen, slotProps } = usePopover('app-contacts-card-row relative');
-  const stack = commonGroupAvatarStack(groups, groupSpaces);
-  const avatars = stack.length > 0 ? (
-    <span className="app-contacts-group-avatars mr-0.5 flex items-center" aria-hidden="true">
-      {stack.map((avatar) => (
-        <GroupAvatar key={avatar.key} avatars={avatar.avatars} imageUrl={avatar.imageUrl} name={avatar.name} className="h-5 w-5" />
-      ))}
-    </span>
-  ) : null;
   const multiple = groups.length > 1;
   return (
     <div {...slotProps}>
@@ -72,7 +61,6 @@ function GroupsRow({ groups, groupSpaces, onOpenGroup }: {
         icon={<Users className="h-[18px] w-[18px]" aria-hidden="true" />}
         label="Groups in common"
         count={groups.length}
-        extra={avatars}
         ariaHasPopup={multiple ? 'menu' : undefined}
         ariaExpanded={multiple ? open : undefined}
         onClick={onOpenGroup ? () => {

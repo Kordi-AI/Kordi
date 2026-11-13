@@ -149,10 +149,12 @@
   padding-bottom: 12px;
 }
 
+/* Auto margins alone would shrink a flex item to its content, so the body is told to fill the
+ * page and then capped at the column plus its gutters. */
 .app-contact-shared-page.is-pane .app-contact-shared-body {
-  box-sizing: content-box;
-  width: auto;
-  max-width: var(--shared-col);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--shared-col) + 2 * var(--shared-gutter));
   margin: 0 auto;
   padding: 0 var(--shared-gutter) 28px;
 }
@@ -220,7 +222,17 @@
   color: #fff;
 }
 
-/* Files and links: flat rows, the month label right above. */
+/* Files: Artifacts list rows (ArtifactListRow). Their badge sits 9px inside the row, so the list
+ * reaches 9px past the column and the badges line up with the month label. */
+.app-contact-shared-page.is-pane .app-contact-shared-file-list {
+  margin: 0 -9px;
+}
+
+.app-contact-shared-page.is-popover .app-contact-shared-file-list {
+  padding: 0 3px;
+}
+
+/* Links: flat rows, the month label right above. */
 .app-contact-shared-row {
   position: relative;
   display: flex;
@@ -313,23 +325,8 @@
   border-radius: 8px;
 }
 
-.app-contact-shared-lead.is-file {
-  background: color-mix(in oklab, var(--app-accent) 14%, transparent);
-  color: var(--app-accent);
-}
-
-.app-contact-shared-lead.is-file svg {
-  width: 17px;
-  height: 17px;
-}
-
 .app-contact-shared-page.is-pane .app-contact-shared-lead {
   border-radius: 9px;
-}
-
-.app-contact-shared-page.is-pane .app-contact-shared-lead.is-file svg {
-  width: 20px;
-  height: 20px;
 }
 
 .app-contact-shared-lead.is-link {
