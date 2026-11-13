@@ -7,7 +7,20 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 fn unavailable() -> KordiError {
-    KordiError::Tool("Agent communication is unavailable or this execution lease expired. Do not claim that a request was sent.".into())
+    KordiError::Tool(kordi_tools::reach_out::not_sent(None, None))
+}
+
+/// A refused call keeps the server's error code and message, so the agent
+/// can correct it and the failure is diagnosable.
+fn refused(status: reqwest::StatusCode, body: &Value) -> KordiError {
+    let code = body["errorCode"]
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("http_{}", status.as_u16()));
+    KordiError::Tool(kordi_tools::reach_out::not_sent(
+        Some(&code),
+        body["message"].as_str(),
+    ))
 }
 struct Transport {
     lease: DesktopCloudExecutionLease,
@@ -20,8 +33,10 @@ impl Transport {
             .await
             .ok_or_else(unavailable)?;
         let response=self.client.post(&self.endpoint).cloud_bearer_auth(token).json(&json!({"claimId":self.lease.claim_id,"action":action,"toolCallId":id,"arguments":args})).send().await.map_err(|_|unavailable())?;
-        if !response.status().is_success() {
-            return Err(unavailable());
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.json::<Value>().await.unwrap_or(Value::Null);
+            return Err(refused(status, &body));
         }
         response.json().await.map_err(|_| unavailable())
     }
@@ -54,7 +69,7 @@ pub(super) async fn build(
     // A missing capability on an older backend leaves the tool hidden.
     let capabilities = transport.call("capabilities", "", json!({})).await.ok()?;
     let guidance = if listed_in_identity {
-        (capabilities["available"] == true).then(|| kordi_tools::reach_out::GUIDANCE.to_owned())?
+        listed_guidance(&capabilities)?
     } else {
         guidance(&capabilities)?
     };
@@ -93,6 +108,22 @@ fn listed(value: &Value) -> bool {
     value.as_array().is_some_and(|items| !items.is_empty())
 }
 
+fn requester_listed(capabilities: &Value) -> bool {
+    capabilities["people"]
+        .as_array()
+        .is_some_and(|people| people.iter().any(|p| p["requester"] == true))
+}
+
+/// The stable guidance when the runtime note lists whom this run can reach.
+/// Nobody to reach hides the tool, so the owner's private chat with only
+/// their own agent gets no reach_out at all, and a run that cannot ask the
+/// requester is told to ask them in its reply.
+fn listed_guidance(capabilities: &Value) -> Option<String> {
+    let anyone = listed(&capabilities["targets"]) || listed(&capabilities["people"]);
+    (capabilities["available"] == true && anyone)
+        .then(|| kordi_tools::reach_out::guidance(requester_listed(capabilities)).to_owned())
+}
+
 /// The directory the agent sees from a server whose turn identity carries no
 /// runtime note: other agents, and people it may ask. Older backends list no
 /// people, so only agents are offered there.
@@ -125,13 +156,12 @@ fn guidance(capabilities: &Value) -> Option<String> {
             capabilities["people"]
         ));
     }
-    let requester = capabilities["people"]
-        .as_array()
-        .is_some_and(|people| people.iter().any(|p| p["requester"] == true));
-    if requester {
-        text.push_str(" If you need information or a decision from the person who asked (marked requester) before you can finish, ask them with reach_out instead of ending your turn with a question; their reply continues the task.");
+    text.push_str(" When the task involves other participants (plans, times, availability, preferences), first reach_out to each other participant's agent (preferred) or to the person for what only they know");
+    if requester_listed(capabilities) {
+        text.push_str(", and ask the requester with reach_out for what only the requester knows; never end with a list of open questions. If you need information or a decision from the person who asked (marked requester) before you can finish, ask them with reach_out instead of ending your turn with a question; their reply continues the task.");
+    } else {
+        text.push_str(". The person who asked cannot be reached with reach_out: they read your reply here, so ask them in your reply.");
     }
-    text.push_str(" When the task involves other participants (plans, times, availability, preferences), first reach_out to each other participant's agent (preferred) or to the person for what only they know, and ask the requester with reach_out for what only the requester knows; never end with a list of open questions.");
     text.push_str(" A successful call queues the request. The request is already visible in this conversation. Do not add an acknowledgement or waiting message. Follow the receipt to end this turn; the reply automatically resumes the original task. Do not poll or resend.");
     Some(text)
 }
@@ -172,6 +202,39 @@ mod tests {
         assert!(!guidance(&older).unwrap().contains("People:"));
         assert!(guidance(&json!({"available":true,"targets":[],"people":[]})).is_none());
         assert!(guidance(&json!({"available":false,"people":[{"accountId":"p"}]})).is_none());
+    }
+
+    #[test]
+    fn the_owner_private_chat_offers_no_requester_target() {
+        // Only the owner's other agent is reachable: the guidance never tells
+        // the agent to ask the owner with reach_out.
+        let own_chat = json!({"available":true,"targets":[{"agentId":"cloud-agent:o","ownerAccountId":"o"}],"people":[]});
+        let text = listed_guidance(&own_chat).unwrap();
+        assert!(text.contains("ask them in your reply; never use reach_out for that"));
+        assert!(!text.contains("ask them with reach_out"));
+        let legacy = guidance(&own_chat).unwrap();
+        assert!(!legacy.contains("ask the requester with reach_out"));
+        assert!(legacy.contains("ask them in your reply"));
+        // Nobody reachable, as an older server reports it: no tool at all.
+        let nobody = json!({"available":true,"targets":[],"people":[]});
+        assert!(listed_guidance(&nobody).is_none());
+        assert!(listed_guidance(&json!({"available":false,"targets":[],"people":[]})).is_none());
+        let shared =
+            json!({"available":true,"targets":[],"people":[{"accountId":"o","requester":true}]});
+        assert_eq!(
+            listed_guidance(&shared).as_deref(),
+            Some(kordi_tools::reach_out::GUIDANCE)
+        );
+    }
+
+    #[test]
+    fn a_refusal_keeps_the_server_code_and_message() {
+        let body = json!({"errorCode":"context_unavailable","message":"The person who asked cannot be asked with reach_out in this conversation."});
+        let text = refused(reqwest::StatusCode::UNPROCESSABLE_ENTITY, &body).to_string();
+        assert!(text.contains("(context_unavailable): The person who asked cannot be asked"));
+        assert!(text.contains("Do not claim that a request was sent."));
+        let bare = refused(reqwest::StatusCode::BAD_GATEWAY, &Value::Null).to_string();
+        assert!(bare.contains("(http_502)"));
     }
 
     #[test]

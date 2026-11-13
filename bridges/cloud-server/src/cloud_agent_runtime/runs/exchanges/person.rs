@@ -152,7 +152,7 @@ fn requested_kind(args: &Value) -> RunResult<Option<&'static str>> {
         Some(kind) => match kind.to_ascii_lowercase().as_str() {
             "agent" | "bridge-agent" => Ok(Some("agent")),
             "person" | "bridge-person" => Ok(Some("person")),
-            _ => Err(RunError::NotFound),
+            _ => Err(super::refusal::rejected(super::refusal::TARGET_KIND)),
         },
     }
 }
@@ -172,14 +172,16 @@ pub(super) async fn requested(
     let people = directory(pool, parent).await?;
     let person = resolve(&people, target);
     if kind == Some("person") {
-        return person.cloned().map(Some);
+        return person
+            .map(|p| Some(p.clone()))
+            .map_err(|_| super::refusal::person(parent, target));
     }
     let Ok(person) = person else {
         return Ok(None);
     };
     let agents = store::directory(pool, parent).await?;
     if store::resolve_target(&agents, target).is_ok() {
-        return Err(RunError::NotFound);
+        return Err(super::refusal::rejected(super::refusal::AMBIGUOUS));
     }
     Ok(Some(person.clone()))
 }
@@ -198,13 +200,13 @@ pub(super) async fn send(
     // Revalidate the lease and membership after obtaining the root's budget lock.
     authorize(pool, &parent.run, Some((executor, account))).await?;
     if !reachable(&mut tx, parent, &person.account_id).await? {
-        return Err(RunError::NotFound);
+        return Err(super::refusal::person(parent, &person.account_id));
     }
     let existing: Option<(Uuid, String, Option<String>, String)> = query_as("SELECT exchange_id,status,target_person_id,request_text FROM cloud_agent_exchanges WHERE parent_run_id=$1 AND (request_key=$2 OR (target_person_id=$3 AND request_text=$4))")
         .bind(&parent.run).bind(key).bind(&person.account_id).bind(text).fetch_optional(&mut *tx).await?;
     if let Some((id, status, target, request_text)) = existing {
         if target.as_deref() != Some(person.account_id.as_str()) || request_text != text {
-            return Err(RunError::NotFound);
+            return Err(super::refusal::rejected(super::refusal::REUSED_CALL));
         }
         return Ok(receipt(id, &status, person));
     }
