@@ -16,6 +16,7 @@ pub(crate) mod db_fixture;
 mod flow_tests;
 mod group_intro_tests;
 mod group_origin_tests;
+mod join_request_support;
 mod join_request_tests;
 mod matching_guard_tests;
 mod matching_pair_tests;

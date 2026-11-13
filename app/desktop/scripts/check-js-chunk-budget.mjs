@@ -90,7 +90,10 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // it moves to 5.95 MB.
 // The PDF viewer, the file card with Quick Look, and loading Quick Look thumbnails add 5.9 kB, so it
 // moves to 5.956 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_956_000;
+// Asking to join groups listed in a Grounding room (the Groups row states, approver rows, and the
+// join request card in group chats) adds 5.8 kB, and the community-profile build used by the browser
+// tests 0.2 kB more, so it moves to 5.963 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_963_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -129,7 +132,8 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The same table and image viewers, their styles, and the code viewer's entry module add 14.6 kB
 // there, so it moves to 5.977 MB.
 // The same PDF viewer and file card add 4.5 kB there, so it moves to 5.983 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_983_000;
+// The same room group join requests add 5.3 kB there, so it moves to 5.989 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_989_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
