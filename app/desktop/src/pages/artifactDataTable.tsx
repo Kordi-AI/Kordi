@@ -41,7 +41,7 @@ export function ArtifactDataTable({ source, delimiter, mode = 'panel' }: { sourc
     <div data-artifact-preview-mode={mode} data-kordi-copy-surface="document" tabIndex={0} onKeyDown={handleDocumentCopySurfaceKeyDown} className={cn('overflow-auto p-3', mode === 'panel' ? 'max-h-[32rem]' : 'min-h-full')}>
       <div className="overflow-hidden rounded-[18px] border border-white/8 bg-[color:var(--app-control-bg)]/70">
         <table className="min-w-full border-collapse text-left text-[12px] text-slate-100">
-          <thead className="bg-white/[0.05] text-[10px] uppercase tracking-[0.12em] text-slate-400">
+          <thead className="bg-white/[0.05] text-[12px] text-[color:var(--utility-muted-text)]">
             <tr>
               {headers.map((header, index) => <th key={`header-${index}`} className="border-b border-white/8 px-3 py-2 font-medium">{header || `Column ${index + 1}`}</th>)}
             </tr>

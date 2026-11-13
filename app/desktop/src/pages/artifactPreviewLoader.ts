@@ -14,6 +14,11 @@ export function setArtifactPreviewLoaderForPreview(loader: typeof previewOverrid
   previewOverride = loader;
 }
 
+/** Whether the visual page supplies sample files. */
+export function hasArtifactPreviewLoaderForPreview() {
+  return Boolean(previewOverride);
+}
+
 /** Whether file contents can be read here: the desktop app, the browser app, or the visual page. */
 export function artifactPreviewsAvailable(isNativeShell: boolean) {
   return Boolean(previewOverride) || isNativeShell || isBrowserAppRuntime();

@@ -218,9 +218,6 @@ html:is(.kordi-native-shell, .kordi-browser-shell) .kordi-app[data-native-backdr
   background: var(--app-transient-overlay-bg);
 }
 
-.app-artifact-preview-window-header {
-  background: var(--app-transient-raised-bg);
-}
 
 .app-artifact-preview-toolbar {
   background: #151923;
@@ -247,9 +244,6 @@ html:is(.kordi-native-shell, .kordi-browser-shell) .kordi-app[data-native-backdr
   background: var(--app-transient-overlay-bg);
 }
 
-.kordi-app.theme-light .app-artifact-preview-window-header {
-  background: var(--app-transient-raised-bg);
-}
 
 .kordi-app.theme-light .app-artifact-preview-toolbar,
 .kordi-app.theme-light .app-artifact-preview-opaque-surface .app-markdown-code-header {

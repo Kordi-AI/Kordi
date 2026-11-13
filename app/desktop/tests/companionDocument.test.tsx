@@ -104,14 +104,17 @@ test('folding a document retains its reader; expanding restores it and closing r
   });
 });
 
-test('selecting a code artifact keeps the inline preview', async () => {
+test('selecting a code artifact opens it in the side panel source view, with nothing under the list', async () => {
   await withJsdomRoot(async (mount) => {
     const root = await mount(createElement(Harness));
     await click(row(root, 'app.ts'));
     const page = root.querySelector('[data-view]') as HTMLElement;
-    assert.equal(page.dataset.view, 'chat');
-    assert.ok(root.querySelector('[data-artifact-preview-section="true"]'), 'code keeps the inline preview');
-    assert.equal(root.querySelector('[aria-label="Document panel"]'), null);
+    assert.equal(page.dataset.view, 'document', 'the companion switches to the open file');
+    assert.equal(root.querySelector('[data-artifact-preview-section="true"]'), null, 'no preview under the list');
+    const pane = root.querySelector('[aria-label="Document panel"]');
+    assert.ok(pane, 'code opens in the companion pane');
+    assert.ok(pane.querySelector('[role="tab"]')?.textContent?.includes('app.ts'));
+    assert.equal(pane.querySelector('.app-document-reader'), null, 'code uses the source view, not the document reader');
   });
 });
 

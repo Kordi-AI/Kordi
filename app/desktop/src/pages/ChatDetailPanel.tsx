@@ -399,7 +399,7 @@ function ChatDetailPanelView({
           {shownArtifacts.length === 0 ? (
             <div data-artifact-search-empty="" className="px-1 py-6 text-center text-[13px] leading-5 text-[color:var(--utility-muted-text)]">No matches</div>
           ) : artifactLayout === 'cards' ? (
-            <div className="app-artifact-card-scroll h-full min-h-0 overflow-y-auto overflow-x-hidden">
+            <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden">
               <Suspense fallback={null}>
                 <ArtifactCardGrid
                   isNativeShell={isNativeShell}

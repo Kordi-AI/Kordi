@@ -334,7 +334,7 @@ function MermaidDiagram({ code, className, copySurface }: { code: string; classN
   return (
     <div data-mermaid-diagram="true" data-kordi-copy-block="true" className={cn('overflow-hidden rounded-[18px] border border-white/8 bg-[color:var(--app-code-bg)]', className)}>
       <div className="flex items-center justify-between gap-3 border-b border-white/8 px-3 py-2" data-kordi-copy-exclude="true">
-        <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400">Mermaid diagram</div>
+        <div className="text-[11.5px] text-[color:var(--utility-muted-text)]">Mermaid diagram</div>
         {!diagram ? <div className="truncate text-[10px] text-amber-200">Source preview</div> : null}
       </div>
       {diagram ? <div className="overflow-auto bg-white p-3" {...copySurfaceProps(copySurface)}>{diagram}</div>

@@ -102,10 +102,13 @@ test('chat artifacts list rows are one line and line up with the toolbar (light)
   await expect(rows).toHaveCount(13);
   await expect(page.locator('[data-artifact-file-row="true"][aria-current="true"]')).toHaveCount(0);
 
-  // A row's fill runs exactly from the search field's left edge to the New button's right edge.
+  // Picking a row opens it in the side panel; the row's fill then runs exactly from the search
+  // field's left edge to the New button's right edge.
+  await page.locator('[data-artifact-file-row="true"]').nth(2).click();
+  await expect(page.getByRole('complementary', { name: 'Document panel' })).toBeVisible();
+  await expect(page.locator('[data-artifact-preview-section="true"]')).toHaveCount(0);
   const toolbar = await page.locator('[data-chat-document-entries="true"]').boundingBox();
   const search = await page.locator('.app-artifact-search').boundingBox();
-  await page.locator('[data-artifact-file-row="true"]').nth(2).click();
   const picked = await rows.nth(2).boundingBox();
   expect(Math.abs((picked?.x ?? 0) - (search?.x ?? 1))).toBeLessThan(1);
   expect(Math.abs((picked?.x ?? 0) + (picked?.width ?? 0) - ((toolbar?.x ?? 0) + (toolbar?.width ?? 1)))).toBeLessThan(1);

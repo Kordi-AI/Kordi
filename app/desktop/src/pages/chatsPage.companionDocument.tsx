@@ -14,7 +14,9 @@ import type { DocumentShareApi } from '@/features/documents/documentShareApi';
 import { dispatchDocumentSessionOpen } from '@/features/documents/documentShareToken';
 import type { CompanionDocumentTabsModel } from '@/features/documents/useCompanionDocument';
 import type { DesktopArtifactPreview } from '@/kordi-app/types';
-import { fetchDesktopChatArtifactPreview, isNativeDesktopShell } from '@/lib/desktop';
+import { isNativeDesktopShell } from '@/lib/desktop';
+import { hasArtifactPreviewLoaderForPreview, loadArtifactPreview } from '@/pages/artifactPreviewLoader';
+import { openArtifactExternally } from '@/pages/openArtifactExternally';
 import { CompanionTitlebar } from './CompanionTitlebar';
 
 type LoadedPreview = { key: string; preview: DesktopArtifactPreview | null };
@@ -29,7 +31,9 @@ function CompanionDocumentReader({ document, api, onTitle, onRenameAvailable }: 
   const { artifact } = document;
   const [reloads, setReloads] = useState(0);
   const key = `${document.previewBaseRoot ?? ''}:${artifact.id}:${artifact.path}`;
-  const canReadLocally = !document.preview && document.readLocally !== false && isNativeDesktopShell();
+  const nativeShell = isNativeDesktopShell();
+  // The login-free visual page serves sample files the same way the Mac reads real ones.
+  const canReadLocally = !document.preview && document.readLocally !== false && (nativeShell || hasArtifactPreviewLoaderForPreview());
   const cloudSourceId = document.sourceView ? artifact.attachmentId : null;
   const [loaded, setLoaded] = useState<LoadedPreview | null>(null);
   useEffect(() => {
@@ -43,12 +47,12 @@ function CompanionDocumentReader({ document, api, onTitle, onRenameAvailable }: 
       const text = await blob.slice(0, limit).text();
       const lines = text.split(/\r?\n/);
       return { path: artifact.path, lines: lines.slice(0, 2000).map((text, index) => ({ number: index + 1, text })), truncated: blob.size > limit || lines.length > 2000 };
-    })() : fetchDesktopChatArtifactPreview(artifact.path, document.previewBaseRoot ?? null);
+    })() : loadArtifactPreview({ isNativeShell: nativeShell, path: artifact.path, attachmentId: artifact.attachmentId, baseRoot: document.previewBaseRoot ?? null });
     request
       .then((preview) => { if (!cancelled) setLoaded({ key, preview }); })
       .catch(() => { if (!cancelled) setLoaded({ key, preview: null }); });
     return () => { cancelled = true; };
-  }, [artifact.path, canReadLocally, cloudSourceId, document.previewBaseRoot, key, reloads]);
+  }, [artifact.attachmentId, artifact.path, canReadLocally, cloudSourceId, document.previewBaseRoot, key, nativeShell, reloads]);
   const reportTitle = useCallback((title: string) => onTitle(artifact.id, title), [artifact.id, onTitle]);
   const reportRename = useCallback((rename: ((title: string) => void) | null) => onRenameAvailable(artifact.id, rename), [artifact.id, onRenameAvailable]);
   const reload = useCallback(() => setReloads((count) => count + 1), []);
@@ -58,7 +62,10 @@ function CompanionDocumentReader({ document, api, onTitle, onRenameAvailable }: 
   const localSource = preview ? preview.lines.map((line) => line.text).join('\n') : null;
 
   if (waitingForFile) return <p className="app-companion-status" role="status"><LoaderCircle className="inline h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Loading</p>;
-  if (document.sourceView) return <CompanionSourceView preview={preview} onReload={reload} />;
+  const openExternally = nativeShell && document.readLocally !== false
+    ? () => { void openArtifactExternally(artifact, document.previewBaseRoot ?? null).catch(() => undefined); }
+    : undefined;
+  if (document.sourceView) return <CompanionSourceView preview={preview} path={artifact.path} onReload={reload} onOpenExternal={openExternally} />;
   return (
     <DocumentReader
       api={api}

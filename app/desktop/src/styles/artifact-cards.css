@@ -135,6 +135,3 @@
 /* The arrow takes the Live pill's corner while it shows. */
 .app-artifact-card-shell:has(.app-artifact-card-open:is(:hover, :focus-visible)) .app-artifact-card-live,
 .app-artifact-card-shell:hover:has(.app-artifact-card-open) .app-artifact-card-live { opacity: 0; }
-
-/* The scroll bar gets its own lane, so it never covers the right column of cards. */
-.app-artifact-card-scroll { scrollbar-gutter: stable; }

@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 
 import { ErrorLine } from '@/components/ui/ErrorLine';
-import { openArtifactInCompanion } from '@/features/documents/companionDocument';
+import { openArtifactInSidePanel } from '@/features/documents/companionDocument';
 import { useDocumentReaderHost } from '@/features/documents/documentReaderHost';
 import type { ConversationParticipant, DesktopArtifactPreview, SessionArtifact } from '@/kordi-app/types';
 
 import { ArtifactCard } from './ArtifactCard';
 import { ArtifactPreviewWindow } from './ArtifactInspector';
-import { artifactPreviewKind, fileNameFromPath } from './artifactPreviewFormat';
+import { fileNameFromPath } from './artifactPreviewFormat';
 import { loadArtifactPreview } from './artifactPreviewLoader';
 import type { ArtifactThumbnailContext } from './artifactThumbnail';
 import { useOpenArtifactExternally } from './openArtifactExternally';
@@ -23,12 +23,12 @@ type ArtifactCardGridProps = {
   thumbnailApi?: ArtifactThumbnailContext['api'];
 };
 
-const KIND_LABEL: Record<string, string> = { html: 'Preview', svg: 'Preview', markdown: 'Markdown', mermaid: 'Mermaid', table: 'Table', json: 'JSON' };
 
 /**
  * The card layout of a chat's Artifacts tab: one dense grid with a thumbnail of each artifact's
  * first lines, created files first and changed project files after them (their cards say how they
- * changed). Markdown and HTML open in the companion pane; other files open in the preview window.
+ * changed). Every artifact opens as a tab in the companion pane; the preview window is only the
+ * fallback where there is no companion.
  */
 export function ArtifactCardGrid({
   isNativeShell,
@@ -55,7 +55,7 @@ export function ArtifactCardGrid({
     setPicked(artifact.id);
     onSelectArtifact(artifact.id);
     const baseRoot = artifact.pinned ? null : previewBaseRoot;
-    if (documentsInCompanion && openArtifactInCompanion(artifact, baseRoot)) return;
+    if (documentsInCompanion && openArtifactInSidePanel(artifact, baseRoot)) return;
     loadArtifactPreview({ isNativeShell, path: artifact.path, attachmentId: artifact.attachmentId, baseRoot })
       .then((preview) => setPreviewing({ artifact, preview }))
       .catch(() => undefined);
@@ -82,7 +82,6 @@ export function ArtifactCardGrid({
         <ArtifactPreviewWindow
           preview={previewing.preview}
           title={fileNameFromPath(previewing.artifact.path)}
-          kindLabel={KIND_LABEL[artifactPreviewKind(previewing.artifact.path)] ?? 'Source'}
           onClose={() => setPreviewing(null)}
         />
       ) : null}

@@ -4,7 +4,7 @@
 // artifacts or memories, and `?layout=list` or `?layout=cards` saves that
 // layout first (otherwise the saved choice applies, cards by default). It makes no network calls and needs no session.
 import './previewChatTheme';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { DocumentReaderHostContext, type DocumentReaderHost } from '../../src/features/documents/documentReaderHost';
@@ -16,10 +16,9 @@ import { ARTIFACT_LAYOUT_STORAGE_KEY } from '../../src/pages/artifactLayoutPrefe
 import { setArtifactDocumentApiForPreview } from '../../src/pages/artifactDocumentApi';
 import { setArtifactPreviewLoaderForPreview } from '../../src/pages/artifactPreviewLoader';
 import { isNativeDesktopShell } from '../../src/lib/desktop';
-import { COMPANION_DOCUMENT_OPEN_EVENT, type CompanionDocument } from '../../src/features/documents/companionDocument';
-import type { DesktopArtifactPreview } from '../../src/kordi-app/types';
-import { ArtifactPreviewWindow } from '../../src/pages/ArtifactInspector';
-import { loadArtifactPreview } from '../../src/pages/artifactPreviewLoader';
+import type { CompanionDocument } from '../../src/features/documents/companionDocument';
+import { useCompanionDocument, useCompanionDocumentRequests } from '../../src/features/documents/useCompanionDocument';
+import { CompanionDocumentPane } from '../../src/pages/chatsPage.companionDocument';
 import { ChatDetailPanel } from '../../src/pages/ChatDetailPanel';
 import { ChatMemoryTab } from '../../src/pages/ChatMemoryTab';
 import { RightDetailRail } from '../../src/pages/RightDetailRail';
@@ -219,17 +218,21 @@ const readerHost: DocumentReaderHost = {
 function Preview() {
   const [tab, setTab] = useState<'info' | 'artifacts' | 'tasks' | 'memory'>(params.get('tab') === 'memory' ? 'memory' : 'artifacts');
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
-  // The page has no companion pane, so a Markdown or HTML document opens in the preview window instead.
-  const [companion, setCompanion] = useState<DesktopArtifactPreview | null>(null);
-  useEffect(() => {
-    const open = (event: Event) => {
-      const { artifact } = (event as CustomEvent<CompanionDocument>).detail;
-      event.preventDefault();
-      void loadArtifactPreview({ isNativeShell: false, path: artifact.path, attachmentId: artifact.attachmentId }).then(setCompanion).catch(() => undefined);
-    };
-    window.addEventListener(COMPANION_DOCUMENT_OPEN_EVENT, open);
-    return () => window.removeEventListener(COMPANION_DOCUMENT_OPEN_EVENT, open);
-  }, []);
+  // The app's own companion pane and tab model. Shared documents open from their sample text in
+  // the reader's local mode, since the page has no server; other files load through the sample loader.
+  const companion = useCompanionDocument(conversation.id);
+  useCompanionDocumentRequests((request: CompanionDocument) => {
+    if (request.sourceView) {
+      companion.open(request);
+      return;
+    }
+    const text = sampleText(request.artifact.path, request.artifact.attachmentId) ?? '';
+    companion.open({
+      ...request,
+      artifact: { ...request.artifact, attachmentId: null },
+      preview: { path: request.artifact.path, truncated: false, lines: text.split('\n').map((line, index) => ({ number: index + 1, text: line })) },
+    });
+  });
   return (
     <div
       className={`kordi-app theme-${theme}`}
@@ -278,15 +281,12 @@ function Preview() {
             </RightDetailRail>
           </div>
         </section>
+        {companion.documents.length > 0 ? (
+          <div className="flex min-h-0 w-[46%] min-w-[360px] shrink-0 flex-col border-l border-[color:var(--app-divider)]">
+            <CompanionDocumentPane tabs={companion} host={readerHost} onClose={companion.close} />
+          </div>
+        ) : null}
       </div>
-      {companion ? (
-        <ArtifactPreviewWindow
-          preview={companion}
-          title={companion.path.split('/').pop() ?? companion.path}
-          kindLabel={/\.html?$/i.test(companion.path) ? 'Preview' : 'Markdown'}
-          onClose={() => setCompanion(null)}
-        />
-      ) : null}
     </div>
   );
 }

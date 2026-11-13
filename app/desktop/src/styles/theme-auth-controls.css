@@ -88,6 +88,11 @@
   color: rgb(134 25 143) !important;
 }
 
+/* Code keywords: the dark theme's pale violet is unreadable on light code backgrounds. */
+.kordi-app.theme-light .text-violet-200 {
+  color: rgb(109 40 217) !important;
+}
+
 .kordi-app.theme-light .text-blue-100,
 .kordi-app.theme-light .text-blue-200 {
   color: rgb(30 58 138) !important;

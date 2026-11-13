@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { CompanionSourceView } from '../src/features/documents/CompanionSourceView';
+import { COMPANION_DOCUMENT_OPEN_EVENT, openArtifactInSidePanel, type CompanionDocument } from '../src/features/documents/companionDocument';
 import type { DocumentResponse } from '../src/features/documents/documentShareTypes';
 import { documentTitleFor, resetDocumentTitlesForTests } from '../src/features/documents/documentTitles';
 import type { SessionArtifact } from '../src/kordi-app/types';
@@ -136,4 +138,47 @@ test('the open arrow shows on rows and cards only where a file can be opened', (
     artifact, isActive: false, participants: [], thumbnailContext: { isNativeShell: true, api: null }, onOpen: () => {}, onOpenExternal: () => {}, fetchTitle: async () => ({ title: '' }),
   }));
   assert.match(card, /class="app-artifact-card-open"[^>]*aria-label="Open plan\.md in its default app"/);
+});
+
+test('every artifact opens in the side panel: documents in the reader, other files in the source view', () => {
+  const requests: CompanionDocument[] = [];
+  const listen = (event: Event) => { requests.push((event as CustomEvent<CompanionDocument>).detail); event.preventDefault(); };
+  const target = new EventTarget();
+  const previousWindow = (globalThis as { window?: unknown }).window;
+  (globalThis as { window?: unknown }).window = Object.assign(target, { CustomEvent });
+  target.addEventListener(COMPANION_DOCUMENT_OPEN_EVENT, listen);
+  try {
+    assert.equal(openArtifactInSidePanel(doc('a', 'notes/plan.md'), '/project'), true);
+    assert.equal(openArtifactInSidePanel(doc('b', 'src/app.ts', { kind: 'code' }), '/project'), true);
+    assert.equal(openArtifactInSidePanel(doc('c', 'data/prices.csv', { kind: 'file' })), true);
+  } finally {
+    target.removeEventListener(COMPANION_DOCUMENT_OPEN_EVENT, listen);
+    (globalThis as { window?: unknown }).window = previousWindow;
+  }
+  assert.deepEqual(requests.map((request) => [request.artifact.path, Boolean(request.sourceView), request.previewBaseRoot]), [
+    ['notes/plan.md', false, '/project'],
+    ['src/app.ts', true, '/project'],
+    ['data/prices.csv', true, null],
+  ]);
+});
+
+test('the source view names the type plainly and offers a way out for files it cannot show', () => {
+  const preview = (path: string) => ({ path, truncated: false, lines: [{ number: 1, text: 'x' }] });
+  const view = (props: Parameters<typeof CompanionSourceView>[0]) => renderToStaticMarkup(createElement(CompanionSourceView, props));
+  assert.match(view({ preview: preview('src/app.ts'), onReload: () => {} }), /<span>TypeScript<span aria-hidden="true">·<\/span>1 line<\/span>/);
+  assert.match(view({ preview: preview('data/prices.csv'), onReload: () => {} }), />CSV</);
+  assert.match(view({ preview: preview('notes/a.txt'), onReload: () => {} }), />Plain text</);
+  const withOpen = view({ preview: preview('src/app.py'), onReload: () => {}, onOpenExternal: () => {} });
+  assert.match(withOpen, />Python</);
+  assert.match(withOpen, />Copy</);
+  assert.match(withOpen, />Open in default app</);
+  assert.doesNotMatch(view({ preview: preview('src/app.py'), onReload: () => {} }), /Open in default app/, 'only where the file can be reached');
+
+  const image = view({ preview: null, path: 'shots/hero.png', onReload: () => {}, onOpenExternal: () => {} });
+  assert.match(image, /No preview for PNG files yet\./);
+  assert.match(image, />Open in default app</);
+  assert.doesNotMatch(image, />Retry</, 'retrying will not help an image');
+  const missing = view({ preview: null, path: 'src/gone.ts', onReload: () => {} });
+  assert.match(missing, /This file is unavailable on this device\./);
+  assert.match(missing, />Retry</);
 });

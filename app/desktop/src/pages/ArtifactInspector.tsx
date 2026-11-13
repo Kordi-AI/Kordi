@@ -8,8 +8,8 @@ import type { ConversationParticipant, DesktopArtifactDirectory, DesktopArtifact
 import { fetchDesktopChatArtifactDirectory } from '@/lib/desktop';
 import { cn } from '@/lib/utils';
 import { ArtifactDocumentSection } from '@/features/documents/ArtifactDocumentSection';
-import { documentFormatForPath, isDocumentReaderArtifact } from '@/features/documents/documentReaderModel';
-import { openArtifactInCompanion } from '@/features/documents/companionDocument';
+import { isDocumentReaderArtifact } from '@/features/documents/documentReaderModel';
+import { openArtifactInSidePanel } from '@/features/documents/companionDocument';
 import { useDocumentReaderHost } from '@/features/documents/documentReaderHost';
 import { artifactPreviewDocumentSource, type ArtifactPreviewMode } from './artifactPreviewDocument';
 import { ArtifactDataTable } from './artifactDataTable';
@@ -130,15 +130,14 @@ function artifactCategory(artifact: SessionArtifact): NonNullable<SessionArtifac
   return artifact.category ?? 'artifact';
 }
 
+/** A file opened large: one quiet line with its name and Close, then the preview. */
 export function ArtifactPreviewWindow({
   preview,
   title,
-  kindLabel,
   onClose,
 }: {
   preview: DesktopArtifactPreview;
   title: string;
-  kindLabel: string;
   onClose: () => void;
 }) {
   return (
@@ -147,29 +146,19 @@ export function ArtifactPreviewWindow({
         role="dialog"
         aria-modal="true"
         aria-label="Artifact preview window"
-        className="app-transient-surface app-artifact-preview-window-panel mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-[24px] border"
+        className="app-transient-surface app-artifact-preview-window-panel mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-[16px] border"
       >
-        <div className="app-transient-divider app-artifact-preview-window-header flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="app-transient-icon grid h-7 w-7 shrink-0 place-items-center rounded-lg">
-              <Maximize2 className="h-3.5 w-3.5" />
-            </div>
-            <div className="min-w-0 truncate text-[13px] font-medium leading-5 text-[color:var(--utility-foreground)]">{title}</div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="app-transient-icon rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.12em]">
-              {kindLabel}
-            </span>
-            <button
-              type="button"
-              onClick={onClose}
-              className="app-button-quiet grid h-8 w-8 place-items-center rounded-xl p-0"
-              aria-label="Close preview window"
-              title="Close preview window"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+        <div className="app-transient-divider app-artifact-preview-window-header flex shrink-0 items-center justify-between gap-3 border-b py-1.5 pr-2 pl-4">
+          <div className="min-w-0 truncate text-[13px] leading-5 text-[color:var(--utility-foreground)]">{title}</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="app-button-quiet grid h-7 w-7 shrink-0 place-items-center rounded-md p-0"
+            aria-label="Close preview window"
+            title="Close preview window"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
         <div className="app-artifact-preview-window-body min-h-0 flex-1 overflow-auto">
           {renderArtifactPreview(preview, 'window')}
@@ -217,9 +206,9 @@ export function ArtifactInspector({
     [activeArtifactId, artifacts, generatedArtifacts, relatedArtifacts],
   );
   const previewArtifact = browserSelectedArtifact ?? activeArtifact;
-  // In chats, Markdown and HTML open in the companion pane instead of inline.
+  // In chats, every artifact opens as a tab in the companion pane, so nothing previews under the list.
   const documentsInCompanion = Boolean(useDocumentReaderHost().opensDocumentsInCompanion);
-  const opensInCompanion = documentsInCompanion && Boolean(documentFormatForPath(previewArtifact?.path));
+  const opensInCompanion = documentsInCompanion && Boolean(previewArtifact);
   // A document that opens in the companion is marked only once picked here, so the list does not
   // start with a filled row; anything previewed below the list stays marked.
   const listActiveArtifact = opensInCompanion && pickedArtifactId !== activeArtifact?.id ? null : activeArtifact;
@@ -228,7 +217,7 @@ export function ArtifactInspector({
     setBrowserSelectedArtifact(null);
     onSelectArtifact(artifactId);
     const artifact = artifacts.find((entry) => entry.id === artifactId);
-    if (artifact && documentsInCompanion) openArtifactInCompanion(artifact, artifact.pinned ? null : previewBaseRoot);
+    if (artifact && documentsInCompanion) openArtifactInSidePanel(artifact, artifact.pinned ? null : previewBaseRoot);
   };
   const effectivePreviewBaseRoot = previewArtifact?.pinned ? null : previewBaseRoot;
   const activePreviewKey = previewArtifact
@@ -389,7 +378,7 @@ export function ArtifactInspector({
                         return;
                       }
                       setBrowserSelectedArtifact(artifactFromDirectoryEntry(entry));
-                      if (documentsInCompanion) openArtifactInCompanion(artifactFromDirectoryEntry(entry), null);
+                      if (documentsInCompanion) openArtifactInSidePanel(artifactFromDirectoryEntry(entry), null);
                     }}
                     className={cn(
                       'app-inspector-source-row w-full text-left transition',
@@ -513,7 +502,6 @@ export function ArtifactInspector({
         <ArtifactPreviewWindow
           preview={cachedPreview}
           title={previewFileName || cachedPreview.path}
-          kindLabel={previewKindLabel}
           onClose={() => setPreviewWindowOpen(false)}
         />
       ) : null}
