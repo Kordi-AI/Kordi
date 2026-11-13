@@ -394,9 +394,9 @@ are a second wave.
   (plus `chat:write` to post) and `channels:read` and `groups:read`, which
   list the channels a person can choose in Settings > Connectors > Slack
   (`GET /v1/cloud/connectors/:id/settings/options`). Connections made before
-  the list scopes answer `connector_scope_missing` until reconnected. No user
-  scopes are requested, and direct-message ids (`D...`) are refused because
-  `im:history` is not requested. GitHub's act scope is `repo`, requested with the read scopes
+  the list scopes answer `connector_scope_missing` until reconnected. All
+  Slack scopes are user-token scopes (no bot scopes), and direct-message ids
+  (`D...`) are refused because `im:history` is not requested. GitHub's act scope is `repo`, requested with the read scopes
   on connect, which gives write access to every private repository the person
   can reach; the consent text in the desktop and iOS catalogs says the grant
   includes commenting and private repository write, and the broker only runs
