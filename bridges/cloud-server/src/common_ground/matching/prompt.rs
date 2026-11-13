@@ -69,7 +69,7 @@ pub(in crate::common_ground) fn room_prompt(members: &[SharedCard]) -> String {
     out
 }
 
-fn json_object(text: &str) -> Option<&str> {
+pub(in crate::common_ground) fn json_object(text: &str) -> Option<&str> {
     text.get(text.find('{')?..=text.rfind('}')?)
 }
 

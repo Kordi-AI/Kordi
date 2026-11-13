@@ -18,6 +18,8 @@ use kordi_cloud_server::ServerState;
 use sqlx_postgres::PgPool;
 
 use crate::fixture::Fixture;
+use crate::match_metrics::{self, Observation};
+use crate::match_run::{self, MatchPrompt};
 use crate::replay::{self, Engine, Harness};
 use crate::report::{summarize, FixtureResult, PassResult, Prices, ProviderInfo, RunReport};
 use crate::score::{score_build, score_turn};
@@ -159,8 +161,19 @@ fn provider_info(config: &SystemAgentConfig, engine: Engine) -> ProviderInfo {
     }
 }
 
-/// Replays `fixtures` and scores them. System agent fixtures need `harness`;
-/// Grounding builds run on `config` alone.
+/// How a suite run repeats and which match instructions it uses.
+#[derive(Debug, Clone, Copy)]
+pub struct RunOptions {
+    /// Times each fixture is replayed; above one only without a database.
+    pub repeat: usize,
+    pub match_prompt: MatchPrompt,
+    pub prices: Option<Prices>,
+    pub now: DateTime<Utc>,
+}
+
+/// Replays `fixtures` once with the current match instructions and scores
+/// them. System agent fixtures need `harness`; Grounding builds and match
+/// runs use `config` alone.
 pub async fn run_suite(
     label: &str,
     fixtures: &[Fixture],
@@ -170,63 +183,135 @@ pub async fn run_suite(
     prices: Option<Prices>,
     now: DateTime<Utc>,
 ) -> Result<RunReport> {
-    let mut results = Vec::new();
-    for fixture in fixtures {
-        let passes = match fixture {
-            Fixture::SystemAgent(conversation) => {
-                let harness = harness
-                    .with_context(|| format!("{} needs {DATABASE_URL_VAR}", conversation.id))?;
-                let (seeded, outcomes) = replay::conversation(harness, conversation)
-                    .await
-                    .with_context(|| format!("replaying {}", conversation.id))?;
-                conversation
-                    .turns
-                    .iter()
-                    .zip(outcomes)
-                    .map(|(turn, outcome)| PassResult {
-                        ran: outcome.ran,
-                        latency_ms: outcome.latency_ms,
-                        usage: outcome.usage,
-                        checks: score_turn(
-                            &turn.expect,
-                            &outcome,
-                            seeded.seeded_event_id.as_deref(),
-                        ),
-                        outcome: serde_json::to_value(&outcome).unwrap_or_default(),
-                    })
-                    .collect::<Vec<_>>()
-            }
-            Fixture::Grounding(build) => {
-                let outcome = crate::grounding::build(config, engine, build, now)
-                    .await
-                    .with_context(|| format!("building {}", build.id))?;
-                vec![PassResult {
-                    ran: true,
-                    latency_ms: Some(outcome.latency_ms),
+    let options = RunOptions {
+        repeat: 1,
+        match_prompt: MatchPrompt::Current,
+        prices,
+        now,
+    };
+    run_suite_with(label, fixtures, config, harness, engine, &options).await
+}
+
+/// One replay of `fixture`, scored; a match run's findings are added to
+/// `observations`.
+async fn replay_fixture(
+    fixture: &Fixture,
+    config: &SystemAgentConfig,
+    harness: Option<&Harness>,
+    engine: Engine,
+    options: &RunOptions,
+    observations: &mut Vec<Observation>,
+) -> Result<Vec<PassResult>> {
+    Ok(match fixture {
+        Fixture::SystemAgent(conversation) => {
+            let harness =
+                harness.with_context(|| format!("{} needs {DATABASE_URL_VAR}", conversation.id))?;
+            let (seeded, outcomes) = replay::conversation(harness, conversation)
+                .await
+                .with_context(|| format!("replaying {}", conversation.id))?;
+            conversation
+                .turns
+                .iter()
+                .zip(outcomes)
+                .map(|(turn, outcome)| PassResult {
+                    ran: outcome.ran,
+                    latency_ms: outcome.latency_ms,
                     usage: outcome.usage,
-                    checks: score_build(&build.expect, &outcome),
+                    checks: score_turn(&turn.expect, &outcome, seeded.seeded_event_id.as_deref()),
                     outcome: serde_json::to_value(&outcome).unwrap_or_default(),
-                }]
-            }
-        };
-        let passed = passes
-            .iter()
-            .all(|pass| pass.checks.iter().all(|c| c.passed));
-        eprintln!("{} {}", if passed { "pass" } else { "FAIL" }, fixture.id());
-        results.push(FixtureResult {
+                })
+                .collect()
+        }
+        Fixture::Grounding(build) => {
+            let outcome = crate::grounding::build(config, engine, build, options.now)
+                .await
+                .with_context(|| format!("building {}", build.id))?;
+            vec![PassResult {
+                ran: true,
+                latency_ms: Some(outcome.latency_ms),
+                usage: outcome.usage,
+                checks: score_build(&build.expect, &outcome),
+                outcome: serde_json::to_value(&outcome).unwrap_or_default(),
+            }]
+        }
+        Fixture::GroundingMatch(run) => {
+            let outcome = match_run::run(config, engine, run, options.match_prompt)
+                .await
+                .with_context(|| format!("matching {}", run.id))?;
+            observations.extend(match_metrics::observe(run, &outcome));
+            vec![PassResult {
+                ran: true,
+                latency_ms: Some(outcome.latency_ms),
+                usage: outcome.usage,
+                checks: match_run::score_match(run, &outcome),
+                outcome: serde_json::to_value(&outcome).unwrap_or_default(),
+            }]
+        }
+    })
+}
+
+/// Replays `fixtures` `options.repeat` times, every fixture once per
+/// repeat, and scores them. A fixture's passes hold every repeat in order;
+/// match suite numbers are measured per repeat and summarized.
+pub async fn run_suite_with(
+    label: &str,
+    fixtures: &[Fixture],
+    config: &SystemAgentConfig,
+    harness: Option<&Harness>,
+    engine: Engine,
+    options: &RunOptions,
+) -> Result<RunReport> {
+    if options.repeat == 0 {
+        bail!("a run replays each fixture at least once");
+    }
+    crate::select::check_repeat(fixtures, options.repeat)?;
+    let mut results: Vec<FixtureResult> = fixtures
+        .iter()
+        .map(|fixture| FixtureResult {
             id: fixture.id().to_string(),
             kind: fixture.kind().to_string(),
-            passed,
-            passes,
-        });
+            passed: true,
+            passes: Vec::new(),
+        })
+        .collect();
+    let mut repeats = Vec::new();
+    for repeat in 1..=options.repeat {
+        let mut observations = Vec::new();
+        for (fixture, result) in fixtures.iter().zip(&mut results) {
+            let passes =
+                replay_fixture(fixture, config, harness, engine, options, &mut observations)
+                    .await?;
+            let passed = passes
+                .iter()
+                .all(|pass| pass.checks.iter().all(|c| c.passed));
+            let repeat = if options.repeat > 1 {
+                format!(" (repeat {repeat})")
+            } else {
+                String::new()
+            };
+            eprintln!(
+                "{} {}{repeat}",
+                if passed { "pass" } else { "FAIL" },
+                fixture.id()
+            );
+            result.passed &= passed;
+            result.passes.extend(passes);
+        }
+        repeats.push(observations);
     }
-    let summary = summarize(&results, prices);
+    let mut summary = summarize(&results, options.prices);
+    summary.numbers = match_metrics::numbers(&repeats);
+    let match_prompt = fixtures
+        .iter()
+        .any(|fixture| matches!(fixture, Fixture::GroundingMatch(_)))
+        .then(|| options.match_prompt.info());
     Ok(RunReport {
         schema_version: crate::report::SCHEMA_VERSION,
         label: label.to_string(),
-        started_at: now.to_rfc3339(),
+        started_at: options.now.to_rfc3339(),
         provider: provider_info(config, engine),
-        prices,
+        prices: options.prices,
+        match_prompt,
         fixtures: results,
         summary,
     })

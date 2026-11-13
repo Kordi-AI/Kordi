@@ -1,0 +1,30 @@
+{
+  "kind": "groundingMatchSuite",
+  "id": "match-names",
+  "description": "Eight fictional game developers whose display names are a full name, common English words, a topic word, a single word or a non-Latin script, to measure how often a finding reads the same to either person.",
+  "people": [
+    {"id": "n01", "name": "Alex Rivera", "workingOn": ["Real-time path tracing", "Neural denoising for renderers"], "interests": ["Computer graphics", "Game engines"], "canHelp": ["Shader optimization", "GPU profiling"], "lookingFor": ["Art direction feedback"]},
+    {"id": "n02", "name": "Will", "workingOn": ["Procedural level generation", "Game AI planning"], "interests": ["Game engines", "Player modeling"], "canHelp": ["Unity tooling", "Level design"], "lookingFor": ["Playtest recruiting"]},
+    {"id": "n03", "name": "May", "workingOn": ["Music generation models", "Adaptive game soundtracks"], "interests": ["Audio ML", "Game audio"], "canHelp": ["Audio dataset curation", "Music theory"], "lookingFor": ["Game engine integration help"]},
+    {"id": "n04", "name": "Art", "workingOn": ["Generative art tools", "Concept art pipelines"], "interests": ["Creativity support", "Diffusion models"], "canHelp": ["Art direction", "Concept art critique"], "lookingFor": ["Real-time rendering for previews"]},
+    {"id": "n05", "name": "Grace", "workingOn": ["Accessible game controls", "Playtests with disabled players"], "interests": ["Game accessibility", "Player modeling"], "canHelp": ["Playtest recruiting", "Accessibility audits"], "lookingFor": ["Adaptive difficulty methods"]},
+    {"id": "n06", "name": "Ray", "workingOn": ["Ray tracing for games", "Denoising for real-time rendering"], "interests": ["Computer graphics", "Real-time rendering"], "canHelp": ["Graphics API debugging"], "lookingFor": ["Shader optimization"]},
+    {"id": "n07", "name": "Δάφνη", "workingOn": ["Expressive speech synthesis for game characters", "Voice consent tracking"], "interests": ["Audio ML", "Game audio"], "canHelp": ["Voice actor recruiting"], "lookingFor": ["Audio dataset curation"]},
+    {"id": "n08", "name": "Zanele", "workingOn": ["Dynamic difficulty adjustment", "Player skill estimation"], "interests": ["Player modeling", "Game AI"], "canHelp": ["Adaptive difficulty methods", "Telemetry analysis"], "lookingFor": ["Procedural levels for difficulty tests"]}
+  ],
+  "pairs": [
+    {"a": "n01", "b": "n06", "label": "strong", "kind": "overlap", "why": "Both build real-time ray tracing with denoising; shader help is offered and wanted", "shared": [["Real-time path tracing", "Ray tracing for games"], ["Neural denoising for renderers", "Denoising for real-time rendering"]], "trades": [["n01", "Shader optimization", "Shader optimization"]]},
+    {"a": "n01", "b": "n04", "label": "strong", "kind": "complement", "why": "Wants art direction feedback; art direction offered", "trades": [["n04", "Art direction", "Art direction feedback"]]},
+    {"a": "n02", "b": "n05", "label": "strong", "kind": "complement", "why": "Needs playtest recruiting; recruits playtesters and also models players", "shared": [["Player modeling", "Player modeling"]], "trades": [["n05", "Playtest recruiting", "Playtest recruiting"]]},
+    {"a": "n02", "b": "n08", "label": "strong", "kind": "overlap", "why": "Both work on game AI and player modeling; level design serves difficulty tests", "shared": [["Game AI planning", "Game AI"], ["Player modeling", "Player modeling"]], "trades": [["n02", "Level design", "Procedural levels for difficulty tests"]]},
+    {"a": "n05", "b": "n08", "label": "strong", "kind": "complement", "why": "Needs adaptive difficulty methods; builds them", "trades": [["n08", "Adaptive difficulty methods", "Adaptive difficulty methods"]]},
+    {"a": "n02", "b": "n03", "label": "strong", "kind": "complement", "why": "Needs game engine integration; offers Unity tooling", "trades": [["n02", "Unity tooling", "Game engine integration help"]]},
+    {"a": "n03", "b": "n07", "label": "strong", "kind": "overlap", "why": "Both do audio ML for games; audio dataset curation is offered and wanted", "shared": [["Audio ML", "Audio ML"], ["Game audio", "Game audio"]], "trades": [["n03", "Audio dataset curation", "Audio dataset curation"]]},
+    {"a": "n04", "b": "n08", "label": "none", "kind": "unrelated", "why": "Generative art tools vs difficulty adjustment"},
+    {"a": "n06", "b": "n05", "label": "none", "kind": "unrelated", "why": "Ray tracing vs accessible game controls"},
+    {"a": "n01", "b": "n07", "label": "none", "kind": "unrelated", "why": "Path tracing vs speech synthesis"}
+  ],
+  "rooms": [
+    {"id": "r1", "members": ["n01", "n02", "n03", "n04", "n05", "n06", "n07", "n08"]}
+  ]
+}
