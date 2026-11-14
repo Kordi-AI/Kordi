@@ -280,3 +280,92 @@ async fn polling_a_busy_room_waits_for_one_connection_at_a_time() {
         "at most one run per viewer: {runs}"
     );
 }
+
+#[tokio::test]
+async fn everyone_behind_one_address_can_join_one_room() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    // Every request in a test comes from the same (unknown) address, as at
+    // an event behind one NAT.
+    let labels: Vec<String> = (0..62).map(|i| format!("V{i}")).collect();
+    let cards: Vec<(&str, &str)> = labels
+        .iter()
+        .map(|l| (l.as_str(), "Agent memory"))
+        .collect();
+    let (app, people) = people_with(&pool, &cards).await;
+    let code = free_code(&pool).await;
+    for (_, token) in &people {
+        let (status, body) = send(
+            &app,
+            "GET",
+            &format!("/v1/cloud/common-ground/rooms/{code}/preview"),
+            token,
+            None,
+        )
+        .await;
+        // The first person opens the room by joining; everyone else finds it.
+        assert!(status == 200 || status == 404, "{status} {body}");
+        let (status, body) = send(
+            &app,
+            "POST",
+            &format!("/v1/cloud/common-ground/rooms/{code}/join"),
+            token,
+            None,
+        )
+        .await;
+        assert_eq!(status, 200, "{body}");
+    }
+
+    // Misses still spend the address's budget (each guesser stays under
+    // their own); once it is spent, even the right code is refused, so a
+    // hit looks like a miss.
+    let mut misses = 0;
+    let mut token = String::new();
+    let refused = loop {
+        if misses % 9 == 0 {
+            token = signed_in(&pool, &format!("Guess{misses}")).await.1;
+        }
+        let free = free_code(&pool).await;
+        let path = format!("/v1/cloud/common-ground/rooms/{free}/preview");
+        match send(&app, "GET", &path, &token, None).await.0 {
+            404 => misses += 1,
+            429 => break true,
+            other => panic!("unexpected {other}"),
+        }
+        if misses > 200 {
+            break false;
+        }
+    };
+    assert!(refused, "misses are limited per address");
+    // 60 a minute: the first person's preview and join missed, and the 61
+    // others' previews and joins found the room and cost nothing.
+    assert_eq!(misses, 58, "joins of an open room were charged");
+    let (_, fresh) = signed_in(&pool, "Late").await;
+    let (status, _) = send(
+        &app,
+        "GET",
+        &format!("/v1/cloud/common-ground/rooms/{code}/preview"),
+        &fresh,
+        None,
+    )
+    .await;
+    assert_eq!(status, 429, "the address's budget is spent");
+}
+
+/// A code with no open room, without closing anyone's room.
+async fn free_code(pool: &sqlx_postgres::PgPool) -> String {
+    loop {
+        let code = super::support::free_code();
+        let (open,): (bool,) = query_as(
+            "SELECT EXISTS (SELECT 1 FROM cloud_common_ground_rooms WHERE code = $1 AND closed_at IS NULL)",
+        )
+        .bind(&code)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        if !open {
+            return code;
+        }
+    }
+}

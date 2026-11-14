@@ -63,7 +63,7 @@ pub(in crate::common_ground) async fn create(
     for _ in 0..ATTEMPTS {
         let code = random_code();
         match enter(pool, &code, account, &body, &profile, &name, true).await {
-            Ok(Entered::Room(room_id)) => {
+            Ok(Entered::Opened(room_id) | Entered::Room(room_id)) => {
                 return match view(pool, room_id, account).await {
                     Ok(view) => (StatusCode::CREATED, Json(view)).into_response(),
                     Err(error) => db_error(error),

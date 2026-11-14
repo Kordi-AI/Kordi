@@ -159,7 +159,7 @@ fn address_limit(
 }
 
 /// Codes are short, so guessing is limited per account and per address.
-/// Opening a room counts the same as joining one.
+/// Opening a room counts against both.
 async fn check_limits(
     rate_limiter: &CloudRateLimiter,
     account: &str,
@@ -175,6 +175,31 @@ async fn check_limits(
         }
     }
     None
+}
+
+/// A join spends the account's budget every time, but the address's only
+/// on a miss (a code with no open room, which opens one): everyone at an
+/// event may share one address, and joining the right code is not a guess.
+/// Once the address's budget is spent every join is refused, so hits and
+/// misses still look the same. Returns the address budget to charge.
+async fn check_join_limits(
+    rate_limiter: &CloudRateLimiter,
+    account: &str,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    headers: &HeaderMap,
+) -> Result<(AccountActionLimit, String), Response> {
+    let (ip_limit, ip_key) = address_limit(rate_limiter, connect_info, headers);
+    for decision in [
+        rate_limiter
+            .observe_account_limit(ROOM_JOIN_LIMIT, account)
+            .await,
+        rate_limiter.peek_account_limit(ip_limit, &ip_key).await,
+    ] {
+        if let RateLimitDecision::Limited { retry_after } = decision {
+            return Err(limited(retry_after));
+        }
+    }
+    Ok((ip_limit, ip_key))
 }
 
 /// The request body, or the response for an unknown room kind.
@@ -206,7 +231,10 @@ fn room_name(name: &str) -> String {
 
 /// How entering a code went.
 enum Entered {
+    /// Joined the room open under the code.
     Room(Uuid),
+    /// No room was open under the code, so this opened one.
+    Opened(Uuid),
     Full,
     /// The code has an open room and only a new room was wanted.
     Taken,
@@ -243,6 +271,7 @@ async fn enter(
     .bind(code)
     .fetch_optional(&mut *tx)
     .await?;
+    let opened = open.is_none();
     let room_id = match open {
         Some(_) if new_only => return Ok(Entered::Taken),
         Some((room_id,)) => room_id,
@@ -281,7 +310,11 @@ async fn enter(
         .await?;
     notify_members(&mut tx, room_id, code).await?;
     tx.commit().await?;
-    Ok(Entered::Room(room_id))
+    Ok(if opened {
+        Entered::Opened(room_id)
+    } else {
+        Entered::Room(room_id)
+    })
 }
 
 pub(super) async fn join(
@@ -297,9 +330,11 @@ pub(super) async fn join(
         return room_not_found();
     }
     let account = session.account_id.as_str();
-    if let Some(response) = check_limits(&rate_limiter, account, connect_info, &headers).await {
-        return response;
-    }
+    let (ip_limit, ip_key) =
+        match check_join_limits(&rate_limiter, account, connect_info, &headers).await {
+            Ok(address) => address,
+            Err(response) => return response,
+        };
     let pool = state.db_pool();
     let body = match room_request(body) {
         Ok(body) => body,
@@ -312,6 +347,11 @@ pub(super) async fn join(
     let name = room_name(&body.name);
     match enter(pool, &code, account, &body, &profile, &name, false).await {
         Ok(Entered::Room(room_id)) => view_response(pool, room_id, account).await,
+        Ok(Entered::Opened(room_id)) => {
+            // The room is open either way; the budget only slows the next guess.
+            let _ = rate_limiter.observe_account_limit(ip_limit, &ip_key).await;
+            view_response(pool, room_id, account).await
+        }
         Ok(Entered::Full | Entered::Taken) => room_full(),
         Err(error) => db_error(error),
     }
