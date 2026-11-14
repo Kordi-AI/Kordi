@@ -22,7 +22,7 @@ fn assistant_text(message: &kordi_core::types::AssistantMessage) -> Option<Strin
 
 /// The summary of a session whose last request never reached an end: the
 /// process that ran it is gone.
-pub(crate) const INTERRUPTED_SUMMARY: &str =
+pub const INTERRUPTED_SUMMARY: &str =
     "The background session was interrupted before producing a final result.";
 
 pub(crate) fn inspect_persisted_background_session(
