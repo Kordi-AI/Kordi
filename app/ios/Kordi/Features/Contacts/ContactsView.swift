@@ -6,6 +6,7 @@ struct ContactsView<PinnedRows: View>: View {
     @State private var showAddContact = false
     @State private var showsCommonGround = false
     @State private var profileSubject: ContactProfileSubject?
+    @State private var openedInvitation: RoomGroupInvitation?
     var onOpenConversation: ((ConversationSummary) -> Void)? = nil
     var onOpenGroup: ((GroupSpaceSummary) -> Void)? = nil
     /// Pushes Common ground on the main stack; without it the screen opens full screen.
@@ -45,7 +46,7 @@ struct ContactsView<PinnedRows: View>: View {
     }
 
     private var showsRequests: Bool {
-        !incomingRequests.isEmpty || !outgoingRequests.isEmpty
+        !incomingRequests.isEmpty || !outgoingRequests.isEmpty || !model.roomGroupInvitations.isEmpty
     }
 
     var body: some View {
@@ -72,6 +73,12 @@ struct ContactsView<PinnedRows: View>: View {
                     Section {
                         ForEach(incomingRequests) { request in
                             ContactRequestRow(request: request).contactRequestSafetyActions(request)
+                                .contactsListRow()
+                        }
+                        ForEach(model.roomGroupInvitations) { invitation in
+                            ContactsRoomInvitationRow(invitation: invitation, onOpenConversation: onOpenConversation) {
+                                openedInvitation = invitation
+                            }
                                 .contactsListRow()
                         }
                         ForEach(outgoingRequests) { request in
@@ -145,10 +152,17 @@ struct ContactsView<PinnedRows: View>: View {
         }
         .sheet(isPresented: $showAddContact) { AddContactSheet() }
         .contactProfileSheet(subject: $profileSubject, onOpenConversation: onOpenConversation)
+        .stableNavigationDestination(item: $openedInvitation) { invitation in
+            ContactsRoomInvitationDetailView(invitation: invitation)
+        }
         .fullScreenCover(isPresented: $showsCommonGround) {
             CommonGroundDestinationView(appModel: model, onClose: { showsCommonGround = false }) { showsCommonGround = false; onOpenConversation?($0) }
         }
-        .task { await model.refreshContactRequests() }
+        .task {
+            async let requests: Void = model.refreshContactRequests()
+            async let invitations: Void = model.refreshRoomGroupInvitations()
+            _ = await (requests, invitations)
+        }
     }
 
     private var commonGroundButton: some View {

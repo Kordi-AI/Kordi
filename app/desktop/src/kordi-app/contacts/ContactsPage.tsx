@@ -1,11 +1,13 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useSessionPanelSlot } from '@/app/sessionPanelSlot';
 
+import { useRoomInvitations } from '@/features/commonGround/roomInvitations';
 import { cn } from '@/lib/utils';
 import type { ParticipantSpaceViewModel } from '../types';
 import { ContactDetailDialog, ContactDetailEmpty, ContactDetailPane } from './ContactDetailPane';
+import { ContactsRoomInvitationDetail } from './ContactsRoomInvitationDetail';
 import { ContactsGroupChannelsDialog } from './ContactsGroupChannelsDialog';
 import { ContactsListColumn } from './ContactsListColumn';
 import type { ContactsPageProps } from './contactsPageTypes';
@@ -45,9 +47,17 @@ export function ContactsPage(props: ContactsPageProps) {
   const selectedRequest = useSelectedContactRequest(props.contactRequests, props.activeContactRequestId, activeContactRequest);
   const detailMode = contactOverlayMode === 'request' && !selectedRequest ? null : contactOverlayMode;
   const hasLeadingDetail = leadingDetail !== undefined && leadingDetail !== null && leadingDetail !== false;
+  // A group invitation opened from Requests shows while no contact, request or Grounding is open.
+  const rooms = useRoomInvitations();
+  const invitation = !detailMode && !hasLeadingDetail ? rooms.selected : null;
+  const { store: roomStore } = rooms;
+  useEffect(() => {
+    // Opening a contact, a request or Grounding closes the invitation.
+    if (detailMode || hasLeadingDetail) roomStore.select(null);
+  }, [detailMode, hasLeadingDetail, roomStore]);
   useEscapeToDeselect(
-    hasLeadingDetail || (Boolean(detailMode) && !(detailMode === 'request' && requestActions.busy)),
-    onCloseOverlay,
+    hasLeadingDetail || Boolean(invitation) || (Boolean(detailMode) && !(detailMode === 'request' && requestActions.busy)),
+    invitation ? () => roomStore.select(null) : onCloseOverlay,
   );
 
   const detailProps = detailMode && !hasLeadingDetail ? {
@@ -73,13 +83,14 @@ export function ContactsPage(props: ContactsPageProps) {
     <div ref={rootRef} className={cn('app-contacts-page relative flex h-full min-h-0 min-w-0 flex-1', isNarrow && 'is-narrow')}>
       {slot
         ? createPortal(<ContactsListColumn {...listProps} inSidebar />, slot)
-        : isNarrow && hasLeadingDetail ? null : <ContactsListColumn {...listProps} inSidebar={false} />}
+        : isNarrow && (hasLeadingDetail || invitation) ? null : <ContactsListColumn {...listProps} inSidebar={false} />}
       {hasLeadingDetail ? (
         <div className="app-contacts-detail-pane app-contacts-leading-detail relative flex min-h-0 min-w-0 flex-1 flex-col">
           {leadingDetail}
         </div>
       ) : null}
-      {!isNarrow && !hasLeadingDetail && (detailProps ? <ContactDetailPane {...detailProps} /> : <ContactDetailEmpty />)}
+      {invitation ? <ContactsRoomInvitationDetail invitation={invitation} state={rooms} store={roomStore} /> : null}
+      {!isNarrow && !hasLeadingDetail && !invitation && (detailProps ? <ContactDetailPane {...detailProps} /> : <ContactDetailEmpty />)}
       {isNarrow && detailProps ? <ContactDetailDialog {...detailProps} /> : null}
       {selectedGroup ? (
         <ContactsGroupChannelsDialog space={selectedGroup} onDismiss={() => setSelectedGroupId(null)}

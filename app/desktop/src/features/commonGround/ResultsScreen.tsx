@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Copy, LogOut } from 'lucide-react';
 
 import { DetailTile, DetailTiles } from '@/kordi-app/contacts/ContactDetailParts';
@@ -9,7 +9,7 @@ import { personTitle } from './profiles';
 import { RoomSharing } from './ShareProfileDialog';
 import { StartGroupDialog } from './StartGroupDialog';
 import { roomClosed, type CgState, type CommonGroundStore } from './store';
-import type { CgPerson, CgResults } from './types';
+import type { CgGroup as CgRoomGroup, CgPerson, CgResults } from './types';
 
 function names(people: CgPerson[], selfId: string) {
   const others = people.filter((person) => person.accountId !== selfId).map((person) => person.name);
@@ -32,7 +32,27 @@ function arriving(results: CgResults, members: CgPerson[], selfId: string, close
   return members.filter((member) => !listed.has(member.accountId));
 }
 
-function GroupsSection({ code, results, state, store, host }: { code: string; results: CgResults; state: CgState; store: CommonGroundStore; host: CgHost }) {
+/** The group row's trailing control: Open for members, otherwise the viewer's join request state. */
+function GroupTrailing({ code, group, state, store, host, closed }: { code: string; group: CgRoomGroup; state: CgState; store: CommonGroundStore; host: CgHost; closed: boolean }) {
+  if (group.joined) return <CgButton onClick={() => host.openGroup(group.groupSpaceId)}>Open</CgButton>;
+  const request = group.joinRequest;
+  if (request?.status === 'pending') {
+    return (
+      <span className="cg-row-actions">
+        <span className="cg-trail">Requested</span>
+        <CgButton quiet disabled={state.busy === `join-request:${request.requestId}`} onClick={() => void store.cancelJoinRequest(code, request.requestId)}>Cancel</CgButton>
+      </span>
+    );
+  }
+  if (closed || !group.canAskToJoin) return null;
+  return (
+    <CgButton disabled={state.busy === `join-request:${group.groupSpaceId}`} onClick={() => void store.askToJoin(code, group.groupSpaceId)}>
+      Ask to join
+    </CgButton>
+  );
+}
+
+function GroupsSection({ code, results, state, store, host, closed }: { code: string; results: CgResults; state: CgState; store: CommonGroundStore; host: CgHost; closed: boolean }) {
   const groups = results.groups ?? [];
   const invitations = state.support.invitations ? results.invitations ?? [] : [];
   if (!groups.length && !invitations.length) return null;
@@ -40,13 +60,31 @@ function GroupsSection({ code, results, state, store, host }: { code: string; re
     <CgSection title="Groups">
       <CgGroup>
         {groups.map((group) => (
-          <CgRow
-            key={group.groupSpaceId}
-            lead={<CgAvatarGrid people={group.members ?? []} size={30} />}
-            title={group.name}
-            sub={groupLine(group) || undefined}
-            trailing={group.joined ? <CgButton onClick={() => host.openGroup(group.groupSpaceId)}>Open</CgButton> : null}
-          />
+          <Fragment key={group.groupSpaceId}>
+            <CgRow
+              lead={<CgAvatarGrid people={group.members ?? []} size={30} />}
+              title={group.name}
+              sub={groupLine(group) || undefined}
+              trailing={<GroupTrailing code={code} group={group} state={state} store={store} host={host} closed={closed} />}
+            />
+            {(group.requests ?? []).map((request) => {
+              const busy = state.busy === `join-request:${request.requestId}`;
+              return (
+                <div key={request.requestId} className="cg-row-nested">
+                  <CgRow
+                    lead={<CgAvatar person={request.person} size={26} />}
+                    title={`${request.person.name} asked to join`}
+                    trailing={(
+                      <span className="cg-row-actions">
+                        <CgButton quiet disabled={busy} onClick={() => void store.decideJoinRequest(code, request.requestId, 'decline')}>Decline</CgButton>
+                        <CgButton disabled={busy} onClick={() => void store.decideJoinRequest(code, request.requestId, 'approve')}>Approve</CgButton>
+                      </span>
+                    )}
+                  />
+                </div>
+              );
+            })}
+          </Fragment>
         ))}
         {invitations.map((invitation) => (
           <CgRow
@@ -168,7 +206,7 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
       </CgSection>}
       {waiting ? <div className="cg-hint">Waiting for others</div> : null}
       {finding ? <CgProgress inline line="Finding overlap" /> : null}
-      <GroupsSection code={code} results={results} state={state} store={store} host={host} />
+      <GroupsSection code={code} results={results} state={state} store={store} host={host} closed={closed} />
       {closed ? (
         <div className="cg-actions-end">
           <button type="button" className="cg-button is-danger-quiet" onClick={() => void store.leaveRoom(code)}>Remove</button>
