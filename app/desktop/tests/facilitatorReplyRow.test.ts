@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { mapCanonicalMessage } from '../src/features/canonical/readModel/messageMapping';
+import { canDisplayAgentTurn } from '../src/features/chat/agentProcessingVisibility';
 import type { CloudMessage } from '../src/features/cloud/authClient';
 import { encodeCloudGroupControl } from '../src/features/cloud/cloudGroupMessages';
 import { buildCloudMessageIndex } from '../src/features/cloud/cloudMessageIndex';
 import { patchCanonicalCloudMessages } from '../src/features/cloud/cloudReactionProjection';
-import type { CanonicalSessionState } from '../src/kordi-app/types';
+import type { CanonicalSessionMessage, CanonicalSessionState } from '../src/kordi-app/types';
 
 // Bea asks "@Facilitator hi". The server shows the Facilitator's reply row
 // processing, then edits it in place into the reply, like a member agent's
@@ -70,4 +71,23 @@ test('the Facilitator shows a working row that becomes its reply in place', () =
   assert.equal(replied[0]?.turn?.completed, true);
   assert.equal(replied[0]?.turn?.assistantText, 'Hi Bea! I can find a time or open a vote.');
   assert.equal(replied[0]?.sender, 'Facilitator');
+});
+
+test('the person who asked sees the working row too, while their own message still says sending', () => {
+  // Bea asked; her bubble may still say sending when the row arrives a second later.
+  const request = mapCanonicalMessage({
+    id: 'request', sessionId: groupId, senderIdentityId: 'human:bea', senderRole: 'user', messageKind: 'text',
+    contentText: '@Facilitator hi', contentHash: null, content: { deliveryState: 'sending' }, status: 'sending',
+    createdAtMs: 1, updatedAtMs: 1, sequenceNum: 1, sourceTransport: 'cloud-group', sourceEventId: 'cloud-group:request',
+  } as unknown as CanonicalSessionMessage, new Map(), 'human:bea')!;
+  const identities = new Map(beaView.identities.map((identity) => [identity.id, identity]));
+  const context = { senderIdentityIdByMessageId: new Map([['request', 'human:bea']]) };
+  const row = mapCanonicalMessage(beaView.messages[0], identities, 'human:bea', context)!;
+  assert.deepEqual(request.statusChips, ['sending']);
+  assert.equal(row.turn?.serverStored, true);
+  assert.equal(canDisplayAgentTurn(row.turn!, [request, row]), true, 'the stored row shows for the asker');
+
+  // A local placeholder for a request that never left still waits for it.
+  const local = { ...row.turn!, serverStored: undefined };
+  assert.equal(canDisplayAgentTurn(local, [request, row]), false);
 });

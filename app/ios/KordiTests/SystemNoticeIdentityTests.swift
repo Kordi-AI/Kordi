@@ -107,6 +107,17 @@ final class SystemNoticeIdentityTests: XCTestCase {
         XCTAssertEqual(refreshed.first?.authorName, "Facilitator")
         XCTAssertNil(refreshed.first?.agentExecution)
 
+        // The person who asked sees the working row too, even while their own
+        // message still says sending.
+        let ask = ChatMessage(
+            id: "request", conversationId: group.id, author: .me, authorName: "You", text: "@Facilitator hi",
+            createdAt: .distantPast, deliveryState: .sending, errorMessage: nil, requestMessageId: nil
+        )
+        XCTAssertEqual(shown.requestMessageId, ask.id)
+        XCTAssertNotNil(shown.cloudMessageVersion)
+        let asked = AgentSessionQueuePresentation.apply(to: [ask, shown], kind: .group)
+        XCTAssertEqual(asked.map(\.id), [ask.id, shown.id])
+
         // A row the server removed (a card answered, or the run failed) is gone.
         let removed = CloudMessageDTO(messageId: "facilitator-row", fromAccountId: KordiSystemAgentIdentity.accountId,
             toAccountId: "acct_maya", body: "", createdAt: "2026-11-13T10:00:00Z", deliveredAt: nil, readAt: nil,
