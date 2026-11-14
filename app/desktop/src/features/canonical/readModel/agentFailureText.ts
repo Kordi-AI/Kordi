@@ -7,7 +7,7 @@ type FailedTurnMessage = Pick<CanonicalSessionMessage, 'sessionId' | 'sourceTran
 
 /**
  * A line written for the requester: a notice their own device wrote, such as
- * an offline owner, or Kordi Support's service line. Neither holds owner detail.
+ * an offline owner, or KordiSpot's service line. Neither holds owner detail.
  */
 function isRequesterFacingLine(message: FailedTurnMessage): boolean {
   return message.sourceTransport === 'cloud-group-agent-offline'

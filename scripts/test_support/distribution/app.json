@@ -40,7 +40,7 @@
     },
     "supportAgent": {
       "enabled": false,
-      "name": "Kordi Support",
+      "name": "KordiSpot",
       "subtitle": "Ask questions or suggest improvements",
       "ownerEmail": "support@example.test",
       "persona": "Synthetic support agent persona."

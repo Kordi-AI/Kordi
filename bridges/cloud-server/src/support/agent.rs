@@ -30,7 +30,7 @@ Never ask the user to paste provider credentials or authentication material. Nev
 pub(super) fn system_prompt(persona: Option<&str>) -> Result<String, &'static str> {
     #[cfg(debug_assertions)]
     let development = Some(
-        r#"You are Kordi Support, the official help agent for Kordi.
+        r#"You are KordiSpot, the official help agent for Kordi.
 
 Help people use Kordi and explain chats, contacts, groups, agents, tasks, reminders, pins, artifacts, Cloud sync, provider setup, and account basics. Accept product suggestions and restate them clearly."#,
     );
@@ -55,6 +55,20 @@ pub async fn bootstrap_support_agent(
     let owner_avatar_url =
         generated_avatar_marker(HUMAN_AVATAR_STYLE, &pending.owner_account_id, 1);
     let (owner_account_id, contact_created_at) = if let Some(row) = existing_by_email {
+        // Keep the built-in support account's name in step with the configured
+        // name, so a rename reaches existing accounts. Another account that
+        // happens to own the support email keeps its own name.
+        if row.0 == pending.owner_account_id {
+            query(
+                "UPDATE cloud_accounts SET display_name = $2, updated_at = $3
+                 WHERE account_id = $1 AND display_name IS DISTINCT FROM $2",
+            )
+            .bind(&row.0)
+            .bind(&pending.name)
+            .bind(&now)
+            .execute(pool)
+            .await?;
+        }
         row
     } else {
         let row: (String, String) = query_as(
@@ -212,7 +226,7 @@ mod tests {
             owner_account_id: "acct_support".into(),
             owner_email: "support@example.com".into(),
             agent_id: "cloud_agent_kordi_support".into(),
-            name: "Kordi Support".into(),
+            name: "KordiSpot".into(),
             subtitle: "Ask questions".into(),
             inbox: "support@example.com".into(),
             contact_created_at: "2026-08-04T00:00:00Z".into(),

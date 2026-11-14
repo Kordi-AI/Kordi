@@ -121,6 +121,17 @@ fn flagged_ids(input: &Value) -> HashSet<String> {
         .collect()
 }
 
+/// Message ids the run input marks as asking the System agent itself.
+fn system_agent_request_ids(input: &Value) -> HashSet<String> {
+    input["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|message| message["addressesSystemAgent"] == true)
+        .filter_map(|message| message["messageId"].as_str().map(str::to_string))
+        .collect()
+}
+
 async fn save(pool: &PgPool, conversation_id: Uuid, patch: &Value) -> Result<(), sqlx_core::Error> {
     query(
         "UPDATE cloud_pip_conversation_state
@@ -159,7 +170,9 @@ pub(super) async fn prepare(
     .unwrap_or_default()
         - LOOKBACK_MESSAGES;
     let flagged = flagged_ids(&input);
-    let messages = message_facts(pool, config, candidate, start.max(0), &flagged).await?;
+    let requests = system_agent_request_ids(&input);
+    let messages =
+        message_facts(pool, config, candidate, start.max(0), &flagged, &requests).await?;
     let work = open_work(pool, candidate).await?;
     let clock = Clock {
         now: Utc::now(),

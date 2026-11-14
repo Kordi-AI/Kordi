@@ -18,6 +18,7 @@ import {
   type SupportReportDraft,
   type SupportReportDiagnosticValues,
 } from '@/features/support/supportReport';
+import { KORDI_SUPPORT_NAME } from '@/features/support/supportIdentity';
 
 type SupportReportDialogProps = {
   sessionId: string;
@@ -179,7 +180,7 @@ export function SupportReportDialog({
               {stage === 'draft'
                 ? 'Describe the request first. Nothing is sent until you review and approve it.'
                 : stage === 'sent'
-                  ? 'Kordi Support can now follow up using your signed-in account email.'
+                  ? `${KORDI_SUPPORT_NAME} can now follow up using your signed-in account email.`
                   : 'Review every item below, then choose whether to allow the report to be sent.'}
             </AppDialogDescription>
           </div>
@@ -351,7 +352,7 @@ export function SupportReportDialog({
                   checked={permissionGranted}
                   onChange={setPermissionGranted}
                   disabled={busy}
-                  label="I allow Kordi to send the report shown above to Kordi Support."
+                  label={`I allow Kordi to send the report shown above to ${KORDI_SUPPORT_NAME}.`}
                 />
               </div>
 
@@ -421,7 +422,7 @@ export function SupportConversationEmptyState() {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center px-6 py-12 text-center">
       <ShieldCheck className="h-7 w-7 text-[color:var(--utility-muted-text)]" aria-hidden="true" />
-      <h3 className="mt-3 text-[15px] font-semibold">Kordi Support</h3>
+      <h3 className="mt-3 text-[15px] font-semibold">{KORDI_SUPPORT_NAME}</h3>
       <p className="app-transient-muted mt-1.5 text-[12px] leading-5">
         Ask a product question in this chat, or use Send report above to contact the Kordi team.
       </p>

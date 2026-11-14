@@ -24,8 +24,8 @@ test('bar colour follows the 75% and 90% thresholds and reached limits', () => {
 });
 
 test('labels and values', () => {
-  assert.equal(usageLabel(snapshot({ limitId: 'conversation.system_agent_runs', scope: 'conversation' })), 'System agent per chat');
-  assert.equal(usageLabel(snapshot({ limitId: 'pool.stopped' })), 'System agent');
+  assert.equal(usageLabel(snapshot({ limitId: 'conversation.system_agent_runs', scope: 'conversation' })), 'Facilitator per chat');
+  assert.equal(usageLabel(snapshot({ limitId: 'pool.stopped' })), 'Facilitator');
   assert.equal(usageValueLabel(snapshot({ used: 7, limit: 10, usedPercent: 70 })), '7 of 10');
   assert.equal(usageValueLabel(snapshot({ limitId: 'pool.spend', used: 400_000, limit: 1_000_000, usedPercent: 40 })), '0.40 of 1.00');
   assert.equal(usageValueLabel(snapshot({ usedPercent: 70 })), '70%');
