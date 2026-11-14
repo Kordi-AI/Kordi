@@ -2,8 +2,8 @@ use super::*;
 
 #[tokio::test]
 #[ignore = "requires a dedicated PostgreSQL fixture; run scripts/test-cloud-migrations.sh"]
-async fn upgrade_from_201_adds_group_invitations() {
-    let pool = fixture(201).await;
+async fn upgrade_from_202_adds_group_invitations() {
+    let pool = fixture(202).await;
     execute(&pool, "INSERT INTO cloud_chat_conversations(conversation_id,kind,created_by_account_id,client_operation_id,creation_fingerprint,legacy_session_id) VALUES('00000000-0000-0000-0000-0000000000b1','group','fixture-owner','00000000-0000-0000-0000-0000000000b2','fixture','session:group:fixture')").await;
     let (a, b) = tokio::join!(apply_migrations(&pool), apply_migrations(&pool));
     a.unwrap();
@@ -48,7 +48,7 @@ async fn upgrade_from_201_adds_group_invitations() {
     // Running the released SQL again keeps the rows.
     let migration = EMBEDDED_MIGRATIONS
         .iter()
-        .find(|m| m.version == 202)
+        .find(|m| m.version == 203)
         .unwrap();
     let mut tx = pool.begin().await.unwrap();
     sqlx_core::raw_sql::raw_sql(migration.sql)

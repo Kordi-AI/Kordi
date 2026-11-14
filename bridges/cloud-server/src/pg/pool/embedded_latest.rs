@@ -38,12 +38,17 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
     ),
     migration!(
         201,
-        "common ground room join requests",
-        "0201_common_ground_room_join_requests.sql"
+        "cloud run lease attempts",
+        "0201_cloud_run_lease_attempts.sql"
     ),
     migration!(
         202,
+        "common ground room join requests",
+        "0202_common_ground_room_join_requests.sql"
+    ),
+    migration!(
+        203,
         "common ground group invitations",
-        "0202_common_ground_group_invitations.sql"
+        "0203_common_ground_group_invitations.sql"
     ),
 ];

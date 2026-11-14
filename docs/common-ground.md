@@ -139,7 +139,7 @@ Routes under `/v1/cloud/common-ground/`. Every person returned in Common ground 
 
 ### Inviting Grounding people into groups
 
-An active owner or admin of a group invites people they share Grounding with: both still in the same room, a pairing, or a match they opened, with no block either way and only when the person lets them see their card. Contacts are added directly; everyone else gets an invitation (`cloud_common_ground_group_invitations`, migration 0202) that they join or decline from Contacts › Requests.
+An active owner or admin of a group invites people they share Grounding with: both still in the same room, a pairing, or a match they opened, with no block either way and only when the person lets them see their card. Contacts are added directly; everyone else gets an invitation (`cloud_common_ground_group_invitations`, migration 0203) that they join or decline from Contacts › Requests.
 
 - `GET people/:id/groups`: the person-page picker. `contact`, and up to 100 groups you own or administer, newest activity first, each with `groupSpaceId`, `conversationId`, `name`, `memberCount`, up to four `members` (owner first) and `state` (`member`, `invited` or null) for that person. 404 `common_ground_person_not_found` unless you may invite them.
 - `GET group-people?groupSpaceId=…`: Group › Add people. Up to 100 people you may invite who are not your contacts, not in the group and not blocked with anyone in it, each as `{ person, source, invited }`. `source` is the most recent room you both are still in; null for a match or pairing. Rooms come first.

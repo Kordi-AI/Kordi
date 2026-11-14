@@ -3,9 +3,7 @@ pub use crate::runtime_sandbox::{
 };
 use std::path::PathBuf;
 
-#[cfg(test)]
-use crate::client::CloudAgentRun;
-use crate::client::{CloudAgentRunClient, RunnerClientError};
+use crate::client::{CloudAgentRun, CloudAgentRunClient, RunnerClientError};
 use crate::model_loop::{
     run_model_loop, run_omp_model_loop, CloudModelProvider, OpenAiCompatibleProvider,
 };
@@ -144,7 +142,25 @@ where
     let Some(run) = client.lease_next_run().await? else {
         return Ok(RunnerStepOutcome::NoRun);
     };
+    let run_id = run.run_id.clone();
+    step_leased_run(client, provider, sandbox_root, engine, run)
+        .await
+        .map_err(|error| error.for_run(&run_id))
+}
 
+/// Runs one leased run to its end. An error leaves the run leased, so its
+/// lease lapses and the server leases it again, a bounded number of times.
+async fn step_leased_run<C, P>(
+    client: &C,
+    provider: &P,
+    sandbox_root: PathBuf,
+    engine: CloudModelEngine,
+    run: CloudAgentRun,
+) -> Result<RunnerStepOutcome, RunnerClientError>
+where
+    C: CloudAgentRunClient + Sync,
+    P: CloudModelProvider + Sync,
+{
     // A memory import runs only on the owner's Mac; the server never leases one.
     if run.status == "cancelled" || run.run_id.starts_with("import_") {
         return Ok(RunnerStepOutcome::SkippedCancelled { run_id: run.run_id });
