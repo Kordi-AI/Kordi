@@ -274,3 +274,100 @@ async fn a_running_agent_is_never_overtaken_and_system_agent_runs_own_nothing() 
         .unwrap();
     assert_eq!(chat.sweep().await, 1, "the run failed without a reply");
 }
+
+impl Chat {
+    /// Bob asks Alice's agent, its reply is still processing, and Bob asks
+    /// the Facilitator directly, with the run of Alice's agent `status`.
+    async fn ask_the_facilitator_while_alices_agent_works(&self, status: &str) {
+        let alice = &self.alice;
+        let request = group(
+            self.chat,
+            json!({"id": Uuid::new_v4().to_string(), "senderAccountId": self.bob, "createdAtMs": 1,
+                "text": "@KordiAlice hi",
+                "targetCloudAgentId": format!("cloud-agent:{alice}"),
+                "targetCloudAgentName": "KordiAlice", "targetCloudAgentOwnerAccountId": alice,
+                "mentions": [{"label": "KordiAlice", "targetKind": "agent",
+                    "targetIdentityId": format!("agent:cloud-agent:{alice}")}]}),
+        );
+        let request_id = say(&self.pool, &self.bob, self.chat, &request).await;
+        self.run("car_", &request_id, status, 5).await;
+        let processing = group(
+            self.chat,
+            json!({"id": Uuid::new_v4().to_string(), "senderAccountId": alice, "createdAtMs": 2,
+                "senderKind": "agent", "deliveryState": "processing", "replyToMessageId": request_id,
+                "text": "Working on it"}),
+        );
+        say(&self.pool, alice, self.chat, &processing).await;
+        let ask = group(
+            self.chat,
+            json!({"id": Uuid::new_v4().to_string(), "senderAccountId": self.bob, "createdAtMs": 3,
+                "text": "@Facilitator hi",
+                "mentions": [{"label": "Facilitator", "targetKind": "agent",
+                    "targetIdentityId": format!("agent:cloud-agent:{}", self.config.account_id),
+                    "startUtf16": 0, "lengthUtf16": 12, "displayText": "@Facilitator"}]}),
+        );
+        say(&self.pool, &self.bob, self.chat, &ask).await;
+    }
+
+    async fn alices_agent_replies(&self) {
+        let reply = group(
+            self.chat,
+            json!({"id": Uuid::new_v4().to_string(), "senderAccountId": self.alice, "createdAtMs": 4,
+                "senderKind": "agent", "deliveryState": "complete", "text": "Hi Bob!"}),
+        );
+        say(&self.pool, &self.alice, self.chat, &reply).await;
+    }
+
+    /// The Facilitator request in the newest System agent run's input.
+    async fn asked_facilitator_in_last_run(&self) -> Value {
+        let prompts = self.system_agent_prompts().await;
+        let input = prompts.last().expect("a System agent run");
+        input["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|message| message["text"] == "@Facilitator hi")
+            .cloned()
+            .expect("the request is in the run input")
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn asking_the_facilitator_while_another_agent_replies_gets_an_answer() {
+    let chat = Chat::new().await;
+    chat.ask_the_facilitator_while_alices_agent_works("completed")
+        .await;
+    chat.alices_agent_replies().await;
+    assert_eq!(chat.sweep().await, 1, "the Facilitator answers");
+    let asked = chat.asked_facilitator_in_last_run().await;
+    assert_eq!(asked["isNew"], true);
+    assert_eq!(asked["addressesSystemAgent"], true);
+    assert!(asked.get("agentOwned").is_none(), "{asked}");
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn asking_the_facilitator_while_another_agent_runs_waits_then_answers() {
+    let chat = Chat::new().await;
+    chat.ask_the_facilitator_while_alices_agent_works("running")
+        .await;
+    assert_eq!(chat.sweep().await, 0, "Alice's agent is still working");
+    let hooks = chat.hooks().await;
+    assert!(
+        hooks["heldRequest"]["fromSequence"].as_i64().is_some(),
+        "{hooks}"
+    );
+    assert!(chat.system_agent_prompts().await.is_empty());
+
+    chat.alices_agent_replies().await;
+    query("UPDATE cloud_agent_fallback_runs SET status = 'completed', updated_at = now()::text WHERE session_id = $1")
+        .bind(&chat.session)
+        .execute(&chat.pool)
+        .await
+        .unwrap();
+    assert_eq!(chat.sweep().await, 1, "then the Facilitator answers");
+    let asked = chat.asked_facilitator_in_last_run().await;
+    assert_eq!(asked["isNew"], true);
+    assert_eq!(asked["addressesSystemAgent"], true);
+}

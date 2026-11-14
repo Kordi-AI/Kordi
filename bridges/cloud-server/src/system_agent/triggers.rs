@@ -24,6 +24,9 @@ use super::ownership_store::Gate;
 pub(super) const DISCUSSION_KEY: &str = "planDiscussion";
 pub(super) const CHECK_AFTER_KEY: &str = "triggerCheckAfter";
 pub(super) const CARDS_CHECKED_KEY: &str = "cardsCheckedAt";
+/// A direct request that arrived while a person's agent was busy: the
+/// sequence its run input reaches back to once that agent is done.
+pub(super) const HELD_REQUEST_KEY: &str = "heldRequest";
 /// The run input key holding the marks a finished run records.
 const MARKS_KEY: &str = "triggerMarks";
 /// How soon a trigger that had to wait is checked again.
@@ -165,13 +168,27 @@ pub(super) fn decide(mut facts: PassFacts<'_>) -> PassPlan {
         .map_or(facts.silence, |last| facts.now - last);
     let silent = quiet >= facts.silence;
 
+    // A request is never dropped because another agent is busy: it waits,
+    // and its run reaches back to it once that agent is done.
+    let held = facts
+        .hooks_fired
+        .get(HELD_REQUEST_KEY)
+        .and_then(|held| held.get("fromSequence"))
+        .and_then(Value::as_i64);
+    let asked = facts.asks_system_agent || held.is_some();
     let run = if gate.stepping_in {
         Some(Trigger::Stall)
-    } else if facts.asks_system_agent && !gate.agent_busy {
+    } else if asked && !gate.agent_busy {
         Some(Trigger::Request {
-            rewind_to: discussion
-                .as_ref()
-                .map(|discussion| discussion.from_sequence),
+            rewind_to: [
+                discussion
+                    .as_ref()
+                    .map(|discussion| discussion.from_sequence),
+                held,
+            ]
+            .into_iter()
+            .flatten()
+            .min(),
         })
     } else if gate.agent_busy {
         None
@@ -220,10 +237,20 @@ pub(super) fn decide(mut facts: PassFacts<'_>) -> PassPlan {
         Some(Trigger::Loop(chosen) | Trigger::Conflict(chosen)) => chosen == finding,
         _ => false,
     };
-    let waiting = [&facts.found_loop, &facts.found_conflict]
-        .into_iter()
-        .flatten()
-        .any(|finding| !chosen(finding));
+    let hold = asked && run.is_none();
+    if hold && held.is_none() {
+        patch.insert(
+            HELD_REQUEST_KEY.into(),
+            json!({ "fromSequence": facts.seen_sequence }),
+        );
+    } else if held.is_some() && matches!(run, Some(Trigger::Request { .. })) {
+        marks.insert(HELD_REQUEST_KEY.into(), Value::Null);
+    }
+    let waiting = hold
+        || [&facts.found_loop, &facts.found_conflict]
+            .into_iter()
+            .flatten()
+            .any(|finding| !chosen(finding));
     if waiting {
         let at = facts.now + Duration::seconds(RECHECK_SECONDS);
         patch.insert(CHECK_AFTER_KEY.into(), json!(at));
@@ -364,6 +391,9 @@ pub(super) fn similarity(
     left.intersection(right).count() as f64 / union as f64
 }
 
+#[cfg(test)]
+#[path = "triggers_request_tests.rs"]
+mod request_tests;
 #[cfg(test)]
 #[path = "triggers_tests.rs"]
 mod tests;
