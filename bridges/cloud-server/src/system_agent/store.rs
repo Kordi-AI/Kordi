@@ -18,7 +18,6 @@ use super::cards::{mark_card_seen, sync_card_messages};
 use super::config::SystemAgentConfig;
 use super::input::Candidate;
 use super::limits;
-use super::post::post_text;
 use crate::resource_pools::usage::{settle, Settlement};
 use crate::resource_pools::Feature;
 
@@ -26,9 +25,6 @@ pub use super::retry::{fail, release_stale_runs};
 
 /// Stored run ids keep the old prefix.
 pub const RUN_PREFIX: &str = "pip_";
-/// The reply to a direct request when the model returned nothing to post.
-pub(super) const REQUEST_FALLBACK: &str =
-    "Hi! I can find a time, open a vote, or keep track of who does what. Just ask.";
 const SWEEP_BATCH: i64 = 10;
 
 /// A SQL pattern for an RFC 3339 time as the sweep row stores it.
@@ -330,6 +326,15 @@ async fn enqueue(
     crate::pool_workers::store::tag_run(&mut tx, &run_id, &resource_pool, Feature::SystemAgent)
         .await?;
     tx.commit().await?;
+    // The person who asked sees the Facilitator working on it right away.
+    super::reply_slot::show(
+        pool,
+        &config.account_id,
+        &run_id,
+        candidate.conversation_id,
+        &input,
+    )
+    .await;
     Ok(true)
 }
 
@@ -427,18 +432,17 @@ pub async fn complete(
         .filter(|_| !workflow_posted)
         .map(str::trim)
         .filter(|text| !text.is_empty());
-    // Someone who asked the System agent directly always gets an answer.
-    let asked_directly = run.input["trigger"]["kind"] == "request";
-    let answered = workflow_posted || card_touched || message.is_some() || !documents.is_empty();
-    let response_message_id = match message
-        .or_else(|| (!documents.is_empty()).then_some("I drafted a document for the group."))
-        .or_else(|| (asked_directly && !answered).then_some(REQUEST_FALLBACK))
-    {
-        Some(text) if !text.is_empty() => {
-            post_text(pool, run_id, &run, text, card_touched, &documents).await?
-        }
-        _ => None,
-    };
+    let answered = workflow_posted || card_touched;
+    let response_message_id = super::reply_slot::publish(
+        pool,
+        run_id,
+        &run,
+        message,
+        answered,
+        card_touched,
+        &documents,
+    )
+    .await?;
 
     let hooks = super::triggers::finish_marks(&run.input);
 

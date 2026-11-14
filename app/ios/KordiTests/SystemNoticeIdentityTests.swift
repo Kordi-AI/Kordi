@@ -72,6 +72,42 @@ final class SystemNoticeIdentityTests: XCTestCase {
         XCTAssertEqual(reply.attachments.first?.name, "CSV Checklist.md")
     }
 
+    func testFacilitatorWorkingRowBecomesItsReplyInPlace() throws {
+        // Bea asks "@Facilitator hi"; the server shows the Facilitator's reply
+        // row working, then edits it in place into the reply.
+        let group = makeGroup()
+        let owner = group.groupParticipants[0]
+        func row(state: String, text: String, version: Int) throws -> CloudMessageDTO {
+            let envelope = CloudGroupControlEnvelope(
+                kind: "group-message", groupId: group.sessionId, groupSpaceId: group.groupSpaceId,
+                groupTitle: group.displayName, createdByAccountId: owner.accountId, actor: owner,
+                participants: group.groupParticipants, message: CloudGroupMessagePayload(
+                    id: "facilitator-reply:request", senderAccountId: KordiSystemAgentIdentity.accountId,
+                    text: text, createdAtMs: 1_000, senderKind: "agent", senderDisplayName: "Facilitator",
+                    deliveryState: state, replyToMessageId: "request", requestId: "request"
+                )
+            )
+            return CloudMessageDTO(messageId: "facilitator-row", fromAccountId: KordiSystemAgentIdentity.accountId,
+                toAccountId: "acct_maya", body: try CloudGroupMessageCodec.encode(envelope),
+                createdAt: "2026-11-13T10:00:00Z", deliveredAt: nil, readAt: nil, direction: "incoming",
+                sessionId: group.sessionId, version: version)
+        }
+        let working = try row(state: "processing", text: "", version: 1)
+        let shown = try XCTUnwrap(AppModel.mapGroupMessages([working], conversation: group, ownAccountId: "acct_maya").first)
+        XCTAssertEqual(shown.author, .agent)
+        XCTAssertEqual(shown.authorName, "Facilitator")
+        XCTAssertEqual(shown.agentExecution?.progressLabel, "Working")
+        XCTAssertEqual(MessageAuthorIdentity.resolve(shown, in: group, account: nil, mentionTargets: []),
+                       KordiSystemAgentIdentity.avatar)
+
+        let replied = try row(state: "complete", text: "Hi! I can find a time or open a vote.", version: 2)
+        let refreshed = AppModel.mapGroupMessages([replied, working], conversation: group, ownAccountId: "acct_maya")
+        XCTAssertEqual(refreshed.count, 1, "the reply takes the working row")
+        XCTAssertEqual(refreshed.first?.text, "Hi! I can find a time or open a vote.")
+        XCTAssertEqual(refreshed.first?.authorName, "Facilitator")
+        XCTAssertNil(refreshed.first?.agentExecution)
+    }
+
     func testSystemNoticeFromSystemAgentProjectsAsSystem() throws {
         let conversation = makeGroup()
         let notice = makeWire(id: "notice", kind: KordiSystemIdentity.messageKind, body: "Maya joined.")

@@ -31,8 +31,11 @@ pub(super) async fn say(pool: &PgPool, sender: &str, chat: Uuid, text: &str) -> 
 }
 
 pub(super) fn group(chat: Uuid, message: Value) -> String {
-    let envelope =
-        json!({"kind": "group-message", "groupId": format!("group:{chat}"), "message": message});
+    // As the apps send it: the sender is the actor.
+    let sender = json!({"accountId": message["senderAccountId"], "displayName": "Member"});
+    let envelope = json!({"kind": "group-message", "groupId": format!("group:{chat}"),
+        "createdByAccountId": message["senderAccountId"], "actor": sender,
+        "participants": [sender], "message": message});
     format!(
         "kordi-cloud-group:{}",
         URL_SAFE_NO_PAD.encode(envelope.to_string())
@@ -408,7 +411,10 @@ async fn a_direct_request_is_taken_right_away_and_always_answered() {
 
     // The model returned nothing; the person still gets an answer.
     let posted = chat.finish_run(None).await;
-    assert_eq!(posted["text"], super::store::REQUEST_FALLBACK);
+    assert_eq!(
+        posted["message"]["text"],
+        super::reply_slot::REQUEST_FALLBACK
+    );
 
     // Plain chat is never marked.
     say(&chat.pool, &chat.bob, chat.chat, "lol nice photo").await;
