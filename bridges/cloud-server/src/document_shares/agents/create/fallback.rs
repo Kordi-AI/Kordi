@@ -3,8 +3,11 @@
 //! A run that failed, was stopped, or answered without text has no reply to
 //! carry its documents; neither has a background task whose follow-up never
 //! came. After a grace period such documents are posted in their group by
-//! the agent, so a document is never lost. This is a fallback only: every
-//! reply path attaches documents itself.
+//! the agent, so a document is never lost. A background task's document waits
+//! for its follow-up reply only until the task has ended for the reply grace
+//! period; [`FOLLOW_UP_GRACE_MINUTES`] covers a task the cloud never saw. The
+//! message names the request the document belongs to. This is a fallback
+//! only: every reply path attaches documents itself.
 
 use std::collections::BTreeMap;
 
@@ -12,12 +15,13 @@ use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 use uuid::Uuid;
 
-use super::group_message::{post, DocumentMessage};
+use super::group_message::{post, request_line, DocumentMessage};
 use super::reply::{mark_attached, RunDocument};
 
 /// Minutes after a run ended before its untaken documents are posted.
 pub(crate) const REPLY_GRACE_MINUTES: i32 = 2;
-/// Minutes a background task's document waits for the follow-up reply.
+/// Minutes a background task's document waits for the follow-up reply when
+/// the cloud has no record of the task.
 pub(crate) const FOLLOW_UP_GRACE_MINUTES: i32 = 30;
 const SWEEP_LIMIT: i64 = 100;
 
@@ -37,7 +41,20 @@ pub(crate) async fn post_unattached(pool: &PgPool) -> Result<usize, sqlx_core::E
                  AND COALESCE(run.completed_at, run.updated_at)::timestamptz \
                      < now() - make_interval(mins => $1)) \
              OR (document.after_reply \
-                 AND document.created_at < now() - make_interval(mins => $2))) \
+                 AND document.created_at < now() - make_interval(mins => $2)) \
+             OR (document.after_reply AND EXISTS ( \
+                   SELECT 1 FROM cloud_agent_subsessions task \
+                   WHERE task.parent_session_id = run.session_id \
+                     AND task.owner_account_id = run.owner_account_id \
+                     AND task.parent_request_id = run.request_message_id) \
+                 AND NOT EXISTS ( \
+                   SELECT 1 FROM cloud_agent_subsessions task \
+                   WHERE task.parent_session_id = run.session_id \
+                     AND task.owner_account_id = run.owner_account_id \
+                     AND task.parent_request_id = run.request_message_id \
+                     AND (task.status = 'running' \
+                          OR COALESCE(task.execution_finished_at, task.updated_at) \
+                             > now() - make_interval(mins => $1))))) \
          ORDER BY document.created_at, document.attachment_id LIMIT $3",
     )
     .bind(REPLY_GRACE_MINUTES)
@@ -68,8 +85,10 @@ pub(crate) async fn post_unattached(pool: &PgPool) -> Result<usize, sqlx_core::E
         .fetch_optional(pool)
         .await?;
         if let Some((conversation_id,)) = conversation {
+            let text = request_line(pool, conversation_id, &run_id).await?;
             let message = DocumentMessage {
                 conversation_id,
+                text: text.as_deref().unwrap_or_default(),
                 run_id: &run_id,
                 session_id: &session_id,
                 owner_account_id: &owner,

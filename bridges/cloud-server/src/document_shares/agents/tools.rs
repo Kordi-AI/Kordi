@@ -163,24 +163,37 @@ pub(crate) fn descriptors(read: bool, edit: bool) -> Vec<LeaseConnectorTool> {
     tools
 }
 
+/// The descriptor of an ordinary group run.
+#[cfg(test)]
+pub(crate) fn create_descriptor() -> LeaseConnectorTool {
+    create_descriptor_for(false)
+}
+
 /// `create_document`: an `act` tool, because it adds a document to the
 /// group. Clients run it without an approval card: the document rides the
-/// agent's reply, to the people who read that reply anyway.
-pub(crate) fn create_descriptor() -> LeaseConnectorTool {
+/// agent's reply, to the people who read that reply anyway. A background
+/// session's reply stays in that session, so its document is posted in the
+/// parent group on its own, and its description says so.
+pub(crate) fn create_descriptor_for(background_session: bool) -> LeaseConnectorTool {
+    let delivery = if background_session {
+        "It is posted in the group as a document card from you"
+    } else {
+        "It is attached to your reply as a document card from you"
+    };
     LeaseConnectorTool {
         connector_id: DOCUMENT_CONNECTOR_ID.to_string(),
         provider: DOCUMENT_PROVIDER.to_string(),
         name: CREATE_DOCUMENT_TOOL.to_string(),
         group: ConnectorToolGroup::Act,
-        description: "Save a finished Markdown or HTML document for this group conversation. \
-             It is attached to your reply as a document card from you and listed in the \
-             group's Artifacts, where members can open, comment on, and edit it. Use it \
-             whenever someone asks for a document, note, report, or plan for the group, \
-             instead of writing a local file. Write the whole document first, then call this \
-             once per document with a specific title and the complete content; never call it \
-             to start an empty or placeholder document. Afterwards reply briefly with what it \
-             covers, without file paths."
-            .to_string(),
+        description: format!(
+            "Save a finished Markdown or HTML document for this group conversation. \
+             {delivery} and listed in the group's Artifacts, where members can open, comment \
+             on, and edit it. Use it whenever someone asks for a document, note, report, or \
+             plan for the group, instead of writing a local file. Write the whole document \
+             first, then call this once per document with a specific title and the complete \
+             content; never call it to start an empty or placeholder document. Afterwards \
+             reply briefly with what it covers, without file paths."
+        ),
         input_schema: super::create::schema(),
     }
 }
@@ -201,7 +214,7 @@ pub(crate) async fn lease_tools(
     let offered = offered_tools(&facts.gate);
     let mut tools = descriptors(offered.read, offered.edit);
     if offered.create {
-        tools.push(create_descriptor());
+        tools.push(create_descriptor_for(facts.gate.background_session));
     }
     Ok(tools)
 }

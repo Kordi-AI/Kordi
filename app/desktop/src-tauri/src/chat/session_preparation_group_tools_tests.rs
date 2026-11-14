@@ -266,9 +266,57 @@ async fn group_turns_and_background_tasks_offer_create_document() {
 /// turn, and that turn is prepared with the parent's create_document.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_spawned_background_task_is_prepared_with_create_document() {
+    let (tools, prompt) = spawned_group_child("group-document-spawn", None).await;
+    assert!(
+        tools.iter().any(|tool| tool == CREATE_DOCUMENT_TOOL),
+        "{tools:?}"
+    );
+    // Issue 1889: the owner's background task can read the group's documents.
+    assert!(
+        tools.iter().any(|tool| tool == "read_document"),
+        "{tools:?}"
+    );
+    assert!(!tools.iter().any(|tool| tool == "gmail_send"), "{tools:?}");
+    assert!(prompt.contains("create it with create_document"));
+}
+
+/// The owner's own group request: the background session keeps the parent's
+/// local tools and still gets the parent's create_document, so the spawn
+/// message's instruction to save the result with it can be followed.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_owner_group_background_task_keeps_local_tools_and_create_document() {
+    let parent_tools = [
+        "read",
+        "bash",
+        "web_search",
+        "task_operator",
+        "read_document",
+        "edit_document",
+        CREATE_DOCUMENT_TOOL,
+    ]
+    .map(String::from)
+    .to_vec();
+    let (tools, prompt) =
+        spawned_group_child("owner-group-document-spawn", Some(parent_tools)).await;
+    for name in ["read", "bash", CREATE_DOCUMENT_TOOL, "read_document"] {
+        assert!(tools.iter().any(|tool| tool == name), "{name}: {tools:?}");
+    }
+    // No approval card in a background session: never an edit.
+    for name in ["edit_document", "task_operator", "gmail_send"] {
+        assert!(!tools.iter().any(|tool| tool == name), "{name}: {tools:?}");
+    }
+    assert!(prompt.contains("create it with create_document"));
+}
+
+/// Spawns a background task of the owner's group request and returns the
+/// tools and system prompt its first turn was prepared with.
+async fn spawned_group_child(
+    storage_name: &str,
+    owner_tools: Option<Vec<String>>,
+) -> (Vec<String>, String) {
     use kordi_cli::task_operator::{ChildAgentRunner, SpawnRequest};
 
-    let storage = crate::test_support::ScopedKordiStorageRoot::new("group-document-spawn");
+    let storage = crate::test_support::ScopedKordiStorageRoot::new(storage_name);
     let root = storage.root().to_path_buf();
     let (home, app, cwd) = (root.join("home"), root.join("app"), root.join("cwd"));
     for dir in [&home, &app, &cwd] {
@@ -290,6 +338,7 @@ async fn a_spawned_background_task_is_prepared_with_create_document() {
         kordi_cli::desktop_runtime::DesktopRuntimeProfile::default(),
     )
     .with_shared_context(true, None, Some(identity(OWNER, None)))
+    .with_owner_local_tools(owner_tools)
     .with_group_documents(crate::chat::background_tasks::group_document_lease(
         Some(&group_lease()),
         true,
@@ -332,19 +381,7 @@ async fn a_spawned_background_task_is_prepared_with_create_document() {
     assert_eq!(sessions.len(), 1);
     let mut child = sessions[0].lock().await;
     let tools = child.next_turn_tool_names().unwrap();
-    assert!(
-        tools.iter().any(|tool| tool == CREATE_DOCUMENT_TOOL),
-        "{tools:?}"
-    );
-    // Issue 1889: the owner's background task can read the group's documents.
-    assert!(
-        tools.iter().any(|tool| tool == "read_document"),
-        "{tools:?}"
-    );
-    assert!(!tools.iter().any(|tool| tool == "gmail_send"), "{tools:?}");
-    assert!(child
-        .next_turn_system_prompt()
-        .contains("create it with create_document"));
+    (tools, child.next_turn_system_prompt().to_string())
 }
 
 /// The owner's own request on the Mac: the spawned background session gets

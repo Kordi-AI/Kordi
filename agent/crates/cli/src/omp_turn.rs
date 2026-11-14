@@ -169,7 +169,10 @@ pub(crate) async fn run_turn_inner(
         .await
         .map_err(|error| {
             // A fixed code only: the error never carries message content.
+            // The desktop app has no tracing subscriber, so the code is also
+            // written to stderr, next to the runtime's protocol log.
             tracing::warn!(code = error.diagnostic_code(), "OMP turn failed");
+            eprintln!("[omp] turn failed: {}", error.diagnostic_code());
             // This Mac's own turn: its owner sees the provider's cleaned reason.
             anyhow!(error.with_provider_reason())
         })?;
