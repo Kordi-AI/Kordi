@@ -28,6 +28,7 @@ import {
   appendCloudGroupRequestingPlaceholder,
   cloudAgentRequestReachedCloud,
   cloudAgentRunAlreadyOwnsRequest,
+  cloudGroupAgentRefusedNotice,
   cloudGroupAgentUnavailableFallbackRequest,
   removeCloudGroupOfflinePlaceholder,
   removeCloudGroupPendingRowsForTerminalResponse,
@@ -36,8 +37,8 @@ import {
   type CloudFallbackClaimAttemptResult,
 } from './cloudAgentRequestState';
 import {
-  cloudFallbackClaimErrorIsRetryable,
   cloudFallbackClaimFailureDiagnostic,
+  cloudFallbackClaimFailureResult,
 } from './cloudFallbackClaimDiagnostics';
 import {
   cloudGroupAgentMentionResponseStateFromSources,
@@ -130,12 +131,11 @@ export function useCloudAgentAvailability({
       // Invite propagation and an already-owned exact run can race a fresh
       // group send. Retry only bounded transient failures; presence itself is
       // capability state and never owns a request.
-      const retryable = cloudFallbackClaimErrorIsRetryable(error);
       reportWarning(
         '[cloud-agent-fallback] claim failed',
         cloudFallbackClaimFailureDiagnostic(error),
       );
-      return retryable ? 'retryable-failure' : 'terminal-failure';
+      return cloudFallbackClaimFailureResult(error);
     } finally {
       claimingRunKeysRef.current.delete(claim.idempotencyKey);
     }
@@ -224,8 +224,9 @@ export function useCloudAgentAvailability({
 
       const requestDeadlineMs = candidate.requestMessage.createdAtMs
         + CLOUD_GROUP_AGENT_OFFLINE_TIMEOUT_MS;
-      const persistUnavailableNotice = async () => {
+      const persistUnavailableNotice = async (error?: string) => {
         const failedNoticeRequest = cloudGroupAgentUnavailableFallbackRequest({
+          error,
           sessionId: candidate.requestMessage.sessionId,
           requestMessageId: candidate.requestMessage.id,
           targetAccountId: candidate.targetAccountId,
@@ -350,6 +351,8 @@ export function useCloudAgentAvailability({
           return;
         }
 
+        // A refusal is final: say so now instead of the no-reply notice.
+        if (claimResult === 'refused') return persistUnavailableNotice(cloudGroupAgentRefusedNotice(candidate.targetAgentDisplayName));
         const remainingMs = requestDeadlineMs - Date.now();
         if (remainingMs > 0) {
           scheduleStatusCheck(

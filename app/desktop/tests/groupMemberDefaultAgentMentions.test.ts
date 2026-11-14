@@ -91,3 +91,35 @@ test('the agent list refetch opens at most once per interval', async () => {
   now += 1;
   assert.equal(gate(), true, 'a later open refetches');
 });
+
+test('a refused claim ends the request at once with "isn’t available", not the no-reply notice', async () => {
+  const { CloudAuthError } = await import('../src/features/cloud/cloudAuthError');
+  const { cloudFallbackClaimFailureResult } = await import('../src/features/cloud/cloudFallbackClaimDiagnostics');
+  const {
+    CLOUD_GROUP_AGENT_UNAVAILABLE_NOTICE,
+    cloudGroupAgentRefusedNotice,
+    cloudGroupAgentUnavailableFallbackRequest,
+  } = await import('../src/features/cloud/cloudAgentRequestState');
+
+  const refusal = new CloudAuthError('agent_not_available', "This agent isn't available.", 403);
+  assert.equal(cloudFallbackClaimFailureResult(refusal), 'refused');
+  assert.equal(cloudFallbackClaimFailureResult(new CloudAuthError('rate_limited', 'Slow down.', 429)), 'retryable-failure');
+  assert.equal(cloudFallbackClaimFailureResult(new CloudAuthError('requester_mismatch', 'No.', 403)), 'terminal-failure');
+
+  const refused = cloudGroupAgentUnavailableFallbackRequest({
+    sessionId: 'session:group:room',
+    requestMessageId: 'msg:ui:request',
+    targetAccountId: 'acct_alex',
+    targetAgentDisplayName: "Alex Rivera's Kordi",
+    error: cloudGroupAgentRefusedNotice("Alex Rivera's Kordi"),
+  });
+  assert.equal((refused.content as { error?: string }).error, "Alex Rivera's Kordi isn't available.");
+  assert.equal(refused.status, 'failed');
+  // A genuine no-claim timeout keeps the offline notice.
+  const timedOut = cloudGroupAgentUnavailableFallbackRequest({
+    sessionId: 'session:group:room',
+    requestMessageId: 'msg:ui:request',
+    targetAccountId: 'acct_alex',
+  });
+  assert.equal((timedOut.content as { error?: string }).error, CLOUD_GROUP_AGENT_UNAVAILABLE_NOTICE);
+});
