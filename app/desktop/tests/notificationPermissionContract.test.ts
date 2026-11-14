@@ -30,6 +30,9 @@ test('packaged macOS notifications use one native permission and presentation pa
   assert.match(settings, /Open System Settings and allow notifications for Kordi/);
   assert.match(settings, /Allow notifications/);
   assert.doesNotMatch(settings, /Permission not requested/);
+  // A request macOS leaves unanswered must not be offered again as Allow.
+  assert.match(settings, /markNotificationRequestStalled\(\)/);
+  assert.match(settings, /notificationRequestStalled\(\) \? 'denied'/);
   assert.match(messageAttention, /showNativeNotification/);
   assert.match(backgroundCompletion, /showNativeNotification/);
   assert.match(cargo, /notify-rust = \{ version = "4\.18\.0", features = \["preview-macos-un"\] \}/);
