@@ -80,21 +80,23 @@ pub async fn desktop_digest_reminders(
     }
     #[cfg(target_os = "macos")]
     {
-        use mac_usernotifications::{AuthorizationStatus, Notification};
+        use mac_usernotifications::Notification;
+        // Only a person's action asks macOS. Automatic runs read the status, so a prompt
+        // macOS refuses to show cannot turn into a request loop.
         if request_permission {
-            mac_usernotifications::request_auth()
-                .await
-                .map_err(|e| e.to_string())?;
+            tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                mac_usernotifications::request_auth(),
+            )
+            .await
+            .map_err(|_| "The notification permission request timed out.".to_string())?
+            .map_err(|e| e.to_string())?;
         }
         let settings = mac_usernotifications::get_notification_settings()
             .await
             .map_err(|e| e.to_string())?;
-        let granted = matches!(
-            settings.authorization_status,
-            AuthorizationStatus::Authorized
-                | AuthorizationStatus::Provisional
-                | AuthorizationStatus::Ephemeral
-        );
+        let state = reminder_permission_state(settings.authorization_status);
+        let granted = state == "granted";
         let prefix = format!(
             "kordi-calendar:{}:",
             hex::encode(Sha256::digest(account_id.as_bytes()))
@@ -133,7 +135,7 @@ pub async fn desktop_digest_reminders(
             }
         }
         if !granted {
-            return Ok("denied".into());
+            return Ok(state.into());
         }
         for (id, delay) in future {
             if !pending.contains(&id) {
@@ -156,6 +158,20 @@ pub async fn desktop_digest_reminders(
         Ok("unavailable".into())
     }
 }
+/// "default" means macOS has not asked yet, so the page can offer Allow; "denied" means the
+/// person turned notifications off and only System Settings can turn them back on.
+#[cfg(target_os = "macos")]
+fn reminder_permission_state(status: mac_usernotifications::AuthorizationStatus) -> &'static str {
+    use mac_usernotifications::AuthorizationStatus;
+    match status {
+        AuthorizationStatus::Authorized
+        | AuthorizationStatus::Provisional
+        | AuthorizationStatus::Ephemeral => "granted",
+        AuthorizationStatus::NotDetermined => "default",
+        AuthorizationStatus::Denied | AuthorizationStatus::Unknown => "denied",
+    }
+}
+
 pub async fn clear_reminders(account_id: Option<String>) {
     #[cfg(target_os = "macos")]
     {
@@ -377,4 +393,33 @@ pub async fn desktop_digest_fetch_ics(url: String) -> Result<String, String> {
         bytes.extend_from_slice(&chunk);
     }
     String::from_utf8(bytes).map_err(|_| "The calendar is not UTF-8 text.".into())
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod reminder_permission_tests {
+    use super::reminder_permission_state;
+    use mac_usernotifications::AuthorizationStatus;
+
+    #[test]
+    fn undetermined_is_reported_apart_from_denied() {
+        assert_eq!(
+            reminder_permission_state(AuthorizationStatus::NotDetermined),
+            "default"
+        );
+        assert_eq!(
+            reminder_permission_state(AuthorizationStatus::Denied),
+            "denied"
+        );
+        assert_eq!(
+            reminder_permission_state(AuthorizationStatus::Unknown),
+            "denied"
+        );
+        for status in [
+            AuthorizationStatus::Authorized,
+            AuthorizationStatus::Provisional,
+            AuthorizationStatus::Ephemeral,
+        ] {
+            assert_eq!(reminder_permission_state(status), "granted");
+        }
+    }
 }

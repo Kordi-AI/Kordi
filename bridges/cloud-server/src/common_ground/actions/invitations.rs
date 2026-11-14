@@ -148,7 +148,7 @@ pub(in crate::common_ground) async fn pending(
             .map(|(created_at, _, invitation)| (created_at, invitation)),
     );
     // Stable, so room invitations keep their order among equal times.
-    invitations.sort_by(|a, b| b.0.cmp(&a.0));
+    invitations.sort_by_key(|a| std::cmp::Reverse(a.0));
     let invitations: Vec<_> = invitations
         .into_iter()
         .map(|(_, invitation)| invitation)
