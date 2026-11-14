@@ -185,7 +185,7 @@ async fn shared_question_silently_finishes_after_a_reply_on_mac_and_cloud() {
             .unwrap();
             let response = value.get("message").unwrap_or(&value);
             // A waiting slot says whom it waits for, never a blank row.
-            assert_eq!(response["text"], "Waiting for Exchange Beta's Kordi.");
+            assert_eq!(response["text"], "Waiting");
             let control = response.get("structuredContent").unwrap_or(response);
             if !cloud {
                 // The yield keeps the slot visible as waiting (#2416), never emptied.

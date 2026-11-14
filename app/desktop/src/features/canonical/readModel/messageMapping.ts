@@ -1,4 +1,4 @@
-import { agentExchangeWaitsForViewer, withAgentExchangeProgress } from '@/features/cloud/agentExchangePresentation';
+import { agentExchangeStatus, agentExchangeWaitsForViewer, withAgentExchangeProgress } from '@/features/cloud/agentExchangePresentation';
 import { toolsWithEventTaskTarget } from './toolTaskTarget';
 import { canonicalTools } from './toolMapping';
 export { canonicalTools } from './toolMapping';
@@ -347,7 +347,10 @@ export function mapCanonicalMessage(
   const isProcessingAgentPlaceholder = isAgentTurn
     && (deliveryState === 'queued' || deliveryState === 'processing')
     && (!rawDisplayText.trim() || isProcessingPlaceholderText(rawDisplayText));
-  const displayText = isProcessingAgentPlaceholder || legacyCollaborationAgentFailure || noProviderFailure || (isAgentTurn && statusFailed && isFailedReplyTextOnlyItsError(rawDisplayText, stringValue(content.error))) ? '' : rawDisplayText;
+  // A task slot that waits or processes (#2416) carries a status line for older
+  // clients; its progress header already says it, so it is never reply text.
+  const agentExchangeStatusLine = isAgentTurn && deliveryState === 'processing' && Boolean(agentExchangeStatus(content.agentExchangeStatus));
+  const displayText = isProcessingAgentPlaceholder || agentExchangeStatusLine || legacyCollaborationAgentFailure || noProviderFailure || (isAgentTurn && statusFailed && isFailedReplyTextOnlyItsError(rawDisplayText, stringValue(content.error))) ? '' : rawDisplayText;
   // A reply that ended early keeps its partial text and marks how it ended.
   const rawEnding = isAgentTurn && completed && displayText.trim() ? stringValue(content.ending) : undefined;
   const ending = rawEnding === 'stopped' || rawEnding === 'interrupted' ? rawEnding : undefined;

@@ -92,11 +92,11 @@ test('a mounted reply DOM node survives pending-to-stored replacement', async ()
     await render(view([request, response('pending', 'processing')]));
     const before = host.querySelector('[data-transcript-message-root]');
     assert.ok(before);
-    assert.match(host.textContent ?? '', /Waiting for agent/);
+    assert.match(host.textContent ?? '', /Waiting/);
     await render(view([request, response('stored', 'complete')], false, false));
     assert.equal(host.querySelector('[data-transcript-message-root]'), before);
     assert.match(host.textContent ?? '', /Hello/);
-    assert.doesNotMatch(host.textContent ?? '', /Waiting for agent/);
+    assert.doesNotMatch(host.textContent ?? '', /Waiting/);
     assert.equal(host.querySelectorAll('[data-transcript-message-root]').length, 1);
   } finally {
     await act(async () => root.unmount());

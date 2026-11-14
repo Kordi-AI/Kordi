@@ -178,7 +178,7 @@ pub(super) fn apply(wire: &mut Value, group: bool, change: &Change) {
     // The task is still open while it waits: the slot stays in progress and
     // says whom it waits for, so no client shows a blank or finished row.
     let (state, text) = match change {
-        Change::Waiting { name, .. } => ("processing", format!("Waiting for {name}.")),
+        Change::Waiting { .. } => ("processing", "Waiting".to_owned()),
         Change::Processing => ("processing", String::new()),
         Change::Silent => ("complete", String::new()),
         Change::Answer(text) => ("complete", text.clone()),
@@ -239,7 +239,7 @@ mod tests {
         );
         assert_eq!(wire["agentExchangeStatus"], "waiting");
         assert_eq!(wire["agentExchangeWaitingFor"], "Beta");
-        assert_eq!(wire["text"], "Waiting for Beta.", "never a blank row");
+        assert_eq!(wire["text"], "Waiting", "never a blank row");
         assert_eq!(
             wire["deliveryState"], "processing",
             "the task is still open"
