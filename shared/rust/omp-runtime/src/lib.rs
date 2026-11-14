@@ -6,8 +6,10 @@ mod error;
 mod protocol;
 mod provider_reason;
 mod supervisor_helpers;
+mod violation;
 mod warm_pool;
 mod worker_command;
+use error::ProtocolViolation as V;
 pub use error::{ProtocolViolation, RuntimeError};
 pub use provider_reason::provider_reason;
 use supervisor_helpers::{
@@ -303,15 +305,15 @@ impl OmpRuntime {
             let Some(line) = line else {
                 return Err(RuntimeError::UnexpectedExit);
             };
-            let output: WorkerOutput = serde_json::from_slice(&line)
-                .map_err(|_| RuntimeError::Protocol(ProtocolViolation::MalformedFrame))?;
+            let output: WorkerOutput =
+                serde_json::from_slice(&line).map_err(|error| violation::malformed(&error))?;
             match output {
                 WorkerOutput::Ready { schema_version } => {
                     if seen_ready {
-                        return Err(RuntimeError::Protocol(ProtocolViolation::Handshake));
+                        return Err(RuntimeError::protocol(V::Handshake, "ready twice"));
                     }
                     if schema_version != SCHEMA_VERSION {
-                        return Err(RuntimeError::Protocol(ProtocolViolation::SchemaVersion));
+                        return Err(RuntimeError::protocol(V::SchemaVersion, "in ready"));
                     }
                     seen_ready = true;
                 }
@@ -369,10 +371,10 @@ impl OmpRuntime {
                         || !tool_calls.insert(call_id.clone())
                         || hook_calls.contains(&call_id)
                     {
-                        return Err(RuntimeError::Protocol(ProtocolViolation::CallId));
+                        return Err(violation::call_id("tool", &name));
                     }
                     if !request.tools.iter().any(|tool| tool.name == name) {
-                        return Err(RuntimeError::Protocol(ProtocolViolation::UnknownTool));
+                        return Err(violation::named(V::UnknownTool, "tool", &name));
                     }
                     let token = tool_cancel.child_token();
                     pending_tools.push(Box::pin(async move {
@@ -411,12 +413,12 @@ impl OmpRuntime {
                         || tool_calls.contains(&call_id)
                         || !hook_calls.insert(call_id.clone())
                     {
-                        return Err(RuntimeError::Protocol(ProtocolViolation::CallId));
+                        return Err(violation::call_id("hook", &name));
                     }
                     if !matches!(name.as_str(), "context" | "before_provider_request")
                         || !request.hooks.iter().any(|hook| hook == &name)
                     {
-                        return Err(RuntimeError::Protocol(ProtocolViolation::UnknownHook));
+                        return Err(violation::named(V::UnknownHook, "hook", &name));
                     }
                     let token = tool_cancel.child_token();
                     pending_hooks.push(Box::pin(async move {
@@ -446,7 +448,8 @@ impl OmpRuntime {
                         &mut last_sequence,
                     )?;
                     if !pending_tools.is_empty() || !pending_hooks.is_empty() {
-                        return Err(RuntimeError::Protocol(ProtocolViolation::PendingCallbacks));
+                        let pending = (pending_tools.len(), pending_hooks.len());
+                        return Err(violation::pending(pending));
                     }
                     return Ok(RunResult {
                         text,

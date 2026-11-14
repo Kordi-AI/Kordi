@@ -151,3 +151,21 @@ fn diagnostic_codes_are_fixed_identifiers() {
         );
     }
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_lone_surrogate_delta_is_a_malformed_frame() {
+    // What an older worker wrote when a provider split a character outside
+    // the Basic Multilingual Plane across two deltas. The worker now joins
+    // the halves; the host still refuses the frame and logs why.
+    let script = r#"read request
+printf '%s\n' '{"type":"ready","schemaVersion":1}'
+printf '%s\n' '{"type":"event","schemaVersion":1,"runId":"run-1","attemptId":"attempt-1","sequence":1,"event":{"kind":"text_delta","delta":"\ud835"}}'
+"#;
+    let error = run(script, &request()).await.err().unwrap();
+    assert_eq!(
+        error,
+        RuntimeError::Protocol(ProtocolViolation::MalformedFrame)
+    );
+    assert_eq!(error.diagnostic_code(), "protocol_malformed_frame");
+}

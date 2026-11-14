@@ -7,6 +7,7 @@ import { ompCapabilityOptions } from './capabilities';
 import { toKordiMessage, toOmpMessage } from './messages';
 import { RuntimeError, type JsonObject, type RunRequest, type ToolResult } from './protocol';
 import { ompThinkingLevel } from './thinkingLevel';
+import { DeltaJoiner } from './wellFormed';
 
 export type RuntimeHost = {
   event(event: JsonObject): void;
@@ -136,6 +137,8 @@ export async function runTurn(request: RunRequest, host: RuntimeHost, signal: Ab
       autoApprove: true,
     });
     session = created.session;
+    // A character split across two deltas is sent whole (see wellFormed.ts).
+    const deltas = new DeltaJoiner();
     session.subscribe(event => {
       if (terminalError) return;
       switch (event.type) {
@@ -150,10 +153,14 @@ export async function runTurn(request: RunRequest, host: RuntimeHost, signal: Ab
           break;
         case 'message_update': {
           const update = event.assistantMessageEvent;
-          if (update.type === 'text_delta' || update.type === 'thinking_delta') host.event({ kind: update.type, delta: update.delta });
+          if (update.type === 'text_delta' || update.type === 'thinking_delta') {
+            const delta = deltas.push(update.type, update.delta);
+            if (delta) host.event({ kind: update.type, delta });
+          }
           break;
         }
         case 'message_end':
+          deltas.reset();
           // A host may continue after an explicitly configured provider failure.
           // Journal completed actions, never failed/partial assistant output.
           if (event.message.role !== 'assistant' || !['error', 'aborted'].includes(event.message.stopReason)) {
