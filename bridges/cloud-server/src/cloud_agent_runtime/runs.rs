@@ -58,6 +58,8 @@ pub(crate) use errors::{
     agent_unavailable, error_response, run_error_response, runner_unauthorized,
 };
 pub use errors::{RunError, RunResult};
+#[cfg(test)]
+pub use leases::lease_next_run_among;
 pub use leases::{
     lease_canary_run, lease_next_run, mark_run_running, RunnerLeaseResponse, RunnerRunEnvelope,
     RunnerRunRequest, RunnerRunResponse,

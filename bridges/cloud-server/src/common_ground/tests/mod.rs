@@ -30,6 +30,7 @@ mod nearby_profile_preferences_tests;
 mod nearby_search_tests;
 mod nearby_support;
 mod nearby_tests;
+mod opened_match_lease_tests;
 mod profile_cards_tests;
 mod profile_design_tests;
 mod profile_icon_tests;
