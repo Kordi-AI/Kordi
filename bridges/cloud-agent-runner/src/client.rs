@@ -3,20 +3,17 @@ use serde::{Deserialize, Serialize};
 
 mod artifacts;
 mod envelopes;
+mod errors;
 mod run;
 pub use artifacts::{ArtifactExportInput, ArtifactExportResponse};
 use envelopes::{
     ArtifactExportEnvelope, HeartbeatEnvelope, LeaseResponse, ProviderAuthEnvelope, RunEnvelope,
 };
+use errors::parse_response;
+pub use errors::RunnerClientError;
 pub use run::{AgentRuntimeRoute, CloudAgentRun};
 
 use crate::memory::{MemoryRequestError, NewRunnerMemory, RunnerMemory, RunnerMemoryContext};
-
-#[derive(Debug, thiserror::Error)]
-pub enum RunnerClientError {
-    #[error("cloud runner client request failed: {0}")]
-    Request(String),
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderAuthMaterial {
@@ -264,11 +261,13 @@ impl HttpCloudAgentRunClient {
             .await
             .map_err(|err| RunnerClientError::Request(err.to_string()))?;
         if !status.is_success() {
+            // Server error bodies are short codes; anything longer is cut.
+            let text: String = text.chars().take(300).collect();
             return Err(RunnerClientError::Request(format!(
                 "{path} returned {status}: {text}"
             )));
         }
-        serde_json::from_str(&text).map_err(|err| RunnerClientError::Request(err.to_string()))
+        parse_response(path, &text)
     }
 }
 
@@ -480,3 +479,7 @@ impl CloudAgentRunClient for HttpCloudAgentRunClient {
         crate::memory::http_save_memory(self, run_id, memory).await
     }
 }
+
+#[cfg(test)]
+#[path = "client_parse_tests.rs"]
+mod parse_tests;
