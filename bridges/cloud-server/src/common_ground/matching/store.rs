@@ -27,9 +27,12 @@ pub(super) const MAX_THEME_MEMBERS: usize = 150;
 /// once per join.
 pub(super) const THEME_REFRESH: Duration = Duration::from_secs(120);
 
-/// A run blocks another of its kind while it is open, and for two minutes
-/// after it failed, so a failing provider is not called on every refresh.
-const BLOCKING_RUN_SQL: &str = "created_at > now() - interval '15 minutes'
+/// A run blocks another of its kind while it is open (up to an hour, so a
+/// run that was lost does not block forever), and for two minutes after it
+/// failed, so a failing provider is not called on every refresh. In a busy
+/// room a run can wait in the queue for many minutes; queueing it again
+/// while it waits only doubles the work.
+const BLOCKING_RUN_SQL: &str = "created_at > now() - interval '60 minutes'
     AND (finished_at IS NULL OR (error_code IS NOT NULL AND finished_at > now() - interval '2 minutes'))";
 
 /// Stored results for `viewer`, keyed by the other profile, that are still
@@ -179,7 +182,7 @@ where
         "SELECT viewer_profile_id, (cards_json -> 0 ->> 'revision')::bigint
          FROM cloud_common_ground_match_runs
          WHERE kind = 'match' AND finished_at IS NULL
-           AND created_at > now() - interval '15 minutes' AND viewer_profile_id = ANY($1)
+           AND created_at > now() - interval '60 minutes' AND viewer_profile_id = ANY($1)
            AND cards_json @> jsonb_build_array(
                jsonb_build_object('profileId', $2::text, 'revision', $3::bigint))",
     )

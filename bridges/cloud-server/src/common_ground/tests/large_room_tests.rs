@@ -105,6 +105,22 @@ async fn everyone_shows_at_once_and_the_model_details_the_best_few() {
         2,
         "one match run and one theme run"
     );
+    // A run that waits behind a busy room for a while still blocks another.
+    query(
+        "UPDATE cloud_common_ground_match_runs SET created_at = now() - interval '20 minutes'
+         WHERE viewer_account_id = $1",
+    )
+    .bind(ada)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (status, _) = send(&app, "POST", &results, ada_token, None).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        open_runs(&pool, ada).await,
+        2,
+        "no second run while one waits"
+    );
     let (run_id, cards) = claim_open(&pool, "match", Some(ada)).await;
     assert_eq!(cards.len(), 1 + 5);
     assert_eq!(&cards[0], ada);
