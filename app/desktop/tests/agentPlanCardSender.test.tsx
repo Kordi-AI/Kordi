@@ -42,7 +42,7 @@ test('a plan card snapshot carries the agent that planned it, and only a valid o
   assert.equal(normalizePlanCardSnapshot({ ...block, plannedBy: { agentName: 'Kordi' } })?.plannedBy, null);
 });
 
-test("the owner sees their agent's card as their agent's message, not System", () => {
+test("the owner sees their agent's card as their agent's message, not the Facilitator", () => {
   const message = directRow('outbound', agentCard);
   assert.equal(message.role, 'owned-agent');
   assert.equal(message.senderType, 'agent');
@@ -69,9 +69,9 @@ test("another member sees the card from the owner's agent with the owner line", 
   assert.doesNotMatch(markup, />System</);
 });
 
-test('a System agent card in a direct chat still shows as System', () => {
+test('a Facilitator card in a direct chat still shows as the Facilitator', () => {
   const message = directRow('outbound', systemCard);
-  assert.equal(message.sender, 'System');
+  assert.equal(message.sender, 'Facilitator');
   assert.equal(message.senderProfileImageUrl, KORDI_SYSTEM_AVATAR_URL);
   assert.equal(message.senderOwnerName, undefined);
 });
@@ -97,6 +97,6 @@ test('in a group the card shows as the agent, with its picture from the agent di
   assert.equal(ownView?.isOwnMessage, false);
 
   const system = mapCanonicalMessage(row(block), identities, 'human:viewer');
-  assert.equal(system?.sender, 'System');
+  assert.equal(system?.sender, 'Facilitator');
   assert.equal(system?.senderProfileImageUrl, KORDI_SYSTEM_AVATAR_URL);
 });

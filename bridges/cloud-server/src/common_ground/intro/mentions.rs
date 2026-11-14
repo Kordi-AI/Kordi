@@ -115,7 +115,7 @@ pub(super) fn envelope(text: &str, people: &[Member]) -> String {
 }
 
 /// Puts "@" before a name the model wrote bare where it introduces someone:
-/// at the start of a line, or followed by ":" or " (invited)".
+/// at the start of a line, or followed by ":".
 pub(super) fn at_names(text: &str, people: &[Member]) -> String {
     let names = names_longest_first(people);
     let mut out = String::with_capacity(text.len() + 16);
@@ -126,7 +126,7 @@ pub(super) fn at_names(text: &str, people: &[Member]) -> String {
         let boundary = previous.is_none_or(|p| !p.is_alphanumeric() && p != '@');
         if let Some(name) = boundary.then(|| name_at(&text[index..], &names)).flatten() {
             let after = &text[index + name.len()..];
-            if line_start || after.starts_with(':') || after.starts_with(" (invited)") {
+            if line_start || after.starts_with(':') {
                 out.push('@');
             }
             out.push_str(name);
@@ -234,11 +234,11 @@ mod tests {
             Member::new("Maya Chen", "c"),
             Member::new("Priya", "p"),
         ];
-        let text = "Welcome, Alex and Priya.\nAlex: memory.\n  Maya Chen (invited): evals.\n\
+        let text = "Welcome, Alex and Priya.\nAlex: memory.\n  Maya Chen: evals.\n\
                     @Priya: retrieval. Ask Maya: she knows.\nMayank is not here.";
         assert_eq!(
             at_names(text, &people),
-            "Welcome, Alex and Priya.\n@Alex: memory.\n  @Maya Chen (invited): evals.\n\
+            "Welcome, Alex and Priya.\n@Alex: memory.\n  @Maya Chen: evals.\n\
              @Priya: retrieval. Ask @Maya: she knows.\nMayank is not here."
         );
     }

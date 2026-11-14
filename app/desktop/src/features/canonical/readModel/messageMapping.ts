@@ -441,6 +441,8 @@ export function mapCanonicalMessage(
           pendingCollaborationAgentRequest,
           hostedRunStatus: !completed && (reportedRunStatus === 'queued' || reportedRunStatus === 'leased' || reportedRunStatus === 'running')
             ? reportedRunStatus : undefined,
+          // A reply row the server stored exists only because the server has the request.
+          ...(isHostedCloudAgentTurn && typeof content.cloudMessageVersion === 'number' ? { serverStored: true } : {}),
         }
       : undefined,
   }, content.agentExchangeStatus, content.agentExchangeWaitingFor, agentExchangeWaitsForViewer(

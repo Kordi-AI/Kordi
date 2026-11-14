@@ -208,6 +208,7 @@ pub(super) async fn plan(
         newest_card_created_at: cards.iter().map(|card| card.created_at).max(),
         found_loop,
         found_conflict: find_conflict(&cards, &candidate.hooks_fired),
+        requests_only: super::membership::is_room_group(pool, candidate.conversation_id).await?,
     });
     let mut patch = plan.patch;
     // Cards are checked for conflicts up to their newest change, so the sweep

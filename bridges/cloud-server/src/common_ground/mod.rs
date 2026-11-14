@@ -56,7 +56,7 @@ pub(crate) use nearby::{
 pub(crate) use people::{profile_common_ground, ProfileCommonGround};
 pub use runs::{complete, fail, RUN_PREFIX};
 
-/// Server-only message kind that clients show as a notice from "System":
+/// Server-only message kind that clients show as a notice from the Facilitator:
 /// group intros, joined lines and Meet cards. Clients cannot post it; see
 /// `validate_message_request`.
 pub(crate) const SYSTEM_NOTICE_KIND: &str = "system-notice";

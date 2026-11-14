@@ -34,6 +34,29 @@ struct GroupAgentTargetTests {
     }
 
     @Test @MainActor
+    func facilitatorMentionIsAnsweredByTheServerAndNeverRoutedToAPersonsAgent() {
+        let facilitator = KordiSystemAgentIdentity.mentionTarget
+        #expect(facilitator.mentionText == "@Facilitator")
+        #expect(facilitator.isFacilitator)
+        #expect(ComposerMentionMenuItem(kind: .target(facilitator)).detail() == "Built in")
+        #expect(ComposerMentionMenuItem(kind: .target(facilitator)).section == .agents)
+
+        let participants = ["sender", "peer"].map { CloudGroupParticipant(accountId: "acct_\($0)", displayName: $0, avatarUrl: nil, role: "person") }
+        let peerAgent = ComposerMentionTarget(id: "agent:cloud-agent:acct_peer", displayName: "Kordi", kind: .agent, accountId: "acct_peer", agentId: "cloud-agent:acct_peer", ownerName: "peer", avatarSource: nil)
+        let targets = [facilitator, peerAgent]
+        let text = "@Facilitator find a time"
+        let mentions = ComposerMentionTargetCatalog.mentions(in: text, selectedTarget: facilitator, targets: targets)
+        #expect(mentions.map(\.targetIdentityId) == ["agent:cloud-agent:acct_kordi_pip"])
+        #expect(mentions.first?.agentId == nil)
+        #expect(mentions.first?.humanId == nil)
+        #expect(mentions.first?.nodeId == nil)
+        #expect(ComposerMentionTargetCatalog.groupTarget(in: text, selectedTarget: facilitator, targets: targets, senderAccountId: "acct_sender", participants: participants) == nil)
+        // Beside a person's agent, that agent still gets the request.
+        let both = "@Facilitator and @Kordipeer check status"
+        #expect(ComposerMentionTargetCatalog.groupTarget(in: both, selectedTarget: peerAgent, targets: targets, senderAccountId: "acct_sender", participants: participants)?.id == peerAgent.id)
+    }
+
+    @Test @MainActor
     func groupComposerGenericAliasSelectsSenderAndPreservesExplicitPeer() {
         let participants = ["sender", "peer"].map { CloudGroupParticipant(accountId: "acct_\($0)", displayName: $0, avatarUrl: nil, role: "person") }
         let targets = participants.map { ComposerMentionTarget(id: "agent:cloud-agent:\($0.accountId)", displayName: "Kordi", kind: .agent, accountId: $0.accountId, agentId: "cloud-agent:\($0.accountId)", ownerName: $0.displayName, avatarSource: nil) }

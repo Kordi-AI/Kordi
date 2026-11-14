@@ -3,11 +3,14 @@ import SwiftUI
 /// Server notices, such as a group's introduction and "joined" lines or the
 /// plan card in a direct chat. They carry this message kind and come from the
 /// hidden System account, the plan agent, or a member (a plan card stays the
-/// organizer's). Platform notices show as System. Facilitator and personal
-/// agents have their own author labels for messages and cards.
+/// organizer's). Platform notices show as the Facilitator, like the System
+/// agent, so people see one Facilitator. Personal agents have their own author
+/// labels for messages and cards.
 enum KordiSystemIdentity {
     static let messageKind = "system-notice"
-    static let displayName = "System"
+    static let displayName = KordiSystemAgentIdentity.displayName
+    /// The name notices carried before they showed as the Facilitator.
+    static let legacyDisplayName = "System"
     static let seed = "kordi_system"
     static let accountId = "acct_kordi_system"
 
@@ -27,6 +30,13 @@ enum KordiSystemIdentity {
     static func timelineMessageKind(kind: String, hasGroupEvent: Bool) -> String {
         guard hasGroupEvent, kind.trimmingCharacters(in: .whitespacesAndNewlines) == messageKind else { return kind }
         return ChatMessage.groupEventNoticeMessageKind
+    }
+
+    /// The notice name, current or legacy, so messages stored before the
+    /// rename keep the Facilitator's picture.
+    static func isDisplayName(_ name: String?) -> Bool {
+        let name = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name == displayName || name == legacyDisplayName
     }
 
     static func matches(seed: String?) -> Bool {
@@ -55,7 +65,7 @@ enum KordiSystemIdentity {
         isSystemNotice(kind: messageKind) || isServiceAccount(fromAccountId) ? displayName : fallback
     }
 
-    /// The name on a group message that has no envelope: "System" for a
+    /// The name on a group message that has no envelope: "Facilitator" for a
     /// notice or a server-managed account, then the member's name or the
     /// conversation's name.
     static func groupAuthorName(

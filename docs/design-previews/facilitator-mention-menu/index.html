@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Facilitator in the @ menu · Kordi proposal</title>
+<style>
+:root{
+  --font:-apple-system,"SF Pro Text",Inter,system-ui,sans-serif;
+  --page:#e9e9ee;--chrome-muted:rgba(60,60,67,.6);
+  --canvas:#fafafa;--text:#1c1c1e;--muted:#6b6b70;--line:rgba(0,0,0,.08);
+  --surface:rgb(252 252 253 / .985);--hover:rgb(238 240 243 / .99);--border:rgb(15 23 42 / .105);
+  --composer:#fff;--mark:rgba(214,80,60,.14);--mark-line:rgba(214,80,60,.55);--ios-bg:#f2f2f7;--ios-card:#fff;
+}
+@media (prefers-color-scheme:dark){
+  :root{--page:#141416;--chrome-muted:rgba(235,235,245,.6);--canvas:#1c1c1e;--text:#f2f2f7;--muted:#a0a0a8;--line:rgba(255,255,255,.1);
+    --surface:rgb(29 31 37 / .98);--hover:rgb(44 47 55 / .98);--border:rgb(255 255 255 / .095);--composer:#26262a;
+    --mark:rgba(240,110,90,.18);--ios-bg:#000;--ios-card:#1c1c1e}
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--text);font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased;padding:20px 16px 48px}
+h1{font-size:17px;font-weight:600;margin:0 auto 4px;max-width:1240px}
+.lede{max-width:1240px;margin:0 auto 18px;color:var(--chrome-muted);font-size:13px}
+.grid{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.col{background:var(--canvas);border-radius:14px;border:1px solid var(--line);padding:16px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.col > h2{font-size:13px;font-weight:600;margin:0}
+.col > h2 span{font-weight:400;color:var(--muted);margin-left:6px}
+.note{font-size:12px;color:var(--muted);margin:0}
+
+/* Mac popover, after composerMentionMenu.tsx */
+.menu{width:280px;max-width:100%;padding:6px;border:1px solid var(--border);border-radius:14px;background:var(--surface);box-shadow:0 12px 40px rgb(0 0 0 / 18%)}
+.sec{padding:4px 8px 4px;font-size:10.5px;font-weight:500;color:var(--muted)}
+.item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:9px}
+.item.on{background:var(--hover)}
+.av{width:24px;height:24px;border-radius:50%;flex-shrink:0;border:1px solid var(--border);object-fit:cover;display:grid;place-items:center;font-size:10px;font-weight:600;color:#fff}
+.lbl{font-size:13px;font-weight:500;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbl i{font-style:normal;color:var(--muted);margin-right:1px}
+.det{font-size:10.5px;line-height:16px;color:var(--muted)}
+.composer{width:280px;max-width:100%;background:var(--composer);border:1px solid var(--border);border-radius:16px;padding:9px 12px;font-size:13px}
+.composer b{font-weight:500;color:#2a62c9}
+
+/* iPhone list, after ComposerMentionMenu.swift */
+.phone{width:300px;max-width:100%;background:var(--ios-bg);border-radius:22px;padding:10px;border:1px solid var(--line)}
+.card{background:var(--ios-card);border-radius:14px;padding:4px 0}
+.card .h{font-size:12px;font-weight:500;color:var(--muted);padding:4px 12px 2px}
+.row{display:flex;align-items:center;gap:10px;padding:4px 12px;min-height:40px}
+.row + .row{border-top:.5px solid var(--line);margin-left:46px;padding-left:0}
+.row .av{width:26px;height:26px}
+.row .t{font-size:15px;line-height:19px}
+.row .d{font-size:11px;color:var(--muted)}
+.new{background:var(--mark);box-shadow:inset 0 0 0 1px var(--mark-line);border-radius:9px}
+</style>
+</head>
+<body>
+<h1>Facilitator in the @ menu</h1>
+<p class="lede">A group chat, after typing "@". Red marks what is new.</p>
+
+<div class="grid">
+  <section class="col">
+    <h2>Mac <span>now</span></h2>
+    <div class="menu">
+      <div class="sec">People</div>
+      <div class="item on"><span class="av" style="background:#d1d5db;color:#374151">@</span><div><div class="lbl">@all</div><div class="det">All people in this group</div></div></div>
+      <div class="item"><span class="av" style="background:#6b8f71">BO</span><div class="lbl"><i>@</i>Bea Okafor</div></div>
+      <div class="sec">Agents</div>
+      <div class="item"><span class="av" style="background:#e8b84a">K</span><div><div class="lbl"><i>@</i>Bea Okafor's Kordi</div><div class="det">Owner · Bea Okafor</div></div></div>
+    </div>
+    <div class="composer"><b>@</b></div>
+  </section>
+
+  <section class="col">
+    <h2>Mac <span>proposed</span></h2>
+    <div class="menu">
+      <div class="sec">People</div>
+      <div class="item on"><span class="av" style="background:#d1d5db;color:#374151">@</span><div><div class="lbl">@all</div><div class="det">All people in this group</div></div></div>
+      <div class="item"><span class="av" style="background:#6b8f71">BO</span><div class="lbl"><i>@</i>Bea Okafor</div></div>
+      <div class="sec">Agents</div>
+      <div class="item new"><img class="av" src="../../../app/desktop/public/kordi-system-avatar.jpg" alt=""><div><div class="lbl"><i>@</i>Facilitator</div><div class="det">Built in</div></div></div>
+      <div class="item"><span class="av" style="background:#e8b84a">K</span><div><div class="lbl"><i>@</i>Bea Okafor's Kordi</div><div class="det">Owner · Bea Okafor</div></div></div>
+    </div>
+    <div class="composer"><b>@Facilitator</b> can you find a time for all of us?</div>
+    <p class="note">In every group the Facilitator is in, Grounding groups included. Picking it sends a real mention, so it highlights.</p>
+  </section>
+
+  <section class="col">
+    <h2>iPhone <span>proposed</span></h2>
+    <div class="phone">
+      <div class="card">
+        <div class="h">People</div>
+        <div class="row"><span class="av" style="background:#d1d5db;color:#374151">@</span><div><div class="t">All</div><div class="d">All people in this group</div></div></div>
+        <div class="row"><span class="av" style="background:#6b8f71">BO</span><div class="t">Bea Okafor</div></div>
+        <div class="h">Agents</div>
+        <div class="row new"><img class="av" src="../../../app/desktop/public/kordi-system-avatar.jpg" alt=""><div><div class="t">Facilitator</div><div class="d">Built in</div></div></div>
+        <div class="row"><span class="av" style="background:#e8b84a">K</span><div><div class="t">Bea Okafor's Kordi</div><div class="d">Owner · Bea Okafor</div></div></div>
+      </div>
+    </div>
+    <p class="note">Same order and wording as the Mac.</p>
+  </section>
+</div>
+</body>
+</html>

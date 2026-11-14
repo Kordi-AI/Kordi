@@ -24,8 +24,8 @@ const createdNotice = {
 } as CanonicalSessionMessage;
 
 const messages: Message[] = [
-  { id: 'msg:created', role: canonicalMessageRole(createdNotice), senderType: 'human', sender: 'System', text: createdNotice.contentText, time: '09:30' },
-  { id: 'msg:joined', role: 'system', senderType: 'human', sender: 'System', text: 'Ben Ortiz joined the group, invited by Ava Lee.', time: '09:31' },
+  { id: 'msg:created', role: canonicalMessageRole(createdNotice), senderType: 'human', sender: 'Facilitator', text: createdNotice.contentText, time: '09:30' },
+  { id: 'msg:joined', role: 'system', senderType: 'human', sender: 'Facilitator', text: 'Ben Ortiz joined the group, invited by Ava Lee.', time: '09:31' },
   { id: 'msg:hello', role: 'person', senderType: 'human', sender: 'Ava Lee', text: 'Welcome! The checklist is pinned.', time: '09:32', showSenderMeta: true },
 ];
 

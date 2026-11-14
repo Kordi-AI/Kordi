@@ -33,7 +33,7 @@ final class UsageLimitsTests: XCTestCase {
         """#.utf8))
         XCTAssertEqual(snapshot.conversationId, "conv_1")
         XCTAssertEqual(snapshot.pausedSince, "2026-11-04T14:20:00Z")
-        XCTAssertEqual(UsagePresentation.label(limitId: snapshot.limitId), "System agent per chat")
+        XCTAssertEqual(UsagePresentation.label(limitId: snapshot.limitId), "Facilitator per chat")
         XCTAssertEqual(UsagePresentation.value(snapshot), "20 of 20")
     }
 
@@ -58,7 +58,7 @@ final class UsageLimitsTests: XCTestCase {
         XCTAssertEqual(UsagePresentation.label(limitId: "pool.runs"), "Runs")
         XCTAssertEqual(UsagePresentation.label(limitId: "pool.spend"), "Spend")
         XCTAssertEqual(UsagePresentation.label(limitId: "account.grounding_runs"), "Grounding")
-        XCTAssertEqual(UsagePresentation.label(limitId: "pool.stopped"), "System agent")
+        XCTAssertEqual(UsagePresentation.label(limitId: "pool.stopped"), "Facilitator")
     }
 
     func testStatusCopy() {

@@ -16,6 +16,13 @@ import { canonicalAvatarImageSource } from '@/features/cloud/canonicalAvatar';
 import type { ComposerMentionOption } from '@/kordi-app/components';
 import type { Conversation, DesktopCollaborationState, DesktopChatState } from '@/kordi-app/types';
 import { ALL_GROUP_MENTION_LABEL, groupMentionTargetIdentityId } from '@/features/chat/messageMentions';
+import {
+  KORDI_FACILITATOR_MENTION_HOST_ID,
+  KORDI_FACILITATOR_MENTION_TARGET_ID,
+  KORDI_FACILITATOR_NAME,
+  KORDI_SYSTEM_AGENT_ACCOUNT_ID,
+  KORDI_SYSTEM_AVATAR_URL,
+} from '@/features/systemAgent/systemAgentIdentity';
 
 import { normalizeMentionSearch } from '@/app/useKordiAppModelHelpers';
 import { defaultAgentDisplayName, publicScopedAgentMentionHandle } from '@/lib/identityLabels';
@@ -164,6 +171,21 @@ export function buildCollaborationMentionTargetsByScope({
         nodeId: groupMentionIdentity,
         runtime: 'group',
         avatarSeed: groupMentionIdentity,
+        unreadCount: 0,
+      });
+      // The Facilitator is in every group; it leads the agents.
+      pushOption({
+        value: KORDI_FACILITATOR_NAME,
+        label: KORDI_FACILITATOR_NAME,
+        detail: 'Built in',
+        targetKind: 'agent',
+        sourceHostId: KORDI_FACILITATOR_MENTION_HOST_ID,
+        nodeId: KORDI_FACILITATOR_MENTION_TARGET_ID,
+        runtime: 'facilitator',
+        humanId: null,
+        agentId: null,
+        avatarImageUrl: KORDI_SYSTEM_AVATAR_URL,
+        avatarSeed: KORDI_SYSTEM_AGENT_ACCOUNT_ID,
         unreadCount: 0,
       });
     }

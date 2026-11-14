@@ -4,8 +4,8 @@ const LABELS: Record<UsageLimitId, string> = {
   'pool.runs': 'Runs',
   'pool.spend': 'Spend',
   'account.grounding_runs': 'Grounding',
-  'conversation.system_agent_runs': 'System agent per chat',
-  'pool.stopped': 'System agent',
+  'conversation.system_agent_runs': 'Facilitator per chat',
+  'pool.stopped': 'Facilitator',
 };
 
 export function usageLabel(snapshot: UsageSnapshot): string {

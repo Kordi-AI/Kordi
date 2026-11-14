@@ -27,6 +27,12 @@ pub(super) async fn message_sent(state: &ServerState, message: &MessageSnapshot)
     {
         eprintln!("[chat_sync] agent question reply matching: {error}");
     }
+    // "@Facilitator" skips the sweep's quiet wait; the sweep retries anyway.
+    if let Err(error) =
+        crate::system_agent::requests::note_direct_request(state.db_pool(), message).await
+    {
+        eprintln!("[chat_sync] Facilitator request wake: {error}");
+    }
     // A person's mention that no agent can take fails visibly for everyone.
     if let Err(error) = measure(
         metrics,

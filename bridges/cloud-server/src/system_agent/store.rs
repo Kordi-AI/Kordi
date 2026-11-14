@@ -18,7 +18,6 @@ use super::cards::{mark_card_seen, sync_card_messages};
 use super::config::SystemAgentConfig;
 use super::input::Candidate;
 use super::limits;
-use super::post::post_text;
 use crate::resource_pools::usage::{settle, Settlement};
 use crate::resource_pools::Feature;
 
@@ -59,7 +58,8 @@ pub(super) const SWEEP_SQL: &str = concat!(
        AND s.retry_after <= now()
        AND (
          -- Members' new messages (never the System agent's own), once the chat has been
-         -- quiet for 30 seconds, or two minutes after the first one.
+         -- quiet for 30 seconds, or two minutes after the first one, or right away when
+         -- one of them asks the System agent directly (`requests::note_direct_request`).
          (c.latest_message_sequence > s.seen_sequence
           AND EXISTS (SELECT 1 FROM cloud_chat_messages msg
             WHERE msg.conversation_id = c.conversation_id
@@ -74,6 +74,9 @@ pub(super) const SWEEP_SQL: &str = concat!(
                 AND msg.conversation_sequence > s.seen_sequence AND msg.sender_account_id <> $1
               ORDER BY msg.conversation_sequence ASC LIMIT 1)
               <= now() - interval '2 minutes'
+            OR CASE WHEN jsonb_typeof(s.hooks_fired->'requestSequence') = 'number'
+                 THEN (s.hooks_fired->>'requestSequence')::bigint > s.seen_sequence
+                 ELSE false END
           ))
          -- Votes or answers changed the card, and it has been quiet for 45 seconds.
          OR (card.revision > CASE
@@ -323,6 +326,15 @@ async fn enqueue(
     crate::pool_workers::store::tag_run(&mut tx, &run_id, &resource_pool, Feature::SystemAgent)
         .await?;
     tx.commit().await?;
+    // The person who asked sees the Facilitator working on it right away.
+    super::reply_slot::show(
+        pool,
+        &config.account_id,
+        &run_id,
+        candidate.conversation_id,
+        &input,
+    )
+    .await;
     Ok(true)
 }
 
@@ -420,14 +432,17 @@ pub async fn complete(
         .filter(|_| !workflow_posted)
         .map(str::trim)
         .filter(|text| !text.is_empty());
-    let response_message_id = match message
-        .or_else(|| (!documents.is_empty()).then_some("I drafted a document for the group."))
-    {
-        Some(text) if !text.is_empty() => {
-            post_text(pool, run_id, &run, text, card_touched, &documents).await?
-        }
-        _ => None,
-    };
+    let answered = workflow_posted || card_touched;
+    let response_message_id = super::reply_slot::publish(
+        pool,
+        run_id,
+        &run,
+        message,
+        answered,
+        card_touched,
+        &documents,
+    )
+    .await?;
 
     let hooks = super::triggers::finish_marks(&run.input);
 

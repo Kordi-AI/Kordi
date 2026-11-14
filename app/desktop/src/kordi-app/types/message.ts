@@ -416,6 +416,8 @@ export type DesktopChatTurnSnapshot = {
   localExecutionStarted?: boolean;
   /** Server-confirmed state of a hosted request; never a local execution handle. */
   hostedRunStatus?: 'queued' | 'leased' | 'running';
+  /** A group agent reply row stored on the server, never a local placeholder. */
+  serverStored?: boolean;
   messageAction?: MessageActionMetadata | null;
   id: string;
   sessionId: string;

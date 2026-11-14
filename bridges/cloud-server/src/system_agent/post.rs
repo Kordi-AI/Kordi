@@ -67,6 +67,20 @@ pub(super) fn forward_text(
     }
 }
 
+/// The System agent's words as members read them: a step-in line, `@Handle`
+/// mentions shown by name, and those mentions resolved.
+pub(super) async fn reply_text(
+    pool: &PgPool,
+    run: &super::store::ActiveRun,
+    text: &str,
+    card_touched: bool,
+) -> Result<(String, Vec<Value>), sqlx_core::Error> {
+    let members = mention_members(pool, run.conversation_id, &run.owner_account_id).await?;
+    let text = forward_text(&run.input, text, card_touched, &members);
+    let text = super::ownership::with_step_in_line(&run.input, &text);
+    Ok(render_mentions(&text, &members))
+}
+
 /// Posts the System agent's words as their own message, with `@Handle`
 /// mentions shown by name and resolved.
 pub(super) async fn post_text(
@@ -78,10 +92,7 @@ pub(super) async fn post_text(
     documents: &[RunDocument],
 ) -> Result<Option<String>, sqlx_core::Error> {
     let sender = &run.owner_account_id;
-    let members = mention_members(pool, run.conversation_id, sender).await?;
-    let text = forward_text(&run.input, text, card_touched, &members);
-    let text = super::ownership::with_step_in_line(&run.input, &text);
-    let (text, mentions) = render_mentions(&text, &members);
+    let (text, mentions) = reply_text(pool, run, text, card_touched).await?;
     let mut request = SendMessageRequest {
         client_message_id: Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("{run_id}:text").as_bytes()),
         kind: "text".to_string(),
