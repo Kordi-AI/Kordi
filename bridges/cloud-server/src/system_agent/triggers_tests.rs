@@ -12,7 +12,7 @@ fn now() -> DateTime<Utc> {
         .with_timezone(&Utc)
 }
 
-fn quiet_for(minutes: i64) -> Gate {
+pub(super) fn quiet_for(minutes: i64) -> Gate {
     Gate {
         last_human_at: Some(now() - Duration::minutes(minutes)),
         first_new_human_at: Some(now() - Duration::minutes(minutes)),
@@ -20,7 +20,7 @@ fn quiet_for(minutes: i64) -> Gate {
     }
 }
 
-fn facts<'a>(gate: &'a Gate, hooks_fired: &'a Value) -> PassFacts<'a> {
+pub(super) fn facts<'a>(gate: &'a Gate, hooks_fired: &'a Value) -> PassFacts<'a> {
     PassFacts {
         now: now(),
         silence: Duration::minutes(10),
@@ -33,10 +33,11 @@ fn facts<'a>(gate: &'a Gate, hooks_fired: &'a Value) -> PassFacts<'a> {
         newest_card_created_at: None,
         found_loop: None,
         found_conflict: None,
+        requests_only: false,
     }
 }
 
-fn finding(kind: &str) -> Finding {
+pub(super) fn finding(kind: &str) -> Finding {
     Finding {
         detail: json!({"kind": kind}),
         marks: json!({ format!("{kind}:key"): true }),

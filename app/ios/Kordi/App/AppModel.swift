@@ -6456,6 +6456,8 @@ final class AppModel: ObservableObject {
             throw CloudAPIError(code: "group_has_no_recipients", message: "This group has no other participants.", statusCode: 0)
         }
         let actor = participants.first(where: { $0.accountId == account.accountId })!
+        // The Facilitator answers its own mention; it is never a routed agent.
+        let routedAgent = mentionTarget?.kind == .agent && mentionTarget?.isFacilitator != true ? mentionTarget : nil
         let envelope = CloudGroupControlEnvelope(
             kind: "group-message",
             groupId: conversation.sessionId,
@@ -6478,10 +6480,10 @@ final class AppModel: ObservableObject {
                 attachments: attachments,
                 mentions: mentions.isEmpty ? nil : mentions,
                 messageAction: messageAction,
-                targetCloudAgentId: mentionTarget?.kind == .agent ? mentionTarget?.agentId : nil,
-                targetCloudAgentName: mentionTarget?.kind == .agent ? mentionTarget?.displayName : nil,
-                targetCloudAgentOwnerAccountId: mentionTarget?.kind == .agent ? mentionTarget?.accountId : nil,
-                targetCloudAgentOwnerName: mentionTarget?.kind == .agent ? mentionTarget?.ownerName : nil,
+                targetCloudAgentId: routedAgent?.agentId,
+                targetCloudAgentName: routedAgent?.displayName,
+                targetCloudAgentOwnerAccountId: routedAgent?.accountId,
+                targetCloudAgentOwnerName: routedAgent?.ownerName,
                 agentRuntimeRoute: requestedRuntimeRoute(for: conversation),
                 messageKind: messageKind,
                 voiceMessage: voiceMessage
@@ -6624,6 +6626,10 @@ final class AppModel: ObservableObject {
         for wire in messages {
             guard let envelope = CloudGroupMessageCodec.parse(wire.body) else {
                 guard ChatCallActivity(messageKind: wire.messageKind) == nil else { continue }
+                // A Facilitator reply row the server removed (its card answered,
+                // or its run failed) has no body left; it never shows as a bubble.
+                if KordiSystemIdentity.isServiceAccount(wire.fromAccountId), wire.body.isEmpty,
+                   wire.attachments.isEmpty, wire.planCard == nil, wire.facilitatorCard == nil { continue }
                 if let current = canonicalMessagesByID[wire.messageId]?.cloudMessageVersion,
                    let incoming = wire.version, current > incoming { continue }
                 let cardAgent = KordiSystemIdentity.planCardAgent(wire, ownAccountId: ownAccountId)

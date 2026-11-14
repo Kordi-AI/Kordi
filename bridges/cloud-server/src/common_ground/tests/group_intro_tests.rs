@@ -211,18 +211,19 @@ async fn start_group_queues_an_intro_that_system_agent_posts() {
         "Topic: Agent memory\n",
         "- @Alex (started the group). Working on: Agent memory.",
         "- @Priya. Working on: Tool use. Can help with: Rust services.",
-        "- @Sam (invited). Working on: Agent memory.",
     ] {
         assert!(prompt.contains(expected), "{expected:?} in {prompt}");
     }
+    // Sam is only invited: the intro neither names nor quotes him.
+    assert!(!prompt.contains("Sam"), "{prompt}");
     assert!(system_agent_messages(&pool, conversation(&group))
         .await
         .is_empty());
 
-    // The model wrote two names bare; the cap cuts the last "@Sam" in half.
-    let lines = "  Welcome, Alex, Priya and Sam.\nAlex: memory.\n@Priya: tool use.\n\
-                 Sam (invited): here.\n";
-    let reply = format!("{lines}{} @Sam", "x".repeat(1_200 - 89));
+    // The model wrote a name bare and Sam, who has not joined, by name; the
+    // cap cuts the last "@Priya" short.
+    let lines = "  Welcome, Alex and Priya.\nAlex: memory.\n@Priya: tool use.\nSam: here.\n";
+    let reply = format!("{lines}{} @Priya", "x".repeat(1_200 - 73));
     complete(&pool, &run_id, RUNNER, &reply).await.unwrap();
     let posted = system_agent_envelopes(&pool, conversation(&group)).await;
     assert_eq!(posted.len(), 1);
@@ -233,19 +234,17 @@ async fn start_group_queues_an_intro_that_system_agent_posts() {
     let text = posted[0]["text"].as_str().unwrap();
     assert!(
         text.starts_with(
-            "Welcome, Alex, Priya and Sam.\n@Alex: memory.\n@Priya: tool use.\n\
-             @Sam (invited): here.\n"
+            "Welcome, Alex and Priya.\n@Alex: memory.\n@Priya: tool use.\nSam: here.\n"
         ),
         "{text}"
     );
     assert_eq!(text.chars().count(), 1_200, "the intro is capped");
-    assert!(text.ends_with(" @Sa"), "{}", &text[text.len() - 8..]);
+    assert!(text.ends_with(" @Pr"), "{}", &text[text.len() - 8..]);
     assert_eq!(
         mentions(&posted[0]),
         vec![
             ("@Alex".to_string(), alex.clone()),
             ("@Priya".to_string(), priya.clone()),
-            ("@Sam".to_string(), sam.clone()),
         ]
     );
     assert_eq!(intro_state(&pool, &run_id).await, (true, None));

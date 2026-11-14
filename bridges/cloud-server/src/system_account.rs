@@ -1,6 +1,8 @@
-//! System: the server-managed account that posts notices, such as the Grounding
-//! intro and the line when someone joins a Grounding group. Clients show its
-//! messages as "System". It has no email, no sign-in and no agent of its own.
+//! The notice account: the server-managed account that posts notices, such as
+//! the Grounding intro and the line when someone joins a Grounding group. It
+//! shows as "Facilitator", with the same name and picture as the System agent,
+//! so people see one Facilitator. It has no email, no sign-in and no agent of
+//! its own.
 //! Like the System agent it is a service member: it belongs to the
 //! conversations it posts in, but is never listed, counted or removable as a
 //! person.
@@ -14,7 +16,9 @@ use crate::avatars::{AGENT_AVATAR_STYLE, AVATAR_RENDERER_VERSION, HUMAN_AVATAR_S
 use crate::chat_sync::store::StoreError;
 
 pub const SYSTEM_ACCOUNT_ID: &str = "acct_kordi_system";
-pub const SYSTEM_DISPLAY_NAME: &str = "System";
+/// Matches the System agent's default name. `ensure_account` renames a row
+/// stored under the old name at startup.
+pub const SYSTEM_DISPLAY_NAME: &str = crate::system_agent::DEFAULT_SYSTEM_AGENT_NAME;
 
 /// Conversation kinds System may join.
 const SYSTEM_CONVERSATION_KINDS: &[&str] = &["group"];

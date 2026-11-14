@@ -44,7 +44,7 @@ function chatMessage(senderAccountId: string, kind: string): ChatSyncMessage {
   } as unknown as ChatSyncMessage;
 }
 
-test('a direct-chat plan card notice from the organizer shows as System, not an own bubble', () => {
+test('a direct-chat plan card notice from the organizer shows as the Facilitator, not an own bubble', () => {
   const cloud = cloudMessageFromChatSync(chatMessage('acct_me', 'system-notice'), direct);
   assert.equal(cloud.messageKind, 'system-notice');
   assert.equal(cloud.planCard?.eventId, 'plan_meet');
@@ -61,14 +61,14 @@ test('a direct-chat plan card notice from the organizer shows as System, not an 
   assert.ok(message);
   assert.equal(message.role, 'person');
   assert.equal(message.isOwnMessage, false);
-  assert.equal(message.sender, 'System');
+  assert.equal(message.sender, 'Facilitator');
   assert.equal(message.senderProfileImageUrl, KORDI_SYSTEM_AVATAR_URL);
   assert.equal(message.showSenderMeta, true);
   assert.deepEqual(message.statusChips, []);
   assert.equal(message.planCard?.eventId, 'plan_meet');
 
   const markup = renderToStaticMarkup(createElement(MessageBubble, { msg: message, onOpenSenderProfile: () => {} }));
-  assert.match(markup, />System</);
+  assert.match(markup, />Facilitator</);
   assert.match(markup, /kordi-system-avatar\.jpg/);
   assert.match(markup, /app-plan-card/);
   assert.doesNotMatch(markup, /app-chat-bubble-user/);
@@ -93,7 +93,7 @@ test('a group notice posted by the viewer is not an own bubble', () => {
   if (!message) throw new Error('expected a mapped message');
   assert.equal(message.role, 'person');
   assert.equal(message.isOwnMessage, false);
-  assert.equal(message.sender, 'System');
+  assert.equal(message.sender, 'Facilitator');
   assert.equal(message.readReceiptSummary, null);
 });
 

@@ -17,13 +17,13 @@ fn calendar_event_id(event_id: &str) -> String {
 }
 
 /// "Planned with <agent> in <chat>.": the person's agent that opened the card,
-/// or the System agent.
+/// or the Facilitator.
 fn planned_with(row: &PlanCardRow, group: Option<&str>) -> String {
     let planner = row
         .agent
         .as_ref()
         .map(PlanCardAgent::label)
-        .unwrap_or_else(|| "the System agent".to_string());
+        .unwrap_or_else(|| "the Facilitator".to_string());
     match group {
         Some(group) => format!("Planned with {planner} in {group}."),
         None => format!("Planned with {planner}."),
@@ -162,7 +162,7 @@ mod tests {
     fn the_description_names_the_agent_that_planned_it() {
         assert_eq!(
             planned_with(&row(None), Some("Team")),
-            "Planned with the System agent in Team."
+            "Planned with the Facilitator in Team."
         );
         let agent = PlanCardAgent {
             agent_id: "cloud-agent:acct_a".to_string(),
