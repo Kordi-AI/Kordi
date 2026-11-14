@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support avatar</title>
+<style>
+:root {
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --ground: #e9e8e4; --chrome: #dddcd7; --chrome-on: #ffffff; --chrome-text: #3c3c43;
+  --text: #000000; --muted: rgba(60,60,67,.62); --line: rgba(60,60,67,.14);
+  --m-main: #fafafa; --m-card: #f0f0f0; --m-line: rgba(0,0,0,.1); --m-fg: #1d1d1f; --m-fg2: rgb(76 70 65); --m-sel: rgba(0,0,0,.06);
+  --m-hero: linear-gradient(180deg, #eef0f4, #fafafa);
+  --m-bubble: #ececec; --m-accent: #2f62d3;
+  --i-bg: #f2f2f7; --i-card: #ffffff; --i-line: rgba(60,60,67,.29); --i-muted: rgba(60,60,67,.6);
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --ground: #121214; --chrome: #2c2c2e; --chrome-on: #48484a; --chrome-text: #ebebf5;
+  --text: #ffffff; --muted: rgba(235,235,245,.6); --line: rgba(84,84,88,.6);
+  --m-main: #17181a; --m-card: #1f2023; --m-line: rgba(255,255,255,.08); --m-fg: rgba(255,255,255,.92); --m-fg2: rgba(255,255,255,.6); --m-sel: rgba(255,255,255,.07);
+  --m-hero: linear-gradient(180deg, #283040, #1b1c1f);
+  --m-bubble: #2a2b2e; --m-accent: #6a9bff;
+  --i-bg: #000000; --i-card: #1c1c1e; --i-line: rgba(84,84,88,.65); --i-muted: rgba(235,235,245,.6);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { min-height: 100vh; background: var(--ground); color: var(--text); font: 15px/1.38 var(--sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
+:focus, :focus-visible { outline: none; }
+
+.rv { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 12px 20px; border-bottom: .5px solid var(--line); }
+.rv h1 { margin: 0 6px 0 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.seg { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--chrome); flex: none; }
+.seg button { height: 28px; padding: 0 10px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--chrome-text); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--chrome-on); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+
+.stage { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 20px 16px 40px; }
+.label { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.block { width: min(980px, 100%); }
+
+/* All options side by side */
+.compare { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.opt { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 10px 12px; border-radius: 14px; background: var(--m-main); border: 1px solid transparent; cursor: pointer; }
+.opt[aria-pressed="true"] { border-color: var(--m-fg2); }
+.opt .sizes { display: flex; align-items: flex-end; gap: 14px; }
+.opt span { font-size: 13px; color: var(--m-fg2); }
+.opt b { font-weight: 600; color: var(--m-fg); }
+
+/* Avatar */
+.av { display: block; flex: none; border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 .5px rgba(0,0,0,.12); }
+.av svg { display: block; width: 100%; height: 100%; }
+.av.sq { border-radius: 17%; }
+
+/* Mac */
+.surfaces { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 18px; align-items: start; }
+.mac { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 520px; border-radius: 12px; overflow: hidden; background: var(--m-main); color: var(--m-fg); box-shadow: 0 0 0 .5px var(--m-line), 0 20px 50px rgba(30,30,25,.16); font-size: 13px; }
+.m-list { border-right: 1px solid var(--m-line); padding: 12px 8px; }
+.m-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; }
+.m-row.sel { background: var(--m-sel); }
+.m-row .t { min-width: 0; }
+.m-row .n { font-weight: 600; font-size: 13px; }
+.m-row .s { color: var(--m-fg2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph { width: 36px; height: 36px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 600; font-size: 13px; color: #fff; }
+.m-detail { display: flex; flex-direction: column; }
+.m-hero { display: flex; flex-direction: column; align-items: center; padding: 34px 24px 26px; background: var(--m-hero); }
+.m-hero h2 { margin: 14px 0 2px; font-size: 20px; font-weight: 600; }
+.m-hero p { margin: 0; color: var(--m-fg2); font-size: 14px; }
+.m-btn { margin-top: 22px; width: min(370px, 100%); height: 62px; border-radius: 12px; background: var(--m-card); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--m-accent); font-size: 13px; }
+.m-chat { border-top: 1px solid var(--m-line); padding: 18px 24px; display: flex; flex-direction: column; gap: 10px; }
+.msg { display: flex; align-items: flex-end; gap: 8px; }
+.msg .b { max-width: 340px; padding: 8px 12px; border-radius: 16px; background: var(--m-bubble); font-size: 13px; }
+.msg .who { font-size: 11px; color: var(--m-fg2); margin: 0 0 2px 2px; }
+
+/* iPhone */
+.phone { width: 390px; max-width: 100%; border-radius: 46px; padding: 12px; background: #0b0b0c; box-shadow: 0 20px 50px rgba(30,30,25,.2); }
+.screen { height: 760px; border-radius: 36px; overflow: hidden; background: var(--i-bg); color: var(--text); display: flex; flex-direction: column; }
+.i-top { height: 54px; flex: none; }
+.i-title { padding: 0 20px 10px; font-size: 32px; font-weight: 700; }
+.i-group { margin: 0 16px; border-radius: 22px; background: var(--i-card); overflow: hidden; }
+.i-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
+.i-row + .i-row { border-top: .5px solid var(--i-line); margin-left: 68px; padding-left: 0; }
+.i-row .n { font-size: 17px; font-weight: 600; }
+.i-row .s { font-size: 14px; color: var(--i-muted); }
+.i-hero { display: flex; flex-direction: column; align-items: center; padding: 30px 16px 0; }
+.i-hero h2 { margin: 12px 0 2px; font-size: 24px; font-weight: 600; }
+.i-hero p { margin: 0; color: var(--i-muted); font-size: 15px; }
+.i-btn { margin-top: 18px; width: 100%; height: 64px; border-radius: 16px; background: var(--i-card); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--m-accent); font-size: 13px; }
+.i-chat { margin-top: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.i-chat .b { background: var(--i-card); }
+
+@media (max-width: 900px) {
+  .compare { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .surfaces { grid-template-columns: 1fr; justify-items: center; }
+  .mac { grid-template-columns: 1fr; width: 100%; }
+  .m-list { border-right: 0; border-bottom: 1px solid var(--m-line); }
+}
+</style>
+</head>
+<body>
+<header class="rv">
+  <h1>Support avatar</h1>
+  <div class="seg" id="opt"><button data-v="a">A</button><button data-v="b">B</button><button data-v="c">C</button><button data-v="d">D</button></div>
+  <div class="seg" id="name"><button data-v="KordiSpot">KordiSpot</button><button data-v="KordiSupport">KordiSupport</button></div>
+  <div class="seg" id="theme"><button data-v="light">Light</button><button data-v="dark">Dark</button></div>
+</header>
+<main class="stage">
+  <section class="block">
+    <p class="label">Options at 96, 40 and 28 px</p>
+    <div class="compare" id="compare"></div>
+  </section>
+  <section class="block">
+    <p class="label">In place</p>
+    <div class="surfaces">
+      <div class="mac">
+        <div class="m-list" id="m-list"></div>
+        <div class="m-detail">
+          <div class="m-hero">
+            <span class="av" data-size="96"></span>
+            <h2 data-name></h2>
+            <p>Ask questions or suggest improvements</p>
+            <div class="m-btn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 0 0-7.4 12.7L3.5 20.5l4.4-1.1A8.5 8.5 0 1 0 12 3.5Z"/></svg>Message</div>
+          </div>
+          <div class="m-chat">
+            <div class="msg"><span class="av" data-size="28"></span><div><div class="who" data-name></div><div class="b">Hi. Ask me anything about Kordi, or tell me what to improve.</div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="phone"><div class="screen">
+        <div class="i-top"></div>
+        <div class="i-title">Contacts</div>
+        <div class="i-group" id="i-list"></div>
+        <div class="i-hero">
+          <span class="av" data-size="92"></span>
+          <h2 data-name></h2>
+          <p>Ask questions or suggest improvements</p>
+          <div class="i-btn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 0 0-7.4 12.7L3.5 20.5l4.4-1.1A8.5 8.5 0 1 0 12 3.5Z"/></svg>Message</div>
+        </div>
+        <div class="i-chat"><div class="msg"><span class="av sq" data-size="30"></span><div class="b">Hi. Ask me anything about Kordi.</div></div></div>
+      </div></div>
+    </div>
+  </section>
+</main>
+<script>
+// Geometry copied from scripts/kordi-app-icons/icons.mjs (512 box, bird placed optically centred).
+const INK = '#1f1a17', AMBER = '#f7b32b';
+const PLACE = 'translate(256,250) scale(0.94) translate(-270,-292)';
+const BODY = '<ellipse cx="262" cy="292" rx="150" ry="136"/>';
+const TAIL = '<path d="M400,342 C436,322 462,272 470,204 C448,236 420,244 386,218Z" stroke-width="4" stroke-linejoin="round"/>';
+const EYE = '<circle cx="194" cy="266" r="17"/>';
+const WING = '<path transform="translate(332,322) scale(0.8) translate(-326,-312)" d="M248,326 C276,284 346,262 408,266 C388,316 332,356 272,354 C252,352 242,340 248,326Z"/>';
+const BEAK = '<path d="M120,276 L82,294 L120,312Z" stroke-width="12" stroke-linejoin="round"/>';
+
+// Question mark centred on the origin: hook and stem stroked with round caps, then the dot.
+function question({ x, y, s, color, width = 24 }) {
+  return `<g transform="translate(${x},${y}) scale(${s})">`
+    + `<path d="M-32,-34 C-32,-72 32,-72 32,-36 C32,-10 0,-4 0,20" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`
+    + `<circle cx="0" cy="56" r="${width * 0.62}" fill="${color}"/></g>`;
+}
+
+const OPTIONS = {
+  a: { title: 'A', line: 'Question mark as the wing', cuts: () => EYE + question({ x: 324, y: 300, s: 1.06, color: '#000', width: 25 }) },
+  b: { title: 'B', line: 'Small question mark above the wing', cuts: () => EYE + WING + question({ x: 290, y: 214, s: 0.56, color: '#000', width: 28 }) },
+  c: { title: 'C', line: 'Amber question mark beside the head', cuts: () => EYE + WING, birdTransform: 'translate(58,62) scale(0.8)', extra: () => question({ x: 120, y: 120, s: 1.02, color: AMBER, width: 26 }) },
+  d: { title: 'D', line: 'Amber question mark as the wing', cuts: () => EYE, overlay: () => question({ x: 324, y: 300, s: 1.06, color: AMBER, width: 25 }) },
+};
+
+let uid = 0;
+function avatarSvg(key) {
+  const o = OPTIONS[key];
+  const id = `cut${uid++}`;
+  const bird = `<defs><mask id="${id}" maskUnits="userSpaceOnUse" x="-100" y="-100" width="712" height="712">`
+    + `<g fill="#fff" stroke="#fff">${BODY}${TAIL}</g><g fill="#000">${o.cuts()}</g></mask></defs>`
+    + `<g transform="${PLACE}"><g fill="${AMBER}" stroke="${AMBER}">${BEAK}</g>`
+    + `<rect x="-100" y="-100" width="712" height="712" fill="${INK}" mask="url(#${id})"/>`
+    + (o.overlay ? o.overlay() : '') + '</g>';
+  const placed = o.birdTransform ? `<g transform="${o.birdTransform}">${bird}</g>` : bird;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#fff"/>`
+    + `<g transform="translate(36,36) scale(0.86)">${placed}${o.extra ? o.extra() : ''}</g></svg>`;
+}
+
+const params = new URLSearchParams(location.search);
+const state = {
+  opt: OPTIONS[params.get('option')] ? params.get('option') : 'd',
+  name: params.get('name') === 'KordiSupport' ? 'KordiSupport' : 'KordiSpot',
+  theme: params.get('theme') === 'dark' ? 'dark' : 'light',
+};
+
+function fill(el, key) {
+  const size = Number(el.dataset.size);
+  el.style.width = el.style.height = `${size}px`;
+  el.innerHTML = avatarSvg(key);
+}
+
+function render() {
+  document.documentElement.dataset.theme = state.theme;
+  for (const [group, value] of [['opt', state.opt], ['name', state.name], ['theme', state.theme]]) {
+    for (const b of document.querySelectorAll(`#${group} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === value));
+  }
+  document.getElementById('compare').innerHTML = Object.entries(OPTIONS).map(([key, o]) => `
+    <button class="opt" data-v="${key}" aria-pressed="${key === state.opt}">
+      <div class="sizes"><span class="av" data-size="96"></span><span class="av" data-size="40"></span><span class="av" data-size="28"></span></div>
+      <span><b>${o.title}</b> · ${o.line}</span>
+    </button>`).join('');
+  for (const el of document.querySelectorAll('#compare .opt')) {
+    for (const av of el.querySelectorAll('.av')) fill(av, el.dataset.v);
+    el.onclick = () => { state.opt = el.dataset.v; sync(); };
+  }
+  document.getElementById('m-list').innerHTML = `
+    <div class="m-row sel"><span class="av" data-size="36"></span><div class="t"><div class="n" data-name></div><div class="s">Ask questions or suggest improvements</div></div></div>
+    <div class="m-row"><span class="ph" style="background:#c4865b">M</span><div class="t"><div class="n">Maya Chen</div><div class="s">Online</div></div></div>
+    <div class="m-row"><span class="ph" style="background:#6d8fb8">A</span><div class="t"><div class="n">Alex Rivera</div><div class="s">Last seen 2h ago</div></div></div>`;
+  document.getElementById('i-list').innerHTML = `
+    <div class="i-row"><span class="av sq" data-size="44"></span><div><div class="n" data-name></div><div class="s">Ask questions or suggest improvements</div></div></div>
+    <div class="i-row"><span class="ph" style="width:44px;height:44px;border-radius:17%;background:#c4865b">M</span><div><div class="n">Maya Chen</div><div class="s">Online</div></div></div>`;
+  for (const el of document.querySelectorAll('.surfaces .av')) fill(el, state.opt);
+  for (const el of document.querySelectorAll('[data-name]')) el.textContent = state.name;
+}
+
+function sync() {
+  const next = new URLSearchParams({ option: state.opt, name: state.name, theme: state.theme });
+  history.replaceState(null, '', `?${next}`);
+  render();
+}
+
+for (const group of ['opt', 'name', 'theme']) {
+  for (const b of document.querySelectorAll(`#${group} button`)) {
+    b.onclick = () => { state[group] = b.dataset.v; sync(); };
+  }
+}
+render();
+</script>
+</body>
+</html>

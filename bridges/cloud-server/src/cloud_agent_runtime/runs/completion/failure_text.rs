@@ -6,7 +6,7 @@ use super::super::envelopes::{
 };
 
 const SUPPORT_FAILURE_TEXT: &str =
-    "Kordi Support couldn’t complete this request. Please try again shortly.";
+    "KordiSpot couldn’t complete this request. Please try again shortly.";
 
 /// The line the agent's owner reads. It never says "sign in": that means
 /// signing in to Kordi, not reconnecting an AI provider.

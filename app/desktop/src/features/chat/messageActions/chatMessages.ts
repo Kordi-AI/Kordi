@@ -124,6 +124,7 @@ collaborationSessionOutreachTarget,
 isCollaborationGroupSession,
 shouldUseCollaborationConversationRouting
 } from './collaborationRouting';
+import { KORDI_SUPPORT_NAME } from '@/features/support/supportIdentity';
 async function persistCanonicalGroupMessageFailure(
   prepared: PreparedCanonicalUserMessage | null,
   detail: string,
@@ -1256,7 +1257,7 @@ export function useChatMessageActions({
     }
 
     if (lockedSupportAgentTarget) {
-      setDesktopChatError('Kordi Support is still loading. Try again in a moment.');
+      setDesktopChatError(`${KORDI_SUPPORT_NAME} is still loading. Try again in a moment.`);
       return;
     }
 

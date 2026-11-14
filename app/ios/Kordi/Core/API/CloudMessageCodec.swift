@@ -553,8 +553,9 @@ enum AgentFailurePresentation {
     static func text(stored: String, failureCode: String?, viewerOwnsAgent: Bool, agentName: String?) -> String {
         let stored = stored.trimmingCharacters(in: .whitespacesAndNewlines)
         guard viewerOwnsAgent else {
-            // Kordi Support's own line is already neutral.
-            return stored.hasPrefix("Kordi Support couldn") ? stored : couldNotReply(agentName)
+            // KordiSpot's own line is already neutral.
+            let supportNames = [KordiSupportIdentity.displayName] + KordiSupportIdentity.legacyDisplayNames
+            return supportNames.contains { stored.hasPrefix("\($0) couldn") } ? stored : couldNotReply(agentName)
         }
         let code = failureCode?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? legacyCode(stored)
         let provider = providerName(stored) ?? "AI provider"
