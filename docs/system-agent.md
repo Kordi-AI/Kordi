@@ -7,7 +7,7 @@ with the front-facing Kordi bird. Stored identifiers retain the former PiP
 name for compatibility.
 
 Kordi runs two agents on its own service credentials: the System agent described here, and
-Kordi Support, which people chat with directly. In code, "system agent" as a
+KordiSpot, which people chat with directly. In code, "system agent" as a
 contact kind (`system_agent`) means Support's direct chat contact, not this
 agent.
 
@@ -27,7 +27,7 @@ These are not System agent jobs:
 | Proactive | Your own agent watches your groups and asks you before it helps. It runs on your accounts, on your Mac first, and nothing reaches the group until you allow it ([proactive agent](development/proactive-agent.md)). |
 | Digest | Your own saved provider accounts generate your private digest ([rolling digest](rolling-digest.md)). Group plans the System agent manages outrank digest suggestions (see below). |
 | System notices | Grounding notices and group joined lines come from the System account `acct_kordi_system`, which calls no model. |
-| Kordi Support | A separate Kordi-run agent with its own account and key that people chat with directly (`bridges/cloud-server/src/support/`). |
+| KordiSpot | A separate Kordi-run agent with its own account and key that people chat with directly (`bridges/cloud-server/src/support/`). |
 
 The rule: a job that acts for one person, reads their private data, or spends
 on their behalf belongs to that person's agent and accounts. A job that serves
@@ -35,7 +35,7 @@ everyone in a conversation runs on the System agent.
 
 ## Identity
 
-The System agent mirrors the Kordi Support agent's plumbing: a system account,
+The System agent mirrors the KordiSpot agent's plumbing: a system account,
 a locked agent definition, a default agent profile so member listings render
 it, and a `ServiceProviderAuth` credential resolved at run time from server
 configuration. It is bootstrapped at server start and joins every existing
@@ -190,7 +190,7 @@ in the run fails. Each card message carries a single `plan_card` block with a
 options with votes, unresolved fields, and every participant's RSVP. macOS
 (`app/desktop/src/kordi-app/components/planCard.tsx`) and iOS
 (`app/ios/Kordi/Features/Conversation/PlanCardView.swift`) render the block as
-a compact card in the style of the Kordi Support permission card: while the
+a compact card in the style of the KordiSpot permission card: while the
 card polls, the options are the buttons; otherwise "I'm in" and "Can't make
 it", plus a Confirm button for the organizer and chat admins while the plan is
 awaiting confirmation. Confirmation requires an exact start date and time, but

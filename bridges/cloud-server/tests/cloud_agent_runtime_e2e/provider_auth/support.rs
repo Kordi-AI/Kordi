@@ -19,7 +19,7 @@ async fn support_runs_use_the_dedicated_service_api_key_without_an_owner_snapsho
             owner_account_id: format!("acct_kordi_support_{suffix}"),
             owner_email: unique_email("provider-support-owner"),
             agent_id: support_agent_id.clone(),
-            name: "Kordi Support".into(),
+            name: "KordiSpot".into(),
             subtitle: "Ask questions or suggest improvements".into(),
             inbox: unique_email("provider-support-inbox"),
             provider_auth: SupportProviderAuth::openai_api_key(&support_secret, "gpt-5.6-luna")
@@ -92,7 +92,7 @@ async fn support_runs_use_the_dedicated_service_api_key_without_an_owner_snapsho
                     "kind": "message",
                     "text": "How do I use Kordi groups?",
                     "targetCloudAgentId": support_agent_id,
-                    "targetCloudAgentName": "Kordi Support",
+                    "targetCloudAgentName": "KordiSpot",
                     "targetCloudAgentOwnerAccountId": support_owner.account_id,
                     "targetCloudAgentOwnerName": "Kordi",
                 })

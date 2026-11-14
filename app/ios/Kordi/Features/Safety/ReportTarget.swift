@@ -16,7 +16,7 @@ struct SafetyAccount: Identifiable, Hashable {
         self.avatarUrl = avatarUrl?.nonEmpty
     }
 
-    /// Kordi Support and the System accounts can't be blocked or reported.
+    /// KordiSpot and the System accounts can't be blocked or reported.
     static func isServiceAccount(_ accountId: String) -> Bool {
         KordiSystemIdentity.isServiceAccount(accountId) || KordiSupportIdentity.matches(name: nil, seed: accountId)
     }
@@ -66,7 +66,7 @@ struct ReportTarget: Identifiable, Hashable {
 
     /// A report for a message someone else wrote, or nil when the message
     /// can't be reported: yours, a notice, not yet on the server, or from
-    /// Kordi Support or your own agent.
+    /// KordiSpot or your own agent.
     static func message(
         _ message: ChatMessage,
         in conversation: ConversationSummary,
