@@ -14,8 +14,6 @@ for (const conflict of [false, true]) {
     let reads = 0, writes = 0;
     let cancelReason: unknown;
     let renewedAfterStop = false;
-    const oldWarn = console.warn, oldInfo = console.info;
-    console.warn = () => undefined; console.info = () => undefined;
     Object.defineProperty(globalThis, 'window', { configurable: true, value: {
       setTimeout: (callback: () => void) => setTimeout(callback, 1),
       __TAURI_INTERNALS__: { invoke: async (command: string, args: Record<string, unknown>) => {
@@ -41,7 +39,6 @@ for (const conflict of [false, true]) {
       CloudAuthClient.prototype.getAgentSubsession = oldGet;
       CloudAuthClient.prototype.putAgentSubsession = oldPut;
       __setSessionBackendForTests(null);
-      console.warn = oldWarn; console.info = oldInfo;
       if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
       else Reflect.deleteProperty(globalThis, 'window');
     }

@@ -38,10 +38,6 @@ function harness({ snapshot, get, put }: {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const oldGet = CloudAuthClient.prototype.getAgentSubsession;
   const oldPut = CloudAuthClient.prototype.putAgentSubsession;
-  const oldInfo = console.info;
-  const oldWarn = console.warn;
-  console.info = () => undefined;
-  console.warn = () => undefined;
   const commands: Command[] = [];
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {
     setTimeout: (callback: () => void) => setTimeout(callback, 1),
@@ -71,8 +67,6 @@ function harness({ snapshot, get, put }: {
       CloudAuthClient.prototype.getAgentSubsession = oldGet;
       CloudAuthClient.prototype.putAgentSubsession = oldPut;
       __setSessionBackendForTests(null);
-      console.info = oldInfo;
-      console.warn = oldWarn;
       if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
       else Reflect.deleteProperty(globalThis, 'window');
     },

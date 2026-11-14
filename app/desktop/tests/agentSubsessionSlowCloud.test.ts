@@ -75,8 +75,6 @@ test('an answer that refuses each attempt keeps renewing the deadline', async ()
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const oldGet = CloudAuthClient.prototype.getAgentSubsession;
   const oldPut = CloudAuthClient.prototype.putAgentSubsession;
-  const oldWarn = console.warn;
-  console.warn = () => undefined;
   const commands: string[] = [];
   let writes = 0;
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {
@@ -116,7 +114,6 @@ test('an answer that refuses each attempt keeps renewing the deadline', async ()
     CloudAuthClient.prototype.getAgentSubsession = oldGet;
     CloudAuthClient.prototype.putAgentSubsession = oldPut;
     __setSessionBackendForTests(null);
-    console.warn = oldWarn;
     if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
     else Reflect.deleteProperty(globalThis, 'window');
   }

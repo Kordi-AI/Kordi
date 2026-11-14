@@ -18,9 +18,21 @@ pub(in crate::chat) fn record_stop_reason(
     };
     update_turn(snapshot, |state| {
         if !state.completed && state.stop_reason.is_none() {
+            eprintln!(
+                "[background-session] stopping turn {}: {}",
+                state.id,
+                describe_stop_reason(&reason)
+            );
             state.stop_reason = Some(reason);
         }
     });
+}
+
+fn describe_stop_reason(reason: &DesktopTurnStopReason) -> String {
+    match (reason.status, reason.code.as_deref()) {
+        (Some(status), Some(code)) => format!("{} (last refusal {status} {code})", reason.kind),
+        _ => reason.kind.clone(),
+    }
 }
 
 /// The longest a renderer-provided lease deadline may reach ahead. The renderer
@@ -42,6 +54,16 @@ pub(in crate::chat) async fn renew_execution_lease(
         .cloned()
         .ok_or_else(|| "Unknown execution lease turn".to_string())?;
     if let Ok(mut last) = turn.lease_refusal.lock() {
+        // The renderer passes the cloud's last refusal; log when it changes.
+        if *last != refusal {
+            match &refusal {
+                Some(next) => eprintln!(
+                    "[background-session] the cloud refuses updates of turn {turn_id}: {} {}; it keeps running",
+                    next.status, next.code
+                ),
+                None => eprintln!("[background-session] turn {turn_id} is synced again"),
+            }
+        }
         *last = refusal;
     }
     let remaining = deadline_ms.saturating_sub(super::super::now_millis());
