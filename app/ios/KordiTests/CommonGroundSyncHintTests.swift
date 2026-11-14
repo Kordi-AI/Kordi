@@ -51,6 +51,8 @@ final class CommonGroundSyncHintTests: XCTestCase {
         XCTAssertEqual(try hint(event("common_ground.room.updated", payload: #"{"code":"4821"}"#, seq: 1)), .room(code: "4821"))
         XCTAssertEqual(try hint(event("common_ground.matches.updated", payload: #"{"profileId":"p_1"}"#, seq: 2)), .matches)
         XCTAssertEqual(try hint(event("common_ground.matches.updated", payload: "{}", seq: 3)), .matches)
+        XCTAssertEqual(try hint(event("common_ground.invitations.updated", payload: "{}", seq: 6)), .invitations)
+        XCTAssertTrue(CommonGroundSyncHint.eventTypes.contains("common_ground.invitations.updated"))
         XCTAssertNil(try hint(event("common_ground.room.updated", payload: "{}", seq: 4)), "A room hint names its room")
         XCTAssertNil(try hint(event("document.updated", payload: #"{"attachmentId":"att_1"}"#, seq: 5)))
     }

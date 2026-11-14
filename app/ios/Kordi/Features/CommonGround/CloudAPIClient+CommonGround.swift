@@ -211,6 +211,48 @@ extension CloudAPIClient {
         try await send(path: cg("recent"), method: "GET", token: token, fallback: "Could not load recent matches.")
     }
 
+    // MARK: Group invitations
+
+    /// Groups the viewer manages, each with where the person stands in it.
+    /// 404 when the person cannot be invited.
+    func commonGroundInviteGroups(token: String, accountId: String) async throws -> CommonGroundInviteGroups {
+        try await send(path: cg("people/\(cgSegment(accountId))/groups"), method: "GET", token: token, fallback: "Could not load your groups.")
+    }
+
+    /// People from Grounding that the group can invite. 403 unless the viewer manages the group.
+    func commonGroundGroupCandidates(token: String, groupSpaceId: String) async throws -> [CommonGroundGroupCandidate] {
+        let list: CommonGroundGroupCandidates = try await send(
+            path: cg("group-people"), method: "GET", token: token,
+            query: [URLQueryItem(name: "groupSpaceId", value: groupSpaceId)], fallback: "Could not load people."
+        )
+        return list.people
+    }
+
+    /// Adds contacts directly and invites everyone else (1-20 people).
+    func inviteToCommonGroundGroup(token: String, groupSpaceId: String, accountIds: [String]) async throws -> CommonGroundGroupInviteResult {
+        struct Body: Encodable { let groupSpaceId: String; let accountIds: [String] }
+        return try await send(
+            path: cg("group-invitations"), method: "POST", token: token,
+            body: Body(groupSpaceId: groupSpaceId, accountIds: accountIds), fallback: "Could not invite people to this group."
+        )
+    }
+
+    /// Joins the group a person invited the viewer to.
+    func joinCommonGroundGroupInvitation(token: String, invitationRef: String) async throws -> CommonGroundJoinedGroup {
+        try await send(
+            path: cg("group-invitations/\(cgSegment(invitationRef))/join"), method: "POST", token: token,
+            fallback: "Could not join the group."
+        )
+    }
+
+    /// Declines quietly; the person who invited is not told.
+    func declineCommonGroundGroupInvitation(token: String, invitationRef: String) async throws {
+        try await sendWithoutResponse(
+            path: cg("group-invitations/\(cgSegment(invitationRef))/decline"), method: "POST", token: token,
+            fallback: "Could not decline the invitation."
+        )
+    }
+
     // MARK: Pairing
 
     func commonGroundPairings(token: String) async throws -> CommonGroundPeopleResponse<CommonGroundPerson> {
