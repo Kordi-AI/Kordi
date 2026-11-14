@@ -126,9 +126,7 @@ fn record_background_stop_reason(snapshot: &Arc<Mutex<DesktopChatTurnSnapshot>>,
     let Ok(value) = serde_json::to_value(&reason) else {
         return;
     };
-    if let Err(error) =
-        kordi_cli::desktop_runtime::record_background_stop_reason(session_id, &value)
-    {
+    if let Err(error) = kordi_cli::desktop_runtime::stop_reason::record(session_id, &value) {
         eprintln!("[background-session] could not record why {session_id} stopped: {error}");
     }
 }

@@ -65,10 +65,6 @@ pub struct BackgroundSessionSnapshot {
     pub messages: Vec<BackgroundSessionMessage>,
 }
 
-/// Custom entry type of a recorded stop reason. The entry sits on a side
-/// branch, so it is never model input and never part of the transcript.
-const STOP_REASON_ENTRY: &str = "background_stop_reason";
-
 pub fn is_background_runtime_session(session_id: &str) -> Result<bool> {
     let conn = open_sessions_db()?;
     Ok(kordi_session::store::get_session(&conn, session_id)?
@@ -158,64 +154,6 @@ fn background_snapshot_from_store(
             })
             .collect(),
     })
-}
-
-/// Records why the latest request of a background session was stopped. The
-/// entry is appended as a side branch of the current leaf and the leaf is
-/// restored, so the transcript and the model's history never include it.
-pub fn record_background_stop_reason(session_id: &str, reason: &serde_json::Value) -> Result<()> {
-    let conn = open_sessions_db()?;
-    record_stop_reason_in_store(&conn, session_id, reason)
-}
-
-fn record_stop_reason_in_store(
-    conn: &rusqlite::Connection,
-    session_id: &str,
-    reason: &serde_json::Value,
-) -> Result<()> {
-    use kordi_core::types::{EntryBase, EntryId, SessionEntry};
-    let Some(row) = kordi_session::store::get_session(conn, session_id)? else {
-        return Ok(());
-    };
-    if row.session_scope != "runtime" {
-        return Ok(());
-    }
-    let id = EntryId::generate();
-    let entry = SessionEntry::Custom {
-        base: EntryBase {
-            id: id.clone(),
-            parent_id: row.leaf_id.clone().map(EntryId),
-            timestamp: chrono::Utc::now(),
-        },
-        custom_type: STOP_REASON_ENTRY.into(),
-        data: Some(reason.clone()),
-    };
-    kordi_session::store::append_entry(conn, session_id, &entry)?;
-    // Restore the leaf only if no other entry was appended meanwhile.
-    conn.execute(
-        "UPDATE sessions SET leaf_id=?1 WHERE session_id=?2 AND leaf_id=?3",
-        rusqlite::params![row.leaf_id, session_id, id.as_str()],
-    )?;
-    Ok(())
-}
-
-/// The stop reason recorded after the latest request, if any.
-fn latest_stop_reason(
-    conn: &rusqlite::Connection,
-    session_id: &str,
-) -> Result<Option<serde_json::Value>> {
-    use rusqlite::OptionalExtension;
-    let raw: Option<String> = conn
-        .query_row(
-            "SELECT json_extract(payload,'$.data') FROM entries WHERE session_id=?1 AND type='custom' \
-             AND json_extract(payload,'$.custom_type')=?2 AND seq > COALESCE((SELECT MAX(seq) FROM entries \
-             WHERE session_id=?1 AND type='message' AND json_extract(payload,'$.message.role')='user'),0) \
-             ORDER BY seq DESC LIMIT 1",
-            rusqlite::params![session_id, STOP_REASON_ENTRY],
-            |row| row.get(0),
-        )
-        .optional()?;
-    Ok(raw.and_then(|raw| serde_json::from_str(&raw).ok()))
 }
 
 // Local-only metadata: never included in a shared transcript or Cloud snapshot.
@@ -377,6 +315,44 @@ fn set_background_turn_route_in_store(
     Ok(next)
 }
 
+/// The person's request that a background session started from `request_id`
+/// answers. A follow-up turn's request id names the finished background
+/// session it reports (`background-result:<session>:<status>`); that
+/// session's own parent request is followed until a person's request id is
+/// reached, so a task restarted from a follow-up registers with the cloud
+/// under the original request and its result lands with its follow-up reply.
+pub fn root_background_request_id(request_id: &str) -> Result<String> {
+    let conn = open_sessions_db()?;
+    root_request_from_store(&conn, request_id)
+}
+
+/// Longest chain of follow-up restarts followed back to the person's request.
+const MAX_FOLLOW_UP_CHAIN: usize = 16;
+
+fn root_request_from_store(conn: &rusqlite::Connection, request_id: &str) -> Result<String> {
+    let mut current = request_id.trim().to_string();
+    for _ in 0..MAX_FOLLOW_UP_CHAIN {
+        let Some((session_id, _status)) = current
+            .strip_prefix(BACKGROUND_FOLLOW_UP_ENTRY_PREFIX)
+            .and_then(|rest| rest.rsplit_once(':'))
+        else {
+            break;
+        };
+        let parent = kordi_session::store::get_session(conn, session_id)?
+            .and_then(|row| row.parent_session_message_id)
+            .map(|id| id.trim().to_string())
+            .filter(|id| !id.is_empty());
+        let Some(parent) = parent else { break };
+        current = parent;
+    }
+    Ok(current)
+}
+
+pub mod stop_reason;
+use stop_reason::latest_stop_reason;
+
+#[cfg(test)]
+mod root_request_tests;
 #[cfg(test)]
 mod runtime_snapshot_tests;
 

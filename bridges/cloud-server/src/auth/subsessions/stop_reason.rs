@@ -53,6 +53,16 @@ pub(super) fn from_client(value: &Value, session: &CloudSession) -> Option<Value
     Some(reason)
 }
 
+/// The reason a write stores: only a stopped execution has one, and a Stop
+/// the cloud already recorded keeps its own reason.
+pub(super) fn for_write(request: &super::WriteRequest, session: &CloudSession) -> Option<Value> {
+    request
+        .stop_reason
+        .as_ref()
+        .filter(|_| request.status == "stopped")
+        .and_then(|reason| from_client(reason, session))
+}
+
 /// A person's Stop from any device; only the owner can stop an execution.
 pub(super) fn user(account_id: &str) -> Value {
     json!({ "kind": "user", "accountId": account_id })

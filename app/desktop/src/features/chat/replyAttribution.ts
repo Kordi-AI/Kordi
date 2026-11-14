@@ -217,7 +217,9 @@ function replyTargetForMessage(
 ) {
   const explicitTarget = explicitReplyTargetForMessage(message);
   if (explicitTarget) return explicitTarget;
-  if (message.messageAction?.kind === 'thread') return null;
+  // A stored group agent message names its request when it answers one;
+  // guessing one from mentions could quote an unrelated person's message.
+  if (message.messageAction?.kind === 'thread' || message.answersNoRequest) return null;
   return inferredReplyTargetForAgentMessage(
     message,
     requestCandidates,

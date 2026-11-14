@@ -1,3 +1,4 @@
+use super::stop_reason::record_stop_reason_in_store;
 use super::*;
 use kordi_core::types::{
     AgentMessage, AssistantContent, AssistantMessage, ContentBlock, EntryBase, EntryId,
