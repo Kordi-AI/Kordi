@@ -58,9 +58,10 @@ pub async fn fail(
     .bind(&now)
     .execute(&mut *tx)
     .await?;
+    let mut ended_request = None;
     if changed.rows_affected() > 0 {
-        let state: Option<(i32, String)> = query_as(
-            "SELECT state.attempts + 1, run.prompt
+        let state: Option<(i32, String, uuid::Uuid, String)> = query_as(
+            "SELECT state.attempts + 1, run.prompt, state.conversation_id, run.owner_account_id
              FROM cloud_pip_conversation_state state
              JOIN cloud_agent_fallback_runs run ON run.run_id = state.active_run_id
              WHERE state.active_run_id = $1",
@@ -69,7 +70,12 @@ pub async fn fail(
         .fetch_optional(&mut *tx)
         .await?;
         crate::resource_pools::usage::settle_ended_run(&mut tx, run_id).await?;
-        let (attempts, prompt) = state.unwrap_or((1, String::new()));
+        if let Some((_, prompt, conversation_id, owner)) = &state {
+            ended_request = Some((prompt.clone(), *conversation_id, owner.clone()));
+        }
+        let (attempts, prompt) = state
+            .map(|(attempts, prompt, _, _)| (attempts, prompt))
+            .unwrap_or((1, String::new()));
         let retry_from = retry_sequence(&prompt);
         query(
             "UPDATE cloud_pip_conversation_state
@@ -87,7 +93,18 @@ pub async fn fail(
         .execute(&mut *tx)
         .await?;
     }
-    tx.commit().await
+    tx.commit().await?;
+    // A direct request's row goes with its run; the retry shows a new one.
+    if let Some((prompt, conversation_id, owner)) = ended_request {
+        let input: Value = serde_json::from_str(&prompt).unwrap_or_default();
+        let ending = super::reply_slot::Ending::Failed;
+        if let Err(error) =
+            super::reply_slot::finish(pool, run_id, &owner, conversation_id, &input, ending).await
+        {
+            eprintln!("[system-agent] Could not remove the reply row of {run_id}: {error}");
+        }
+    }
+    Ok(())
 }
 
 /// Releases conversations whose run can no longer finish: its lease expired

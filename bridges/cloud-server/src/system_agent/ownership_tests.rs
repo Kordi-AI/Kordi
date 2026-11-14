@@ -30,6 +30,7 @@ fn person(sequence: i64, minute: i64) -> MessageFact {
         agent: None,
         human: true,
         addressed_owner: None,
+        addresses_system_agent: false,
     }
 }
 
@@ -52,6 +53,7 @@ fn agent(sequence: i64, minute: i64, waiting: bool, delivery: Delivery) -> Messa
         }),
         human: false,
         addressed_owner: None,
+        addresses_system_agent: false,
     }
 }
 
@@ -135,6 +137,38 @@ fn an_open_run_or_pending_exchange_owns_new_messages() {
     let stuck = work(vec![run("queued", None, -120)]);
     let result = assess(None, 0, 0, &messages, &stuck, &clock(1));
     assert_eq!(result.outcome, Outcome::Free);
+}
+
+#[test]
+fn asking_the_facilitator_is_never_another_agents_task() {
+    // Bea asks Alex's agent, its reply is still processing, then Bea asks
+    // "@Facilitator hi": that message stays the System agent's.
+    let facilitator = |sequence, minute| MessageFact {
+        addresses_system_agent: true,
+        ..person(sequence, minute)
+    };
+    let messages = [
+        addressed(1, 0),
+        agent(2, 0, true, Delivery::Processing),
+        facilitator(3, 0),
+    ];
+    let result = assess(None, 0, 2, &messages, &Work::default(), &clock(1));
+    assert!(result.owned.is_empty(), "{:?}", result.owned);
+    assert_eq!(result.outcome, Outcome::Free);
+
+    // The same while the other agent's run is still open.
+    let running = work(vec![run("running", Some(5), 0)]);
+    let result = assess(None, 0, 2, &messages, &running, &clock(1));
+    assert!(!result.owned.contains(&3), "{:?}", result.owned);
+
+    // A plain answer in the same spot still belongs to the waiting agent.
+    let messages = [
+        addressed(1, 0),
+        agent(2, 0, true, Delivery::Processing),
+        person(3, 0),
+    ];
+    let result = assess(None, 0, 2, &messages, &Work::default(), &clock(1));
+    assert_eq!(result.owned, BTreeSet::from([3]));
 }
 
 #[test]

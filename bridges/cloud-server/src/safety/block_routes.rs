@@ -128,7 +128,7 @@ pub(crate) struct BlockOutcome {
     pub removed_contact: bool,
 }
 
-/// Kordi service accounts: System, the System agent, Kordi Support, and any
+/// Kordi service accounts: System, the System agent, KordiSpot, and any
 /// account that owns a system-managed agent.
 async fn is_service_account(state: &ServerState, account_id: &str) -> Result<bool, BlockError> {
     if crate::system_account::is_service_account(account_id)

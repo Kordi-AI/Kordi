@@ -19,7 +19,10 @@ export function canDisplayAgentTurn(turn: DesktopChatTurnSnapshot, messages: rea
     (message.role === 'user' || message.role === 'person')
       && [message.id, message.entryId, ...(message.replyAliasIds ?? [])].includes(requestId)
   )) : undefined;
-  if (request?.statusChips?.some((status) => ['draft', 'sending', 'queued', 'pending', 'failed', 'cancelled'].includes(status.trim().toLowerCase()))) return false;
+  // An unsent request has no agent working on it yet, but a reply row the server
+  // stored proves the server has it, even while the sender's own bubble still
+  // says sending (the Facilitator answers within a second).
+  if (!turn.serverStored && request?.statusChips?.some((status) => ['draft', 'sending', 'queued', 'pending', 'failed', 'cancelled'].includes(status.trim().toLowerCase()))) return false;
   if (turn.status === 'queued') return true;
   // Keep cancellation controls available for sent outreach requests, without
   // treating those controls as a processing event.

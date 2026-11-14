@@ -13,7 +13,7 @@ import { cloudAgentContextMessagesFromConversation } from '@/features/chat/chatC
 import { persistQueuedDesktopMessage } from '@/features/chat/queuedDesktopMessages';
 import { restoredSelfAgentContextMessages } from './restoredSelfAgentContext';
 import { cloudAgentNoProviderNoticeText,isCloudAgentNoProviderConfiguredError } from '@/features/cloud/cloudAgentMessages'; import { cloudAgentProviderFailureNotice } from '@/features/cloud/cloudAgentFailureNotices'; import { isCloudAgentProviderFailureNoticeText } from '@/features/cloud/cloudAgentReplyText';
-import { isCloudCollaborationConversationId } from '@/features/cloud/cloudCollaborationState';
+import { isCloudCollaborationConversationId } from '@/features/cloud/cloudCollaborationState'; import { KORDI_SUPPORT_NAME } from '@/features/support/supportIdentity';
 import { encodeCloudDirectMessageEnvelope } from '@/features/cloud/cloudDirectMessages';
 import {
 cloudGroupMessageSessionId,
@@ -1256,7 +1256,7 @@ export function useChatMessageActions({
     }
 
     if (lockedSupportAgentTarget) {
-      setDesktopChatError('Kordi Support is still loading. Try again in a moment.');
+      setDesktopChatError(`${KORDI_SUPPORT_NAME} is still loading. Try again in a moment.`);
       return;
     }
 

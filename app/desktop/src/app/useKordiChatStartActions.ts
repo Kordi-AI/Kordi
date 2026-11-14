@@ -40,6 +40,7 @@ import {
   mergeOpenCanonicalSessionResult,
 } from './canonicalSessionStateMutations';
 import { rememberSessionOrganization } from '@/features/organizations/sessionOrganization';
+import { KORDI_SUPPORT_NAME } from '@/features/support/supportIdentity';
 
 type CollaborationPersonTarget = {
   hostId: string;
@@ -119,7 +120,7 @@ export function useKordiChatStartActions({
       if (contact.systemContact && contact.sourceAgentId) {
         const accountId = cloudAccountId?.trim();
         if (!accountId) {
-          setDesktopError(`${contact.name || 'Kordi Support'} is still loading. Try again.`);
+          setDesktopError(`${contact.name || KORDI_SUPPORT_NAME} is still loading. Try again.`);
           return;
         }
         selectNewSession(cloudSystemAgentConversationId(

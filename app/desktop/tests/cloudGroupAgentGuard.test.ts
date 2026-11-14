@@ -88,13 +88,8 @@ test('failed guards are classified without leaking the thrown value', async () =
 
 test('terminal persistence precedes slow activity and ownership publication', () => {
   const source = cloudGroupAgentExecutionSource();
-  const terminalUpsert = source.indexOf(
-    "beginChatPerformanceSpan(\n    'cloud-agent-terminal-upsert'",
-  );
-  const activityPublish = source.indexOf(
-    "beginChatPerformanceSpan(\n    'cloud-agent-activity-publish'",
-    terminalUpsert,
-  );
+  const terminalUpsert = source.search(/beginChatPerformanceSpan\(\s*'cloud-agent-terminal-upsert'/);
+  const activityPublish = source.search(/beginChatPerformanceSpan\(\s*'cloud-agent-activity-publish'/);
   const terminalFanout = source.indexOf(
     'await publishCloudGroupAgentTerminalAfterGuards({',
     terminalUpsert,
@@ -103,6 +98,15 @@ test('terminal persistence precedes slow activity and ownership publication', ()
   assert.ok(terminalUpsert >= 0, 'expected terminal canonical upsert');
   assert.ok(activityPublish > terminalUpsert, 'activity must follow terminal persistence');
   assert.ok(terminalFanout > terminalUpsert, 'Cloud guards must follow terminal persistence');
+});
+
+test('a turn that yields keeps its processing row instead of ending it', () => {
+  // The server shows whom the task waits for in that row (#2416); a terminal
+  // local row would hide it from the owner.
+  assert.match(
+    cloudGroupAgentExecutionSource(),
+    /if \(agentExchangeTurnIsWaiting\(finalTurn\)\) \{[^}]*removeTimeoutPlaceholder[\s\S]*?\} else \{\s*const terminalUpsertSpan/,
+  );
 });
 
 test('group terminal fanout preserves only sanitized linked background tools', () => {

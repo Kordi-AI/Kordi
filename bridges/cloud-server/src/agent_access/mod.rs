@@ -195,7 +195,38 @@ pub(crate) async fn save_default_access(
         Vec::new()
     };
     tx.commit().await?;
+    publish_default_agent_directory_change(pool, owner).await;
     Ok(refused)
+}
+
+/// Tells the owner's contacts and group co-members that the default agent's
+/// Access changed, so their composers refetch which agents they may mention
+/// (`agent.directory.changed`, as for a Factory agent). Best effort: a
+/// missed hint is caught by the next refetch, and admission checks Access.
+async fn publish_default_agent_directory_change(pool: &PgPool, owner: &str) {
+    let owner = owner.trim();
+    let result: Result<(), crate::chat_sync::store::StoreError> = async {
+        let mut tx = pool.begin().await?;
+        let recipients = crate::chat_sync::store::identity_sync_recipient_ids(&mut tx, owner, true)
+            .await?
+            .into_iter()
+            .filter(|recipient| recipient != owner)
+            .collect::<Vec<_>>();
+        crate::chat_sync::store::append_user_sync_events_in_transaction(
+            &mut tx,
+            &recipients,
+            "agent.directory.changed",
+            None,
+            &serde_json::json!({ "ownerAccountId": owner, "agentId": default_agent_id(owner) }),
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+    .await;
+    if let Err(error) = result {
+        eprintln!("[agent-access] directory hint for {owner}: {error:?}");
+    }
 }
 
 /// Ends other people's requests to a Factory agent that is now private.

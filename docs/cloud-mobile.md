@@ -18,9 +18,9 @@ The opaque session token is stored in iOS Keychain with `AfterFirstUnlockThisDev
 
 The iOS projection mirrors the macOS product model:
 
-- Contact contains direct-person chats, Kordi Support, and group spaces ordered by activity.
+- Contact contains direct-person chats, KordiSpot, and group spaces ordered by activity.
 - Agent contains all accessible agent sessions ordered by activity, with forks nested under their source session.
-- Kordi Support is one direct Contact conversation and is never projected as an Agent session.
+- KordiSpot is one direct Contact conversation and is never projected as an Agent session.
 - Hidden and deleted sessions are removed from the mobile catalog.
 
 ## Canonical chat

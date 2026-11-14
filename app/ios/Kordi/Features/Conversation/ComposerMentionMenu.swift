@@ -104,6 +104,7 @@ struct ComposerMentionMenuItem: Identifiable, Hashable {
             switch target.kind {
             case .all: "All people in this group"
             case .person: "Contact"
+            case .agent where target.isFacilitator: "Built in"
             case .agent:
                 target.accountId == currentAccountID?.nonEmpty
                     ? "Owner · You"
