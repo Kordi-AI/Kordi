@@ -334,13 +334,12 @@ pub(in crate::common_ground) async fn match_detail(
             StatusCode::NOT_FOUND,
         );
     }
-    match store::queue_matches(
+    match store::queue_opened_match(
         pool,
         system_agent.config(),
         &rate_limiter,
         viewer,
-        std::slice::from_ref(other_card),
-        None,
+        other_card,
         organization
             .as_ref()
             .map(|Extension(o)| o.organization_id.as_str()),
