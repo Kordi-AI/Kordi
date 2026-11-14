@@ -68,4 +68,11 @@ async fn upgrade_from_200_adds_room_join_requests() {
         .await
         .unwrap();
     assert_eq!(count, 2);
+    let (declined,): (Option<chrono::DateTime<chrono::Utc>>,) =
+        query_as("SELECT declined_at FROM cloud_common_ground_room_invitations LIMIT 1")
+            .fetch_optional(&pool)
+            .await
+            .unwrap()
+            .unwrap_or((None,));
+    assert!(declined.is_none(), "room invitations can record a decline");
 }

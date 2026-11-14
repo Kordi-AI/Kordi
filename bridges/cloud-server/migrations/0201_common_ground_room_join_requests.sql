@@ -28,3 +28,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cloud_common_ground_room_join_requests_pen
 
 CREATE INDEX IF NOT EXISTS idx_cloud_common_ground_room_join_requests_room
     ON cloud_common_ground_room_join_requests (room_id, group_space_id);
+
+-- An invitee can decline a room invitation (from the room or Contacts ›
+-- Requests); a declined invitation is no longer listed anywhere.
+ALTER TABLE cloud_common_ground_room_invitations
+    ADD COLUMN IF NOT EXISTS declined_at TIMESTAMPTZ NULL;

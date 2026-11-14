@@ -94,7 +94,7 @@ async fn invitations(pool: &PgPool, room_id: Uuid, viewer: &str) -> sqlx_core::R
            ON group_invite.invitation_id = invite.group_invitation_id
          JOIN cloud_accounts account ON account.account_id = invite.inviter_account_id
          WHERE invite.room_id = $1 AND invite.invitee_account_id = $2
-           AND invite.accepted_at IS NULL
+           AND invite.accepted_at IS NULL AND invite.declined_at IS NULL
            AND group_invite.revoked_at IS NULL AND group_invite.expires_at > $3
          ORDER BY invite.created_at DESC",
     )

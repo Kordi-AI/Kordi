@@ -4,6 +4,7 @@
 //! to join one (Ask to join).
 
 mod groups;
+mod invitations;
 mod join;
 mod join_requests;
 mod people;
@@ -11,6 +12,7 @@ mod relationship;
 mod room_view;
 
 pub(super) use groups::start_group;
+pub(super) use invitations::{decline as decline_invitation, pending as pending_invitations};
 pub(super) use join::join;
 pub(super) use join_requests::{
     ask_to_join, cancel_join_request, decide_join_request, read_join_request,

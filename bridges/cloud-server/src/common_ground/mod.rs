@@ -271,6 +271,14 @@ pub fn routes(state: Arc<ServerState>, rate_limiter: Arc<CloudRateLimiter>) -> R
             post(actions::join),
         )
         .route(
+            "/v1/cloud/common-ground/rooms/:code/invitations/:invitation_ref/decline",
+            post(actions::decline_invitation),
+        )
+        .route(
+            "/v1/cloud/common-ground/invitations",
+            get(actions::pending_invitations),
+        )
+        .route(
             "/v1/cloud/common-ground/rooms/:code/join-requests",
             post(actions::ask_to_join),
         )

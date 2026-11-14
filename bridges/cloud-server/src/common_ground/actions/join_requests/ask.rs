@@ -105,7 +105,8 @@ async fn refusal(
                         JOIN cloud_group_invitations group_invite
                           ON group_invite.invitation_id = invite.group_invitation_id
                         WHERE invite.group_space_id = $1 AND invite.invitee_account_id = $2
-                          AND invite.accepted_at IS NULL AND group_invite.revoked_at IS NULL
+                          AND invite.accepted_at IS NULL AND invite.declined_at IS NULL
+                          AND group_invite.revoked_at IS NULL
                           AND group_invite.expires_at > $3)",
     )
     .bind(group_space_id)

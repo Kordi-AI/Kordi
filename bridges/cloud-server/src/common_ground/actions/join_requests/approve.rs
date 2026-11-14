@@ -94,7 +94,8 @@ async fn room_invitation(
          ON CONFLICT (group_space_id, invitee_account_id) DO UPDATE
          SET group_invitation_id = EXCLUDED.group_invitation_id,
              inviter_account_id = EXCLUDED.inviter_account_id,
-             accepted_at = NULL
+             accepted_at = NULL,
+             declined_at = NULL
          RETURNING invitation_ref",
     )
     .bind(format!("cgi_{}", Uuid::new_v4().simple()))

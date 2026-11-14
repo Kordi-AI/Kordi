@@ -45,7 +45,7 @@ struct ContactsView<PinnedRows: View>: View {
     }
 
     private var showsRequests: Bool {
-        !incomingRequests.isEmpty || !outgoingRequests.isEmpty
+        !incomingRequests.isEmpty || !outgoingRequests.isEmpty || !model.roomGroupInvitations.isEmpty
     }
 
     var body: some View {
@@ -72,6 +72,10 @@ struct ContactsView<PinnedRows: View>: View {
                     Section {
                         ForEach(incomingRequests) { request in
                             ContactRequestRow(request: request).contactRequestSafetyActions(request)
+                                .contactsListRow()
+                        }
+                        ForEach(model.roomGroupInvitations) { invitation in
+                            ContactsRoomInvitationRow(invitation: invitation, onOpenConversation: onOpenConversation)
                                 .contactsListRow()
                         }
                         ForEach(outgoingRequests) { request in
@@ -148,7 +152,11 @@ struct ContactsView<PinnedRows: View>: View {
         .fullScreenCover(isPresented: $showsCommonGround) {
             CommonGroundDestinationView(appModel: model, onClose: { showsCommonGround = false }) { showsCommonGround = false; onOpenConversation?($0) }
         }
-        .task { await model.refreshContactRequests() }
+        .task {
+            async let requests: Void = model.refreshContactRequests()
+            async let invitations: Void = model.refreshRoomGroupInvitations()
+            _ = await (requests, invitations)
+        }
     }
 
     private var commonGroundButton: some View {

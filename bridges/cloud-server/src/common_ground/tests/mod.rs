@@ -43,6 +43,7 @@ mod profiles_tests;
 mod rematch_link_tests;
 mod rematch_support;
 mod rematch_tests;
+mod room_invitation_tests;
 mod room_preview_tests;
 mod rooms_create_tests;
 mod rooms_list_tests;
