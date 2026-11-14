@@ -128,7 +128,7 @@ footer{padding:20px 24px 36px;font-size:12px;color:var(--note)}
 <footer>Design proposal · Sample data · Serves from loopback only</footer>
 
 <script>
-const DEF={theme:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light",footer:"a",creator:"keep"};
+const DEF={theme:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light",footer:"b",creator:"keep"};
 const OK={theme:["light","dark"],footer:["a","b"],creator:["keep","drop"]};
 const q=new URLSearchParams(location.search),st={};
 for(const k in DEF){const v=q.get(k);st[k]=OK[k].includes(v)?v:DEF[k];}
@@ -202,9 +202,9 @@ function render(){
   document.getElementById("confirm").innerHTML=confirmMac()+confirmIos();
   document.getElementById("notes").innerHTML=`
    <p><b>Row.</b> A closed group (and each closed channel) stays in the list with its avatar and title dimmed, “Closed” as the preview, no unread dot and no new-channel button. The time is when it was closed.</p>
-   <p><b>Conversation.</b> History stays readable. The composer is replaced by one line: “This group was closed”. Footer A is the line alone; Delete chat lives in the row’s menu and swipe. Footer B adds Delete chat next to the line.<span class="tag">A recommended</span></p>
+   <p><b>Conversation.</b> History stays readable. The composer is replaced by one line: “This group was closed”. Footer A is the line alone; Delete chat lives in the row’s menu and swipe. Footer B adds Delete chat next to the line.<span class="tag">B chosen</span></p>
    <p><b>Removing it.</b> Delete chat takes it out of your list only (on the server you leave the group). Others keep their copy.</p>
-   <p><b>Creator.</b> Recommended: the creator keeps it like everyone else and deletes it when they want, so closing never destroys anyone’s history by surprise. The alternative removes it from the creator’s list as soon as they close it.<span class="tag">Keep recommended</span></p>
+   <p><b>Creator.</b> Recommended: the creator keeps it like everyone else and deletes it when they want, so closing never destroys anyone’s history by surprise. The alternative removes it from the creator’s list as soon as they close it.<span class="tag">Keep chosen</span></p>
    <p><b>Wording.</b> “Dissolve group” becomes “Close group”, and “Dissolve channel” becomes “Close channel”. Today’s dialog says messages are deleted; after this change they are kept.</p>`;
   const u=new URLSearchParams(st);history.replaceState(null,"","?"+u);
 }

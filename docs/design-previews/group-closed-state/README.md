@@ -12,7 +12,9 @@ python3 -m http.server 8781 --bind 127.0.0.1
 
 Query parameters (kept in sync with the controls): `theme=light|dark`, `footer=a|b`, `creator=keep|drop`.
 
-- Footer A (recommended): "This group was closed", nothing else. Delete chat is in the row menu and swipe.
-- Footer B: the same line with Delete chat next to it.
+- Footer A: "This group was closed", nothing else. Delete chat is in the row menu and swipe.
+- Footer B (chosen): the same line with Delete chat next to it.
 - Creator keep (recommended): the creator sees the closed group like everyone else.
 - Creator drop: closing removes it from the creator's list.
+
+The owner picked Footer B and creator keep on 2026-11-13.

@@ -34,8 +34,10 @@ nothing new is written there.
 - A closed group and each closed channel stay in the chat list, dimmed, with
   "Closed" as the preview and no unread badge.
 - Opening one shows the history read-only. One line replaces the composer:
-  "This group was closed".
-- Delete chat on a closed group leaves it on the server.
+  "This group was closed", with Delete chat next to it.
+- The person who closed the group keeps it like everyone else.
+- Delete chat on a closed group leaves it on the server. On a closed channel
+  of an open group it hides that channel, as Delete chat does elsewhere.
 - Older clients keep showing a closed group as open. Their sends fail with
   `group_closed`.
 
