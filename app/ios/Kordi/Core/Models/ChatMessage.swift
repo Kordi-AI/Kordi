@@ -888,8 +888,9 @@ struct MessageMention: Codable, Hashable {
         lengthUtf16 = nsRange.length
         displayText = String(text[range])
         sourceHostId = nil
-        nodeId = target.kind == .all ? target.id : target.accountId
-        humanId = target.kind == .all ? nil : target.accountId
+        // The Facilitator's mention names no person, so no one's agent is asked.
+        nodeId = target.isFacilitator ? nil : target.kind == .all ? target.id : target.accountId
+        humanId = target.kind == .all || target.isFacilitator ? nil : target.accountId
         agentId = target.agentId
         displayLabel = target.displayName
     }
@@ -963,6 +964,8 @@ struct ComposerMentionTarget: Identifiable, Hashable {
     let agentId: String?
     let ownerName: String?
     let avatarSource: String?
+
+    var isFacilitator: Bool { id == KordiSystemAgentIdentity.mentionTargetId }
 
     var mentionText: String {
         if kind == .all { return "@all" }
@@ -1186,6 +1189,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
     var voiceMessage: VoiceMessage?
     var planCard: PlanCard? = nil
     var facilitatorCard: FacilitatorCard? = nil
+    var groupJoinRequest: GroupJoinRequestCard? = nil
     var agentExecution: AgentExecutionSnapshot?
     /// How an agent reply that keeps its partial text ended early.
     var agentReplyEnding: AgentReplyEnding? = nil
@@ -1286,6 +1290,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         voiceMessage: VoiceMessage? = nil,
         planCard: PlanCard? = nil,
         facilitatorCard: FacilitatorCard? = nil,
+        groupJoinRequest: GroupJoinRequestCard? = nil,
         agentExecution: AgentExecutionSnapshot? = nil,
         agentReplyEnding: AgentReplyEnding? = nil,
         backgroundAgentSessions: [BackgroundAgentSession] = [],
@@ -1320,6 +1325,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         self.voiceMessage = voiceMessage
         self.planCard = planCard
         self.facilitatorCard = facilitatorCard
+        self.groupJoinRequest = groupJoinRequest
         self.agentExecution = agentExecution
         self.agentReplyEnding = agentReplyEnding
         self.backgroundAgentSessions = backgroundAgentSessions

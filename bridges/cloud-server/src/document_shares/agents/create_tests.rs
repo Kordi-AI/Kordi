@@ -199,6 +199,7 @@ fn the_fallback_message_is_the_agents_and_answers_no_request() {
         &latest,
         &DocumentMessage {
             conversation_id: Uuid::nil(),
+            text: "For Member's request: “Write the launch plan”",
             run_id: "run_a",
             session_id: "session:group:g1",
             owner_account_id: "acct_owner",
@@ -213,4 +214,8 @@ fn the_fallback_message_is_the_agents_and_answers_no_request() {
     assert_eq!(message["senderAgentId"], "cloud-agent:acct_owner");
     assert!(message.get("requestId").is_none() && message.get("replyToMessageId").is_none());
     assert_eq!(message["attachments"][0]["attachmentId"], "att_agentdoc_1");
+    assert_eq!(
+        message["text"],
+        "For Member's request: “Write the launch plan”"
+    );
 }

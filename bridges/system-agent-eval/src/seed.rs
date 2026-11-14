@@ -174,8 +174,9 @@ fn text_block(seeded: &Seeded, message: &Message) -> Result<String> {
     let mut mentions = Vec::new();
     for mention in &message.mentions {
         let value = if mention == "system" {
-            json!({"label": "System", "targetKind": "agent",
-                "targetIdentityId": seeded.system_account_id})
+            // As the Mac and iPhone composers send "@Facilitator".
+            json!({"label": "Facilitator", "targetKind": "agent",
+                "targetIdentityId": format!("agent:cloud-agent:{}", seeded.system_account_id)})
         } else if let Some(key) = mention.strip_prefix("agent:") {
             let (account, name) = &seeded.members[key];
             let handle: String = name.chars().filter(|c| c.is_alphanumeric()).collect();

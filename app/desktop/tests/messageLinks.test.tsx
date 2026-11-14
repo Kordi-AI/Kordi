@@ -77,6 +77,29 @@ test('plain message content tokenizes structured mentions and safe URLs without 
   assert.equal(urlMention.filter((part) => part.type === 'mention').length, 0);
 });
 
+test('a structured mention can end a sentence', () => {
+  const text = '@Bea Okafor joined. Shares evals with @Alex Rivera.';
+  const person = (displayText: string, startUtf16: number, humanId: string) => ({
+    label: displayText.slice(1),
+    targetKind: 'person' as const,
+    targetIdentityId: `human:${humanId}`,
+    humanId,
+    startUtf16,
+    lengthUtf16: displayText.length,
+    displayText,
+  });
+  const mentions = parseMessageInlineParts(text, [
+    person('@Bea Okafor', 0, 'acct_bea'),
+    person('@Alex Rivera', 38, 'acct_alex'),
+  ]).flatMap((part) => part.type === 'mention' ? [[part.label, part.humanId]] : []);
+  assert.deepEqual(mentions, [['@Bea Okafor', 'acct_bea'], ['@Alex Rivera', 'acct_alex']]);
+
+  // A handle that continues past the dot is still not a mention of Alex.
+  const handle = parseMessageInlineParts('Ask @Alex.smith', [person('@Alex', 4, 'acct_alex')])
+    .filter((part) => part.type === 'mention');
+  assert.deepEqual(handle.map((part) => part.type === 'mention' ? part.label : ''), ['@Alex.smith']);
+});
+
 test('direct document links use a file glyph while site pages keep a favicon slot', () => {
   assert.equal(isDirectFileLink('https://example.net/release-checklist.pdf?version=2'), true);
   assert.equal(isDirectFileLink('https://example.net/release-checklist'), false);

@@ -158,11 +158,29 @@ pub(crate) async fn execute_tool(
         &requester,
     )
     .await?;
-    let system = format!("{system_prompt}\n\nThis is an execution subsession of the same Agent (ID: {agent}). Keep your identity and ownership. Store your progress and final answer here; do not publish them to the parent conversation. Do not create another subsession. Source session ID: {session_id}. Use scoped conversation tools for missing context. Do not access owner-local files.");
+    let (group,): (bool,) = query_as(
+        "SELECT EXISTS(SELECT 1 FROM cloud_chat_conversations WHERE conversation_id=$1 AND kind='group')",
+    )
+    .bind(conversation)
+    .fetch_one(&mut *tx)
+    .await?;
+    let system = child_system_prompt(&system_prompt, &agent, &session_id, group);
     query("INSERT INTO cloud_agent_fallback_runs(run_id,idempotency_key,request_message_id,session_id,owner_account_id,requester_account_id,status,prompt,system_prompt,sandbox_id,runtime_route_json,created_at,updated_at,execution_backend,execution_agent_id,parent_run_id,subsession_id,subsession_write_scope,run_trigger,connector_audience) VALUES($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,$10,$11,$11,'cloud',$12,$13,$14,$15,'background',COALESCE((SELECT parent.connector_audience FROM cloud_agent_fallback_runs parent WHERE parent.run_id=$13),'shared'))")
         .bind(&child_run).bind(&key).bind(format!("subsession:{id}")).bind(&session_id).bind(&owner).bind(&requester).bind(&request.message).bind(system).bind(sandbox.sandbox_id).bind(route).bind(now.to_rfc3339()).bind(&agent).bind(run_id).bind(id).bind(json!(request.write_scope)).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(json!({"sessionId":id,"title":title,"status":"running"}))
+}
+
+/// The child run's instructions. A child of a group run has
+/// `create_document` (its document is posted in the parent group), so only
+/// then is it told to use it; it is never told about a tool it lacks.
+fn child_system_prompt(system_prompt: &str, agent: &str, session_id: &str, group: bool) -> String {
+    let documents = if group {
+        " When the task asks for a document, report, note, or plan, save the finished document with create_document: it is posted in the parent group as your document card and listed in its Artifacts."
+    } else {
+        ""
+    };
+    format!("{system_prompt}\n\nThis is an execution subsession of the same Agent (ID: {agent}). Keep your identity and ownership. Store your progress and final answer here; do not publish them to the parent conversation.{documents} Do not create another subsession. Source session ID: {session_id}. Use scoped conversation tools for missing context. Do not access owner-local files.")
 }
 
 fn valid_spawn(request: &SpawnInput, title: &str) -> bool {
@@ -254,5 +272,15 @@ mod tests {
         request.write_scope.clear();
         request.fork_turns = Some("all".into());
         assert!(!valid_spawn(&request, "Research"));
+    }
+
+    #[test]
+    fn only_a_child_of_a_group_run_is_told_to_use_create_document() {
+        let group = child_system_prompt("Base", "agent", "session:group:g", true);
+        assert!(group.starts_with("Base\n\nThis is an execution subsession"));
+        assert!(group.contains("save the finished document with create_document"));
+        assert!(group.contains("do not publish them to the parent conversation"));
+        let direct = child_system_prompt("Base", "agent", "session:direct-person:a:b", false);
+        assert!(!direct.contains("create_document"));
     }
 }

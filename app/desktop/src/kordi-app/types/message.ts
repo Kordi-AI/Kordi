@@ -328,12 +328,16 @@ export type Message = {
   voiceMessage?: MessageVoice | null;
   planCard?: MessagePlanCard | null;
   facilitatorCard?: import("@/features/cloud/facilitatorCard").FacilitatorCard | null;
+  groupJoinRequest?: import("@/features/cloud/groupJoinRequest").GroupJoinRequestCard | null;
   eventSources?: MessageEventSource[] | null;
   detail?: string;
   statusChips?: string[];
   attachments?: MessageAttachment[];
   mentions?: MessageMention[];
   replyToMessageId?: string | null;
+  /** A stored group agent message that names no request, such as a document
+   * a background task posted on its own. It is never shown as a reply. */
+  answersNoRequest?: boolean;
   replyAliasIds?: string[];
   replySummary?: MessageReplySummary;
   threadSummary?: MessageThreadSummary;
@@ -416,6 +420,8 @@ export type DesktopChatTurnSnapshot = {
   localExecutionStarted?: boolean;
   /** Server-confirmed state of a hosted request; never a local execution handle. */
   hostedRunStatus?: 'queued' | 'leased' | 'running';
+  /** A group agent reply row stored on the server, never a local placeholder. */
+  serverStored?: boolean;
   messageAction?: MessageActionMetadata | null;
   id: string;
   sessionId: string;

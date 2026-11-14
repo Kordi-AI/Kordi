@@ -16,6 +16,7 @@ import type {
   SharedCloudAgentSummary,
 } from '@/features/cloud/cloudAgents';
 import type { UseCloudCollaborationStateResult } from '@/features/cloud/useCloudCollaborationState';
+import { mentionAgentRefreshGate } from '@/features/chat/messageActions/mentionAgentRefresh';
 import { mentionScopeConversationForActiveConversation } from '@/features/chat/messageActions/mentions';
 import type {
   Conversation,
@@ -66,6 +67,21 @@ export function useKordiCollaborationMentions({
   useEffect(() => {
     void refreshSharedCloudAgents(sharedAgentOwnerIds).catch(() => undefined);
   }, [refreshSharedCloudAgents, sharedAgentOwnerIds]);
+
+  // Refetch when the `@` menu opens or the window regains focus, so an
+  // agent its owner just closed stops being offered.
+  const refreshGate = useMemo(() => mentionAgentRefreshGate(), []);
+  const refreshMentionAgentsSoon = useCallback(() => {
+    if (sharedAgentOwnerIds.length === 0 || !refreshGate()) return;
+    setTimeout(() => {
+      void refreshSharedCloudAgents(sharedAgentOwnerIds).catch(() => undefined);
+    }, 0);
+  }, [refreshGate, refreshSharedCloudAgents, sharedAgentOwnerIds]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('focus', refreshMentionAgentsSoon);
+    return () => window.removeEventListener('focus', refreshMentionAgentsSoon);
+  }, [refreshMentionAgentsSoon]);
 
   const mentionableCloudAgents = useMemo(
     () => mentionableCloudAgentSummaries({
@@ -126,12 +142,12 @@ export function useKordiCollaborationMentions({
   );
 
   const chatMentionTargetsForText = useCallback(
-    (text: string, cursor = text.length) => filterMentionTargets(
-      targetsByScope.chat,
-      currentMentionQuery(text, cursor),
-      { allowLocalFiles: isNativeShell },
-    ),
-    [isNativeShell, targetsByScope.chat],
+    (text: string, cursor = text.length) => {
+      const query = currentMentionQuery(text, cursor);
+      if (query) refreshMentionAgentsSoon();
+      return filterMentionTargets(targetsByScope.chat, query, { allowLocalFiles: isNativeShell });
+    },
+    [isNativeShell, refreshMentionAgentsSoon, targetsByScope.chat],
   );
   const projectMentionTargetsForText = useCallback(
     (text: string, cursor = text.length) => filterMentionTargets(

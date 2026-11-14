@@ -133,7 +133,7 @@ try {
   writeFileSync(join(repoRoot, 'app/desktop/public/favicon.svg'), `${faviconSvg}\n`);
   raster.render(faviconSvg.replace('<svg ', '<svg width="512" height="512" '), join(repoRoot, 'app/desktop/public/favicon.png'), 256);
 
-  // Kordi Support avatar and the README title image.
+  // KordiSpot avatar and the README title image.
   // The System avatar is separately maintained artwork, not generated from the app icon.
   writeFileSync(join(repoRoot, 'app/desktop/public/kordi-support-avatar.svg'), supportAvatarSvg());
   raster.renderWide(readmeTitleHtml(), join(repoRoot, '.github/assets/kordi-title.png'), 1774, 470);

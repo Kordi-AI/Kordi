@@ -72,6 +72,59 @@ final class SystemNoticeIdentityTests: XCTestCase {
         XCTAssertEqual(reply.attachments.first?.name, "CSV Checklist.md")
     }
 
+    func testFacilitatorWorkingRowBecomesItsReplyInPlace() throws {
+        // Bea asks "@Facilitator hi"; the server shows the Facilitator's reply
+        // row working, then edits it in place into the reply.
+        let group = makeGroup()
+        let owner = group.groupParticipants[0]
+        func row(state: String, text: String, version: Int) throws -> CloudMessageDTO {
+            let envelope = CloudGroupControlEnvelope(
+                kind: "group-message", groupId: group.sessionId, groupSpaceId: group.groupSpaceId,
+                groupTitle: group.displayName, createdByAccountId: owner.accountId, actor: owner,
+                participants: group.groupParticipants, message: CloudGroupMessagePayload(
+                    id: "facilitator-reply:request", senderAccountId: KordiSystemAgentIdentity.accountId,
+                    text: text, createdAtMs: 1_000, senderKind: "agent", senderDisplayName: "Facilitator",
+                    deliveryState: state, replyToMessageId: "request", requestId: "request"
+                )
+            )
+            return CloudMessageDTO(messageId: "facilitator-row", fromAccountId: KordiSystemAgentIdentity.accountId,
+                toAccountId: "acct_maya", body: try CloudGroupMessageCodec.encode(envelope),
+                createdAt: "2026-11-13T10:00:00Z", deliveredAt: nil, readAt: nil, direction: "incoming",
+                sessionId: group.sessionId, version: version)
+        }
+        let working = try row(state: "processing", text: "", version: 1)
+        let shown = try XCTUnwrap(AppModel.mapGroupMessages([working], conversation: group, ownAccountId: "acct_maya").first)
+        XCTAssertEqual(shown.author, .agent)
+        XCTAssertEqual(shown.authorName, "Facilitator")
+        XCTAssertEqual(shown.agentExecution?.progressLabel, "Working")
+        XCTAssertEqual(MessageAuthorIdentity.resolve(shown, in: group, account: nil, mentionTargets: []),
+                       KordiSystemAgentIdentity.avatar)
+
+        let replied = try row(state: "complete", text: "Hi! I can find a time or open a vote.", version: 2)
+        let refreshed = AppModel.mapGroupMessages([replied, working], conversation: group, ownAccountId: "acct_maya")
+        XCTAssertEqual(refreshed.count, 1, "the reply takes the working row")
+        XCTAssertEqual(refreshed.first?.text, "Hi! I can find a time or open a vote.")
+        XCTAssertEqual(refreshed.first?.authorName, "Facilitator")
+        XCTAssertNil(refreshed.first?.agentExecution)
+
+        // The person who asked sees the working row too, even while their own
+        // message still says sending.
+        let ask = ChatMessage(
+            id: "request", conversationId: group.id, author: .me, authorName: "You", text: "@Facilitator hi",
+            createdAt: .distantPast, deliveryState: .sending, errorMessage: nil, requestMessageId: nil
+        )
+        XCTAssertEqual(shown.requestMessageId, ask.id)
+        XCTAssertNotNil(shown.cloudMessageVersion)
+        let asked = AgentSessionQueuePresentation.apply(to: [ask, shown], kind: .group)
+        XCTAssertEqual(asked.map(\.id), [ask.id, shown.id])
+
+        // A row the server removed (a card answered, or the run failed) is gone.
+        let removed = CloudMessageDTO(messageId: "facilitator-row", fromAccountId: KordiSystemAgentIdentity.accountId,
+            toAccountId: "acct_maya", body: "", createdAt: "2026-11-13T10:00:00Z", deliveredAt: nil, readAt: nil,
+            direction: "incoming", sessionId: group.sessionId, version: 3)
+        XCTAssertTrue(AppModel.mapGroupMessages([removed], conversation: group, ownAccountId: "acct_maya").isEmpty)
+    }
+
     func testSystemNoticeFromSystemAgentProjectsAsSystem() throws {
         let conversation = makeGroup()
         let notice = makeWire(id: "notice", kind: KordiSystemIdentity.messageKind, body: "Maya joined.")
@@ -85,7 +138,7 @@ final class SystemNoticeIdentityTests: XCTestCase {
         let message = try XCTUnwrap(projected.first { $0.id == "notice" })
         let systemAgentReply = try XCTUnwrap(projected.first { $0.id == "reply" })
 
-        XCTAssertEqual(message.authorName, "System")
+        XCTAssertEqual(message.authorName, "Facilitator")
         XCTAssertEqual(message.text, "Maya joined.")
         XCTAssertFalse(message.isSystemNotice, "Notices keep the normal bubble layout")
         XCTAssertEqual(systemAgentReply.authorName, KordiSystemAgentIdentity.displayName)
@@ -105,7 +158,7 @@ final class SystemNoticeIdentityTests: XCTestCase {
 
         let identity = MessageAuthorIdentity.resolve(notice, in: conversation, account: nil, mentionTargets: [])
 
-        XCTAssertEqual(identity.name, "System")
+        XCTAssertEqual(identity.name, "Facilitator")
         XCTAssertNil(identity.source)
         XCTAssertEqual(identity.seed, KordiSystemIdentity.seed)
         XCTAssertFalse(KordiSystemAgentIdentity.matches(name: identity.name, seed: identity.seed))
@@ -118,7 +171,7 @@ final class SystemNoticeIdentityTests: XCTestCase {
 
     func testPlanAgentMessageWithoutTheKindShowsAsSystem() {
         let conversation = makeGroup()
-        for authorName in ["System", KordiSystemAgentIdentity.legacyName] {
+        for authorName in ["Facilitator", KordiSystemIdentity.legacyDisplayName, KordiSystemAgentIdentity.legacyName] {
             let message = ChatMessage(
                 id: "system-agent", conversationId: conversation.id, author: .person, authorName: authorName,
                 text: "Plan", createdAt: .distantPast, deliveryState: .sent, errorMessage: nil,

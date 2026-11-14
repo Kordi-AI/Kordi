@@ -1,4 +1,4 @@
-import { agentExchangeWaitsForViewer, withAgentExchangeProgress } from '@/features/cloud/agentExchangePresentation';
+import { agentExchangeStatus, agentExchangeWaitsForViewer, withAgentExchangeProgress } from '@/features/cloud/agentExchangePresentation';
 import { toolsWithEventTaskTarget } from './toolTaskTarget';
 import { canonicalTools } from './toolMapping';
 export { canonicalTools } from './toolMapping';
@@ -13,6 +13,7 @@ import { cloudDirectMessageDisplayText, parseCloudDirectMessageEnvelope } from '
 import { cloudGroupAgentConversationId } from '@/features/cloud/cloudGroupMessages';
 import { storedVoiceMessage, withoutVoiceAttachment } from '@/features/cloud/cloudVoiceMessage';
 import { normalizeFacilitatorCard } from '@/features/cloud/facilitatorCard';
+import { normalizeGroupJoinRequestCard } from '@/features/cloud/groupJoinRequest';
 import { normalizePlanCardSnapshot } from '@/features/cloud/planCardSnapshot';
 import { messageEventSourcesField } from '@/features/cloud/cloudAgentSources';
 import { isProcessingPlaceholderText, stripOutreachContextEnvelope } from '@/features/collaboration/agentPlaceholderText';
@@ -346,7 +347,10 @@ export function mapCanonicalMessage(
   const isProcessingAgentPlaceholder = isAgentTurn
     && (deliveryState === 'queued' || deliveryState === 'processing')
     && (!rawDisplayText.trim() || isProcessingPlaceholderText(rawDisplayText));
-  const displayText = isProcessingAgentPlaceholder || legacyCollaborationAgentFailure || noProviderFailure || (isAgentTurn && statusFailed && isFailedReplyTextOnlyItsError(rawDisplayText, stringValue(content.error))) ? '' : rawDisplayText;
+  // A task slot that waits or processes (#2416) carries a status line for older
+  // clients; its progress header already says it, so it is never reply text.
+  const agentExchangeStatusLine = isAgentTurn && deliveryState === 'processing' && Boolean(agentExchangeStatus(content.agentExchangeStatus));
+  const displayText = isProcessingAgentPlaceholder || agentExchangeStatusLine || legacyCollaborationAgentFailure || noProviderFailure || (isAgentTurn && statusFailed && isFailedReplyTextOnlyItsError(rawDisplayText, stringValue(content.error))) ? '' : rawDisplayText;
   // A reply that ended early keeps its partial text and marks how it ended.
   const rawEnding = isAgentTurn && completed && displayText.trim() ? stringValue(content.ending) : undefined;
   const ending = rawEnding === 'stopped' || rawEnding === 'interrupted' ? rawEnding : undefined;
@@ -374,6 +378,7 @@ export function mapCanonicalMessage(
   const voiceMessage = storedVoiceMessage(content.voiceMessage, isOwnMessage);
   const planCard = normalizePlanCardSnapshot(content.planCard);
   const facilitatorCard = normalizeFacilitatorCard(content.facilitatorCard);
+  const groupJoinRequest = normalizeGroupJoinRequestCard(content.groupJoinRequest);
   return withAgentExchangeProgress({
     id: message.id,
     // A message typed in this window keeps its canonical id as its render
@@ -406,11 +411,12 @@ export function mapCanonicalMessage(
     callActivity: canonicalCallActivity(message, content, isOwnMessage),
     messageKind: voiceMessage ? 'voice' : role === 'system' ? stringValue(content.kind) ?? messageKind : undefined,
     voiceMessage,
-    planCard, facilitatorCard, ...messageEventSourcesField(content.sources),
+    planCard, facilitatorCard, ...(groupJoinRequest ? { groupJoinRequest } : {}), ...messageEventSourcesField(content.sources),
     detail: stringValue(content.detail),
     attachments: withoutVoiceAttachment(canonicalAttachments(content.attachments), voiceMessage),
     mentions,
     replyToMessageId: replyToMessageId ?? undefined,
+    ...(isAgentTurn && stringValue(content.cloudGroupMessageId) && !sourceRequestId && !replyToMessageId ? { answersNoRequest: true } : {}),
     replyAliasIds: replyAliasIds.length ? replyAliasIds : undefined,
     readReceiptSummary: isOwnMessage && role === 'user' ? canonicalReadReceiptSummary(content, identityById) : null,
     messageAction,
@@ -438,6 +444,8 @@ export function mapCanonicalMessage(
           pendingCollaborationAgentRequest,
           hostedRunStatus: !completed && (reportedRunStatus === 'queued' || reportedRunStatus === 'leased' || reportedRunStatus === 'running')
             ? reportedRunStatus : undefined,
+          // A reply row the server stored exists only because the server has the request.
+          ...(isHostedCloudAgentTurn && typeof content.cloudMessageVersion === 'number' ? { serverStored: true } : {}),
         }
       : undefined,
   }, content.agentExchangeStatus, content.agentExchangeWaitingFor, agentExchangeWaitsForViewer(

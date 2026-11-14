@@ -88,7 +88,7 @@ test('a task slot waiting on an exchange stays visible after the processing time
     kind: 'agent-response', requestId: 'request', deliveryState: 'processing', ...fields,
   })).toString('base64url')}` }) as CloudMessage;
   const select = (message: CloudMessage) => selectVisibleCloudAgentResponses([message], new Map([['request', 'owner']]), () => false, () => false);
-  const waiting = select(row({ text: 'Waiting for Maya.', agentExchangeStatus: 'waiting', agentExchangeWaitingFor: 'Maya' }));
+  const waiting = select(row({ text: 'Waiting', agentExchangeStatus: 'waiting', agentExchangeWaitingFor: 'Maya' }));
   assert.equal(waiting.visibleMessages.length, 1, 'the server ends this row');
   assert.equal(select(row({ text: 'Thinking' })).visibleMessages.length, 0, 'a lost heartbeat still hides');
 });

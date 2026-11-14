@@ -188,6 +188,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var contacts: [CloudContact] = []
     @Published private(set) var contactPresenceByAccountID: [String: CloudPresenceAccount] = [:]
     @Published private(set) var contactRequests: [CloudContactRequest] = []
+    /// Pending invitations to groups started in Grounding rooms.
+    @Published var roomGroupInvitations: [RoomGroupInvitation] = []
+    /// Invitations answered on this device, kept out of lists fetched before the answer landed.
+    var answeredRoomInvitationRefs = Set<String>()
+    /// The debounced refetch after a Grounding room hint.
+    var roomInvitationRefreshTask: Task<Void, Never>?
     @Published private(set) var conversations: [ConversationSummary] = []
     @Published var projectDevices: [ChatProjectDevice] = []
     @Published var projectError: String?
@@ -337,6 +343,11 @@ final class AppModel: ObservableObject {
     private var canonicalConversationIDBySessionID: [String: String] = [:]
     @Published private var ownedCloudAgents: [CloudAgent] = []
     @Published private var sharedCloudAgents: [CloudAgent] = []
+    @Published private var groupMemberDefaultAgents: [CloudGroupMemberDefaultAgent] = []
+    /// Bumped when another account's agents change (`agent.directory.changed`,
+    /// such as a default agent's Access), so an open conversation refetches
+    /// which agents its composer may offer.
+    @Published private(set) var agentDirectoryRevision = 0
     private var hiddenCloudSessionIds = Set<String>()
     private var deletedCloudSessionIds = Set<String>()
     private var sessionVisibilityMutationRevision = 0
@@ -760,6 +771,10 @@ final class AppModel: ObservableObject {
         contacts = []
         contactPresenceByAccountID = [:]
         contactRequests = []
+        roomGroupInvitations = []
+        answeredRoomInvitationRefs = []
+        roomInvitationRefreshTask?.cancel()
+        roomInvitationRefreshTask = nil
         conversations = []
         projectDevices = []
         personalAgents = nil
@@ -794,6 +809,7 @@ final class AppModel: ObservableObject {
         canonicalConversationIDBySessionID = [:]
         ownedCloudAgents = []
         sharedCloudAgents = []
+        groupMemberDefaultAgents = []
         connectorsClientCache = nil
         connectorsVersion = nil
         connectorsCapabilityNeedsRetry = true
@@ -880,6 +896,8 @@ final class AppModel: ObservableObject {
             async let canonicalLatestMessages = api.bootstrapChatLatestMessages(token: token)
             async let fetchedActiveCalls = try? api.activeCalls(token: token)
             async let fetchedPersonalAgents = try? api.listPersonalAgents(token: token)
+            let fetchesRoomInvitations = isCommonGroundAvailable
+            async let fetchedRoomInvitations = fetchesRoomInvitations ? try? api.listRoomGroupInvitations(token: token) : nil
             let (canonicalAccount, contactList) = try await (refreshedAccount, fetchedContacts)
             guard sessionIdentity.contains(token), self.account?.accountId == canonicalAccount.accountId else { return false }
             applyWorkspaceDirectory(account: canonicalAccount, contacts: contactList)
@@ -904,6 +922,9 @@ final class AppModel: ObservableObject {
                 applyContactPresenceSnapshot(presence)
             }
             if contactRequests != requests { contactRequests = requests }
+            if let roomInvitations = await fetchedRoomInvitations {
+                applyRoomGroupInvitations(roomInvitations, accountId: canonicalAccount.accountId)
+            }
             if let listedPersonalAgents, personalAgents != listedPersonalAgents { personalAgents = listedPersonalAgents }
             if ownedCloudAgents != owned { ownedCloudAgents = owned }
             if shouldRecordRemoteModelChanges {
@@ -2863,6 +2884,17 @@ final class AppModel: ObservableObject {
         return card
     }
 
+    /// A Grounding group join request; `action` is "approve" or "decline".
+    func groupJoinRequest(id: String, action: String?) async throws -> GroupJoinRequestCard {
+        guard !previewMode, let token else {
+            throw CloudAPIError(code: "no_session", message: "Sign in to answer the request.", statusCode: 401)
+        }
+        let request = try await api.groupJoinRequest(token: token, requestId: id, action: action)
+        guard sessionIdentity.contains(token) else { throw CancellationError() }
+        if action != nil { cloudSyncPasses.wake() }
+        return request
+    }
+
     func toggleReaction(
         _ reaction: String,
         on message: ChatMessage,
@@ -3226,7 +3258,7 @@ final class AppModel: ObservableObject {
                 requestMessageId: requestMessageId,
                 agentExecution: AgentExecutionSnapshot(
                     phase: phase,
-                    summary: phase == .queued ? "Queued next" : "Waiting for agent response",
+                    summary: phase == .queued ? "Queued next" : "Waiting",
                     steps: [],
                     thinkingText: nil,
                     tools: nil,
@@ -3710,7 +3742,8 @@ final class AppModel: ObservableObject {
             conversation: conversation,
             ownedAgents: ownedCloudAgents,
             sharedAgents: sharedCloudAgents,
-            contacts: contacts
+            contacts: contacts,
+            groupMemberDefaultAgents: groupMemberDefaultAgents
         )
     }
 
@@ -3733,6 +3766,19 @@ final class AppModel: ObservableObject {
                   sessionIdentity.contains(token),
                   self.account?.accountId == accountID else { return }
             replaceSharedCloudAgents(refreshedAgents, forOwnerAccountIDs: ownerAccountIDs)
+            // Co-members who are not contacts: their default agents.
+            if conversation.kind == .group {
+                let defaults = try await api.listGroupMemberDefaultAgents(
+                    token: token,
+                    ownerAccountIds: ownerAccountIDs
+                )
+                guard !Task.isCancelled,
+                      sessionIdentity.contains(token),
+                      self.account?.accountId == accountID else { return }
+                let refreshedOwners = Set(ownerAccountIDs)
+                let next = groupMemberDefaultAgents.filter { !refreshedOwners.contains($0.ownerAccountId) } + defaults
+                if next != groupMemberDefaultAgents { groupMemberDefaultAgents = next }
+            }
         } catch {
             if CloudTransportErrorPolicy.isCancellation(error) || Task.isCancelled { return }
             // Mention refresh is best effort. Keep the last usable catalog and
@@ -6475,6 +6521,8 @@ final class AppModel: ObservableObject {
             throw CloudAPIError(code: "group_has_no_recipients", message: "This group has no other participants.", statusCode: 0)
         }
         let actor = participants.first(where: { $0.accountId == account.accountId })!
+        // The Facilitator answers its own mention; it is never a routed agent.
+        let routedAgent = mentionTarget?.kind == .agent && mentionTarget?.isFacilitator != true ? mentionTarget : nil
         let envelope = CloudGroupControlEnvelope(
             kind: "group-message",
             groupId: conversation.sessionId,
@@ -6497,10 +6545,10 @@ final class AppModel: ObservableObject {
                 attachments: attachments,
                 mentions: mentions.isEmpty ? nil : mentions,
                 messageAction: messageAction,
-                targetCloudAgentId: mentionTarget?.kind == .agent ? mentionTarget?.agentId : nil,
-                targetCloudAgentName: mentionTarget?.kind == .agent ? mentionTarget?.displayName : nil,
-                targetCloudAgentOwnerAccountId: mentionTarget?.kind == .agent ? mentionTarget?.accountId : nil,
-                targetCloudAgentOwnerName: mentionTarget?.kind == .agent ? mentionTarget?.ownerName : nil,
+                targetCloudAgentId: routedAgent?.agentId,
+                targetCloudAgentName: routedAgent?.displayName,
+                targetCloudAgentOwnerAccountId: routedAgent?.accountId,
+                targetCloudAgentOwnerName: routedAgent?.ownerName,
                 agentRuntimeRoute: requestedRuntimeRoute(for: conversation),
                 messageKind: messageKind,
                 voiceMessage: voiceMessage
@@ -6643,6 +6691,10 @@ final class AppModel: ObservableObject {
         for wire in messages {
             guard let envelope = CloudGroupMessageCodec.parse(wire.body) else {
                 guard ChatCallActivity(messageKind: wire.messageKind) == nil else { continue }
+                // A Facilitator reply row the server removed (its card answered,
+                // or its run failed) has no body left; it never shows as a bubble.
+                if KordiSystemIdentity.isServiceAccount(wire.fromAccountId), wire.body.isEmpty,
+                   wire.attachments.isEmpty, wire.planCard == nil, wire.facilitatorCard == nil { continue }
                 if let current = canonicalMessagesByID[wire.messageId]?.cloudMessageVersion,
                    let incoming = wire.version, current > incoming { continue }
                 let cardAgent = KordiSystemIdentity.planCardAgent(wire, ownAccountId: ownAccountId)
@@ -6684,6 +6736,7 @@ final class AppModel: ObservableObject {
                     voiceMessage: wire.voiceMessage,
                     planCard: wire.planCard,
                     facilitatorCard: facilitatorCard,
+                    groupJoinRequest: KordiSystemIdentity.isSystem(accountId: wire.fromAccountId) ? wire.groupJoinRequest : nil,
                     reactions: wire.reactions,
                     attachmentReactions: wire.attachmentReactions
                 )
@@ -6981,6 +7034,9 @@ final class AppModel: ObservableObject {
                 guard sessionIdentity.contains(token), !Task.isCancelled else { return .stop }
                 applyCloudSyncEvents(state.pendingEvents)
                 await refreshPersonalAgentsIfNeeded(after: state.pendingEvents)
+                if state.pendingEvents.contains(where: { $0.eventType == "agent.directory.changed" }) {
+                    agentDirectoryRevision &+= 1
+                }
                 let hasDirectoryChanges = state.pendingEvents.contains {
                     $0.eventType != "message.upsert"
                         && $0.eventType != "session.pin.updated"
@@ -7805,6 +7861,7 @@ final class AppModel: ObservableObject {
                     voiceMessage: message.voiceMessage,
                     planCard: message.planCard,
                     facilitatorCard: message.facilitatorCard,
+                    groupJoinRequest: message.groupJoinRequest,
                     conversationId: message.conversationId,
                     conversationSequence: message.conversationSequence,
                     version: message.version,

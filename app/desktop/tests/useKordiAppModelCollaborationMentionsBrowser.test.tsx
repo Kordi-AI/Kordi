@@ -34,6 +34,6 @@ test('buildCollaborationMentionTargetsByScope lists group people without desktop
 
   assert.deepEqual(
     targets.chat.map((target) => `${target.targetKind}:${target.label}`),
-    ['all:All', 'person:Alice'],
+    ['all:All', 'agent:Facilitator', 'person:Alice'],
   );
 });

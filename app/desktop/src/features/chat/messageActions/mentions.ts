@@ -6,7 +6,7 @@ import { defaultAgentDisplayName,publicScopedAgentMentionHandle,stripSelfPossess
 import { mentionTextStartsWithLabel } from './localAgentMentions';
 import { mentionHandleForLabel,normalizeMentionLabel } from './mentionHandles';
 import { directChatHasMember, directChatMemberKeys } from './directChatMembers';
-import { ambiguousOwnerNames, identitySuffixForCandidate, uniqueAgentMentionCandidates, uniqueHandle } from './uniqueAgentMentions';
+import { ambiguousOwnerNames, identitySuffixForCandidate, sharedAgentDisplayLabel, sharedAgentInScope, uniqueAgentMentionCandidates, uniqueHandle } from './uniqueAgentMentions';
 export { reserveAgentMentionHandles, uniqueAgentMentionCandidates } from './uniqueAgentMentions';
 
 export {
@@ -186,10 +186,10 @@ export function sharedCloudAgentMentionCandidatesForConversation(
   const localOwnerAccountId = normalizedOwnerKey(localAccountId);
   const localViewerIsParticipant = conversationImpliesLocalViewerParticipant(conversation);
   const candidates = agents
-    .filter((agent) => conversationContainsAccountId(conversation, agent.ownerAccountId)
-      || (localViewerIsParticipant && normalizedOwnerKey(agent.ownerAccountId) === localOwnerAccountId))
+    .filter((agent) => sharedAgentInScope(agent, conversationHasGroupMentionScope(conversation), localOwnerAccountId) && (conversationContainsAccountId(conversation, agent.ownerAccountId)
+      || (localViewerIsParticipant && normalizedOwnerKey(agent.ownerAccountId) === localOwnerAccountId)))
     .map((agent) => {
-      const displayLabel = agent.name;
+      const displayLabel = sharedAgentDisplayLabel(agent);
       const handle = mentionHandleForLabel(displayLabel, agent.agentId);
       const owner = agent.ownerDisplayName?.trim() || agent.ownerAccountId;
       return {

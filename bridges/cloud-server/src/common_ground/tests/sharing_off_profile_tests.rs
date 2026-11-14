@@ -160,10 +160,10 @@ async fn group_notices_quote_cards_only_while_everyone_shares() {
     for line in [
         "- @Alex (started the group). No card shared.\n",
         "- @Priya. No card shared.\n",
-        "- @Sam (invited). No card shared.\n",
     ] {
         assert!(prompt.contains(line), "{line:?} in {prompt}");
     }
+    assert!(!prompt.contains("Sam"), "the invitee is left out: {prompt}");
     let (_, body) = results(&app, &code, &sam_token).await;
     let reference = body["invitations"][0]["invitationRef"].as_str().unwrap();
     let path = format!("{CG}/rooms/{code}/invitations/{reference}/join");
@@ -175,7 +175,8 @@ async fn group_notices_quote_cards_only_while_everyone_shares() {
     set_sharing(&app, &priya_token, None, true).await;
     let group = start_group(&app, &code, &alex_token, &[&priya, &sam]).await;
     let prompt = intro_prompt(&pool, &group).await;
-    for name in ["@Alex (started the group)", "@Priya", "@Sam (invited)"] {
+    assert!(!prompt.contains("Sam"), "the invitee is left out: {prompt}");
+    for name in ["@Alex (started the group)", "@Priya"] {
         let line = format!("- {name}. Working on: Agent memory. Interests: Retrieval.\n");
         assert!(prompt.contains(&line), "{line:?} in {prompt}");
     }

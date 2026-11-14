@@ -193,10 +193,10 @@ test('compact contact density hides peer sender names and uses squarer tighter h
   assert.doesNotMatch(markup, />xin hai Mouse<\/div>/);
 });
 
-test('Kordi Support answers use a normal contact bubble without agent reply UI', () => {
+test('KordiSpot answers use a normal contact bubble without agent reply UI', () => {
   const message: Message = {
     role: 'person',
-    sender: 'Kordi Support',
+    sender: 'KordiSpot',
     senderType: 'human',
     isOwnMessage: false,
     showSenderMeta: false,
@@ -219,10 +219,10 @@ test('Kordi Support answers use a normal contact bubble without agent reply UI',
   assert.doesNotMatch(markup, /Me:/);
 });
 
-test('pending Kordi Support replies use a contact typing indicator without agent controls', () => {
+test('pending KordiSpot replies use a contact typing indicator without agent controls', () => {
   const message: Message = {
     role: 'person',
-    sender: 'Kordi Support',
+    sender: 'KordiSpot',
     senderType: 'human',
     isOwnMessage: false,
     showSenderMeta: false,
@@ -240,17 +240,17 @@ test('pending Kordi Support replies use a contact typing indicator without agent
 
   assert.match(markup, /app-chat-bubble-peer/);
   assert.match(markup, /data-support-contact-typing="true"/);
-  assert.match(markup, /aria-label="Kordi Support is typing"/);
+  assert.match(markup, /aria-label="KordiSpot is typing"/);
   assert.equal((markup.match(/app-support-contact-typing-dot app-support-contact-typing-dot-/g) ?? []).length, 3);
   assert.match(markup, /min-w-\[3\.25rem\]/);
   assert.doesNotMatch(markup, /app-live-turn-response-panel/);
   assert.doesNotMatch(markup, /Processing…|Me:|Stop/);
 });
 
-test('Kordi Support contact bubbles preserve reviewed report approval', () => {
+test('KordiSpot contact bubbles preserve reviewed report approval', () => {
   const message: Message = {
     role: 'person',
-    sender: 'Kordi Support',
+    sender: 'KordiSpot',
     senderType: 'human',
     isOwnMessage: false,
     supportContactResponse: true,
