@@ -126,19 +126,33 @@ pub(crate) fn check_frame(
     sequence: u64,
     last_sequence: &mut Option<u64>,
 ) -> Result<(), RuntimeError> {
-    let violation = if !ready {
-        ProtocolViolation::Handshake
+    let expected = last_sequence.map_or(Some(1), |last| last.checked_add(1));
+    let (violation, detail) = if !ready {
+        (
+            ProtocolViolation::Handshake,
+            "frame before ready".to_string(),
+        )
     } else if schema_version != SCHEMA_VERSION {
-        ProtocolViolation::SchemaVersion
+        (
+            ProtocolViolation::SchemaVersion,
+            format!("schema {schema_version}"),
+        )
     } else if run_id != request.run_id || attempt_id != request.attempt_id {
-        ProtocolViolation::RunMismatch
-    } else if last_sequence.map_or(sequence != 1, |last| last.checked_add(1) != Some(sequence)) {
-        ProtocolViolation::Sequence
+        (
+            ProtocolViolation::RunMismatch,
+            "another run or attempt".to_string(),
+        )
+    } else if expected != Some(sequence) {
+        let expected = expected.map_or("none".to_string(), |value| value.to_string());
+        (
+            ProtocolViolation::Sequence,
+            format!("sequence {sequence}, expected {expected}"),
+        )
     } else {
         *last_sequence = Some(sequence);
         return Ok(());
     };
-    Err(RuntimeError::Protocol(violation))
+    Err(RuntimeError::protocol(violation, &detail))
 }
 
 pub(crate) async fn write_json_line<T: serde::Serialize>(
@@ -146,7 +160,7 @@ pub(crate) async fn write_json_line<T: serde::Serialize>(
     value: &T,
 ) -> Result<(), RuntimeError> {
     let mut line = serde_json::to_vec(value)
-        .map_err(|_| RuntimeError::Protocol(ProtocolViolation::Encoding))?;
+        .map_err(|_| RuntimeError::protocol(ProtocolViolation::Encoding, "host message"))?;
     if line.len() > MAX_REQUEST_BYTES {
         return Err(RuntimeError::OutputLimit);
     }
@@ -174,7 +188,11 @@ pub(crate) async fn read_line_bounded<R: AsyncRead + Unpin>(
             return if line.is_empty() {
                 Ok(None)
             } else {
-                Err(RuntimeError::Protocol(ProtocolViolation::TruncatedFrame))
+                let detail = format!("{} bytes", line.len());
+                Err(RuntimeError::protocol(
+                    ProtocolViolation::TruncatedFrame,
+                    &detail,
+                ))
             };
         }
         let size = available

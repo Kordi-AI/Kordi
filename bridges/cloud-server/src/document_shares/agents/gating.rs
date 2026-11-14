@@ -8,11 +8,20 @@
 //! on the cloud runner, as for comment runs, the server checks alone. Per
 //! call the server checks that the named document is in the run's session
 //! and that the owner can edit it. Never to another member's request, a
-//! public reader's run, a background run, or a scheduled run. `create_document` goes to chat runs in a group, whoever
-//! asked: the document is posted in that group as the agent's own message,
-//! so it reaches exactly the people who already read the agent's reply
-//! (issue 1808). The same gate is evaluated when the lease is delivered and
-//! again on every call.
+//! public reader's run, a background run, or a scheduled run.
+//! `create_document` goes to chat runs in a group, whoever asked: the
+//! document is posted in that group as the agent's own message, so it reaches
+//! exactly the people who already read the agent's reply (issue 1808).
+//!
+//! A background session's run (a cloud child of a group run, or a follow-up
+//! someone asked inside the background session) runs in its parent
+//! conversation's session. When that parent is a group it gets
+//! `create_document` too, whoever asked, with the same per-call checks: the
+//! document is posted in the parent group as the agent's message and listed
+//! in its Artifacts. It reads the parent conversation's documents only for
+//! the owner's own request, as a background task on the Mac does
+//! (issue 1889), and never edits. The same gate is evaluated when the lease
+//! is delivered and again on every call.
 
 use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
@@ -42,6 +51,9 @@ pub(crate) struct ToolGate {
     pub group_session: bool,
     /// The agent's owner made the request.
     pub owner_request: bool,
+    /// The run belongs to a background session; `group_session` and
+    /// `session_has_document` then describe its parent conversation.
+    pub background_session: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +64,13 @@ pub(crate) struct OfferedTools {
 }
 
 pub(crate) fn offered_tools(gate: &ToolGate) -> OfferedTools {
+    if gate.background_session {
+        return OfferedTools {
+            read: !gate.comment_run && gate.owner_request && gate.session_has_document,
+            edit: false,
+            create: !gate.comment_run && gate.group_session && !gate.public_reader,
+        };
+    }
     OfferedTools {
         read: gate.comment_run || gate.session_has_document,
         edit: gate.trigger == RunTrigger::PersonStarted
@@ -78,28 +97,41 @@ pub(crate) struct RunFacts {
     pub gate: ToolGate,
 }
 
-type RunRow = (String, String, String, String, String, String, bool);
+/// `(owner, requester, agent, session, request, trigger, child run,
+/// background session in its parent's session)`.
+type RunRow = (String, String, String, String, String, String, bool, bool);
 
 /// Loads the run and evaluates its gate. `None` when the run does not exist or
 /// is not a run that may use document tools at all (digest, System agent, and
-/// background-session runs).
+/// child runs that are not a background session of the run's own session).
 pub(crate) async fn run_facts(
     pool: &PgPool,
     run_id: &str,
 ) -> Result<Option<RunFacts>, sqlx_core::Error> {
+    // A background session's run counts only when the session belongs to the
+    // run's owner and agent and its parent is the run's own session.
     let row: Option<RunRow> = query_as(
-        "SELECT owner_account_id, requester_account_id, execution_agent_id, session_id, \
-                request_message_id, run_trigger, \
-                subsession_id IS NOT NULL OR parent_run_id IS NOT NULL \
-         FROM cloud_agent_fallback_runs WHERE run_id = $1 AND NOT legacy_duplicate",
+        "SELECT run.owner_account_id, run.requester_account_id, run.execution_agent_id, \
+                run.session_id, run.request_message_id, run.run_trigger, \
+                run.subsession_id IS NOT NULL OR run.parent_run_id IS NOT NULL, \
+                subsession.subsession_id IS NOT NULL \
+         FROM cloud_agent_fallback_runs run \
+         LEFT JOIN cloud_agent_subsessions subsession \
+           ON subsession.subsession_id = run.subsession_id \
+          AND subsession.parent_session_id = run.session_id \
+          AND subsession.owner_account_id = run.owner_account_id \
+          AND subsession.agent_id = run.execution_agent_id \
+         WHERE run.run_id = $1 AND NOT run.legacy_duplicate",
     )
     .bind(run_id)
     .fetch_optional(pool)
     .await?;
-    let Some((owner, requester, agent_id, session_id, request_id, trigger, child)) = row else {
+    let Some((owner, requester, agent_id, session_id, request_id, trigger, child, background)) =
+        row
+    else {
         return Ok(None);
     };
-    if child
+    if (child && !background)
         || run_id.starts_with(crate::digest::RUN_PREFIX)
         || crate::cloud_agent_runtime::import_runs::is_import_run(run_id)
         || run_id.starts_with(crate::system_agent::RUN_PREFIX)
@@ -109,7 +141,7 @@ pub(crate) async fn run_facts(
     {
         return Ok(None);
     }
-    let comment_run = is_comment_request(&request_id);
+    let comment_run = !background && is_comment_request(&request_id);
     let mut gate = ToolGate {
         comment_run,
         trigger: RunTrigger::parse(&trigger),
@@ -119,6 +151,7 @@ pub(crate) async fn run_facts(
         session_has_document: false,
         group_session: false,
         owner_request: owner == requester,
+        background_session: background,
     };
     let mut document = None;
     if comment_run {

@@ -109,8 +109,11 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // One agent task row (a yield or reply kept in its processing row, which a member's cleanup leaves
 // in place) adds under 1 kB, so it moves to 5.987 MB.
 // The Facilitator in the group @ menu, its mention, and mentions that end a sentence add 1.5 kB,
-// so it moves to 5.989 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_989_000;
+// so it moves to 5.963 MB.
+// Together, the room group join requests above (16 kB) and these come to 5.979 MB.
+// Inviting Grounding people into groups (9.7 kB) and sending a joiner's first group message at once
+// (under 1 kB) bring it to 5.99 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_990_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -155,13 +158,15 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // Opening the room from such an invitation adds 1.4 kB there, so it moves to 5.995 MB.
 // The Daily calendar access fix adds 1 kB there too, so it moves to 5.997 MB.
 // The same invitation detail adds 1.7 kB there, so it moves to 5.999 MB.
-// The same Digest notification permission line adds 0.2 kB over it there, and inviting Grounding
-// people into groups adds 9.7 kB there too; measured at 6.009 MB, it moves to 6.01 MB.
+// The same Digest notification permission line adds 0.2 kB over it there, so it moves to 5.984 MB.
 // Offering group members' default agents in the @ menu, refreshing it on open and focus, and ending a
-// refused agent request at once add 0.2 kB there, so it moves to 6.011 MB.
-// The same single agent task row adds under 1 kB there, so it moves to 6.013 MB.
-// The web app carries the same Facilitator @ menu and mention code, 1.5 kB, so it moves to 6.015 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_015_000;
+// refused agent request at once add 0.2 kB there, so it moves to 5.985 MB.
+// The same single agent task row adds under 1 kB there, so it moves to 5.987 MB.
+// The web app carries the same Facilitator @ menu and mention code, 1.5 kB, so it moves to 5.989 MB.
+// Together, the room group join requests above (17 kB) and these come to 6.006 MB there.
+// Inviting Grounding people into groups (9.7 kB) and sending a joiner's first group message at once
+// (under 1 kB) bring it to 6.017 MB there.
+const MAX_WEB_APP_DIST_BYTES = 6_017_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

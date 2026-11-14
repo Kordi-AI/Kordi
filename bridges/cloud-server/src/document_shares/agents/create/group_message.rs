@@ -1,6 +1,7 @@
-//! The fallback message: documents no reply took, posted in their group as
-//! the agent's own message, with the same identity as the agent's replies
-//! (`senderKind: "agent"` and the agent's id, sent by its owner's account).
+//! The document message: documents no reply took, or a background session's
+//! documents, posted in their group as the agent's own message, with the same
+//! identity as the agent's replies (`senderKind: "agent"` and the agent's id,
+//! sent by its owner's account).
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde_json::{json, Map, Value};
@@ -19,6 +20,8 @@ const ENVELOPE_SCAN: i64 = 200;
 
 pub(super) struct DocumentMessage<'a> {
     pub conversation_id: Uuid,
+    /// One short line naming the request the documents belong to.
+    pub text: &'a str,
     pub run_id: &'a str,
     pub session_id: &'a str,
     pub owner_account_id: &'a str,
@@ -77,6 +80,70 @@ async fn latest_envelope(
         .find_map(|(content,)| decoded_group_message(content)))
 }
 
+/// Recent messages searched for the request a document belongs to.
+const REQUEST_SCAN: i64 = 1000;
+/// Longest quote of the request, in characters.
+const REQUEST_QUOTE_CHARS: usize = 80;
+
+/// One line that names the request `run_id` answered, quoting it, such as
+/// `For Alex's request: "Do a literature review"`. The message answers no
+/// request itself, so without this line nothing would say what it is for.
+/// `None` when the request is no longer in the group.
+pub(super) async fn request_line(
+    pool: &PgPool,
+    conversation_id: Uuid,
+    run_id: &str,
+) -> Result<Option<String>, sqlx_core::Error> {
+    let run: Option<(String,)> =
+        query_as("SELECT request_message_id FROM cloud_agent_fallback_runs WHERE run_id = $1")
+            .bind(run_id)
+            .fetch_optional(pool)
+            .await?;
+    let Some((request_id,)) = run else {
+        return Ok(None);
+    };
+    let rows: Vec<(Uuid, Value)> = query_as(
+        "SELECT message_id, content FROM cloud_chat_messages \
+         WHERE conversation_id = $1 AND deleted_at IS NULL \
+         ORDER BY conversation_sequence DESC LIMIT $2",
+    )
+    .bind(conversation_id)
+    .bind(REQUEST_SCAN)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.iter().find_map(|(message_id, content)| {
+        let envelope = decoded_group_message(content)?;
+        let request = &envelope["message"];
+        let matches = message_id.to_string() == request_id
+            || request["id"].as_str() == Some(request_id.as_str());
+        if !matches || request["senderKind"] == "agent" {
+            return None;
+        }
+        let text = request["text"]
+            .as_str()?
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if text.is_empty() {
+            return None;
+        }
+        let quote: String = text.chars().take(REQUEST_QUOTE_CHARS).collect();
+        let quote = if quote.len() < text.len() {
+            format!("{quote}…")
+        } else {
+            quote
+        };
+        let name = envelope["actor"]["displayName"]
+            .as_str()
+            .map(str::trim)
+            .filter(|name| !name.is_empty());
+        Some(match name {
+            Some(name) => format!("For {name}'s request: “{quote}”"),
+            None => format!("For the request: “{quote}”"),
+        })
+    }))
+}
+
 /// The group envelope of the fallback message. It answers no request, so
 /// clients never take it for the run's reply.
 pub(super) fn document_envelope(
@@ -119,7 +186,7 @@ pub(super) fn document_envelope(
             "senderAccountId": message.owner_account_id,
             "senderAgentId": message.agent_id,
             "senderKind": "agent",
-            "text": "",
+            "text": message.text,
             "createdAtMs": created_at_ms,
             "deliveryState": "complete",
             "attachments": references,
