@@ -59,6 +59,8 @@
 /* The rail in the sidebar session panel: same padding and backdrop as the Chats list. */
 .app-agent-studio-shell:not(:has(> .app-agent-studio-rail)) {
   grid-template-columns: minmax(0, 1fr);
+  /* The narrow layout's rail row does not apply once the rail moves to the sidebar. */
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .app-agent-studio-rail.is-in-sidebar {

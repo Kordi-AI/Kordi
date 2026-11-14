@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factory page · Kordi proposal</title>
+<link rel="stylesheet" href="preview.css">
+</head>
+<body>
+<!-- Standalone design preview of the Factory page. Synthetic data, no network calls, system fonts only.
+     Tokens mirror app/desktop/src/styles/theme-tokens.css and shell-factory-*.css. -->
+<nav class="pv-bar" aria-label="Preview controls">
+  <div class="pv-group" role="group" aria-label="Variant">
+    <button type="button" data-variant="a">A · Scope first</button>
+    <button type="button" data-variant="b">B · One control</button>
+    <button type="button" data-variant="c">C · Filter menu</button>
+  </div>
+  <div class="pv-group" role="group" aria-label="Theme">
+    <button type="button" data-theme-set="light">Light</button>
+    <button type="button" data-theme-set="dark">Dark</button>
+  </div>
+</nav>
+<div class="pv-stage">
+  <div class="app" id="app"></div>
+</div>
+<script type="module" src="preview.js"></script>
+</body>
+</html>

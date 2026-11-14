@@ -134,14 +134,6 @@
     border-right: 0;
   }
 
-  .app-skill-community {
-    grid-template-columns: minmax(248px, 290px) minmax(0, 1fr);
-  }
-
-  .app-factory-library-detail {
-    grid-template-columns: minmax(260px, 0.78fr) minmax(380px, 1.22fr);
-  }
-
 }
 
 @container agents-page (max-width: 760px) {
@@ -173,34 +165,9 @@
     min-height: 40px;
   }
 
-  .app-skill-library-files,
-  .app-skill-community {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .app-skill-library-files > nav,
-  .app-skill-community-results {
-    max-height: 190px;
-    border-right: 0;
-    border-bottom: 1px solid color-mix(in oklab, var(--app-divider) 58%, transparent);
-  }
-
-  .app-skill-library-summary {
-    padding-inline: 14px;
-  }
-
-  .app-skill-library-facts,
-  .app-skill-library-actions {
-    margin-left: 0;
-  }
-
   .app-agent-studio-header {
     min-height: 62px;
     padding: 9px 12px;
-  }
-
-  .app-factory-library-overview {
-    padding-inline: 20px;
   }
 
   .app-factory-inspect-scroll {
@@ -237,41 +204,13 @@
     max-width: 150px;
   }
 
-  .app-factory-inspect-main > .app-agent-studio-header,
-  .app-factory-community-main > .app-agent-studio-header {
+  .app-factory-inspect-main > .app-agent-studio-header {
     flex-wrap: wrap;
     padding-block: 10px;
   }
 
   .app-agent-studio-header-actions {
     width: 100%;
-  }
-
-  .app-factory-skill-mode {
-    width: auto;
-    flex: 1 1 auto;
-  }
-
-  .app-factory-library-detail {
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-  }
-
-  .app-factory-library-overview {
-    flex: 0 0 auto;
-    overflow: visible;
-    border-right: 0;
-    border-bottom: 1px solid color-mix(in oklab, var(--app-divider) 62%, transparent);
-  }
-
-  .app-factory-library-preview {
-    flex: 0 0 540px;
-    min-height: 540px;
-  }
-
-  .app-factory-library-definition {
-    margin-block: 24px;
   }
 
   .app-agent-studio-status-pill {

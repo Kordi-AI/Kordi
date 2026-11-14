@@ -7,6 +7,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { AgentInspectionView } from '../src/kordi-app/agents/AgentInspectionView';
 import { AgentStudioWorkspace } from '../src/kordi-app/agents/AgentStudioWorkspace';
 import { CapabilityLibraryView } from '../src/kordi-app/agents/CapabilityLibraryView';
+import { CommunitySkillDetail } from '../src/kordi-app/agents/CommunitySkillDetail';
+import { communitySecurityNotice } from '../src/kordi-app/agents/factoryLibraryUtils';
 import {
   CLOUD_AGENT_TOOL_DESCRIPTIONS,
   factoryAgentCreateInput,
@@ -24,7 +26,7 @@ import {
 import type { Agent } from '../src/kordi-app/types';
 import { randomFactoryCreationAvatar } from '../src/kordi-app/agents/useFactoryCreationAvatar';
 import { parseBirdAvatarSeed } from '../src/features/cloud/birdAvatars';
-import type { DesktopAgentBuilderStatus, DesktopSkillLibraryEntry } from '../src/lib/desktop';
+import type { DesktopAgentBuilderStatus, DesktopCommunitySkillSummary, DesktopSkillLibraryEntry } from '../src/lib/desktop';
 import { readDesktopShellCss } from './helpers/readDesktopStyles';
 
 const agent: Agent = {
@@ -355,7 +357,7 @@ test('Tool and Plugin inspection remain read-only and expose exact Build routing
   }
 });
 
-test('Skill Library uses a balanced three-pane inspection layout and keeps Community discovery available', () => {
+test('Skill detail puts the name, source and version in the header and files in tabs', () => {
   const skill: DesktopSkillLibraryEntry = {
     id: 'skill:research',
     name: 'research',
@@ -366,7 +368,7 @@ test('Skill Library uses a balanced three-pane inspection layout and keeps Commu
     origin: 'external',
     enabled: true,
     editable: false,
-    removable: false,
+    removable: true,
     version: '1.0.0',
     provider: null,
     owner: null,
@@ -382,44 +384,56 @@ test('Skill Library uses a balanced three-pane inspection layout and keeps Commu
     status: 'Enabled',
     usedBy: ['Research Agent'],
   };
-  const installedHtml = renderToStaticMarkup(
+  const html = renderToStaticMarkup(
     <CapabilityLibraryView
       kind="skill"
       artifact={artifact}
       skill={skill}
-      installedSkills={[skill]}
-      onEditInBuild={() => undefined}
-    />,
-  );
-  const communityHtml = renderToStaticMarkup(
-    <CapabilityLibraryView
-      kind="skill"
-      artifact={artifact}
-      skill={skill}
-      skillMode="community"
-      installedSkills={[skill]}
+      onSetEnabled={() => undefined}
+      onRemove={() => true}
       onEditInBuild={() => undefined}
     />,
   );
   const css = readDesktopShellCss();
 
-  assert.match(installedHtml, /app-factory-library-overview/);
-  assert.match(installedHtml, /app-factory-library-preview/);
-  assert.match(installedHtml, /My skills <span>1<\/span>/);
-  assert.match(installedHtml, /Local library/);
-  assert.doesNotMatch(installedHtml, /Settings:External/);
-  assert.doesNotMatch(installedHtml, /File preview|Published files|Read only/);
-  assert.doesNotMatch(communityHtml, /Community catalog/);
-  assert.match(communityHtml, /Search ClawHub/);
-  assert.match(communityHtml, /Inspect before installing/);
-  assert.match(
-    css,
-    /\.app-factory-library-detail\s*\{[^}]*grid-template-columns:\s*minmax\(280px, 0\.72fr\) minmax\(420px, 1\.28fr\);/s,
+  assert.match(html, /<h2>research<\/h2><p>Skill · Local library · v1\.0\.0<\/p>/);
+  assert.match(html, /role="switch" aria-checked="true" aria-label="Enabled"/);
+  assert.match(html, /Edit in Build/);
+  assert.match(html, /aria-label="More"/);
+  assert.match(html, />Copy path</);
+  assert.match(html, />Remove</);
+  assert.match(html, /<h3>About<\/h3>/);
+  assert.match(html, /<dt>Used by<\/dt><dd>Research Agent<\/dd>/);
+  assert.doesNotMatch(html, /Settings:External|My skills|Community|File preview|Read only/);
+  assert.doesNotMatch(css, /\.app-factory-skill-mode|\.app-factory-library-detail|\.app-skill-community/);
+  assert.match(css, /\.app-factory-detail-tab-list button\.is-active::after\s*\{/);
+});
+
+test('Community skill detail offers Install and the source link, and warns only on a flagged scan', () => {
+  const summary: DesktopCommunitySkillSummary = {
+    id: 'clawhub:pixel-forge:figma-to-code',
+    provider: 'clawhub',
+    owner: 'pixel-forge',
+    slug: 'figma-to-code',
+    name: 'figma-to-code',
+    description: 'Turn a Figma frame into React components.',
+    version: '1.2.0',
+    downloads: 21500,
+    stars: 0,
+    sourceUrl: 'https://clawhub.ai/pixel-forge/skills/figma-to-code',
+    installed: false,
+  };
+  const html = renderToStaticMarkup(
+    <CommunitySkillDetail summary={summary} loadingList={false} installedSkills={[]} onInstalled={() => undefined} />,
   );
-  assert.match(
-    css,
-    /\.app-factory-library-switch\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/s,
-  );
+
+  assert.match(html, /<h2>figma-to-code<\/h2><p>Skill · ClawHub · v1\.2\.0<\/p>/);
+  assert.match(html, /aria-label="Open on ClawHub"/);
+  assert.match(html, />Install<\/button>/);
+  assert.doesNotMatch(html, /role="switch"|Installs to your default agent|Inspect before installing/);
+  assert.equal(communitySecurityNotice({ securityStatus: 'clean', securitySummary: 'Clean.' }), null);
+  assert.equal(communitySecurityNotice({ securityStatus: 'unreviewed', securitySummary: 'No scan.' }), null);
+  assert.equal(communitySecurityNotice({ securityStatus: 'suspicious', securitySummary: 'Marked suspicious.' }), 'Marked suspicious.');
 });
 
 test('compact Factory layout shows one pane at a time behind the Chat / Blueprint switcher', () => {

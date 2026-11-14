@@ -116,6 +116,19 @@ export type FactorySection = 'build' | 'agents' | 'library';
 
 export type FactoryLibrarySection = 'skill' | 'tool' | 'plugin';
 
+export type FactoryCommunityProvider = 'clawhub' | 'skills-sh';
+
+/** What the Library list shows: one kind from the user's own library, or one community catalog. */
+export type FactoryLibraryFilter =
+  | { scope: 'mine'; kind: FactoryLibrarySection }
+  | { scope: 'community'; provider: FactoryCommunityProvider };
+
+export function communityProviderLabel(provider: string) {
+  if (provider === 'clawhub') return 'ClawHub';
+  if (provider === 'skills-sh') return 'skills.sh';
+  return provider;
+}
+
 export type FactoryReturnContext = {
   section: Exclude<FactorySection, 'build'>;
   librarySection?: FactoryLibrarySection;

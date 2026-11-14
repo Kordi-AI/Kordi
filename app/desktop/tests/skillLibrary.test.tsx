@@ -7,7 +7,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { AgentStudioRail } from '../src/kordi-app/agents/AgentStudioRail';
-import { AddToAgentControl, SkillLibraryView } from '../src/kordi-app/agents/SkillLibraryView';
 import { skillLibraryFileDisplay } from '../src/kordi-app/agents/model';
 import type { Agent } from '../src/kordi-app/types';
 import type { DesktopSkillLibraryEntry } from '../src/lib/desktop';
@@ -67,6 +66,21 @@ function agent(overrides: Partial<Agent> = {}): Agent {
   };
 }
 
+function communityProps(overrides: Partial<React.ComponentProps<typeof AgentStudioRail>['community']> = {}): React.ComponentProps<typeof AgentStudioRail>['community'] {
+  return {
+    providers: ['clawhub', 'skills-sh'],
+    query: '',
+    setQuery: () => undefined,
+    browsing: true,
+    results: [],
+    loading: false,
+    error: null,
+    selected: null,
+    select: () => undefined,
+    ...overrides,
+  };
+}
+
 function railProps(overrides: Partial<React.ComponentProps<typeof AgentStudioRail>> = {}): React.ComponentProps<typeof AgentStudioRail> {
   return {
     agents: [],
@@ -77,11 +91,11 @@ function railProps(overrides: Partial<React.ComponentProps<typeof AgentStudioRai
     libraryArtifacts: { tool: [], plugin: [] },
     selectedLibraryId: null,
     section: 'build',
-    librarySection: 'skill',
-    libraryCommunity: false,
+    libraryFilter: { scope: 'mine', kind: 'skill' },
+    community: communityProps(),
     canCreateAgent: true,
     onSectionChange: () => undefined,
-    onLibrarySectionChange: () => undefined,
+    onLibraryFilterChange: () => undefined,
     onOpenBuild: () => undefined,
     onOpenAgent: () => undefined,
     onOpenLibraryArtifact: () => undefined,
@@ -124,13 +138,11 @@ function installDom() {
 }
 
 test('skill file rows do not repeat a root filename as their subtitle', () => {
-  const source = readFileSync(new URL('../src/kordi-app/agents/SkillLibraryView.tsx', import.meta.url), 'utf8');
   assert.deepEqual(skillLibraryFileDisplay('SKILL.md'), { name: 'SKILL.md', parent: null });
   assert.deepEqual(skillLibraryFileDisplay('references/api.md'), { name: 'api.md', parent: 'references' });
-  assert.doesNotMatch(source, /Editable Factory skill|Read only/);
 });
 
-test('Factory rail exposes Build, Agent, Lib and all chat-first artifact kinds', () => {
+test('Factory rail exposes Build, Agents, Library and all chat-first artifact kinds', () => {
   const html = renderToStaticMarkup(
     <AgentStudioRail {...railProps({ skills: [builtSkill], section: 'agents' })} />,
   );
@@ -140,8 +152,8 @@ test('Factory rail exposes Build, Agent, Lib and all chat-first artifact kinds',
   assert.match(html, /New tool/);
   assert.match(html, /New plugin/);
   assert.match(html, />Build<\/button>/);
-  assert.match(html, /Agent <span>0<\/span>/);
-  assert.match(html, /Lib <span>1<\/span>/);
+  assert.match(html, /Agents <span>0<\/span>/);
+  assert.match(html, /Library <span>1<\/span>/);
   assert.match(html, /Search agents/);
   assert.doesNotMatch(html, /Factory runtime connected/);
 });
@@ -253,13 +265,12 @@ test('Factory agent selection uses rounded sidebar rows with matching content in
   );
 });
 
-test('Lib exposes independent Skill, Tool, and Plugin counts with stable selection', () => {
+test('Library search carries one filter menu for scope and type, and rows say only Disabled', () => {
   const html = renderToStaticMarkup(
     <AgentStudioRail {...railProps({
-      skills: [{ ...builtSkill, enabled: true }],
+      skills: [{ ...builtSkill, enabled: true }, { ...externalUiSkill, enabled: false }],
       selectedLibraryId: builtSkill.id,
       section: 'library',
-      librarySection: 'skill',
       libraryArtifacts: {
         tool: [{ id: 'tool:read', kind: 'tool', name: 'read', description: '', status: 'Available', usedBy: [] }],
         plugin: [{ id: 'plugin:github', kind: 'plugin', name: 'github', description: '', status: 'Available', usedBy: [] }],
@@ -267,152 +278,61 @@ test('Lib exposes independent Skill, Tool, and Plugin counts with stable selecti
     })} />,
   );
 
-  assert.match(html, /repository-review/);
-  assert.match(html, /Skills <span>1<\/span>/);
-  assert.match(html, /Tools <span>1<\/span>/);
-  assert.match(html, /Plugins <span>1<\/span>/);
-  assert.match(html, /app-session-row-active/);
-  assert.match(html, /aria-current="true"/);
-  assert.match(html, /Enabled/);
-  assert.match(html, /<strong>repository-review<\/strong><span class="app-agent-studio-agent-state">Enabled<\/span>/);
-  assert.doesNotMatch(html, /app-agent-studio-draft-avatar/);
+  assert.match(html, /placeholder="Search skills"/);
+  assert.match(html, /aria-label="Show: Skills"/);
+  assert.match(html, />My library</);
+  assert.match(html, /role="menuitemradio" aria-checked="true"><svg[^>]*>.*?<span>Skills<\/span><small>2<\/small>/);
+  assert.match(html, /<span>Tools<\/span><small>1<\/small>/);
+  assert.match(html, /<span>Plugins<\/span><small>1<\/small>/);
+  assert.match(html, />Community</);
+  assert.match(html, /<span>ClawHub<\/span>/);
+  assert.match(html, /<span>skills\.sh<\/span>/);
+  assert.doesNotMatch(html, /app-factory-library-switch|text-transform/);
+  assert.match(html, /aria-current="true" class="app-agent-studio-agent-row is-compact app-session-row-active"><strong>repository-review<\/strong><\/button>/);
+  assert.match(html, /<strong>adapt<\/strong><span class="app-agent-studio-agent-state">Disabled<\/span>/);
+  assert.doesNotMatch(html, /Enabled/);
 });
 
 test('Factory rail keys search and scroll return context independently for each peer view', () => {
   const source = readFileSync(new URL('../src/kordi-app/agents/AgentStudioRail.tsx', import.meta.url), 'utf8');
 
   assert.match(source, /const \[queries, setQueries\] = useState<Record<string, string>>\(\{\}\);/);
-  assert.match(source, /const viewKey = section === 'library' \? `\$\{section\}:\$\{librarySection\}:\$\{libraryCommunity \? 'community' : 'installed'\}` : section;/);
+  assert.match(source, /`\$\{section\}:community:\$\{libraryFilter\.provider\}`/);
   assert.match(source, /setQueries\(\(current\) => \(\{ \.\.\.current, \[viewKey\]: value \}\)\)/);
   assert.equal(source.match(/scrollPositionsRef\.current\[viewKey\]/g)?.length, 2);
 });
 
-test('Community discovery owns its search pane without duplicating the installed-skill search', () => {
-  const html = renderToStaticMarkup(
-    <AgentStudioRail {...railProps({
-      skills: [builtSkill],
-      section: 'library',
-      librarySection: 'skill',
-      libraryCommunity: true,
-    })} />,
-  );
+test('Community results fill the rail list, opening on Popular before a search', () => {
+  const result = {
+    id: 'clawhub:pixel-forge:figma-to-code',
+    provider: 'clawhub',
+    owner: 'pixel-forge',
+    slug: 'figma-to-code',
+    name: 'figma-to-code',
+    description: 'Turn a Figma frame into React components.',
+    version: '1.2.0',
+    downloads: 21500,
+    stars: 0,
+    sourceUrl: 'https://clawhub.ai/pixel-forge/skills/figma-to-code',
+    installed: true,
+  };
+  const props = (community: Partial<React.ComponentProps<typeof AgentStudioRail>['community']>) => railProps({
+    skills: [builtSkill],
+    section: 'library',
+    libraryFilter: { scope: 'community', provider: 'clawhub' },
+    community: communityProps(community),
+  });
+  const popular = renderToStaticMarkup(<AgentStudioRail {...props({ results: [result], selected: result })} />);
 
-  assert.match(html, /Community skills/);
-  assert.doesNotMatch(html, /Search trusted catalogs/);
-  assert.doesNotMatch(html, /Search skills/);
-  assert.doesNotMatch(html, /repository-review/);
-});
+  assert.match(popular, /placeholder="Search ClawHub"/);
+  assert.match(popular, /aria-label="Show: ClawHub"/);
+  assert.match(popular, />Popular</);
+  assert.match(popular, /<strong>figma-to-code<\/strong><small>pixel-forge · 22K installs<\/small>/);
+  assert.match(popular, /aria-label="Installed"/);
+  assert.doesNotMatch(popular, /repository-review|Community skills/);
 
-test('Skill Library keeps install state and explicit add-to-agent action visible', () => {
-  const agentTargets = [
-    agent(),
-    agent({ id: 'agent:reviewer', name: 'Review Agent', role: 'Repository reviewer', loadedSkills: ['adapt'] }),
-  ];
-  const html = renderToStaticMarkup(
-    <SkillLibraryView
-      skills={[externalUiSkill]}
-      selectedSkillId={externalUiSkill.id}
-      loading={false}
-      error={null}
-      mutatingSkillId={null}
-      agentTargets={agentTargets}
-      onSelectSkill={() => undefined}
-      onRefresh={async () => [externalUiSkill]}
-      onSetEnabled={async () => externalUiSkill}
-      onRemove={async () => true}
-      onInstalled={() => undefined}
-      onAddToAgent={() => undefined}
-    />,
-  );
-
-  assert.match(html, /Skill Library/);
-  assert.match(html, /My skills/);
-  assert.match(html, /Community/);
-  assert.match(html, /adapt/);
-  assert.match(html, /Category/);
-  assert.match(html, />UI</);
-  assert.match(html, /Installed from/);
-  assert.match(html, /Local library/);
-  assert.match(html, /Version/);
-  assert.match(html, />—</);
-  assert.doesNotMatch(html, /<dt>Source<\/dt>|<dt>Scope<\/dt>|<dt>Files<\/dt>|Settings:External/);
-  assert.match(html, /Disabled/);
-  assert.match(html, /Add to agent/);
-  assert.match(html, /Choose an agent/);
-  assert.match(html, /Kordi/);
-  assert.match(html, /Review Agent/);
-  assert.match(html, /Repository reviewer/);
-  assert.match(html, /Added/);
-  assert.doesNotMatch(html, /Add to current build/);
-  assert.match(html, /Remove/);
-});
-
-test('Add to agent exposes each target and forwards the selected agent id', async () => {
-  const installed = installDom();
-  const host = document.createElement('div');
-  document.body.append(host);
-  let root: Root | null = createRoot(host);
-  let selectedAgentId: string | null = null;
-
-  try {
-    await act(async () => root?.render(
-      <AddToAgentControl
-        skill={externalUiSkill}
-        content="# Adapt"
-        agentTargets={[agent(), agent({ id: 'agent:writer', name: 'Writing Agent', role: 'Writing assistant' })]}
-        onAddToAgent={async (agentId) => { selectedAgentId = agentId; }}
-      />,
-    ));
-
-    const writingAgent = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
-      .find((button) => button.textContent?.includes('Writing Agent'));
-    assert.ok(writingAgent);
-    await act(async () => writingAgent.click());
-    assert.equal(selectedAgentId, 'agent:writer');
-    assert.equal(host.querySelector('summary')?.textContent?.trim(), 'Add to agent');
-    assert.equal(host.querySelector('details')?.hasAttribute('open'), false);
-  } finally {
-    await act(async () => root?.unmount());
-    root = null;
-    host.remove();
-    installed.restore();
-  }
-});
-
-test('Add to agent dismisses when the user clicks outside the picker', async () => {
-  const installed = installDom();
-  const host = document.createElement('div');
-  const outside = document.createElement('button');
-  document.body.append(host, outside);
-  let root: Root | null = createRoot(host);
-
-  try {
-    await act(async () => root?.render(
-      <AddToAgentControl
-        skill={externalUiSkill}
-        content="# Adapt"
-        agentTargets={[agent()]}
-        onAddToAgent={() => undefined}
-      />,
-    ));
-
-    const details = host.querySelector<HTMLDetailsElement>('details');
-    assert.ok(details);
-    await act(async () => {
-      details.open = true;
-      details.dispatchEvent(new installed.dom.window.Event('toggle'));
-    });
-    assert.equal(details.open, true);
-
-    await act(async () => {
-      outside.dispatchEvent(new installed.dom.window.Event('pointerdown', { bubbles: true }));
-    });
-    assert.equal(details.open, false);
-  } finally {
-    await act(async () => root?.unmount());
-    root = null;
-    outside.remove();
-    host.remove();
-    installed.restore();
-  }
+  const searched = renderToStaticMarkup(<AgentStudioRail {...props({ query: 'figma', browsing: false, results: [result] })} />);
+  assert.doesNotMatch(searched, />Popular</);
+  const empty = renderToStaticMarkup(<AgentStudioRail {...props({ query: 'zzz', browsing: false })} />);
+  assert.match(empty, /No matching skills/);
 });
