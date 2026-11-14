@@ -13,9 +13,9 @@ use axum::{
 };
 use rand::Rng;
 
+use super::limits::check_limits;
 use super::{
-    check_limits, enter, joining_profile, room_full, room_name, room_request, view::view, Entered,
-    JoinRequest,
+    enter, joining_profile, room_full, room_name, room_request, view::view, Entered, JoinRequest,
 };
 use crate::auth::rate_limit::CloudRateLimiter;
 use crate::common_ground::{db_error, err};

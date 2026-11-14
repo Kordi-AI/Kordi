@@ -16,7 +16,8 @@ use serde_json::json;
 use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 
-use super::{address_limit, member_count_sql, room_not_found, sharing_profile, valid_code};
+use super::limits::address_limit;
+use super::{member_count_sql, room_not_found, sharing_profile, valid_code};
 use crate::auth::rate_limit::{CloudRateLimiter, RateLimitDecision};
 use crate::common_ground::{db_error, limited, ROOM_JOIN_LIMIT, ROOM_OPEN_SQL};
 use crate::{auth::routes::CloudSession, server::ServerState};
