@@ -137,9 +137,5 @@ pub async fn bootstrap_system_agent(
             println!("System agent joined {joined} existing group conversation(s)");
         }
     }
-    let left = super::membership::leave_room_groups(pool, &config.account_id).await?;
-    if left > 0 {
-        println!("System agent left {left} Grounding group(s)");
-    }
     Ok(config)
 }

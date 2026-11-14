@@ -277,6 +277,7 @@ struct ConversationView: View {
     private let onReplyInConversation: ((MessageActionSource) -> Void)?
     private let onOpenSessionDetails: ((ConversationSummary) -> Void)?
     @State private var draft = ""
+    @State private var mentionMenuOpenCount = 0
     @State private var isSending = false
     @State private var stagedMessageIDs: [String] = []
     @State private var trajectoryViewport = ConversationTrajectoryViewport()
@@ -467,11 +468,15 @@ struct ConversationView: View {
     private var isWaitingForLinkedBackgroundSession: Bool {
         linkedBackgroundSessionState == .running && messages.isEmpty
     }
+    /// Refetches which agents may be mentioned when the conversation or its
+    /// people change, when another account's agents change, and when an `@`
+    /// is typed, so an agent its owner just closed stops being offered.
     private var mentionTargetRefreshID: [String] {
-        [conversation.id] + ComposerMentionTargetCatalog.ownerAccountIDs(
-            for: conversation,
-            currentAccountID: model.account?.accountId ?? ""
-        )
+        [conversation.id, "\(model.agentDirectoryRevision)", "\(mentionMenuOpenCount)"]
+            + ComposerMentionTargetCatalog.ownerAccountIDs(
+                for: conversation,
+                currentAccountID: model.account?.accountId ?? ""
+            )
     }
     // Agent replies can span a viewport and leave stale lazy height estimates
     // during a follow-up send, including on iOS 27. Use measured row slots.
@@ -1203,6 +1208,9 @@ struct ConversationView: View {
         }
         .task(id: mentionTargetRefreshID) {
             await model.refreshMentionTargets(for: conversation)
+        }
+        .onChange(of: draft.contains("@")) { _, hasMention in
+            if hasMention { mentionMenuOpenCount &+= 1 }
         }
         .task {
             _ = await MessageDeleteParticleResources.prepared.value

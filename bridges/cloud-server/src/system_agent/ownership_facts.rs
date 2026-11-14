@@ -161,13 +161,15 @@ fn mention_owner(mention: &Value) -> Option<String> {
 }
 
 /// Facts for messages after `after`, ascending. `flagged` holds the ids the
-/// run input marks as addressed to or answered by an agent.
+/// run input marks as addressed to or answered by an agent, and
+/// `asks_system_agent` the ids it marks as asking the System agent.
 pub(super) async fn message_facts(
     pool: &PgPool,
     config: &SystemAgentConfig,
     candidate: &Candidate,
     after: i64,
     flagged: &HashSet<String>,
+    asks_system_agent: &HashSet<String>,
 ) -> Result<Vec<MessageFact>, sqlx_core::Error> {
     let conversation_id = candidate.conversation_id;
     let rows: Vec<FactRow> = query_as(MESSAGE_FACTS_SQL)
@@ -213,6 +215,7 @@ pub(super) async fn message_facts(
                     human: person && agent.is_none(),
                     agent,
                     addressed_owner,
+                    addresses_system_agent: asks_system_agent.contains(&id),
                 })
             },
         )

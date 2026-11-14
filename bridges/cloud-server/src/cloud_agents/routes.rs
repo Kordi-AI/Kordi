@@ -39,6 +39,10 @@ struct CloudAgentListResponse {
 #[serde(rename_all = "camelCase")]
 struct SharedAgentsQuery {
     owner_account_ids: Option<String>,
+    /// Also list the default agents of owners who share a group chat with
+    /// the caller. Opt-in, so older clients keep seeing Factory agents only.
+    #[serde(default)]
+    include_default_agents: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -179,10 +183,24 @@ async fn list_shared_agents(
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
         .collect::<Vec<_>>();
-    match list_shared_agent_summaries(state.db_pool(), &owner_ids, &session.account_id).await {
-        Ok(agents) => Json(SharedCloudAgentListResponse { agents }).into_response(),
-        Err(err) => store_error_response("list_shared", err),
+    let mut agents =
+        match list_shared_agent_summaries(state.db_pool(), &owner_ids, &session.account_id).await {
+            Ok(agents) => agents,
+            Err(err) => return store_error_response("list_shared", err),
+        };
+    if query.include_default_agents {
+        match crate::cloud_agents::store_shared::list_group_member_default_agent_summaries(
+            state.db_pool(),
+            &owner_ids,
+            &session.account_id,
+        )
+        .await
+        {
+            Ok(defaults) => agents.extend(defaults),
+            Err(err) => return store_error_response("list_shared", err),
+        }
     }
+    Json(SharedCloudAgentListResponse { agents }).into_response()
 }
 
 async fn create_agent(

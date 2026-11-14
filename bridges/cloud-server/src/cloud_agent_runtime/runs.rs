@@ -10,7 +10,9 @@ mod envelopes;
 mod errors;
 pub(crate) mod exchanges;
 pub(crate) mod facilitator_handoff;
+pub(crate) mod facilitator_slot;
 mod feature_runs;
+mod group_member_target;
 mod group_mentions;
 mod group_target;
 pub(crate) mod identity;
@@ -58,6 +60,7 @@ pub(crate) use errors::{
     agent_unavailable, error_response, run_error_response, runner_unauthorized,
 };
 pub use errors::{RunError, RunResult};
+pub use group_member_target::group_member_can_target_owner;
 #[cfg(test)]
 pub use leases::lease_next_run_among;
 pub use leases::{
@@ -65,8 +68,8 @@ pub use leases::{
     RunnerRunRequest, RunnerRunResponse,
 };
 pub use project_unavailable::{
-    fail_unavailable_project_request, fail_unreachable_agent_request, fail_unroutable_mention,
-    PROJECT_UNAVAILABLE_ERROR_CODE,
+    fail_refused_agent_request, fail_unavailable_project_request, fail_unreachable_agent_request,
+    fail_unroutable_mention, PROJECT_UNAVAILABLE_ERROR_CODE,
 };
 #[cfg(test)]
 use prompt_history::{fallback_prompt_with_history, CloudFallbackHistoryMessage};

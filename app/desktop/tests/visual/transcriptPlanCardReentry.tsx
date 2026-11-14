@@ -37,7 +37,7 @@ function history(chat: string): Message[] {
     };
   });
   messages.push({
-    id: `${chat}-plan`, role: 'person', isOwnMessage: false, senderType: 'human', sender: 'System',
+    id: `${chat}-plan`, role: 'person', isOwnMessage: false, senderType: 'human', sender: 'Facilitator',
     senderProfileImageUrl: KORDI_SYSTEM_AVATAR_URL, showSenderMeta: true, messageKind: 'system-notice',
     time: '10:01', text: 'Does Sunday evening work?', planCard: planCard(chat),
   });

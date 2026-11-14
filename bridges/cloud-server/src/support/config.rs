@@ -5,7 +5,7 @@ use crate::service_model_config::{shared_setting, validate_base_url};
 
 pub const DEFAULT_SUPPORT_ACCOUNT_ID: &str = "acct_kordi_support";
 pub const DEFAULT_SUPPORT_AGENT_ID: &str = "cloud_agent_kordi_support";
-pub const DEFAULT_SUPPORT_NAME: &str = crate::distribution::development_default("Kordi Support");
+pub const DEFAULT_SUPPORT_NAME: &str = crate::distribution::development_default("KordiSpot");
 pub const DEFAULT_SUPPORT_SUBTITLE: &str =
     crate::distribution::development_default("Ask questions or suggest improvements");
 pub const DEFAULT_SUPPORT_OPENAI_MODEL: &str =

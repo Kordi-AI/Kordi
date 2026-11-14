@@ -637,6 +637,39 @@ actor CloudAPIClient {
         return Array(agentsByID.values)
     }
 
+    /// The default agents of `ownerAccountIds` the viewer may mention as a
+    /// group co-member; contacts' default agents come with the contacts.
+    func listGroupMemberDefaultAgents(
+        token: String,
+        ownerAccountIds: [String]
+    ) async throws -> [CloudGroupMemberDefaultAgent] {
+        let owners = Array(Set(ownerAccountIds.filter { !$0.isEmpty })).sorted()
+        guard !owners.isEmpty else { return [] }
+        var agentsByOwner: [String: CloudGroupMemberDefaultAgent] = [:]
+        for startIndex in stride(
+            from: owners.startIndex,
+            to: owners.endIndex,
+            by: Self.sharedAgentOwnerBatchSize
+        ) {
+            let endIndex = min(startIndex + Self.sharedAgentOwnerBatchSize, owners.endIndex)
+            let ownerBatch = owners[startIndex..<endIndex]
+            let response: GroupMemberDefaultAgentsResponse = try await send(
+                path: "/v1/cloud/agents/shared",
+                method: "GET",
+                token: token,
+                query: [
+                    URLQueryItem(name: "ownerAccountIds", value: ownerBatch.joined(separator: ",")),
+                    URLQueryItem(name: "includeDefaultAgents", value: "true"),
+                ],
+                fallback: "Could not load shared agents."
+            )
+            for agent in response.agents where agent.isDefaultAgent == true {
+                agentsByOwner[agent.ownerAccountId] = agent
+            }
+        }
+        return agentsByOwner.values.sorted { $0.ownerAccountId < $1.ownerAccountId }
+    }
+
     func createAgent(token: String, draft: CloudAgentDraft) async throws -> CloudAgent {
         let response: AgentResponse = try await send(
             path: "/v1/cloud/agents",
@@ -3225,6 +3258,28 @@ private struct ContactRequestsResponse: Decodable { let requests: [CloudContactR
 private struct ContactRequestResponse: Decodable { let request: CloudContactRequest }
 private struct SendContactRequest: Encodable { let peerAccountId: String; let message: String? }
 private struct AgentsResponse: Decodable { let agents: [CloudAgent] }
+private struct GroupMemberDefaultAgentsResponse: Decodable {
+    let agents: [CloudGroupMemberDefaultAgent]
+
+    private enum CodingKeys: String, CodingKey { case agents }
+
+    /// Factory agents in the same list may not decode as default agents;
+    /// they are skipped, never a failed load.
+    init(from decoder: Decoder) throws {
+        var list = try decoder.container(keyedBy: CodingKeys.self).nestedUnkeyedContainer(forKey: .agents)
+        var agents: [CloudGroupMemberDefaultAgent] = []
+        while !list.isAtEnd {
+            if let agent = try? list.decode(CloudGroupMemberDefaultAgent.self) {
+                agents.append(agent)
+            } else {
+                _ = try? list.decode(SkippedAgentEntry.self)
+            }
+        }
+        self.agents = agents
+    }
+
+    private struct SkippedAgentEntry: Decodable {}
+}
 private struct AgentResponse: Decodable { let agent: CloudAgent }
 private struct CloudAgentAvatarRequest: Encodable {
     let avatarMutation: CanonicalAvatarMutation
