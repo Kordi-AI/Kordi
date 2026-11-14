@@ -99,16 +99,22 @@ pub(super) fn is_group_yield(body: &str) -> bool {
     })
 }
 
-/// A group run that yields to wait keeps its one visible row (#2416). The
-/// processing row the run published first is its reply slot: it stays in
-/// place, the server shows whom the task waits for in it, and the resumed
-/// result replaces it. Returns `None` when the run has no slot still in
-/// progress, so the caller inserts the yield as before.
-pub(super) async fn group_yield_slot(
+/// A group run keeps one visible row from processing to its end (#2416). The
+/// processing row the run published first is its reply slot:
+/// - a yield leaves it in place, and the server shows whom the task waits for
+///   in it until the resumed result replaces it;
+/// - a reply, failure or stop replaces it in place, under the slot's message
+///   id and timeline position, so no client shows the row vanish before the
+///   reply appears.
+///
+/// Returns `None` when the run has no slot still in progress, so the caller
+/// inserts the publication as before.
+pub(super) async fn publish_into_group_slot(
     transaction: &mut sqlx_core::transaction::Transaction<'_, Postgres>,
     run_id: &str,
     sender_account_id: &str,
     conversation_id: Uuid,
+    body: &str,
 ) -> Result<Option<MessageSnapshot>, StoreError> {
     let row: Option<(Uuid, Value)> = query_as(
         "SELECT m.client_message_id, m.content FROM cloud_agent_fallback_runs run \
@@ -125,9 +131,23 @@ pub(super) async fn group_yield_slot(
         return Ok(None);
     };
     if !slot_in_progress(&content) {
-        return Ok(None);
+        // A retry of the reply that ended the slot changes nothing; anything
+        // else is a publication of its own.
+        let retried =
+            !is_group_yield(body) && reply_in_slot(&content, body).as_ref() == Some(&content);
+        if !retried {
+            return Ok(None);
+        }
     }
-    // The slot is left as it is; replacing it with its own content changes nothing.
+    // A yield leaves the slot as it is: replacing it with its own content changes nothing.
+    let content = if is_group_yield(body) || !slot_in_progress(&content) {
+        content
+    } else {
+        match reply_in_slot(&content, body) {
+            Some(content) => content,
+            None => return Ok(None),
+        }
+    };
     replace_server_message_in_transaction(
         transaction,
         sender_account_id,
@@ -136,6 +156,43 @@ pub(super) async fn group_yield_slot(
         content,
     )
     .await
+}
+
+/// What the slot keeps when a reply takes its place: its id and timeline
+/// position, and the sender identity the server stored for it.
+const SLOT_KEYS: [&str; 8] = [
+    "id",
+    "createdAtMs",
+    "senderAccountId",
+    "senderKind",
+    "senderAgentId",
+    "senderOwnerAccountId",
+    "senderOwnerName",
+    "senderDisplayName",
+];
+
+/// The stored content of `slot` with the published reply `body` in its place.
+fn reply_in_slot(slot: &Value, body: &str) -> Option<Value> {
+    let encoded = slot
+        .pointer("/blocks/0/text")
+        .and_then(Value::as_str)?
+        .strip_prefix(GROUP_PREFIX)?;
+    let mut envelope: Value =
+        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(encoded).ok()?).ok()?;
+    let reply = group_message(body)?;
+    let message = envelope.get_mut("message")?.as_object_mut()?;
+    for (key, value) in reply.as_object()? {
+        if !SLOT_KEYS.contains(&key.as_str()) {
+            message.insert(key.clone(), value.clone());
+        }
+    }
+    let text = format!(
+        "{GROUP_PREFIX}{}",
+        URL_SAFE_NO_PAD.encode(envelope.to_string())
+    );
+    let mut content = slot.clone();
+    content["blocks"][0]["text"] = Value::String(text);
+    Some(content)
 }
 
 fn slot_in_progress(content: &Value) -> bool {
@@ -196,6 +253,29 @@ mod tests {
         assert!(slot_in_progress(&stored("processing")));
         assert!(!slot_in_progress(&stored("complete")));
         assert!(!slot_in_progress(&stored("cancelled")));
+    }
+
+    #[test]
+    fn a_reply_takes_the_slots_id_and_place() {
+        let slot = json!({"schema": 1, "blocks": [{"type": "text", "text": group_body(
+            json!({"id": "slot", "createdAtMs": 10, "deliveryState": "processing", "text": "",
+                "senderOwnerName": "Stored Owner"}))}]});
+        let reply = group_body(
+            json!({"id": "reply", "createdAtMs": 99, "deliveryState": "complete",
+            "text": "Done.", "structuredContent": {"tools": []}}),
+        );
+        let replaced = reply_in_slot(&slot, &reply).unwrap();
+        let message = group_message(replaced["blocks"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(message["id"], "slot");
+        assert_eq!(message["createdAtMs"], 10);
+        assert_eq!(message["text"], "Done.");
+        assert_eq!(message["deliveryState"], "complete");
+        assert_eq!(message["structuredContent"]["tools"], json!([]));
+        assert_eq!(
+            message["senderOwnerName"], "Stored Owner",
+            "the stored identity stays"
+        );
+        assert!(reply_in_slot(&slot, "kordi-cloud-agent-response:e30").is_none());
     }
 
     #[test]

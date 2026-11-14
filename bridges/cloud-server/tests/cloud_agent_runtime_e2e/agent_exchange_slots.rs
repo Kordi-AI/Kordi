@@ -148,6 +148,43 @@ async fn a_mac_run_that_yields_keeps_its_processing_row() {
     );
 }
 
+/// A reply, a failure or a stop from the owner's Mac replaces its processing
+/// row in place, so no member sees the row vanish before the reply appears.
+#[tokio::test]
+async fn a_mac_reply_replaces_its_processing_row_in_place() {
+    for (text, phase) in [
+        ("Synthetic answer.", "complete"),
+        ("Could not reply.", "failed"),
+        ("", "cancelled"),
+    ] {
+        let Some(f) = Fixture::new().await else {
+            return;
+        };
+        let processing = f
+            .publish_from_mac("msg:cloud-agent-processing:slot", "", "processing")
+            .await;
+        let slot: uuid::Uuid = processing["messageId"].as_str().unwrap().parse().unwrap();
+        let rows = f.agent_rows().await;
+        let reply = f
+            .publish_from_mac("msg:cloud-agent:turn", text, phase)
+            .await;
+        assert_eq!(reply["messageId"], slot.to_string(), "{phase}");
+        assert_eq!(f.agent_rows().await, rows, "{phase}: no second row");
+        assert_eq!(f.root_response().await, slot);
+        let row = f.message(slot).await;
+        assert_eq!(
+            row["id"], "msg:cloud-agent-processing:slot",
+            "{phase}: same id"
+        );
+        assert_eq!(row["deliveryState"], phase);
+        assert_eq!(row["text"], text);
+        // A retried publication leaves the finished row as it is.
+        f.publish_from_mac("msg:cloud-agent:turn", text, phase)
+            .await;
+        assert_eq!(f.agent_rows().await, rows, "{phase}: a retry adds nothing");
+    }
+}
+
 #[tokio::test]
 async fn the_asking_agent_keeps_one_row_from_waiting_to_its_result() {
     let Some(f) = Fixture::new().await else {
