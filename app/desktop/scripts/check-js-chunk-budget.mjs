@@ -90,7 +90,9 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // it moves to 5.95 MB.
 // The PDF viewer, the file card with Quick Look, and loading Quick Look thumbnails add 5.9 kB, so it
 // moves to 5.956 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_956_000;
+// Main reached 5.956 MB with the calendar access action; one agent task row (a yield or reply
+// kept in its processing row, which a member's cleanup leaves in place) adds under 1 kB, so it moves to 5.958 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_958_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
