@@ -398,6 +398,7 @@ pub fn run() {
             skill_library::desktop_skill_library_remove,
             skill_library::desktop_skill_community_providers,
             skill_library::desktop_skill_community_search,
+            skill_library::desktop_skill_community_popular,
             skill_library::desktop_skill_community_detail,
             skill_library::desktop_skill_community_install,
             cloud_account_paths::cloud_account_storage_activate,

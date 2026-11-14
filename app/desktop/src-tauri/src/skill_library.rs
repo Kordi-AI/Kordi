@@ -13,9 +13,10 @@ use tauri::State;
 
 use crate::chat::DesktopChatManager;
 
+mod catalog_lists;
+
 const CLAWHUB_API: &str = "https://clawhub.ai/api/v1/";
 const SKILLS_SH_API: &str = "https://skills.sh/api/v1/";
-const COMMUNITY_RESULT_LIMIT: usize = 40;
 const MAX_COMMUNITY_FILES: usize = 128;
 const MAX_COMMUNITY_FILE_BYTES: usize = 1024 * 1024;
 const MAX_COMMUNITY_BUNDLE_BYTES: usize = 4 * 1024 * 1024;
@@ -57,28 +58,6 @@ pub struct DesktopCommunitySkillDetail {
     security_summary: String,
     digest: Option<String>,
     review_digest: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ClawHubSearchResponse {
-    #[serde(default)]
-    results: Vec<ClawHubSearchItem>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ClawHubSearchItem {
-    slug: String,
-    #[serde(default)]
-    display_name: String,
-    #[serde(default)]
-    summary: String,
-    version: Option<String>,
-    #[serde(default)]
-    downloads: u64,
-    updated_at: Option<i64>,
-    owner_handle: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -140,24 +119,6 @@ struct ClawHubFile {
     size: u64,
     sha256: Option<String>,
     content_type: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SkillsShSearchResponse {
-    #[serde(default)]
-    data: Vec<SkillsShSearchItem>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SkillsShSearchItem {
-    id: String,
-    slug: String,
-    name: String,
-    source: String,
-    #[serde(default)]
-    installs: u64,
-    url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -260,109 +221,6 @@ fn clawhub_source_url(owner: Option<&str>, slug: &str) -> String {
     owner
         .map(|owner| format!("https://clawhub.ai/{owner}/skills/{slug}"))
         .unwrap_or_else(|| format!("https://clawhub.ai/skills/{slug}"))
-}
-
-async fn clawhub_search(
-    client: &Client,
-    query: &str,
-    installed: &[SkillLibraryEntry],
-) -> Result<Vec<DesktopCommunitySkillSummary>, String> {
-    if query.trim().len() < 2 {
-        return Ok(Vec::new());
-    }
-    let limit = COMMUNITY_RESULT_LIMIT.to_string();
-    let url = catalog_url(
-        CLAWHUB_API,
-        "search",
-        &[
-            ("q", query.trim()),
-            ("nonSuspiciousOnly", "true"),
-            ("limit", &limit),
-        ],
-    )?;
-    let response: ClawHubSearchResponse = response_json(
-        client
-            .get(url)
-            .send()
-            .await
-            .map_err(|error| format!("ClawHub could not be reached: {error}"))?,
-    )
-    .await?;
-    Ok(response
-        .results
-        .into_iter()
-        .take(COMMUNITY_RESULT_LIMIT)
-        .map(|item| {
-            let owner = item.owner_handle;
-            DesktopCommunitySkillSummary {
-                id: format!(
-                    "clawhub:{}:{}",
-                    owner.as_deref().unwrap_or("unknown"),
-                    item.slug
-                ),
-                provider: "clawhub".to_string(),
-                source_url: clawhub_source_url(owner.as_deref(), &item.slug),
-                installed: installed_match(installed, "clawhub", owner.as_deref(), &item.slug),
-                owner,
-                slug: item.slug.clone(),
-                name: if item.display_name.trim().is_empty() {
-                    item.slug
-                } else {
-                    item.display_name
-                },
-                description: item.summary,
-                version: item.version,
-                downloads: item.downloads,
-                stars: 0,
-                updated_at_ms: item.updated_at,
-            }
-        })
-        .collect())
-}
-
-async fn skills_sh_search(
-    client: &Client,
-    query: &str,
-    installed: &[SkillLibraryEntry],
-) -> Result<Vec<DesktopCommunitySkillSummary>, String> {
-    if query.trim().len() < 2 {
-        return Ok(Vec::new());
-    }
-    let token = skills_sh_token()?;
-    let limit = COMMUNITY_RESULT_LIMIT.to_string();
-    let url = catalog_url(
-        SKILLS_SH_API,
-        "skills/search",
-        &[("q", query.trim()), ("limit", &limit)],
-    )?;
-    let response: SkillsShSearchResponse = response_json(
-        client
-            .get(url)
-            .bearer_auth(token)
-            .send()
-            .await
-            .map_err(|error| format!("Skills.sh could not be reached: {error}"))?,
-    )
-    .await?;
-    Ok(response
-        .data
-        .into_iter()
-        .take(COMMUNITY_RESULT_LIMIT)
-        .map(|item| DesktopCommunitySkillSummary {
-            id: format!("skills-sh:{}", item.id),
-            provider: "skills-sh".to_string(),
-            owner: Some(item.source.clone()),
-            slug: item.slug.clone(),
-            name: item.name,
-            description: format!("Published from {}", item.source),
-            version: None,
-            downloads: item.installs,
-            stars: 0,
-            updated_at_ms: None,
-            source_url: item.url,
-            installed: installed_match(installed, "skills-sh", Some(&item.source), &item.slug),
-        })
-        .collect())
 }
 
 async fn clawhub_detail(
@@ -881,11 +739,17 @@ pub async fn desktop_skill_community_search(
     let cwd = cwd()?;
     let installed = skill_library::list_skills(&cwd).map_err(|error| error.to_string())?;
     let client = http_client()?;
-    match provider.trim() {
-        "clawhub" => clawhub_search(&client, &query, &installed).await,
-        "skills-sh" => skills_sh_search(&client, &query, &installed).await,
-        _ => Err("Unknown community skill provider".to_string()),
-    }
+    catalog_lists::search(&client, provider.trim(), &query, &installed).await
+}
+
+#[tauri::command]
+pub async fn desktop_skill_community_popular(
+    provider: String,
+) -> Result<Vec<DesktopCommunitySkillSummary>, String> {
+    let cwd = cwd()?;
+    let installed = skill_library::list_skills(&cwd).map_err(|error| error.to_string())?;
+    let client = http_client()?;
+    catalog_lists::popular(&client, provider.trim(), &installed).await
 }
 
 #[tauri::command]
