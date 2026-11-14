@@ -9,13 +9,15 @@ import { CommonGroundError, commonGroundErrorCode, commonGroundErrorMessage, isR
 import type { CgProfileMemory } from './profiles';
 import { BUILD_CHECK_MS, startedBuild } from './storeBuild';
 import * as autoOps from './storeAutoRebuild';
+import * as groupInviteOps from './storeGroupInvites';
 import * as hintOps from './storeHints';
+import * as joinRequestOps from './storeJoinRequests';
 import * as pairOps from './storePairing';
 import * as profileOps from './storeProfiles';
 import * as roomOps from './storeRooms';
 import { pollTop, reconcileRooms, refreshScreen } from './storeRefresh';
 import type {
-  CgBuildRequest, CgCardLook, CgCreateRoomInput, CgJoinInput, CgMatch, CgMeetInput, CgOwnerView, CgPersonCard, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry,
+  CgBuildRequest, CgCardLook, CgCreateRoomInput, CgInviteGroup, CgJoinInput, CgMatch, CgMeetInput, CgOwnerView, CgPerson, CgPersonCard, CgPersonGroups, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry,
   CgNearbyScreen, CgRelationship, CgResults, CgRoom, CgRoomSummary, CgTopicLists,
 } from './types';
 
@@ -33,7 +35,7 @@ export function personKey(accountId: string, profileId?: string | null): string 
 }
 
 /** Routes the server may not have yet; a 404 without an error code turns one off. */
-export type CgSupport = { contact: boolean; chat: boolean; meet: boolean; group: boolean; invitations: boolean; rooms: boolean };
+export type CgSupport = { contact: boolean; chat: boolean; meet: boolean; group: boolean; invitations: boolean; rooms: boolean; groupInvite: boolean };
 
 export type CgState = {
   stack: CgScreen[];
@@ -48,6 +50,8 @@ export type CgState = {
   people: Record<string, CgPersonCard>;
   /** Local relationship updates after an action, by account. */
   relationships: Record<string, CgRelationship>;
+  /** The person-page group picker by account; null when they cannot be invited. */
+  inviteGroups: Record<string, CgPersonGroups | null>;
   support: CgSupport;
   /** One line for the current screen. */
   notice: string | null;
@@ -85,7 +89,8 @@ const initialState = (profilesOn = false): CgState => ({
   matches: {},
   people: {},
   relationships: {},
-  support: { contact: true, chat: true, meet: true, group: true, invitations: true, rooms: true },
+  inviteGroups: {},
+  support: { contact: true, chat: true, meet: true, group: true, invitations: true, rooms: true, groupInvite: true },
   notice: null,
   busy: null,
   profilesOn,
@@ -400,6 +405,13 @@ export class CommonGroundStore {
     }
   }
 
+  /** Room member outside a group: ask to join it, or cancel the request. */
+  askToJoin = (code: string, groupSpaceId: string) => joinRequestOps.askToJoin(this, code, groupSpaceId);
+  cancelJoinRequest = (code: string, requestId: string) => joinRequestOps.cancelJoinRequest(this, code, requestId);
+  /** Group owner or admin: approve or decline a pending request. */
+  decideJoinRequest = (code: string, requestId: string, action: 'approve' | 'decline') =>
+    joinRequestOps.decideJoinRequest(this, code, requestId, action);
+
   async joinInvitation(code: string, ref: string): Promise<string | null> {
     try {
       const joined = await this.client.joinInvitation(code, ref);
@@ -418,6 +430,10 @@ export class CommonGroundStore {
   }
 
   // People
+
+  /** The person-page group picker: load the groups, then add or invite the person to one. */
+  loadInviteGroups = (accountId: string) => groupInviteOps.loadInviteGroups(this, accountId);
+  inviteToGroup = (person: CgPerson, group: CgInviteGroup) => groupInviteOps.inviteToGroup(this, person, group);
 
   setRelationship(accountId: string, relationship: CgRelationship) {
     this.set({ relationships: { ...this.state.relationships, [accountId]: relationship } });

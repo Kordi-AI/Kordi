@@ -208,6 +208,124 @@ final class CommonGroundTests: XCTestCase {
         XCTAssertTrue(accepted.communicationEnabled)
     }
 
+    func testPersonInviteIsOfferedToContactsAndNonContacts() {
+        let stranger = CommonGroundPersonActionAvailability(relationship: CommonGroundRelationship(), busy: false)
+        XCTAssertTrue(stranger.inviteEnabled)
+        XCTAssertEqual(stranger.columns, 4)
+        let contact = CommonGroundPersonActionAvailability(relationship: .init(contact: true), busy: false)
+        XCTAssertTrue(contact.inviteEnabled)
+        XCTAssertEqual(contact.columns, 3)
+        XCTAssertFalse(CommonGroundPersonActionAvailability(relationship: nil, busy: false).inviteEnabled)
+        XCTAssertFalse(CommonGroundPersonActionAvailability(relationship: .init(contact: true), busy: true).inviteEnabled)
+    }
+
+    // MARK: Group invitations
+
+    func testInviteGroupsDecodeStatesAndSkipBadEntries() throws {
+        let list = try decode(CommonGroundInviteGroups.self, #"""
+        {"contact": true, "groups": [
+          {"groupSpaceId": "session:group:a", "conversationId": "c_1", "name": "Infrastructure and CI", "memberCount": 3,
+           "members": [{"accountId": "acct_a", "name": "Alex", "handle": "alex", "avatarUrl": null}], "state": null},
+          {"groupSpaceId": "session:group:b", "name": " ", "memberCount": 2, "members": [], "state": "member"},
+          {"groupSpaceId": "session:group:c", "name": "Reading", "memberCount": 4, "state": "invited"},
+          {"groupSpaceId": "session:group:d", "name": "Later", "memberCount": 1, "state": "something-new"},
+          {"name": "No id"}
+        ]}
+        """#)
+        XCTAssertTrue(list.contact)
+        XCTAssertEqual(list.groups.map(\.groupSpaceId), ["session:group:a", "session:group:b", "session:group:c", "session:group:d"])
+        XCTAssertNil(list.groups[0].state)
+        XCTAssertNil(list.groups[0].stateTitle)
+        XCTAssertEqual(list.groups[0].participants.map(\.accountId), ["acct_a"])
+        XCTAssertEqual(list.groups[1].title, "Group")
+        XCTAssertEqual(list.groups[1].stateTitle, "Member")
+        XCTAssertEqual(list.groups[2].stateTitle, "Invited")
+        XCTAssertEqual(list.groups[3].state, .invited, "An unknown state cannot be picked")
+    }
+
+    func testGroupCandidatesShowTheirRoomOrMatch() throws {
+        let list = try decode(CommonGroundGroupCandidates.self, #"""
+        {"people": [
+          {"person": {"accountId": "acct_c", "name": "Chen Wei", "handle": "chenwei", "avatarUrl": null}, "source": "Build night", "invited": false},
+          {"person": {"accountId": "acct_i", "name": "Ines"}, "source": null, "invited": true},
+          {"person": {"accountId": "acct_c", "name": "Chen Wei"}, "source": "Build night", "invited": false},
+          {"source": "No person"}
+        ]}
+        """#)
+        XCTAssertEqual(list.people.map(\.id), ["acct_c", "acct_i"])
+        XCTAssertEqual(list.people[0].detail, "Build night")
+        XCTAssertEqual(list.people[1].detail, "Match")
+        XCTAssertTrue(list.people[1].invited)
+    }
+
+    func testInviteResultNamesOnlyUnsettledSkips() throws {
+        let settled = try decode(CommonGroundGroupInviteResult.self, #"""
+        {"invited": [{"accountId": "acct_c", "name": "Chen"}], "added": [],
+         "skipped": [{"accountId": "acct_s", "reason": "member"}, {"accountId": "acct_i", "reason": "invited"}]}
+        """#)
+        XCTAssertNil(settled.problem)
+        let declined = try decode(CommonGroundGroupInviteResult.self, #"{"invited": [], "added": [], "skipped": [{"accountId": "acct_d", "reason": "declined"}]}"#)
+        XCTAssertEqual(declined.problem, "Could not invite one person.", "Declining stays quiet")
+        let limited = try decode(CommonGroundGroupInviteResult.self, #"{"skipped": [{"accountId": "a", "reason": "unavailable"}, {"accountId": "b", "reason": "limit"}]}"#)
+        XCTAssertTrue(limited.limitReached)
+        XCTAssertEqual(limited.problem, CommonGroundGroupInviteResult.limitMessage)
+    }
+
+    func testRoomAndPersonInvitationsDecodeAndDeduplicate() throws {
+        let room = try decode(RoomGroupInvitation.self, #"""
+        {"invitationRef": "r_1", "code": "4821", "roomName": "Build night", "groupSpaceId": "session:group:a",
+         "name": "Hackathon", "members": [], "memberCount": 2, "from": {"accountId": "acct_a", "name": "Alex Rivera"}}
+        """#)
+        XCTAssertEqual(room.kind, .room)
+        XCTAssertEqual(room.code, "4821")
+        XCTAssertEqual(room.fromLine, "Alex Rivera · from Build night")
+
+        let person = try decode(RoomGroupInvitation.self, #"""
+        {"kind": "group", "invitationRef": "p_1", "code": null, "roomName": null, "groupSpaceId": "session:group:b",
+         "conversationId": "c_2", "name": "Infra", "members": [], "memberCount": 3, "from": {"accountId": "acct_a", "name": "Alex Rivera"}}
+        """#)
+        XCTAssertEqual(person.kind, .group)
+        XCTAssertNil(person.code)
+        XCTAssertEqual(person.fromLine, "Alex Rivera · from Grounding")
+
+        let fromRoom = try decode(RoomGroupInvitation.self, #"""
+        {"kind": "group", "invitationRef": "p_2", "code": null, "roomName": "Build night", "groupSpaceId": "session:group:a",
+         "name": "Hackathon", "from": {"accountId": "acct_a", "name": "Alex Rivera"}}
+        """#)
+        XCTAssertEqual(fromRoom.fromLine, "Alex Rivera · from Build night")
+
+        XCTAssertThrowsError(try decode(RoomGroupInvitation.self, #"""
+        {"kind": "room", "invitationRef": "r_2", "code": null, "groupSpaceId": "g", "from": {"accountId": "a", "name": "A"}}
+        """#), "A room invitation needs its code")
+        XCTAssertThrowsError(try decode(RoomGroupInvitation.self, #"""
+        {"kind": "other", "invitationRef": "x", "code": "1", "groupSpaceId": "g", "from": {"accountId": "a", "name": "A"}}
+        """#))
+
+        let deduplicated = RoomGroupInvitation.deduplicated([fromRoom, room, person, person])
+        XCTAssertEqual(deduplicated.map(\.invitationRef), ["r_1", "p_1"], "The room invitation wins for the same group")
+    }
+
+    func testInviteGroupsReadAMissingRouteAsNoGroupsAndSendOnePerson() async throws {
+        let model = stubbedModel()
+        guard case .success(let none) = await model.inviteGroups(for: "acct_c") else { return XCTFail("A 404 reads as no groups") }
+        XCTAssertTrue(none.groups.isEmpty)
+        XCTAssertNil(model.notice)
+
+        CommonGroundURLProtocol.stub("POST", "/v1/cloud/common-ground/group-invitations", [
+            (200, #"{"invited": [{"accountId": "acct_c", "name": "Chen"}], "added": [], "skipped": []}"#),
+            (200, #"{"invited": [], "added": [], "skipped": [{"accountId": "acct_c", "reason": "limit"}]}"#),
+        ])
+        let sent = await model.invite("acct_c", toGroup: "session:group:a")
+        XCTAssertNil(sent)
+        let body = try XCTUnwrap(CommonGroundURLProtocol.requests.last?.body)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["groupSpaceId"] as? String, "session:group:a")
+        XCTAssertEqual(json["accountIds"] as? [String], ["acct_c"])
+        let limited = await model.invite("acct_c", toGroup: "session:group:a")
+        XCTAssertEqual(limited?.message, CommonGroundGroupInviteResult.limitMessage)
+        XCTAssertNil(model.busy)
+    }
+
     func testPersonActionsRemainUnavailableWhileBusyOrRelationshipUnknown() {
         let unknown = CommonGroundPersonActionAvailability(relationship: nil, busy: false)
         XCTAssertFalse(unknown.showsActions)

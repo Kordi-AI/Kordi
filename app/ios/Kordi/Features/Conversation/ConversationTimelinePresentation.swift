@@ -28,7 +28,7 @@ enum ConversationTimelinePresentation {
             uniquingKeysWith: { first, _ in first }
         )
         let groupKeys = messages.map { message -> String? in
-            if message.isSystemNotice { return nil }
+            if message.isSystemNotice || message.groupJoinRequest != nil { return nil }
             switch message.author {
             case .agent:
                 return nil

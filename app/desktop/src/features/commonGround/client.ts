@@ -8,8 +8,8 @@ import { loadSession } from '@/features/cloud/session';
 import { isCardDesign, isCardIcon } from './cardDesign';
 import { nearbyRoutes } from './clientNearby';
 import type {
-  CgBuildRequest, CgCreatedGroup, CgDocument, CgCreateRoomInput, CgGroup, CgJoinInput, CgMatch, CgMeetInput, CgOwnerView, CgPairCode, CgPerson,
-  CgPersonCard, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry, CgRelationship, CgResults, CgRoom, CgRoomPreview, CgRoomSummary, CgRoutedMemory,
+  CgBuildRequest, CgCreatedGroup, CgDocument, CgCreateRoomInput, CgGroup, CgGroupInviteResult, CgInviteGroup, CgJoinInput, CgJoinRequestStatus, CgMatch, CgMeetInput, CgOwnerView, CgPairCode, CgPerson,
+  CgPersonCard, CgPersonGroups, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry, CgRelationship, CgResults, CgRoom, CgRoomPreview, CgRoomSummary, CgRoutedMemory,
   CgTopicLists,
 } from './types';
 
@@ -153,6 +153,20 @@ export function profileOf(entry: CgProfile): CgProfile {
   return { ...entry, design: isCardDesign(entry.design) ? entry.design : null, icon: isCardIcon(entry.icon) ? entry.icon : null };
 }
 
+/** A group from the person-page picker; missing members and counts read as empty. */
+function inviteGroupOf(entry: Partial<CgInviteGroup>): CgInviteGroup | null {
+  if (typeof entry?.groupSpaceId !== 'string' || !entry.groupSpaceId) return null;
+  const members = Array.isArray(entry.members) ? entry.members : [];
+  return {
+    groupSpaceId: entry.groupSpaceId,
+    conversationId: typeof entry.conversationId === 'string' ? entry.conversationId : null,
+    name: typeof entry.name === 'string' && entry.name ? entry.name : 'Group',
+    memberCount: typeof entry.memberCount === 'number' ? entry.memberCount : members.length,
+    members,
+    state: entry.state === 'member' || entry.state === 'invited' ? entry.state : null,
+  };
+}
+
 export function createCommonGroundClient(options: CommonGroundClientOptions = {}) {
   const baseUrl = options.baseUrl ?? (() => cloudApiBaseUrl());
   const fetchImpl = options.fetchImpl ?? (() => cloudFetchImpl());
@@ -271,6 +285,15 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
     joinInvitation: (code: string, ref: string) => data<{ status: string } & Omit<CgGroup, 'memberCount'>>(
       'POST', cg(`rooms/${enc(code)}/invitations/${enc(ref)}/join`),
     ),
+    askToJoin: (code: string, groupSpaceId: string) => data<{ request: { requestId: string; status: CgJoinRequestStatus } }>(
+      'POST', cg(`rooms/${enc(code)}/join-requests`), { groupSpaceId },
+    ),
+    cancelJoinRequest: (code: string, requestId: string) => data<{ request: { requestId: string; status: CgJoinRequestStatus } }>(
+      'DELETE', cg(`rooms/${enc(code)}/join-requests/${enc(requestId)}`),
+    ),
+    decideJoinRequest: (requestId: string, action: 'approve' | 'decline') => data<{ request: { requestId: string; status: CgJoinRequestStatus } }>(
+      'POST', cg(`join-requests/${enc(requestId)}`), { action },
+    ),
     person: async (accountId: string, profileId?: string | null) => withRelationship(
       await data<CgPersonCard>('GET', cg(`people/${enc(accountId)}${profileQuery(profileId)}`)),
     ),
@@ -299,6 +322,17 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
     redeem: async (code: string, profileId?: string | null) => withRelationship(
       await data<CgPersonCard>('POST', cg('pairings/redeem'), profileId ? { code, profileId } : { code }),
     ),
+    /** Groups the viewer runs that a person can be invited to; 404 with a code when they cannot be invited. */
+    personGroups: async (accountId: string): Promise<CgPersonGroups> => {
+      const body = await data<{ contact?: unknown; groups?: Array<Partial<CgInviteGroup>> }>('GET', cg(`people/${enc(accountId)}/groups`));
+      const groups = Array.isArray(body?.groups) ? body.groups.map(inviteGroupOf).filter((group): group is CgInviteGroup => group !== null) : [];
+      return { contact: body?.contact === true, groups };
+    },
+    /** Adds contacts to a group and invites everyone else (owner or admin, 1-20 ids). */
+    inviteToGroup: async (groupSpaceId: string, accountIds: string[]): Promise<CgGroupInviteResult> => {
+      const body = await data<Partial<CgGroupInviteResult> | null>('POST', cg('group-invitations'), { groupSpaceId, accountIds });
+      return { invited: body?.invited ?? [], added: body?.added ?? [], skipped: body?.skipped ?? [] };
+    },
     ...nearbyRoutes(data),
   };
 }

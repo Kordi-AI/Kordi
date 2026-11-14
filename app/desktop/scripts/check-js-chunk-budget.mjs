@@ -90,13 +90,25 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // it moves to 5.95 MB.
 // The PDF viewer, the file card with Quick Look, and loading Quick Look thumbnails add 5.9 kB, so it
 // moves to 5.956 MB.
+// Asking to join groups listed in a Grounding room (the Groups row states, approver rows, and the
+// join request card in group chats) adds 5.8 kB, and the community-profile build used by the browser
+// tests 0.2 kB more, so it moves to 5.963 MB.
+// Room group invitations in Contacts › Requests (their list, Join and Decline, and the Contacts
+// badge) add 3.7 kB, so it moves to 5.967 MB.
+// Opening the room from such an invitation, focused on its group, adds 1.4 kB, so it moves to 5.969 MB.
+// The Daily calendar access fix adds 1 kB on top, so it moves to 5.97 MB.
+// The invitation detail in Contacts (group, inviter, members, Join and Decline) replaces the room
+// jump and adds 1.7 kB, so it moves to 5.972 MB.
+// Inviting Grounding people into groups (the person-page group picker, Add people's From Grounding
+// section and person invitations in Contacts › Requests) adds 9.7 kB, so it moves to 5.981 MB.
 // Asking for notification permission from Digest (Allow, Open System Settings, the focus re-check
-// and the shared unanswered-request state) adds 1.2 kB with the community profile, so it moves to 5.958 MB.
+// and the shared unanswered-request state) adds 1.2 kB with the community profile; with the community
+// build measured at 5.982 MB after both, it moves to 5.984 MB.
 // Offering group members' default agents in the @ menu and ending a refused agent request at once add
-// 0.2 kB, so it moves to 5.959 MB.
+// 0.2 kB, so it moves to 5.985 MB.
 // One agent task row (a yield or reply kept in its processing row, which a member's cleanup leaves
-// in place) adds under 1 kB, so it moves to 5.961 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_961_000;
+// in place) adds under 1 kB, so it moves to 5.987 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_987_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -135,11 +147,18 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The same table and image viewers, their styles, and the code viewer's entry module add 14.6 kB
 // there, so it moves to 5.977 MB.
 // The same PDF viewer and file card add 4.5 kB there, so it moves to 5.983 MB.
-// The same Digest notification permission line adds 0.2 kB over it there, so it moves to 5.984 MB.
+// The same room group join requests add 5.3 kB there, so it moves to 5.989 MB.
+// The same room group invitations in Contacts › Requests add 3.7 kB there, and the cloud community
+// build the web browser tests use is 0.3 kB larger, so it moves to 5.994 MB.
+// Opening the room from such an invitation adds 1.4 kB there, so it moves to 5.995 MB.
+// The Daily calendar access fix adds 1 kB there too, so it moves to 5.997 MB.
+// The same invitation detail adds 1.7 kB there, so it moves to 5.999 MB.
+// The same Digest notification permission line adds 0.2 kB over it there, and inviting Grounding
+// people into groups adds 9.7 kB there too; measured at 6.009 MB, it moves to 6.01 MB.
 // Offering group members' default agents in the @ menu, refreshing it on open and focus, and ending a
-// refused agent request at once add 0.2 kB there, so it moves to 5.985 MB.
-// The same single agent task row adds under 1 kB there, so it moves to 5.987 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_987_000;
+// refused agent request at once add 0.2 kB there, so it moves to 6.011 MB.
+// The same single agent task row adds under 1 kB there, so it moves to 6.013 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_013_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
@@ -245,8 +264,10 @@ try {
       throw new Error(`Help must load on demand, but ${chunk.name} imports it eagerly.`);
     }
   }
-  if (distBytes - atlasBytes - editorBytes - codeViewerBytes - helpBytes - licenseBytes > applicationBudget) {
+  const applicationBytes = distBytes - atlasBytes - editorBytes - codeViewerBytes - helpBytes - licenseBytes;
+  if (applicationBytes > applicationBudget) {
     console.error(`Application bundle budget exceeded. Maximum allowed size is ${formatKb(applicationBudget)}.`);
+    console.error(`- application: ${formatKb(applicationBytes)}`);
     console.error(`- dist: ${formatKb(distBytes)}`);
     process.exit(1);
   }

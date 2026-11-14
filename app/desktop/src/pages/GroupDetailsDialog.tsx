@@ -10,6 +10,7 @@ import type {
   CloudGroupInvitationCreateInput,
   CloudGroupInvitationSummary,
 } from '@/features/cloud/authClient';
+import type { GroupGroundingPerson } from '@/features/commonGround/groupPeople';
 import { GroupAvatarEditor } from '@/kordi-app/components/GroupAvatarEditor';
 import { IdentityAvatar } from '@/kordi-app/components/IdentityAvatar';
 import {
@@ -20,12 +21,13 @@ import {
 } from '@/features/chat/chatCreateFlows';
 import type { Contact, ConversationParticipant, ParticipantSpaceViewModel } from '@/kordi-app/types';
 import { cn } from '@/lib/utils';
-import { formatPresenceLine } from '@/kordi-app/contactPresenceLine';
 import { groupNameIsValid } from '@/features/chat/groupCreateCopy';
 import { GroupManagePage } from '@/pages/GroupManagePage';
 import { GroupNameInline } from '@/pages/GroupNameInline';
 import { GroupProfileHeader } from '@/pages/GroupProfileHeader';
 import { GroupInvitationSharePanel } from '@/pages/GroupInvitationSharePanel';
+import { GroupAddPeopleList } from '@/pages/GroupAddPeopleList';
+import { useGroupGroundingPeople } from '@/pages/groupGroundingPeople';
 import {
   COLLAPSED_MEMBER_GRID_ITEMS,
   GROUP_MANAGEMENT_FOCUSABLE_SELECTOR,
@@ -67,6 +69,9 @@ export type GroupDetailsDialogProps = {
     input: CloudGroupInvitationCreateInput,
   ) => Promise<CloudGroupInvitation>;
   onListGroupInvitations?: (groupSpaceId: string) => Promise<CloudGroupInvitationSummary[]>;
+  /** Group › Add people's "From Grounding" people (owner or admin); a failure hides the section. */
+  onListGroundingPeople?: (groupSpaceId: string) => Promise<GroupGroundingPerson[]>;
+  onInviteGroundingPeople?: (groupSpaceId: string, accountIds: string[]) => Promise<void>;
   onMessageContact?: (contact: Contact) => Promise<void> | void;
   onDissolveGroup?: (groupSpaceId: string, sessionIds: string[]) => Promise<void> | void;
   anchorRect?: GroupManagementPopoverAnchor | null;
@@ -86,6 +91,8 @@ export function GroupDetailsDialog({
   onAddContact,
   onCreateGroupInvitation,
   onListGroupInvitations,
+  onListGroundingPeople,
+  onInviteGroundingPeople,
   onMessageContact,
   onDissolveGroup,
   anchorRect = null,
@@ -114,6 +121,7 @@ export function GroupDetailsDialog({
   // Manage is a second level inside the panel, like the account menu's organization list.
   const [level, setLevel] = useState<{ page: 'main' | 'manage'; direction: 'forward' | 'back' | null }>({ page: 'main', direction: null });
   const stepBackRef = useRef<() => boolean>(() => false);
+  const grounding = useGroupGroundingPeople(onListGroundingPeople);
 
   const session = space?.sessions[0] ?? null;
   const groupSessionIds = useMemo(
@@ -296,6 +304,7 @@ export function GroupDetailsDialog({
   }, [isOpen, space?.id]);
 
   if (!isOpen || !space || groupSessionIds.length === 0) return null;
+  const groupSpaceId = space.id.trim().replace(/^group:/, '');
 
   const { style, arrowStyle, placement } = groupManagementGeometry(anchorRect, viewport);
   const resolvedGridFocusId = gridFocusId && gridItemIds.includes(gridFocusId)
@@ -348,6 +357,7 @@ export function GroupDetailsDialog({
     setActionError(null);
     setIsAddPeopleOpen(true);
     setAddPeopleMode('contacts');
+    grounding.load(currentMemberIsAdmin ? groupSpaceId : null);
     setAddQuery('');
   };
 
@@ -691,6 +701,7 @@ export function GroupDetailsDialog({
                       onClick={() => {
                         setIsAddPeopleOpen(false);
                         setSelectedContactIds([]);
+                        grounding.reset();
                       }}
                     >
                       <ArrowLeft className="h-3.5 w-3.5" />
@@ -698,9 +709,9 @@ export function GroupDetailsDialog({
                     <div className="min-w-0 flex-1">
                       <h3 id={`${addSearchId}-heading`} className="text-[12px] font-semibold">Add people</h3>
                     </div>
-                    {addPeopleMode === 'contacts' && selectedAddContactIds.length > 0 ? (
+                    {addPeopleMode === 'contacts' && selectedAddContactIds.length + grounding.selected.length > 0 ? (
                       <span className="text-[10px] tabular-nums text-[color:var(--utility-muted-text)]">
-                        {selectedAddContactIds.length} selected
+                        {selectedAddContactIds.length + grounding.selected.length} selected
                       </span>
                     ) : null}
                   </div>
@@ -716,7 +727,7 @@ export function GroupDetailsDialog({
                         setActionError(null);
                       }}
                     >
-                      Existing contacts
+                      People
                     </button>
                     <button
                       type="button"
@@ -733,93 +744,34 @@ export function GroupDetailsDialog({
                   </div>
 
                   {addPeopleMode === 'contacts' ? (
-                    <>
-                      <label htmlFor={addSearchId} className="sr-only">Search contacts to add</label>
-                      <div className="app-group-management-search relative my-2">
-                        <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--utility-muted-text)]" />
-                        <input
-                          id={addSearchId}
-                          type="search"
-                          value={addQuery}
-                          onChange={(event) => setAddQuery(event.target.value)}
-                          placeholder="Search contacts"
-                          className="app-input-shell h-9 w-full rounded-[11px] py-2 pl-8 pr-3 text-[12px] outline-none"
-                        />
-                      </div>
-
-                      <div className="space-y-0.5" aria-label="Contacts available to add">
-                        {filteredAddOptions.length > 0 ? filteredAddOptions.map((option) => {
-                          const selected = selectedContactIds.includes(option.id);
-                          const rawIdentityLabel = contactStableId(option.contact);
-                          const identityLabel = visibleIdentityLabel(rawIdentityLabel);
-                          const detail = visibleIdentityLabel(option.detail ?? '');
-                          const showIdentityLabel = hasDuplicateName(option.label, duplicateNames)
-                            && identityLabel
-                            && identityLabel !== option.label;
-                          // As in Contacts rows, a known presence line takes the handle's place.
-                          const presenceLine = formatPresenceLine(option.contact.presenceStatus, option.contact.presenceLastSeenAt);
-                          const secondaryText = showIdentityLabel ? identityLabel : presenceLine ?? detail;
-                          return (
-                            <button
-                              key={option.id}
-                              type="button"
-                              disabled={!canInvitePeople || Boolean(pendingAction)}
-                              aria-pressed={selected}
-                              onClick={() => toggleAddContact(option.id)}
-                              className={cn('app-group-management-contact-row flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left text-[11px] transition', selected && 'app-group-management-contact-row-selected')}
-                            >
-                              <IdentityAvatar
-                                kind="human"
-                                seed={option.avatarSeed ?? rawIdentityLabel}
-                                name={option.label}
-                                imageUrl={option.profileImageUrl}
-                                className="h-7 w-7 border border-white/10"
-                                presenceStatus={option.contact.presenceStatus}
-                              />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate font-medium">{option.label}</span>
-                                {secondaryText ? (
-                                  <span className={cn('block truncate text-[9.5px]', !showIdentityLabel && presenceLine === 'online' ? 'app-contacts-presence-online' : 'text-[color:var(--utility-muted-text)]')}>
-                                    {secondaryText}
-                                  </span>
-                                ) : null}
-                              </span>
-                              <span className={cn('app-group-management-contact-check grid h-5 w-5 place-items-center rounded-full border', selected && 'app-group-management-contact-check-selected')}>
-                                {selected ? <Check className="h-3 w-3" /> : null}
-                              </span>
-                            </button>
-                          );
-                        }) : addOptions.length > 0 ? (
-                          <div className="app-group-management-empty rounded-[11px] px-2.5 py-3 text-center text-[11px]">
-                            No contacts match “{addQuery.trim()}”.
-                          </div>
-                        ) : (
-                          <div className="app-group-management-empty rounded-[11px] px-2.5 py-3 text-center text-[11px]">
-                            No existing contacts are available to add.
-                          </div>
-                        )}
-                      </div>
-
-                      <Button
-                        type="button"
-                        className="mt-2 h-9 w-full rounded-[11px] text-[11px]"
-                        disabled={!canInvitePeople || selectedAddContactIds.length === 0 || Boolean(pendingAction)}
-                        onClick={() => {
-                          void runAction(
-                            'add-members',
-                            () => onAddMembers(groupMembershipSessionIds, selectedAddContactIds),
-                            () => {
-                              setSelectedContactIds([]);
-                              setIsAddPeopleOpen(false);
-                            },
-                          );
-                        }}
-                      >
-                        {pendingAction === 'add-members' ? (
-                          <><LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" /> Adding…</>
-                        ) : selectedAddContactIds.length > 0 ? `Add ${selectedAddContactIds.length} ${selectedAddContactIds.length === 1 ? 'person' : 'people'}` : 'Select people to add'}
-                      </Button>
-                    </>
+                    <GroupAddPeopleList
+                      searchId={addSearchId}
+                      query={addQuery}
+                      onQueryChange={setAddQuery}
+                      addOptions={addOptions}
+                      filteredAddOptions={filteredAddOptions}
+                      selectedContactIds={selectedContactIds}
+                      selectedAddContactIds={selectedAddContactIds}
+                      onToggleContact={toggleAddContact}
+                      duplicateNames={duplicateNames}
+                      grounding={grounding}
+                      disabled={!canInvitePeople}
+                      pendingAction={pendingAction}
+                      onSubmit={() => {
+                        void runAction(
+                          'add-members',
+                          async () => {
+                            if (selectedAddContactIds.length) await onAddMembers(groupMembershipSessionIds, selectedAddContactIds);
+                            if (grounding.selected.length && onInviteGroundingPeople) await onInviteGroundingPeople(groupSpaceId, grounding.selected);
+                          },
+                          () => {
+                            setSelectedContactIds([]);
+                            grounding.reset();
+                            setIsAddPeopleOpen(false);
+                          },
+                        );
+                      }}
+                    />
                   ) : (
                     <GroupInvitationSharePanel
                       hidden={false}

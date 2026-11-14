@@ -188,6 +188,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var contacts: [CloudContact] = []
     @Published private(set) var contactPresenceByAccountID: [String: CloudPresenceAccount] = [:]
     @Published private(set) var contactRequests: [CloudContactRequest] = []
+    /// Pending invitations to groups started in Grounding rooms.
+    @Published var roomGroupInvitations: [RoomGroupInvitation] = []
+    /// Invitations answered on this device, kept out of lists fetched before the answer landed.
+    var answeredRoomInvitationRefs = Set<String>()
+    /// The debounced refetch after a Grounding room hint.
+    var roomInvitationRefreshTask: Task<Void, Never>?
     @Published private(set) var conversations: [ConversationSummary] = []
     @Published var projectDevices: [ChatProjectDevice] = []
     @Published var projectError: String?
@@ -761,6 +767,10 @@ final class AppModel: ObservableObject {
         contacts = []
         contactPresenceByAccountID = [:]
         contactRequests = []
+        roomGroupInvitations = []
+        answeredRoomInvitationRefs = []
+        roomInvitationRefreshTask?.cancel()
+        roomInvitationRefreshTask = nil
         conversations = []
         projectDevices = []
         personalAgents = nil
@@ -881,6 +891,8 @@ final class AppModel: ObservableObject {
             async let canonicalLatestMessages = api.bootstrapChatLatestMessages(token: token)
             async let fetchedActiveCalls = try? api.activeCalls(token: token)
             async let fetchedPersonalAgents = try? api.listPersonalAgents(token: token)
+            let fetchesRoomInvitations = isCommonGroundAvailable
+            async let fetchedRoomInvitations = fetchesRoomInvitations ? try? api.listRoomGroupInvitations(token: token) : nil
             let (canonicalAccount, contactList) = try await (refreshedAccount, fetchedContacts)
             guard sessionIdentity.contains(token), self.account?.accountId == canonicalAccount.accountId else { return false }
             applyWorkspaceDirectory(account: canonicalAccount, contacts: contactList)
@@ -905,6 +917,9 @@ final class AppModel: ObservableObject {
                 applyContactPresenceSnapshot(presence)
             }
             if contactRequests != requests { contactRequests = requests }
+            if let roomInvitations = await fetchedRoomInvitations {
+                applyRoomGroupInvitations(roomInvitations, accountId: canonicalAccount.accountId)
+            }
             if let listedPersonalAgents, personalAgents != listedPersonalAgents { personalAgents = listedPersonalAgents }
             if ownedCloudAgents != owned { ownedCloudAgents = owned }
             if shouldRecordRemoteModelChanges {
@@ -2861,6 +2876,17 @@ final class AppModel: ObservableObject {
         guard sessionIdentity.contains(token) else { throw CancellationError() }
         if action != nil { cloudSyncPasses.wake() }
         return card
+    }
+
+    /// A Grounding group join request; `action` is "approve" or "decline".
+    func groupJoinRequest(id: String, action: String?) async throws -> GroupJoinRequestCard {
+        guard !previewMode, let token else {
+            throw CloudAPIError(code: "no_session", message: "Sign in to answer the request.", statusCode: 401)
+        }
+        let request = try await api.groupJoinRequest(token: token, requestId: id, action: action)
+        guard sessionIdentity.contains(token) else { throw CancellationError() }
+        if action != nil { cloudSyncPasses.wake() }
+        return request
     }
 
     func toggleReaction(
@@ -6665,6 +6691,7 @@ final class AppModel: ObservableObject {
                     voiceMessage: wire.voiceMessage,
                     planCard: wire.planCard,
                     facilitatorCard: facilitatorCard,
+                    groupJoinRequest: KordiSystemIdentity.isSystem(accountId: wire.fromAccountId) ? wire.groupJoinRequest : nil,
                     reactions: wire.reactions,
                     attachmentReactions: wire.attachmentReactions
                 )
@@ -7787,6 +7814,7 @@ final class AppModel: ObservableObject {
                     voiceMessage: message.voiceMessage,
                     planCard: message.planCard,
                     facilitatorCard: message.facilitatorCard,
+                    groupJoinRequest: message.groupJoinRequest,
                     conversationId: message.conversationId,
                     conversationSequence: message.conversationSequence,
                     version: message.version,

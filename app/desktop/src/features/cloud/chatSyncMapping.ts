@@ -1,6 +1,7 @@
 import { cloudVoiceMessageMetadataOnly } from './cloudVoiceMessage';
 import type { MessagePlanCard } from '@/kordi-app/types/message';
 import { normalizeFacilitatorCard } from './facilitatorCard';
+import { groupJoinRequestFromChatContent } from './groupJoinRequest';
 import { normalizePlanCardSnapshot } from './planCardSnapshot';
 import { isBuiltInAccountId, isSystemAccountId, isSystemAgentAccountId, KORDI_SYSTEM_NOTICE_KIND } from '@/features/systemAgent/systemAgentIdentity';
 import { normalizedLivePhoto } from '@/features/chat/livePhotos';
@@ -396,6 +397,9 @@ export function cloudMessageFromChatSync(
     planCard: planCardFromChatContent(message.content),
     ...(isSystemAgentAccountId(message.sender_account_id) ? {
       facilitatorCard: facilitatorCardFromChatContent(message.content),
+    } : {}),
+    ...(isSystemAccountId(message.sender_account_id) ? {
+      groupJoinRequest: groupJoinRequestFromChatContent(message.content),
     } : {}),
     conversationId: conversation.id,
     conversationSequence: message.conversation_sequence,

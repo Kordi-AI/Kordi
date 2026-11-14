@@ -385,6 +385,12 @@ struct CommonGroundGroup: Decodable, Hashable, Identifiable {
     var topic: String?
     /// A few of the people in the group, creator first; empty when the server sends none.
     let members: [CommonGroundPerson]
+    /// The viewer's own request to join, while they are not a member.
+    var joinRequest: CommonGroundOwnJoinRequest?
+    /// Whether the viewer may ask to join; false on older servers.
+    var canAskToJoin: Bool
+    /// Pending requests the viewer can decide, oldest first.
+    var requests: [CommonGroundPendingJoinRequest]
     var id: String { groupSpaceId }
 
     /// "From <topic> · 3 members", or just the count; nil when neither is known.
@@ -404,9 +410,15 @@ struct CommonGroundGroup: Decodable, Hashable, Identifiable {
         self.joined = joined
         self.topic = topic
         self.members = members
+        joinRequest = nil
+        canAskToJoin = false
+        requests = []
     }
 
-    private enum CodingKeys: String, CodingKey { case groupSpaceId, conversationId, name, memberCount, createdBy, joined, topic, members }
+    private enum CodingKeys: String, CodingKey {
+        case groupSpaceId, conversationId, name, memberCount, createdBy, joined, topic, members
+        case joinRequest, canAskToJoin, requests
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -418,7 +430,27 @@ struct CommonGroundGroup: Decodable, Hashable, Identifiable {
         joined = c.cgValue(.joined, false)
         topic = c.cgValue(.topic, nil as String?)
         members = c.cgValue(.members, [CommonGroundPerson]())
+        joinRequest = c.cgValue(.joinRequest, nil as CommonGroundOwnJoinRequest?)
+        canAskToJoin = c.cgValue(.canAskToJoin, false)
+        requests = c.cgValue(.requests, [CommonGroundPendingJoinRequest]())
     }
+}
+
+/// The viewer's request to join a room's group.
+struct CommonGroundOwnJoinRequest: Decodable, Hashable {
+    let requestId: String
+    /// "pending", "approved", "declined" or "cancelled".
+    let status: String
+
+    var isPending: Bool { status == "pending" }
+}
+
+/// Someone waiting for an approver to let them into a room's group.
+struct CommonGroundPendingJoinRequest: Decodable, Hashable, Identifiable {
+    let requestId: String
+    let person: CommonGroundPerson
+    let createdAt: String?
+    var id: String { requestId }
 }
 
 struct CommonGroundInvitation: Decodable, Hashable, Identifiable {
