@@ -226,10 +226,8 @@ mod tests {
 
     #[test]
     fn a_waiting_group_completion_is_a_yield() {
-        let waiting = group_body(
-            json!({"deliveryState": "processing", "text": "Waiting for Alex.",
-            "structuredContent": {"agentExchangeStatus": "waiting", "agentExchangeWaitingFor": "Alex"}}),
-        );
+        let waiting = group_body(json!({"deliveryState": "processing", "text": "Waiting",
+            "structuredContent": {"agentExchangeStatus": "waiting", "agentExchangeWaitingFor": "Alex"}}));
         let unnamed = group_body(json!({"deliveryState": "complete", "text": "",
             "structuredContent": {"synchronizationOnly": true, "agentExchangeOutcome": "waiting"}}));
         let silent = group_body(json!({"deliveryState": "complete", "text": "",

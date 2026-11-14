@@ -70,7 +70,7 @@ const members = {
 } as CanonicalSessionState;
 const serverSlot = (status: 'waiting' | 'processing') => ({
   ...members,
-  messages: [{ ...members.messages[0], contentText: status === 'waiting' ? 'Waiting for Synthetic Owner.' : '',
+  messages: [{ ...members.messages[0], contentText: status === 'waiting' ? 'Waiting' : '',
     content: { deliveryState: 'processing', requestId: 'request', agentExchangeStatus: status,
       ...(status === 'waiting' ? { agentExchangeWaitingFor: 'Synthetic Owner', agentExchangeWaitingForAccountId: 'owner' } : {}) } }],
 }) as CanonicalSessionState;
@@ -85,15 +85,15 @@ function label(projected: CanonicalSessionState, viewer: string, role = 'owned-a
 test('a yielded turn keeps the owner\'s row waiting until the server names whom it waits for', () => {
   const projected = projectCloudGroupLiveTurns(members, { request: yielded }, 'owner')!;
   assert.equal(projected.messages[0].contentText, '', 'the waiting outcome never shows as text');
-  assert.equal(label(projected, 'human:owner'), 'Waiting for reply');
+  assert.equal(label(projected, 'human:owner'), 'Waiting');
 });
 
 test('the owner and every other member see the same waiting row, then processing', () => {
   const waiting = serverSlot('waiting');
   assert.equal(projectCloudGroupLiveTurns(waiting, { request: yielded }, 'owner'), waiting,
     'the finished local turn no longer speaks for the slot');
-  assert.equal(label(waiting, 'human:owner'), 'Waiting for your reply');
-  assert.equal(label(waiting, 'human:member', 'external-agent'), 'Waiting for Synthetic Owner');
+  assert.equal(label(waiting, 'human:owner'), 'Waiting');
+  assert.equal(label(waiting, 'human:member', 'external-agent'), 'Waiting');
   const resumed = serverSlot('processing');
   const ownerView = projectCloudGroupLiveTurns(resumed, { request: yielded }, 'owner')!;
   assert.equal(label(ownerView, 'human:owner'), 'Processing reply', 'an answered question is never shown waiting again');

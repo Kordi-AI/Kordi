@@ -160,7 +160,7 @@ or completion revision, even though all revisions share one canonical message.
 `person`, an exact account ID or a unique @handle). Nothing runs for the
 person. The server records a person exchange (migration 188), posts the
 question as the agent's visible message mentioning them, and marks it waiting
-for that person by name; Mac shows "Waiting for <name>" on the question.
+for that person by name; the row reads "Waiting".
 
 The answer is the person's next human message in the conversation after the
 question, or their reply, quote, or thread reply to it. Their agent's
@@ -188,10 +188,10 @@ so the person who made the request is a target too (listed with `requester`).
 When the agent needs their input before it can finish, guidance tells it to ask
 with `reach_out` instead of ending its turn with a question; their next plain
 message, or a reply to the question, continues the task in the language of the
-request, never silently. The question carries `agentExchangeWaitingForAccountId`,
-so the asked person's own Mac shows "Waiting for your reply" while others see
-the name (`agentExchangeWaitingForRequester` additionally marks the owner's own
-question to themselves, for older clients). A new request from them to the
+request, never silently. The question carries `agentExchangeWaitingForAccountId`
+and the waited-for name as data (`agentExchangeWaitingForRequester` additionally
+marks the owner's own question to themselves, for older clients); every member's
+row reads "Waiting". A new request from them to the
 same agent supersedes and cancels the open question. In the owner's private
 agent chat every message already reaches the agent, so nobody there is a target.
 
@@ -247,13 +247,13 @@ that agent's owner directly as a person instead of posting open questions.
 An agent task keeps one visible row: the reply slot of the run a person
 started (#2416), which becomes its reply in place and keeps its place. When
 the agent asks another agent or a person, that slot shows whom it waits for
-instead of being emptied: it stays `processing` with the text "Waiting for
-<name>." while the task is open, never a finished empty row; when the answer
+instead of being emptied: it stays `processing` with the text "Waiting"
+while the task is open, never a finished empty row; when the answer
 arrives it shows processing; the resumed task's result replaces it in place.
 A yield writes that waiting state in the same version that records it, on
 the Mac and the cloud runner, so no version is ever finished and empty while
-the task is open. An agent is named as people know it ("Waiting for Maya's
-Kordi."), and only a person's wait carries their account.
+the task is open. The slot names whom it waits for as data (an agent as
+people know it, "Maya's Kordi"), and only a person's wait carries their account.
 A cloud runner shows the slot as processing as soon as it takes the run, as
 the owner's Mac does. The question stays a plain message from its first
 version (no exchange status; until the task has a slot, the question carries
@@ -266,7 +266,7 @@ visible as waiting too, past the usual processing timeout.
 
 Only the agent answering another agent's request, which has no row of its
 own, gets an added processing row: its reply row is created with the
-question, shows "Waiting for <owner>." (still processing) while it asks its
+question, shows "Waiting" (still processing) while it asks its
 own owner, reopens when the owner replies, and is replaced by its answer; on the cloud runner it has `reach_out`
 for that one question too. Every turn's runtime note names the current
 request's language (for a continuation, its original request), and the

@@ -112,7 +112,7 @@ async fn a_mac_run_that_yields_keeps_its_processing_row() {
     assert_eq!(f.root_response().await, slot);
     let waiting = f.message(slot).await;
     assert_eq!(waiting["id"], "msg:cloud-agent-processing:slot");
-    assert_eq!(waiting["text"], "Waiting for Exchange Beta.");
+    assert_eq!(waiting["text"], "Waiting");
     assert_eq!(waiting["deliveryState"], "processing");
     assert_eq!(
         waiting["structuredContent"]["agentExchangeStatus"],
@@ -308,7 +308,7 @@ async fn an_answering_run_keeps_one_reply_row_through_asking_its_owner() {
     // On the Mac too, the reply row waits for the owner in words, never blank.
     let (_, waiting) = reply_row(&exchange).await;
     assert_eq!(waiting["deliveryState"], "processing");
-    assert_eq!(waiting["text"], "Waiting for Exchange Beta.");
+    assert_eq!(waiting["text"], "Waiting");
     assert!(waiting["structuredContent"]["synchronizationOnly"].is_null());
     f.end_parent().await;
     f.say(1, "Yes, Friday 7pm", None).await;
