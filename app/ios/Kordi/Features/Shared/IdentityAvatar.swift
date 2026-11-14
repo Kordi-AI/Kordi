@@ -166,7 +166,9 @@ enum KordiSystemAgentIdentity {
 enum KordiSupportIdentity {
     static let accountId = "acct_kordi_support"
     static let agentId = "cloud_agent_kordi_support"
-    static let displayName = "Kordi Support"
+    static let displayName = "KordiSpot"
+    /// Earlier names, still recognized in cached chats and contacts.
+    static let legacyDisplayNames = ["Kordi Support"]
     private static let systemAgentSessionPrefix = "session:direct-system-agent:"
 
     static func sessionId(for accountId: String) -> String {
@@ -176,7 +178,10 @@ enum KordiSupportIdentity {
     static func matches(name: String?, seed: String?) -> Bool {
         let normalizedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedSeed = seed?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return normalizedName?.localizedCaseInsensitiveCompare(displayName) == .orderedSame
+        let nameMatches = normalizedName.map { name in
+            ([displayName] + legacyDisplayNames).contains { name.localizedCaseInsensitiveCompare($0) == .orderedSame }
+        } ?? false
+        return nameMatches
             || normalizedSeed == accountId
             || normalizedSeed == agentId
     }
@@ -188,14 +193,14 @@ enum KordiSupportIdentity {
     }
 }
 
-/// Kordi Support: the ink paper-cut bird on white, in both color schemes.
+/// KordiSpot: the ink paper-cut bird on white with an amber question-mark wing, in both color schemes.
 private struct KordiSupportAvatar: View {
     var body: some View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
             ZStack {
                 Color.white
-                KordiMark(size: side * 0.86)
+                KordiMark(size: side * 0.86, wing: .questionMark)
                     .environment(\.colorScheme, .light)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)

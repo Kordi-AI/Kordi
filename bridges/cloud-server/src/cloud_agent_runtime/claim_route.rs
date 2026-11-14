@@ -7,8 +7,9 @@ use crate::auth::routes::CloudSession;
 use crate::cloud_agent_runtime::runs::{
     claim_has_shared_cloud_agent_target, claim_run_for_person_message,
     cloud_agent_response_is_processing_for_request, error_response,
-    fail_unavailable_project_request, requester_can_target_owner, run_error_response,
-    validate_group_agent_claim, validate_shared_cloud_agent_claim, ClaimRunRequest,
+    fail_unavailable_project_request, group_member_can_target_owner, requester_can_target_owner,
+    run_error_response, validate_group_agent_claim, validate_shared_cloud_agent_claim,
+    ClaimRunRequest,
 };
 use crate::server::ServerState;
 use axum::extract::State;
@@ -71,7 +72,7 @@ pub(super) async fn claim_cloud_agent_run(
         );
     }
     // The requester must not have declined AI; another person's agent runs
-    // only when its owner allowed AI (`crate::ai_consent`). Kordi Support's
+    // only when its owner allowed AI (`crate::ai_consent`). KordiSpot's
     // account is operated by Kordi, not a person, so only the requester
     // counts there.
     let owner = input.owner_account_id.trim();
@@ -110,7 +111,7 @@ pub(super) async fn claim_cloud_agent_run(
     // One refusal for every target, so it never shows the owner's choice.
     match super::runs::requester_may_use_owner_agents(state.db_pool(), &input).await {
         Ok(true) => {}
-        Ok(false) => return super::runs::agent_unavailable(),
+        Ok(false) => return refuse_unusable_agent(state.db_pool(), input).await,
         Err(error) => {
             return run_error_response(
                 "check agent permission",
@@ -202,7 +203,18 @@ pub(super) async fn claim_cloud_agent_run(
     )
     .await
     {
-        Ok(value) => value,
+        Ok(true) => true,
+        // A group co-member needs no contact record (docs/contact-permissions.md).
+        Ok(false) => match group_member_can_target_owner(state.db_pool(), &input).await {
+            Ok(value) => value == Some(true),
+            Err(error) => {
+                return run_error_response(
+                    "check group member",
+                    "Could not validate Cloud agent run authorization.",
+                    error,
+                );
+            }
+        },
         Err(error) => {
             return run_error_response(
                 "check requester contact",
@@ -215,7 +227,7 @@ pub(super) async fn claim_cloud_agent_run(
     if !can_target && !shared_agent_allowed {
         return error_response(
             "agent_not_available",
-            "Cloud fallback is available only to the owner, accepted contacts, or shared agents in conversations with the owner.",
+            "Cloud fallback is available only to the owner, accepted contacts, members of a group chat with the owner, or shared agents in conversations with the owner.",
             StatusCode::FORBIDDEN,
         );
     }
@@ -302,5 +314,25 @@ pub(super) async fn claim_cloud_agent_run(
             "Could not claim Cloud agent fallback run.",
             error,
         ),
+    }
+}
+
+/// The requester may not use this agent. A person's group mention of it
+/// ends at once with a final "isn't available" reply that every member
+/// sees; anything else gets the plain refusal. Either way no reason shows.
+async fn refuse_unusable_agent(pool: &PgPool, mut input: ClaimRunRequest) -> Response {
+    match super::runs::request_identity(pool, &input.session_id, &input.request_message_id).await {
+        Ok(Some((id, _))) => input.request_message_id = id,
+        Ok(None) => return super::runs::agent_unavailable(),
+        Err(error) => {
+            return run_error_response("request identity", "Could not resolve the request.", error)
+        }
+    }
+    match super::runs::fail_refused_agent_request(pool, &input).await {
+        Ok(Some(run)) => Json(run).into_response(),
+        Ok(None) => super::runs::agent_unavailable(),
+        Err(error) => {
+            run_error_response("end refused request", "Could not end this request.", error)
+        }
     }
 }

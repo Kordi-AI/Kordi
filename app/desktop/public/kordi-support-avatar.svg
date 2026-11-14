@@ -3,11 +3,12 @@
   <g transform="translate(36,36) scale(0.86)"><defs>
     <mask id="cut" maskUnits="userSpaceOnUse" x="-100" y="-100" width="712" height="712">
       <g fill="#fff" stroke="#fff"><ellipse cx="262" cy="292" rx="150" ry="136"/><path d="M400,342 C436,322 462,272 470,204 C448,236 420,244 386,218Z" stroke-width="4" stroke-linejoin="round"/></g>
-      <g fill="#000"><circle cx="194" cy="266" r="17"/><path transform="translate(332,322) scale(0.8) translate(-326,-312)" d="M248,326 C276,284 346,262 408,266 C388,316 332,356 272,354 C252,352 242,340 248,326Z"/></g>
+      <g fill="#000"><circle cx="194" cy="266" r="17"/></g>
     </mask>
   </defs>
   <g transform="translate(256,250) scale(0.94) translate(-270,-292)">
     <g fill="#f7b32b" stroke="#f7b32b"><path d="M120,276 L82,294 L120,312Z" stroke-width="12" stroke-linejoin="round"/></g>
-    <g><rect x="-100" y="-100" width="712" height="712" fill="#1f1a17" mask="url(#cut)"/></g>
+    <rect x="-100" y="-100" width="712" height="712" fill="#1f1a17" mask="url(#cut)"/>
+    <g transform="translate(324,300) scale(1.06)"><path d="M-32,-34 C-32,-72 32,-72 32,-36 C32,-10 0,-4 0,20" fill="none" stroke="#f7b32b" stroke-width="25" stroke-linecap="round" stroke-linejoin="round"/><circle cx="0" cy="56" r="15.5" fill="#f7b32b"/></g>
   </g></g>
 </svg>

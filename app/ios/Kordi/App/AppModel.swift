@@ -334,6 +334,11 @@ final class AppModel: ObservableObject {
     private var canonicalConversationIDBySessionID: [String: String] = [:]
     @Published private var ownedCloudAgents: [CloudAgent] = []
     @Published private var sharedCloudAgents: [CloudAgent] = []
+    @Published private var groupMemberDefaultAgents: [CloudGroupMemberDefaultAgent] = []
+    /// Bumped when another account's agents change (`agent.directory.changed`,
+    /// such as a default agent's Access), so an open conversation refetches
+    /// which agents its composer may offer.
+    @Published private(set) var agentDirectoryRevision = 0
     private var hiddenCloudSessionIds = Set<String>()
     private var deletedCloudSessionIds = Set<String>()
     private var sessionVisibilityMutationRevision = 0
@@ -790,6 +795,7 @@ final class AppModel: ObservableObject {
         canonicalConversationIDBySessionID = [:]
         ownedCloudAgents = []
         sharedCloudAgents = []
+        groupMemberDefaultAgents = []
         connectorsClientCache = nil
         connectorsVersion = nil
         connectorsCapabilityNeedsRetry = true
@@ -3704,7 +3710,8 @@ final class AppModel: ObservableObject {
             conversation: conversation,
             ownedAgents: ownedCloudAgents,
             sharedAgents: sharedCloudAgents,
-            contacts: contacts
+            contacts: contacts,
+            groupMemberDefaultAgents: groupMemberDefaultAgents
         )
     }
 
@@ -3727,6 +3734,19 @@ final class AppModel: ObservableObject {
                   sessionIdentity.contains(token),
                   self.account?.accountId == accountID else { return }
             replaceSharedCloudAgents(refreshedAgents, forOwnerAccountIDs: ownerAccountIDs)
+            // Co-members who are not contacts: their default agents.
+            if conversation.kind == .group {
+                let defaults = try await api.listGroupMemberDefaultAgents(
+                    token: token,
+                    ownerAccountIds: ownerAccountIDs
+                )
+                guard !Task.isCancelled,
+                      sessionIdentity.contains(token),
+                      self.account?.accountId == accountID else { return }
+                let refreshedOwners = Set(ownerAccountIDs)
+                let next = groupMemberDefaultAgents.filter { !refreshedOwners.contains($0.ownerAccountId) } + defaults
+                if next != groupMemberDefaultAgents { groupMemberDefaultAgents = next }
+            }
         } catch {
             if CloudTransportErrorPolicy.isCancellation(error) || Task.isCancelled { return }
             // Mention refresh is best effort. Keep the last usable catalog and
@@ -6942,6 +6962,9 @@ final class AppModel: ObservableObject {
                 guard sessionIdentity.contains(token), !Task.isCancelled else { return .stop }
                 applyCloudSyncEvents(state.pendingEvents)
                 await refreshPersonalAgentsIfNeeded(after: state.pendingEvents)
+                if state.pendingEvents.contains(where: { $0.eventType == "agent.directory.changed" }) {
+                    agentDirectoryRevision &+= 1
+                }
                 let hasDirectoryChanges = state.pendingEvents.contains {
                     $0.eventType != "message.upsert"
                         && $0.eventType != "session.pin.updated"

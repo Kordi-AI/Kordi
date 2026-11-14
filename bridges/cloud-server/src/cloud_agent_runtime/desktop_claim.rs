@@ -118,10 +118,15 @@ async fn claim_request(
         return denied();
     }
     // A restricted requester gets the one generic refusal on every route, so
-    // the Mac drops the request without answering in the conversation.
+    // the Mac drops the request without answering in the conversation. The
+    // server ends a person's group mention with the same final reply as the
+    // Cloud path, so the requester never waits on a run no one starts.
     match runs::requester_may_use_owner_agents(state.db_pool(), &input.run).await {
         Ok(true) => {}
-        Ok(false) => return runs::agent_unavailable(),
+        Ok(false) => {
+            end_refused_request(state.db_pool(), &mut input.run).await;
+            return runs::agent_unavailable();
+        }
         Err(e) => {
             return run_error_response("desktop claim", "Could not claim agent execution.", e)
         }
@@ -302,6 +307,8 @@ async fn claim_request(
         let allowed: (bool,) = query_as("SELECT EXISTS(SELECT 1 FROM cloud_chat_messages m JOIN cloud_chat_conversations c USING(conversation_id) JOIN cloud_chat_conversation_members member ON member.conversation_id=c.conversation_id WHERE m.message_id::text=$1 AND c.legacy_session_id=$2 AND m.sender_account_id=$3 AND m.deleted_at IS NULL AND member.account_id=$4 AND member.membership_state='active') AND EXISTS(SELECT 1 FROM cloud_agent_desktop_capabilities r JOIN cloud_devices d USING(device_id) WHERE r.device_id=$5 AND d.account_id=$4 AND d.revoked_at IS NULL AND r.agent_id=$6 AND r.updated_at>now()-interval '35 seconds')")
             .bind(wire_id).bind(&input.run.session_id).bind(&input.run.requester_account_id).bind(&session.account_id).bind(&session.device_id).bind(agent).fetch_one(state.db_pool()).await?;
         if !allowed.0 || !runs::validate_group_agent_claim(state.db_pool(), &input.run).await? || !validate_shared_cloud_agent_claim(state.db_pool(), &input.run).await? { return Ok::<_, runs::RunError>(None); }
+        // The Cloud path's group rule: in a group chat, co-members reach each other's agents.
+        if runs::group_member_can_target_owner(state.db_pool(), &input.run).await? == Some(false) { return Ok::<_, runs::RunError>(None); }
         let owner = executor(&session, input.claim_id);
         let run = claim_run_for_desktop(state.db_pool(), &input.run, &owner).await?;
         let acquired: (bool,) = query_as("SELECT execution_backend='desktop' AND claimed_by=$2 AND status IN ('leased','running') AND lease_expires_at::timestamptz>now() FROM cloud_agent_fallback_runs WHERE run_id=$1")
@@ -318,5 +325,21 @@ async fn claim_request(
         Ok(Some(value)) => context_scope_response(&state, value).await,
         Ok(None) => denied(),
         Err(e) => run_error_response("desktop claim", "Could not claim agent execution.", e),
+    }
+}
+
+async fn end_refused_request(pool: &sqlx_postgres::PgPool, run: &mut runs::ClaimRunRequest) {
+    let ended = async {
+        if let Some((id, _)) =
+            runs::request_identity(pool, &run.session_id, &run.request_message_id).await?
+        {
+            run.request_message_id = id;
+            runs::fail_refused_agent_request(pool, run).await?;
+        }
+        Ok::<_, runs::RunError>(())
+    }
+    .await;
+    if let Err(error) = ended {
+        eprintln!("[desktop-claim] end refused request: {error:?}");
     }
 }

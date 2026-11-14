@@ -38,6 +38,8 @@ export type CloudFallbackClaimAttemptResult =
   | 'in-flight'
   | 'retryable-failure'
   | 'terminal-failure'
+  /** The requester may not use the agent: the request ends now, not at the timeout. */
+  | 'refused'
   | 'not-signed-in';
 
 function objectContent(value: unknown): Record<string, unknown> {
@@ -165,6 +167,8 @@ export function upsertCanonicalRequestIntoLocalState(
 
 export const CLOUD_GROUP_AGENT_UNAVAILABLE_NOTICE =
   'Cloud Agent did not reply yet. The owner device may be offline or still starting.';
+/** A refused request names the agent and no reason (docs/contact-permissions.md). */
+export const cloudGroupAgentRefusedNotice = (name?: string | null) => `${name?.trim() || 'This agent'} isn't available.`;
 
 export function cloudGroupAgentUnavailableFallbackRequest(input: {
   sessionId: string;
@@ -173,6 +177,7 @@ export function cloudGroupAgentUnavailableFallbackRequest(input: {
   targetAgentId?: string | null;
   targetAgentDisplayName?: string | null;
   createdAtMs?: number | null;
+  error?: string; // replaces the no-reply notice, as for a refused request
 }): AppendCanonicalMessageRequest {
   const createdAtMs = typeof input.createdAtMs === 'number'
     && Number.isFinite(input.createdAtMs)
@@ -194,7 +199,7 @@ export function cloudGroupAgentUnavailableFallbackRequest(input: {
       deliveryState: 'failed',
       requestId: requestMessageId,
       replyToMessageId: requestMessageId,
-      error: CLOUD_GROUP_AGENT_UNAVAILABLE_NOTICE,
+      error: input.error ?? CLOUD_GROUP_AGENT_UNAVAILABLE_NOTICE,
     },
     parentMessageId: requestMessageId,
     status: 'failed',

@@ -69,20 +69,21 @@ struct KordiMark: View {
     var pose: KordiBirdPose?
     /// Fixed colors instead of the adaptive ink and the yellow beak.
     var tint: KordiBirdTint?
+    var wing: KordiBirdWing = .leaf
     @State private var animationEpoch = Date()
 
     var body: some View {
         Group {
             if let pose {
-                KordiBirdCanvas(size: size, pose: pose, tint: tint)
+                KordiBirdCanvas(size: size, pose: pose, tint: tint, wing: wing)
             } else if flying && !reduceMotion {
                 TimelineView(.animation(minimumInterval: 1 / 60)) { timeline in
                     KordiBirdCanvas(size: size, pose: .flight(KordiBirdFlightMotion.sample(
                         elapsed: timeline.date.timeIntervalSince(animationEpoch)
-                    )), tint: tint)
+                    )), tint: tint, wing: wing)
                 }
             } else {
-                KordiBirdCanvas(size: size, pose: .still, tint: tint)
+                KordiBirdCanvas(size: size, pose: .still, tint: tint, wing: wing)
             }
         }
         .frame(width: size, height: size)
@@ -104,6 +105,12 @@ struct KordiBirdTint: Equatable {
     }
 }
 
+/// The leaf wing of the app icon, or the amber question mark KordiSpot wears in its place.
+enum KordiBirdWing: Equatable {
+    case leaf
+    case questionMark
+}
+
 enum KordiBirdPose: Equatable {
     case still
     case flight(KordiBirdFlightSample)
@@ -118,12 +125,19 @@ private struct KordiBirdCanvas: View {
     let size: CGFloat
     let pose: KordiBirdPose
     var tint: KordiBirdTint?
+    var wing: KordiBirdWing = .leaf
 
     var body: some View {
         let canvasSide = size * (1 + (Self.overflow * 2))
         Canvas { context, _ in
             context.translateBy(x: size * Self.overflow, y: size * Self.overflow)
-            KordiBirdDrawing.draw(pose: pose, in: &context, side: size, tint: tint ?? .adaptive(for: colorScheme))
+            KordiBirdDrawing.draw(
+                pose: pose,
+                in: &context,
+                side: size,
+                tint: tint ?? .adaptive(for: colorScheme),
+                wing: wing
+            )
         }
         .frame(width: canvasSide, height: canvasSide)
         .frame(width: size, height: size)
@@ -139,7 +153,13 @@ private enum KordiBirdDrawing {
     private static let bodyCenter = CGPoint(x: 256, y: 250)
     private static let wingRoot = CGPoint(x: 296, y: 262)
 
-    static func draw(pose: KordiBirdPose, in context: inout GraphicsContext, side: CGFloat, tint: KordiBirdTint) {
+    static func draw(
+        pose: KordiBirdPose,
+        in context: inout GraphicsContext,
+        side: CGFloat,
+        tint: KordiBirdTint,
+        wing wingStyle: KordiBirdWing = .leaf
+    ) {
         let ink = tint.body
         let beakColor = tint.beak
         context.scaleBy(x: side / 512, y: side / 512)
@@ -163,6 +183,18 @@ private enum KordiBirdDrawing {
         cut.blendMode = .destinationOut
         cut.fill(eyePath.applying(placement), with: .color(.black))
 
+        if wingStyle == .questionMark {
+            // Same shapes as `supportAvatarSvg` in scripts/kordi-app-icons/icons.mjs.
+            let mark = questionMarkTransform.concatenating(placement)
+            context.stroke(
+                questionHookPath.applying(mark),
+                with: .color(beakColor),
+                style: StrokeStyle(lineWidth: 25 * questionMarkScale * 0.94, lineCap: .round, lineJoin: .round)
+            )
+            context.fill(questionDotPath.applying(mark), with: .color(beakColor))
+            return
+        }
+
         // Rest and flight share one opaque wing, palette and outline. Switching
         // state must not replace a transparent cutout with a differently colored leaf.
         let wingAngle: Double
@@ -175,6 +207,19 @@ private enum KordiBirdDrawing {
         cut.stroke(wing, with: .color(.black), style: StrokeStyle(lineWidth: 14, lineJoin: .round))
         context.fill(wing, with: .color(ink))
     }
+
+    private static let questionMarkScale: CGFloat = 1.06
+    private static let questionMarkTransform = CGAffineTransform(scaleX: questionMarkScale, y: questionMarkScale)
+        .concatenating(CGAffineTransform(translationX: 324, y: 300))
+
+    /// Question mark hook and stem, centred on the origin, stroked with round caps.
+    private static let questionHookPath = Path { path in
+        path.move(to: CGPoint(x: -32, y: -34))
+        path.addCurve(to: CGPoint(x: 32, y: -36), control1: CGPoint(x: -32, y: -72), control2: CGPoint(x: 32, y: -72))
+        path.addCurve(to: CGPoint(x: 0, y: 20), control1: CGPoint(x: 32, y: -10), control2: CGPoint(x: 0, y: -4))
+    }
+
+    private static let questionDotPath = Path(ellipseIn: CGRect(x: -15.5, y: 56 - 15.5, width: 31, height: 31))
 
     private static let bodyPath = Path(ellipseIn: CGRect(x: 262 - 150, y: 292 - 136, width: 300, height: 272))
 

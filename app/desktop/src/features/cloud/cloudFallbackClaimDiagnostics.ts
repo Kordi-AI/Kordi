@@ -1,4 +1,5 @@
 import type { CloudAuthErrorCode } from './authClient';
+import { isAgentUnavailableRefusal } from './agentRestrictions';
 
 export type CloudFallbackClaimFailureDiagnostic = {
   errorCode: CloudAuthErrorCode;
@@ -78,4 +79,14 @@ export function cloudFallbackClaimFailureDiagnostic(
       ? 'retry'
       : 'terminal',
   };
+}
+
+/**
+ * What a failed claim means for the request: the generic refusal ends it at
+ * once ("isn't available"), a transient error is retried, anything else
+ * waits for the no-reply timeout.
+ */
+export function cloudFallbackClaimFailureResult(error: unknown): 'refused' | 'retryable-failure' | 'terminal-failure' {
+  if (isAgentUnavailableRefusal(error)) return 'refused';
+  return cloudFallbackClaimErrorIsRetryable(error) ? 'retryable-failure' : 'terminal-failure';
 }
