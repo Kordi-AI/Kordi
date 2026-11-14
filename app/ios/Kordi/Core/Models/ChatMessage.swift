@@ -1189,6 +1189,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
     var voiceMessage: VoiceMessage?
     var planCard: PlanCard? = nil
     var facilitatorCard: FacilitatorCard? = nil
+    var groupJoinRequest: GroupJoinRequestCard? = nil
     var agentExecution: AgentExecutionSnapshot?
     /// How an agent reply that keeps its partial text ended early.
     var agentReplyEnding: AgentReplyEnding? = nil
@@ -1289,6 +1290,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         voiceMessage: VoiceMessage? = nil,
         planCard: PlanCard? = nil,
         facilitatorCard: FacilitatorCard? = nil,
+        groupJoinRequest: GroupJoinRequestCard? = nil,
         agentExecution: AgentExecutionSnapshot? = nil,
         agentReplyEnding: AgentReplyEnding? = nil,
         backgroundAgentSessions: [BackgroundAgentSession] = [],
@@ -1323,6 +1325,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         self.voiceMessage = voiceMessage
         self.planCard = planCard
         self.facilitatorCard = facilitatorCard
+        self.groupJoinRequest = groupJoinRequest
         self.agentExecution = agentExecution
         self.agentReplyEnding = agentReplyEnding
         self.backgroundAgentSessions = backgroundAgentSessions

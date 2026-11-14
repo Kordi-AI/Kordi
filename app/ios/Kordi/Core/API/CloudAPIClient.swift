@@ -2598,6 +2598,8 @@ actor CloudAPIClient {
             planCard: message.content.planCard,
             facilitatorCard: KordiSystemAgentIdentity.isSystemAgent(accountId: message.senderAccountId)
                 ? message.content.facilitatorCard : nil,
+            groupJoinRequest: KordiSystemIdentity.isSystem(accountId: message.senderAccountId)
+                ? message.content.groupJoinRequest : nil,
             conversationId: conversation.id,
             conversationSequence: message.conversationSequence,
             version: message.version,
