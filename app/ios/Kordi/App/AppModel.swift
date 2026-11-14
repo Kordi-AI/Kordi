@@ -6606,6 +6606,10 @@ final class AppModel: ObservableObject {
         for wire in messages {
             guard let envelope = CloudGroupMessageCodec.parse(wire.body) else {
                 guard ChatCallActivity(messageKind: wire.messageKind) == nil else { continue }
+                // A Facilitator reply row the server removed (its card answered,
+                // or its run failed) has no body left; it never shows as a bubble.
+                if KordiSystemIdentity.isServiceAccount(wire.fromAccountId), wire.body.isEmpty,
+                   wire.attachments.isEmpty, wire.planCard == nil, wire.facilitatorCard == nil { continue }
                 if let current = canonicalMessagesByID[wire.messageId]?.cloudMessageVersion,
                    let incoming = wire.version, current > incoming { continue }
                 let cardAgent = KordiSystemIdentity.planCardAgent(wire, ownAccountId: ownAccountId)

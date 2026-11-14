@@ -117,7 +117,7 @@ impl Chat {
             .unwrap();
     }
 
-    async fn card(&self, by: &str, title: &str, hours_ahead: i64) {
+    pub(super) async fn card(&self, by: &str, title: &str, hours_ahead: i64) {
         let start = chrono::Utc::now() + chrono::Duration::hours(hours_ahead);
         crate::plan_cards::store::propose(
             &self.pool,

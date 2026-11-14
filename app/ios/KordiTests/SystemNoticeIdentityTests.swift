@@ -106,6 +106,12 @@ final class SystemNoticeIdentityTests: XCTestCase {
         XCTAssertEqual(refreshed.first?.text, "Hi! I can find a time or open a vote.")
         XCTAssertEqual(refreshed.first?.authorName, "Facilitator")
         XCTAssertNil(refreshed.first?.agentExecution)
+
+        // A row the server removed (a card answered, or the run failed) is gone.
+        let removed = CloudMessageDTO(messageId: "facilitator-row", fromAccountId: KordiSystemAgentIdentity.accountId,
+            toAccountId: "acct_maya", body: "", createdAt: "2026-11-13T10:00:00Z", deliveredAt: nil, readAt: nil,
+            direction: "incoming", sessionId: group.sessionId, version: 3)
+        XCTAssertTrue(AppModel.mapGroupMessages([removed], conversation: group, ownAccountId: "acct_maya").isEmpty)
     }
 
     func testSystemNoticeFromSystemAgentProjectsAsSystem() throws {

@@ -1,6 +1,7 @@
 //! The Facilitator's reply row against a real database: shown as soon as a
-//! run takes a direct request, then the reply in that same row; a failure
-//! shows the failed line until the retry takes the row back.
+//! run takes a direct request, then the reply in that same row. A card the
+//! run opens replaces the row, and a failed run removes it; its retry shows
+//! a new one.
 
 use serde_json::{json, Value};
 use sqlx_core::query::query;
@@ -34,7 +35,8 @@ impl Chat {
         id
     }
 
-    /// The Facilitator's rows in the chat: (message id, version, envelope message).
+    /// The Facilitator's reply rows in the chat (not its cards):
+    /// (message id, version, envelope message).
     async fn facilitator_rows(&self) -> Vec<(String, i32, Value)> {
         let rows: Vec<(String, i32, Value)> = query_as(
             "SELECT message_id::text, version, content FROM cloud_chat_messages
@@ -52,6 +54,7 @@ impl Chat {
                 let envelope = super::super::input::cloud_envelope(text).unwrap_or(Value::Null);
                 (id, version, envelope["message"].clone())
             })
+            .filter(|(_, _, message)| message["senderKind"] == "agent")
             .collect()
     }
 
@@ -107,20 +110,50 @@ async fn a_direct_request_shows_a_working_row_that_becomes_the_reply() {
 
 #[tokio::test]
 #[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
-async fn a_failed_request_shows_the_failure_until_its_retry_takes_the_row_back() {
+async fn a_card_the_facilitator_opens_replaces_its_working_row() {
     let chat = Chat::new().await;
     chat.ask_facilitator().await;
     assert_eq!(chat.sweep().await, 1);
+    assert_eq!(chat.facilitator_rows().await.len(), 1, "working");
+    // The run proposes a plan card and says nothing more.
+    let system_agent = chat.config.account_id.clone();
+    chat.card(&system_agent, "Dinner", 48).await;
+    assert_eq!(
+        chat.finish_run(None).await,
+        Value::Null,
+        "the card is the answer"
+    );
+    assert!(
+        chat.facilitator_rows().await.is_empty(),
+        "the working row is gone"
+    );
+    let (cards,): (i64,) =
+        query_as("SELECT COUNT(*) FROM cloud_plan_cards WHERE conversation_id = $1")
+            .bind(chat.chat)
+            .fetch_one(&chat.pool)
+            .await
+            .unwrap();
+    assert_eq!(cards, 1);
+}
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn a_failed_request_removes_its_row_and_the_retry_shows_a_new_one() {
+    let chat = Chat::new().await;
+    chat.ask_facilitator().await;
+    assert_eq!(chat.sweep().await, 1);
+    let first = chat.facilitator_rows().await;
+    assert_eq!(first.len(), 1);
     let run_id = chat.active_run().await;
     super::super::retry::fail(&chat.pool, &run_id, None, "provider_error")
         .await
         .unwrap();
-    let rows = chat.facilitator_rows().await;
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].2["deliveryState"], "failed");
-    assert_eq!(rows[0].2["text"], "Facilitator couldn't reply.");
+    assert!(
+        chat.facilitator_rows().await.is_empty(),
+        "never left working"
+    );
 
-    // The backoff passes; the retry takes the same row back.
+    // The backoff passes; the retry shows a new working row.
     query("UPDATE cloud_pip_conversation_state SET retry_after = now() WHERE conversation_id = $1")
         .bind(chat.chat)
         .execute(&chat.pool)
@@ -128,7 +161,7 @@ async fn a_failed_request_shows_the_failure_until_its_retry_takes_the_row_back()
         .unwrap();
     assert_eq!(chat.sweep().await, 1, "the request is retried");
     let retried = chat.facilitator_rows().await;
-    assert_eq!(retried.len(), 1, "still one row: {retried:?}");
-    assert_eq!(retried[0].0, rows[0].0);
+    assert_eq!(retried.len(), 1, "one row: {retried:?}");
+    assert_ne!(retried[0].0, first[0].0);
     assert_eq!(retried[0].2["deliveryState"], "processing");
 }

@@ -6,17 +6,10 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde_json::Value;
 
-use super::envelopes::{
-    cloud_agent_shared_failure_text, cloud_group_response_body, parse_cloud_group_envelope,
-};
+use super::envelopes::{cloud_group_response_body, parse_cloud_group_envelope};
 use super::group_mentions::CLOUD_GROUP_AGENT_MENTION_MAX_DEPTH;
 
 const CLOUD_GROUP_PREFIX: &str = "kordi-cloud-group:";
-
-/// The line a failed Facilitator reply shows, as a member agent's does.
-pub(crate) fn failure_text() -> String {
-    cloud_agent_shared_failure_text(Some(crate::system_agent::DEFAULT_SYSTEM_AGENT_NAME))
-}
 
 /// The group message id of the request a stored body carries.
 pub(crate) fn request_id(request_body: &str) -> Option<String> {
@@ -26,7 +19,7 @@ pub(crate) fn request_id(request_body: &str) -> Option<String> {
 }
 
 /// One state of the Facilitator's reply row: "processing" with empty text
-/// while it works, then "complete" or "failed" with its words and mentions.
+/// while it works, then "complete" with its words and mentions.
 pub(crate) struct ReplyRow<'a> {
     pub system_agent: &'a str,
     /// The Facilitator's agent id, when it is set up on this server.

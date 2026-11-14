@@ -2,9 +2,9 @@
 //! …"). As soon as a run takes the request, the Facilitator shows a
 //! processing row answering it, in the same reply-slot shape as member
 //! agents' rows (#2547). The run's end edits that row in place: its words
-//! replace it, a card or document it opened removes it (the card is the
-//! reply), and a failure shows the neutral failed line until a retry takes
-//! the row back. One row per request, whatever the number of attempts.
+//! replace it, and a card or document it opened is the reply, so the row
+//! goes. A failed run removes its row too, so no row is left working; the
+//! retry shows a new one.
 
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -28,10 +28,11 @@ pub(super) fn request_message(input: &Value) -> Option<Uuid> {
         .and_then(|id| Uuid::parse_str(id).ok())
 }
 
-fn slot_client_id(request: Uuid) -> Uuid {
+/// One row per run: a failed run's row is gone, and its retry shows its own.
+fn slot_client_id(run_id: &str) -> Uuid {
     Uuid::new_v5(
         &Uuid::NAMESPACE_OID,
-        format!("facilitator-reply:{request}").as_bytes(),
+        format!("facilitator-reply:{run_id}").as_bytes(),
     )
 }
 
@@ -67,10 +68,10 @@ async fn write(
     pool: &PgPool,
     system_agent: &str,
     conversation_id: Uuid,
-    request: Uuid,
+    run_id: &str,
     body: String,
 ) -> Result<Option<String>, sqlx_core::Error> {
-    let client_id = slot_client_id(request);
+    let client_id = slot_client_id(run_id);
     let mut tx = pool.begin().await?;
     let replaced = crate::chat_sync::store::replace_server_message_in_transaction(
         &mut tx,
@@ -110,7 +111,7 @@ async fn write_state(
     pool: &PgPool,
     system_agent: &str,
     conversation_id: Uuid,
-    request: Uuid,
+    (run_id, request): (&str, Uuid),
     text: &str,
     delivery_state: &str,
     mentions: Vec<Value>,
@@ -118,7 +119,7 @@ async fn write_state(
     let Some(request_body) = request_body(pool, conversation_id, request).await? else {
         return Ok(None);
     };
-    let slot_id = format!("facilitator-reply:{request}");
+    let slot_id = format!("facilitator-reply:{run_id}");
     let agent: Option<(String,)> = query_as(
         "SELECT agent_id FROM cloud_agent_definitions
          WHERE owner_account_id = $1 AND is_system_managed AND status = 'active'
@@ -139,7 +140,7 @@ async fn write_state(
     let Some(body) = facilitator_slot::reply_body(&request_body, row) else {
         return Ok(None);
     };
-    write(pool, system_agent, conversation_id, request, body).await
+    write(pool, system_agent, conversation_id, run_id, body).await
 }
 
 /// Shows the processing row for the run that just took a direct request,
@@ -161,7 +162,7 @@ pub(super) async fn open(
         pool,
         system_agent,
         conversation_id,
-        request,
+        (run_id, request),
         "",
         "processing",
         Vec::new(),
@@ -215,19 +216,36 @@ pub(super) async fn publish(
         .filter(|text| !text.is_empty());
     let (sender, conversation_id) = (run.owner_account_id.as_str(), run.conversation_id);
     let Some(text) = text else {
-        finish(pool, sender, conversation_id, &run.input, Ending::Answered).await?;
+        finish(
+            pool,
+            run_id,
+            sender,
+            conversation_id,
+            &run.input,
+            Ending::Answered,
+        )
+        .await?;
         return Ok(None);
     };
     if documents.is_empty() {
         let (words, mentions) = super::post::reply_text(pool, run, text, card_touched).await?;
         let ending = Ending::Reply(&words, mentions);
-        if let Some(row) = finish(pool, sender, conversation_id, &run.input, ending).await? {
+        if let Some(row) = finish(pool, run_id, sender, conversation_id, &run.input, ending).await?
+        {
             return Ok(Some(row));
         }
     }
     let posted = super::post::post_text(pool, run_id, run, text, card_touched, documents).await?;
     if !documents.is_empty() {
-        finish(pool, sender, conversation_id, &run.input, Ending::Answered).await?;
+        finish(
+            pool,
+            run_id,
+            sender,
+            conversation_id,
+            &run.input,
+            Ending::Answered,
+        )
+        .await?;
     }
     Ok(posted)
 }
@@ -238,14 +256,15 @@ pub(super) enum Ending<'a> {
     Reply(&'a str, Vec<Value>),
     /// A card or document answered instead; the row goes.
     Answered,
-    /// The run failed; a retry takes the row back.
+    /// The run failed; the row goes, and the retry shows a new one.
     Failed,
 }
 
-/// Ends the request's row. Returns the row's message id when the row now
-/// holds the reply, and None when the run had no row or the row is gone.
+/// Ends the run's row. Returns the row's message id when the row now holds
+/// the reply, and None when the run had no row or the row is gone.
 pub(super) async fn finish(
     pool: &PgPool,
+    run_id: &str,
     system_agent: &str,
     conversation_id: Uuid,
     input: &Value,
@@ -257,56 +276,39 @@ pub(super) async fn finish(
     let Some(request) = request_message(input) else {
         return Ok(None);
     };
-    match ending {
-        Ending::Reply(text, mentions) => {
-            write_state(
-                pool,
-                system_agent,
-                conversation_id,
-                request,
-                text,
-                "complete",
-                mentions,
-            )
-            .await
-        }
-        Ending::Failed => {
-            let text = facilitator_slot::failure_text();
-            write_state(
-                pool,
-                system_agent,
-                conversation_id,
-                request,
-                &text,
-                "failed",
-                Vec::new(),
-            )
-            .await
-            .map(|_| None)
-        }
-        Ending::Answered => {
-            let row: Option<(Uuid,)> = query_as(
-                "SELECT message_id FROM cloud_chat_messages
-                 WHERE sender_account_id = $1 AND client_message_id = $2 AND deleted_at IS NULL",
-            )
-            .bind(system_agent)
-            .bind(slot_client_id(request))
-            .fetch_optional(pool)
-            .await?;
-            if let Some((message_id,)) = row {
-                crate::chat_sync::store::delete_message(
-                    pool,
-                    system_agent,
-                    conversation_id,
-                    message_id,
-                    true,
-                )
-                .await
-                .map_err(|error| sqlx_core::Error::Protocol(error.to_string()))?;
-            }
-            Ok(None)
-        }
+    if let Ending::Reply(text, mentions) = ending {
+        let slot = (run_id, request);
+        return write_state(
+            pool,
+            system_agent,
+            conversation_id,
+            slot,
+            text,
+            "complete",
+            mentions,
+        )
+        .await;
     }
+    let row: Option<(Uuid,)> = query_as(
+        "SELECT message_id FROM cloud_chat_messages
+         WHERE sender_account_id = $1 AND client_message_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(system_agent)
+    .bind(slot_client_id(run_id))
+    .fetch_optional(pool)
+    .await?;
+    if let Some((message_id,)) = row {
+        crate::chat_sync::store::delete_message(
+            pool,
+            system_agent,
+            conversation_id,
+            message_id,
+            true,
+        )
+        .await
+        .map_err(|error| sqlx_core::Error::Protocol(error.to_string()))?;
+    }
+    Ok(None)
 }
 
 #[cfg(test)]

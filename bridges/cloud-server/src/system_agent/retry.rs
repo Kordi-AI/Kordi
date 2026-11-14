@@ -94,14 +94,14 @@ pub async fn fail(
         .await?;
     }
     tx.commit().await?;
-    // A direct request's row shows the failure until the retry takes it back.
+    // A direct request's row goes with its run; the retry shows a new one.
     if let Some((prompt, conversation_id, owner)) = ended_request {
         let input: Value = serde_json::from_str(&prompt).unwrap_or_default();
         let ending = super::reply_slot::Ending::Failed;
         if let Err(error) =
-            super::reply_slot::finish(pool, &owner, conversation_id, &input, ending).await
+            super::reply_slot::finish(pool, run_id, &owner, conversation_id, &input, ending).await
         {
-            eprintln!("[system-agent] Could not mark the reply row of {run_id} failed: {error}");
+            eprintln!("[system-agent] Could not remove the reply row of {run_id}: {error}");
         }
     }
     Ok(())
