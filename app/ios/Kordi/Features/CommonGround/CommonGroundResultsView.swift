@@ -183,18 +183,78 @@ struct CommonGroundResultsView: View {
                             }
                         }
                         Spacer(minLength: 8)
-                        if group.joined {
-                            Button("Open") { Task { await openGroup(group.groupSpaceId, conversationId: group.conversationId) } }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                        }
+                        groupAction(group)
                     }
                     .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)
                     .padding(.vertical, 8)
                     .frame(minHeight: SessionDetailMetrics.rowMinHeight)
+                    // Requests sent while the room was open can still be answered after it closes.
+                    if group.joined {
+                        ForEach(group.requests) { request in
+                            SessionDetailSeparator(leading: SessionDetailMetrics.rowHorizontalInset)
+                            joinRequestRow(request)
+                        }
+                    }
                 }
             }
         }
+    }
+
+    /// Open for members; Ask to join or Requested while the room is open;
+    /// nothing after a decline.
+    @ViewBuilder private func groupAction(_ group: CommonGroundGroup) -> some View {
+        let busyKey = CommonGroundModel.joinRequestBusyKey(groupSpaceId: group.groupSpaceId)
+        if group.joined {
+            Button("Open") { Task { await openGroup(group.groupSpaceId, conversationId: group.conversationId) } }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        } else if !closed, let request = group.joinRequest, request.isPending {
+            Button("Requested") {
+                Task { await model.cancelJoinRequest(code: code, groupSpaceId: group.groupSpaceId, requestId: request.requestId) }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(Color.primary)
+            .disabled(model.busy == busyKey)
+            .accessibilityHint("Cancels the request")
+        } else if !closed, group.canAskToJoin {
+            Button("Ask to join") {
+                Task { await model.askToJoin(code: code, groupSpaceId: group.groupSpaceId) }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(model.busy == busyKey)
+        }
+    }
+
+    /// Someone waiting to join, under the group row, for approvers.
+    private func joinRequestRow(_ request: CommonGroundPendingJoinRequest) -> some View {
+        let busy = model.busy == CommonGroundModel.decideBusyKey(requestId: request.requestId)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                CommonGroundAvatar(person: request.person, size: 30)
+                Text("\(request.person.displayName) asked to join")
+                    .font(.body)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button("Decline") {
+                    Task { await model.decideJoinRequest(code: code, requestId: request.requestId, approve: false) }
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.primary)
+                Button("Approve") {
+                    Task { await model.decideJoinRequest(code: code, requestId: request.requestId, approve: true) }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .controlSize(.small)
+            .disabled(busy)
+        }
+        .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder private var peopleRows: some View {

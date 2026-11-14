@@ -8,7 +8,7 @@ import { loadSession } from '@/features/cloud/session';
 import { isCardDesign, isCardIcon } from './cardDesign';
 import { nearbyRoutes } from './clientNearby';
 import type {
-  CgBuildRequest, CgCreatedGroup, CgDocument, CgCreateRoomInput, CgGroup, CgJoinInput, CgMatch, CgMeetInput, CgOwnerView, CgPairCode, CgPerson,
+  CgBuildRequest, CgCreatedGroup, CgDocument, CgCreateRoomInput, CgGroup, CgJoinInput, CgJoinRequestStatus, CgMatch, CgMeetInput, CgOwnerView, CgPairCode, CgPerson,
   CgPersonCard, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry, CgRelationship, CgResults, CgRoom, CgRoomPreview, CgRoomSummary, CgRoutedMemory,
   CgTopicLists,
 } from './types';
@@ -270,6 +270,15 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
     },
     joinInvitation: (code: string, ref: string) => data<{ status: string } & Omit<CgGroup, 'memberCount'>>(
       'POST', cg(`rooms/${enc(code)}/invitations/${enc(ref)}/join`),
+    ),
+    askToJoin: (code: string, groupSpaceId: string) => data<{ request: { requestId: string; status: CgJoinRequestStatus } }>(
+      'POST', cg(`rooms/${enc(code)}/join-requests`), { groupSpaceId },
+    ),
+    cancelJoinRequest: (code: string, requestId: string) => data<{ request: { requestId: string; status: CgJoinRequestStatus } }>(
+      'DELETE', cg(`rooms/${enc(code)}/join-requests/${enc(requestId)}`),
+    ),
+    decideJoinRequest: (requestId: string, action: 'approve' | 'decline') => data<{ request: { requestId: string; status: CgJoinRequestStatus } }>(
+      'POST', cg(`join-requests/${enc(requestId)}`), { action },
     ),
     person: async (accountId: string, profileId?: string | null) => withRelationship(
       await data<CgPersonCard>('GET', cg(`people/${enc(accountId)}${profileQuery(profileId)}`)),

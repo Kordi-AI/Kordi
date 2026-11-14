@@ -33,6 +33,7 @@ export function messageSnapshotKey(msg: Message) {
     msg.reactionTargetMessageId ?? '',
     msg.cloudMessageVersion ?? '',
     msg.facilitatorCard ? [msg.facilitatorCard.cardId, msg.facilitatorCard.revision, msg.facilitatorCard.result] : null,
+    msg.groupJoinRequest ? [msg.groupJoinRequest.requestId, msg.groupJoinRequest.revision, msg.groupJoinRequest.status] : null,
     msg.planCard ? [msg.planCard.eventId, msg.planCard.view ?? '', msg.planCard.revision, ...(msg.planCard.options ?? []).map((option) => option.votes.join('+'))].join(':') : '',
     msg.editedAt ?? '',
     msg.eventSources?.map((source) => [source.eventId, source.provider, source.title].join(':')).join('|') ?? '',

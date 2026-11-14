@@ -13,6 +13,7 @@ import { cloudDirectMessageDisplayText, parseCloudDirectMessageEnvelope } from '
 import { cloudGroupAgentConversationId } from '@/features/cloud/cloudGroupMessages';
 import { storedVoiceMessage, withoutVoiceAttachment } from '@/features/cloud/cloudVoiceMessage';
 import { normalizeFacilitatorCard } from '@/features/cloud/facilitatorCard';
+import { normalizeGroupJoinRequestCard } from '@/features/cloud/groupJoinRequest';
 import { normalizePlanCardSnapshot } from '@/features/cloud/planCardSnapshot';
 import { messageEventSourcesField } from '@/features/cloud/cloudAgentSources';
 import { isProcessingPlaceholderText, stripOutreachContextEnvelope } from '@/features/collaboration/agentPlaceholderText';
@@ -374,6 +375,7 @@ export function mapCanonicalMessage(
   const voiceMessage = storedVoiceMessage(content.voiceMessage, isOwnMessage);
   const planCard = normalizePlanCardSnapshot(content.planCard);
   const facilitatorCard = normalizeFacilitatorCard(content.facilitatorCard);
+  const groupJoinRequest = normalizeGroupJoinRequestCard(content.groupJoinRequest);
   return withAgentExchangeProgress({
     id: message.id,
     // A message typed in this window keeps its canonical id as its render
@@ -406,7 +408,7 @@ export function mapCanonicalMessage(
     callActivity: canonicalCallActivity(message, content, isOwnMessage),
     messageKind: voiceMessage ? 'voice' : role === 'system' ? stringValue(content.kind) ?? messageKind : undefined,
     voiceMessage,
-    planCard, facilitatorCard, ...messageEventSourcesField(content.sources),
+    planCard, facilitatorCard, ...(groupJoinRequest ? { groupJoinRequest } : {}), ...messageEventSourcesField(content.sources),
     detail: stringValue(content.detail),
     attachments: withoutVoiceAttachment(canonicalAttachments(content.attachments), voiceMessage),
     mentions,

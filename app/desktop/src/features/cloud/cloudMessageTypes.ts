@@ -1,4 +1,5 @@
 import type { FacilitatorCard } from './facilitatorCard';
+import type { GroupJoinRequestCard } from './groupJoinRequest';
 import type { MessagePlanCard } from '@/kordi-app/types/message';
 import type { CloudMessageAttachment, CloudVoiceMessage } from './cloudAttachmentTypes';
 
@@ -18,6 +19,7 @@ export type CloudMessage = {
   attachments?: CloudMessageAttachment[]; voiceMessage?: CloudVoiceMessage | null;
   planCard?: MessagePlanCard | null;
   facilitatorCard?: FacilitatorCard | null;
+  groupJoinRequest?: GroupJoinRequestCard | null;
   conversationId?: string | null;
   conversationSequence?: number | null;
   clientMessageId?: string | null;

@@ -20,6 +20,7 @@ type ContactsListColumnProps = Pick<ContactsPageProps,
   | 'isContactRequestsOpen'
   | 'onToggleRequests'
   | 'onSelectRequest'
+  | 'onCloseOverlay'
   | 'activeContactRequestId'
   | 'onAddContactByNodeId'
   | 'onLookupContact'
@@ -98,6 +99,7 @@ export function ContactsListColumn({
   isContactRequestsOpen,
   onToggleRequests,
   onSelectRequest,
+  onCloseOverlay,
   activeContactRequestId,
   onAddContactByNodeId,
   onLookupContact,
@@ -164,6 +166,7 @@ export function ContactsListColumn({
             isContactRequestsOpen={isContactRequestsOpen}
             onToggleRequests={onToggleRequests}
             onSelectRequest={onSelectRequest}
+            onCloseOverlay={onCloseOverlay}
             requestActions={requestActions}
           />
           {groupSpaces && onOpenGroup ? (

@@ -10,6 +10,7 @@ import type { CgProfileMemory } from './profiles';
 import { BUILD_CHECK_MS, startedBuild } from './storeBuild';
 import * as autoOps from './storeAutoRebuild';
 import * as hintOps from './storeHints';
+import * as joinRequestOps from './storeJoinRequests';
 import * as pairOps from './storePairing';
 import * as profileOps from './storeProfiles';
 import * as roomOps from './storeRooms';
@@ -399,6 +400,13 @@ export class CommonGroundStore {
       this.set({ busy: null });
     }
   }
+
+  /** Room member outside a group: ask to join it, or cancel the request. */
+  askToJoin = (code: string, groupSpaceId: string) => joinRequestOps.askToJoin(this, code, groupSpaceId);
+  cancelJoinRequest = (code: string, requestId: string) => joinRequestOps.cancelJoinRequest(this, code, requestId);
+  /** Group owner or admin: approve or decline a pending request. */
+  decideJoinRequest = (code: string, requestId: string, action: 'approve' | 'decline') =>
+    joinRequestOps.decideJoinRequest(this, code, requestId, action);
 
   async joinInvitation(code: string, ref: string): Promise<string | null> {
     try {

@@ -27,6 +27,7 @@ export function cloudMessageRevision(messages: readonly CloudMessage[]): string 
     addFingerprintValue(message.sessionId ?? '');
     addFingerprintValue(message.messageKind ?? '');
     addFingerprintValue(JSON.stringify(message.facilitatorCard ?? null));
+    addFingerprintValue(JSON.stringify(message.groupJoinRequest ?? null));
     addFingerprintValue(JSON.stringify(message.planCard ?? null));
     addFingerprintValue(String(message.version ?? ''));
     addFingerprintValue(String(message.body.length));

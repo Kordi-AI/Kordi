@@ -95,6 +95,7 @@ function mergeDuplicateWire(previous: CloudMessage, incoming: CloudMessage): Clo
     voiceMessage: incoming.voiceMessage ?? previous.voiceMessage,
     planCard: incoming.planCard ?? previous.planCard,
     facilitatorCard: incoming.facilitatorCard ?? previous.facilitatorCard,
+    groupJoinRequest: incoming.groupJoinRequest ?? previous.groupJoinRequest,
     // Some compatibility projections omit the semantic kind. Never allow a
     // less complete duplicate to turn a non-executable system event back into
     // an ordinary agent request.
