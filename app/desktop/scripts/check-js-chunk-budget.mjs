@@ -99,20 +99,18 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // The Daily calendar access fix adds 1 kB on top, so it moves to 5.97 MB.
 // The invitation detail in Contacts (group, inviter, members, Join and Decline) replaces the room
 // jump and adds 1.7 kB, so it moves to 5.972 MB.
-// Inviting Grounding people into groups (the person-page group picker, Add people's From Grounding
-// section and person invitations in Contacts › Requests) adds 9.7 kB, so it moves to 5.981 MB.
 // Asking for notification permission from Digest (Allow, Open System Settings, the focus re-check
-// and the shared unanswered-request state) adds 1.2 kB with the community profile; with the community
-// build measured at 5.982 MB after both, it moves to 5.984 MB.
+// and the shared unanswered-request state) adds 1.2 kB with the community profile, so it moves to 5.958 MB.
 // Offering group members' default agents in the @ menu and ending a refused agent request at once add
-// 0.2 kB, so it moves to 5.985 MB.
+// 0.2 kB, so it moves to 5.959 MB.
 // One agent task row (a yield or reply kept in its processing row, which a member's cleanup leaves
-// in place) adds under 1 kB, so it moves to 5.987 MB.
+// in place) adds under 1 kB, so it moves to 5.961 MB.
 // The Facilitator in the group @ menu, its mention, and mentions that end a sentence add 1.5 kB,
 // so it moves to 5.963 MB.
 // Together, the room group join requests above (16 kB) and these come to 5.979 MB.
-// Inviting Grounding people into groups (9.7 kB) and sending a joiner's first group message at once
-// (under 1 kB) bring it to 5.99 MB.
+// Inviting Grounding people into groups (the person-page group picker, Add people's From Grounding
+// section and person invitations in Contacts › Requests, 9.7 kB) and sending a joiner's first group
+// message at once (under 1 kB) bring it to 5.99 MB.
 const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_990_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
