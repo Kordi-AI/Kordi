@@ -145,7 +145,7 @@ final class CommonGroundSyncHintTests: XCTestCase {
         XCTAssertEqual(model.matchingPollInterval, CommonGroundModel.matchPollInterval)
         model.receive(.matches)
         XCTAssertEqual(model.resultsPollInterval("4821"), CommonGroundModel.hintedMatchPollInterval)
-        XCTAssertEqual(model.matchingPollInterval, .seconds(10))
+        XCTAssertEqual(model.matchingPollInterval, .seconds(20))
 
         await model.loadResults("4821", quiet: true)
         XCTAssertEqual(model.resultsPollInterval("4821"), .seconds(60))

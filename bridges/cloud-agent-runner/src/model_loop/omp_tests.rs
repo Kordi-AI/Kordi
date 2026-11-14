@@ -187,6 +187,7 @@ async fn real_bun_cloud_adapter_returns_durable_context() {
         verbatim_model: false,
         max_output_tokens: None,
         headers: Default::default(),
+        retry: Default::default(),
     };
     let worker = OmpRuntime::new(WorkerCommand {
         program: "bun".into(),

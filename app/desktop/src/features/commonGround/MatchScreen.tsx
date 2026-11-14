@@ -15,41 +15,51 @@ function TradeRows({ items, whose }: { items: CgTrade[]; whose: string }) {
   return (
     <CgGroup>
       {items.map((trade) => (
-        <CgRow key={`${trade.topic}:${trade.for}`} lead={<CgTopicDot topic={trade.topic} />} title={trade.topic} sub={`For ${whose} ${lowerFirst(trade.for)}`} />
+        <CgRow
+          key={`${trade.topic}:${trade.for}`}
+          lead={<CgTopicDot topic={trade.topic} />}
+          title={trade.topic}
+          sub={trade.for ? `For ${whose} ${lowerFirst(trade.for)}` : undefined}
+        />
       ))}
     </CgGroup>
   );
 }
 
-/** Shared and Trade for a found match, or a line while it is being found. */
+/**
+ * Shared and Trade for a found match, or a line while it is being found. While matching, newer servers
+ * send the quick estimate's topics without reasons; those show at once above the progress line.
+ */
 export function MatchDetails({ match }: { match: Pick<CgMatch, 'status' | 'person' | 'shared' | 'youBring' | 'theyBring' | 'nextStep'> }) {
   const [tab, setTab] = useState<'shared' | 'trade'>('shared');
   const person = match.person;
   const shared = match.shared ?? [];
   const youBring = match.youBring ?? [];
   const theyBring = match.theyBring ?? [];
-  if (match.status === 'matching') return <CgProgress line="Finding what you share" />;
+  const matching = match.status === 'matching';
+  if (matching && !shared.length && !youBring.length && !theyBring.length) return <CgProgress line="Finding what you share" />;
   if (match.status === 'failed') return <CgNotice text="Could not find a match. Try again later." />;
+  // While matching, an empty list stays empty instead of saying there is no overlap.
+  const emptyRow = (line: string) => (matching ? null : <CgSection><CgGroup><CgRow title={<span className="cg-muted">{line}</span>} /></CgGroup></CgSection>);
   return (
     <>
       <CgSegmented value={tab} onChange={setTab} label="Match" options={[['shared', 'Shared'], ['trade', 'Trade']]} />
       {tab === 'shared' ? (
-        <CgSection>
-          <CgGroup>
-            {shared.length
-              ? shared.map((reason) => <CgRow key={reason.topic} lead={<CgTopicDot topic={reason.topic} />} title={reason.topic} sub={reason.why} />)
-              : <CgRow title={<span className="cg-muted">No clear overlap yet</span>} />}
-          </CgGroup>
-        </CgSection>
+        shared.length ? (
+          <CgSection>
+            <CgGroup>
+              {shared.map((reason) => <CgRow key={reason.topic} lead={<CgTopicDot topic={reason.topic} />} title={reason.topic} sub={reason.why || undefined} />)}
+            </CgGroup>
+          </CgSection>
+        ) : emptyRow('No clear overlap yet')
       ) : youBring.length || theyBring.length ? (
         <>
           {youBring.length ? <CgSection title="You bring"><TradeRows items={youBring} whose={`${person.name}'s`} /></CgSection> : null}
           {theyBring.length ? <CgSection title={`${person.name} brings`}><TradeRows items={theyBring} whose="your" /></CgSection> : null}
         </>
-      ) : (
-        <CgSection><CgGroup><CgRow title={<span className="cg-muted">No clear trade yet</span>} /></CgGroup></CgSection>
-      )}
+      ) : emptyRow('No clear trade yet')}
       {match.nextStep ? <div className="cg-next-step">{match.nextStep}</div> : null}
+      {matching ? <CgProgress inline line="Finding what you share" /> : null}
     </>
   );
 }

@@ -474,7 +474,23 @@ struct CommonGroundRanked: Decodable, Hashable, Identifiable {
     let score: Int
     let headline: String
     let relationship: CommonGroundRelationship?
+    /// True when the score is the quick topic-overlap estimate and no model
+    /// reasons exist yet. Newer servers list everyone this way; absent means false.
+    var estimated: Bool = false
     var id: String { person.accountId }
+}
+
+extension CommonGroundRanked {
+    private enum CodingKeys: String, CodingKey { case person, score, headline, relationship, estimated }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        person = try c.decode(CommonGroundPerson.self, forKey: .person)
+        score = try c.decode(Int.self, forKey: .score)
+        headline = c.cgValue(.headline, "")
+        relationship = c.cgValue(.relationship, nil as CommonGroundRelationship?)
+        estimated = c.cgValue(.estimated, false)
+    }
 }
 
 struct CommonGroundResults: Decodable, Hashable {
@@ -507,20 +523,42 @@ struct CommonGroundReason: Decodable, Hashable {
     let why: String
 }
 
+/// A quick estimate sends topics with an empty `why`; missing text decodes as empty.
+extension CommonGroundReason {
+    private enum CodingKeys: String, CodingKey { case topic, theirTopic, why }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        topic = c.cgValue(.topic, "")
+        theirTopic = c.cgValue(.theirTopic, "")
+        why = c.cgValue(.why, "")
+    }
+}
+
 /// A skill one person offers and the other person's topic it helps.
 struct CommonGroundTrade: Decodable, Hashable {
     let topic: String
     let target: String
     let why: String
+}
 
+extension CommonGroundTrade {
     private enum CodingKeys: String, CodingKey {
         case topic, why
         case target = "for"
     }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        topic = c.cgValue(.topic, "")
+        target = c.cgValue(.target, "")
+        why = c.cgValue(.why, "")
+    }
 }
 
 /// `GET people/:id/match`: 200 with `status: ready` and the match, or 202
-/// with `status: matching|failed` while it is being found.
+/// with `status: matching|failed` while it is being found. Newer servers add
+/// the quick estimate's topics (empty reasons) and `estimated: true` to a 202.
 struct CommonGroundMatch: Decodable, Hashable {
     let status: String
     let person: CommonGroundPerson
@@ -531,9 +569,10 @@ struct CommonGroundMatch: Decodable, Hashable {
     let theyBring: [CommonGroundTrade]
     let nextStep: String?
     let relationship: CommonGroundRelationship?
+    let estimated: Bool
 
     private enum CodingKeys: String, CodingKey {
-        case status, person, score, headline, shared, youBring, theyBring, nextStep, relationship
+        case status, person, score, headline, shared, youBring, theyBring, nextStep, relationship, estimated
     }
 
     init(from decoder: Decoder) throws {
@@ -542,15 +581,18 @@ struct CommonGroundMatch: Decodable, Hashable {
         score = c.cgValue(.score, nil as Int?)
         status = c.cgValue(.status, score == nil ? "matching" : "ready")
         headline = c.cgValue(.headline, nil as String?)
-        shared = c.cgValue(.shared, [])
-        youBring = c.cgValue(.youBring, [])
-        theyBring = c.cgValue(.theyBring, [])
+        shared = c.cgValue(.shared, [CommonGroundReason]()).filter { !$0.topic.isEmpty }
+        youBring = c.cgValue(.youBring, [CommonGroundTrade]()).filter { !$0.topic.isEmpty }
+        theyBring = c.cgValue(.theyBring, [CommonGroundTrade]()).filter { !$0.topic.isEmpty }
         nextStep = c.cgValue(.nextStep, nil as String?)
         relationship = c.cgValue(.relationship, nil as CommonGroundRelationship?)
+        estimated = c.cgValue(.estimated, false)
     }
 
     var isReady: Bool { status == "ready" }
     var isMatching: Bool { status == "matching" }
+    /// Still matching, with the quick estimate's topics to show meanwhile.
+    var hasEstimateTopics: Bool { isMatching && !(shared.isEmpty && youBring.isEmpty && theyBring.isEmpty) }
 }
 
 struct CommonGroundPeopleResponse<Entry: Decodable>: Decodable { let people: [Entry] }

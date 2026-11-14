@@ -12,7 +12,7 @@ mod reply;
 pub use omp::run_omp_model_loop;
 pub use prompt::{cloud_sandbox_system_prompt, tool_catalog};
 pub(crate) use provider::OpenAiApiMode;
-pub use provider::{OpenAiCompatibleProvider, OpenAiProviderConfig};
+pub use provider::{OpenAiCompatibleProvider, OpenAiProviderConfig, ProviderRetryPolicy};
 pub(crate) use reply::{run_reply_text, ToolOutcome};
 
 use crate::artifacts::export_sandbox_file;

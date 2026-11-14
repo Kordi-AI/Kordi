@@ -16,7 +16,8 @@ use serde_json::json;
 use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 
-use super::{address_limit, member_count_sql, room_not_found, sharing_profile, valid_code};
+use super::limits::address_limit;
+use super::{member_count_sql, room_not_found, sharing_profile, valid_code};
 use crate::auth::rate_limit::{CloudRateLimiter, RateLimitDecision};
 use crate::common_ground::{db_error, limited, ROOM_JOIN_LIMIT, ROOM_OPEN_SQL};
 use crate::{auth::routes::CloudSession, server::ServerState};
@@ -47,10 +48,11 @@ async fn open_preview(
         .await
 }
 
-/// Every preview counts against the address. Only misses spend the
-/// account's guess budget, which joining shares, so looking up the right
-/// code never stands in the way of joining it. Once the budget is spent,
-/// every preview is refused, so hits and misses still look the same.
+/// Only misses spend the address's and the account's guess budgets, which
+/// joining shares, so looking up the right code never stands in the way of
+/// joining it, even for everyone at an event behind one address. Once a
+/// budget is spent, every preview is refused, so hits and misses still
+/// look the same.
 pub(in crate::common_ground) async fn preview(
     State(state): State<Arc<ServerState>>,
     Extension(rate_limiter): Extension<Arc<CloudRateLimiter>>,
@@ -65,7 +67,7 @@ pub(in crate::common_ground) async fn preview(
     let account = session.account_id.as_str();
     let (ip_limit, ip_key) = address_limit(&rate_limiter, connect_info, &headers);
     for decision in [
-        rate_limiter.observe_account_limit(ip_limit, &ip_key).await,
+        rate_limiter.peek_account_limit(ip_limit, &ip_key).await,
         rate_limiter
             .peek_account_limit(ROOM_JOIN_LIMIT, account)
             .await,
@@ -78,12 +80,14 @@ pub(in crate::common_ground) async fn preview(
     let (name, kind, member_count, current) = match open_preview(pool, &code, account).await {
         Ok(Some(row)) => row,
         Ok(None) => {
-            return match rate_limiter
+            let by_address = rate_limiter.observe_account_limit(ip_limit, &ip_key).await;
+            let by_account = rate_limiter
                 .observe_account_limit(ROOM_JOIN_LIMIT, account)
-                .await
-            {
-                RateLimitDecision::Limited { retry_after } => limited(retry_after),
-                RateLimitDecision::Allowed => room_not_found(),
+                .await;
+            return match (by_address, by_account) {
+                (RateLimitDecision::Limited { retry_after }, _)
+                | (_, RateLimitDecision::Limited { retry_after }) => limited(retry_after),
+                _ => room_not_found(),
             };
         }
         Err(error) => return db_error(error),

@@ -68,7 +68,7 @@ export type CommonGroundStoreOptions = {
 
 export const MATCH_POLL_MS = 3_000;
 /** The matching poll delay once room and match hints arrive and polling is the fallback. */
-export const MATCH_FALLBACK_POLL_MS = 10_000;
+export const MATCH_FALLBACK_POLL_MS = 20_000;
 export const BUILD_POLL_MS = 3_000;
 export { BUILD_CHECK_MS, BUILD_START_CHECKS } from './storeBuild';
 /** The shortest gap between two refreshes from other devices. */

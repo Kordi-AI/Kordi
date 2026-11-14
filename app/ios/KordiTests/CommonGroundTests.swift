@@ -108,6 +108,76 @@ final class CommonGroundTests: XCTestCase {
         XCTAssertTrue(pending.shared.isEmpty)
     }
 
+    func testResultsKeepEstimatedPeopleAndDefaultTheFlag() throws {
+        let results = try decode(CommonGroundResults.self, #"""
+        {
+          "status": "matching", "topics": [], "suggestion": null,
+          "people": [
+            {"person": {"accountId": "acct_a", "name": "Hana", "avatarUrl": null}, "score": 82, "headline": "Agent memory"},
+            {"person": {"accountId": "acct_b", "name": "Priya", "avatarUrl": null}, "score": 41, "headline": "Evaluation", "estimated": true},
+            {"person": {"accountId": "acct_c", "name": "Maya", "avatarUrl": null}, "score": 12, "estimated": false}
+          ]
+        }
+        """#)
+        XCTAssertTrue(results.isMatching)
+        XCTAssertEqual(results.people.map(\.id), ["acct_a", "acct_b", "acct_c"])
+        XCTAssertEqual(results.people.map(\.estimated), [false, true, false])
+        XCTAssertEqual(results.people[1].score, 41)
+        XCTAssertEqual(results.people[2].headline, "")
+    }
+
+    func testPendingMatchKeepsEstimateTopicsWithEmptyReasons() throws {
+        let match = try decode(CommonGroundMatch.self, #"""
+        {
+          "status": "matching", "profileId": "prof_1",
+          "person": {"accountId": "acct_b", "name": "Priya", "avatarUrl": null},
+          "score": 41, "headline": "Agent memory",
+          "shared": [{"topic": "Agent memory", "theirTopic": "Memory for agents", "why": ""}, {"topic": "Rust"}, {"why": "no topic"}],
+          "youBring": [{"topic": "Evaluation", "for": "Benchmarks", "why": ""}],
+          "theyBring": [],
+          "nextStep": "",
+          "estimated": true
+        }
+        """#)
+        XCTAssertTrue(match.isMatching)
+        XCTAssertFalse(match.isReady)
+        XCTAssertTrue(match.estimated)
+        XCTAssertTrue(match.hasEstimateTopics)
+        XCTAssertEqual(match.score, 41)
+        XCTAssertEqual(match.shared.map(\.topic), ["Agent memory", "Rust"])
+        XCTAssertEqual(match.shared.map(\.why), ["", ""])
+        XCTAssertEqual(match.shared[1].theirTopic, "")
+        XCTAssertEqual(match.youBring.first?.target, "Benchmarks")
+        XCTAssertEqual(match.nextStep, "")
+
+        let older = try decode(CommonGroundMatch.self, #"{"status":"matching","person":{"accountId":"acct_b","name":"Priya","avatarUrl":null}}"#)
+        XCTAssertFalse(older.estimated)
+        XCTAssertFalse(older.hasEstimateTopics)
+
+        let ready = try decode(CommonGroundMatch.self, Self.matchJSON)
+        XCTAssertFalse(ready.estimated)
+        XCTAssertFalse(ready.hasEstimateTopics)
+    }
+
+    func testReadyMatchCanBeOnlyAnEstimate() throws {
+        let match = try decode(CommonGroundMatch.self, #"""
+        {
+          "status": "ready",
+          "person": {"accountId": "acct_b", "name": "Priya", "avatarUrl": null},
+          "score": 41, "headline": "Agent memory",
+          "shared": [{"topic": "Agent memory", "theirTopic": "Memory for agents", "why": ""}],
+          "youBring": [], "theyBring": [], "nextStep": "",
+          "estimated": true
+        }
+        """#)
+        XCTAssertTrue(match.isReady)
+        XCTAssertFalse(match.isMatching, "ready stops polling even when estimated")
+        XCTAssertTrue(match.estimated)
+        XCTAssertFalse(match.hasEstimateTopics)
+        XCTAssertEqual(match.shared.first?.why, "")
+        XCTAssertEqual(match.nextStep, "")
+    }
+
     func testRoomDecodesMembersWithRelationship() throws {
         let room = try decode(CommonGroundRoom.self, #"""
         {"roomId":"r","code":"4821","name":"","openedByYou":true,"expiresAt":"2026-10-21T09:00:00Z",

@@ -53,6 +53,26 @@ impl fmt::Display for PgPoolError {
 
 impl std::error::Error for PgPoolError {}
 
+/// Connections the pool may open. A busy room polls results from every
+/// member's device, so the old fixed 10 starved requests under load.
+const MAX_CONNECTIONS_ENV: &str = "KORDI_DATABASE_MAX_CONNECTIONS";
+const DEFAULT_MAX_CONNECTIONS: u32 = 30;
+/// Seconds a request waits for a free connection before it fails.
+const ACQUIRE_TIMEOUT_ENV: &str = "KORDI_DATABASE_ACQUIRE_TIMEOUT_SECS";
+const DEFAULT_ACQUIRE_TIMEOUT_SECS: u32 = 5;
+
+/// A positive whole number from `name`, else `default`.
+fn env_number(name: &str, default: u32) -> u32 {
+    parse_positive(std::env::var(name).ok().as_deref(), default)
+}
+
+fn parse_positive(value: Option<&str>, default: u32) -> u32 {
+    value
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(default)
+}
+
 /// Open a `PgPool` against `database_url`, configure conservative defaults,
 /// and apply every embedded migration exactly once. Returns the pool ready
 /// for handler use.
@@ -63,9 +83,12 @@ pub async fn init_pool(database_url: &str) -> Result<PgPool, PgPoolError> {
     let options: PgConnectOptions = database_url.parse().map_err(PgPoolError::Connect)?;
 
     let pool = PgPoolOptions::new()
-        .max_connections(10)
+        .max_connections(env_number(MAX_CONNECTIONS_ENV, DEFAULT_MAX_CONNECTIONS))
         .min_connections(1)
-        .acquire_timeout(std::time::Duration::from_secs(5))
+        .acquire_timeout(std::time::Duration::from_secs(u64::from(env_number(
+            ACQUIRE_TIMEOUT_ENV,
+            DEFAULT_ACQUIRE_TIMEOUT_SECS,
+        ))))
         .idle_timeout(std::time::Duration::from_secs(60))
         .connect_with(options)
         .await
@@ -73,4 +96,18 @@ pub async fn init_pool(database_url: &str) -> Result<PgPool, PgPoolError> {
 
     apply_migrations(&pool).await?;
     Ok(pool)
+}
+
+#[cfg(test)]
+mod settings_tests {
+    use super::parse_positive;
+
+    #[test]
+    fn pool_settings_fall_back_to_the_default() {
+        assert_eq!(parse_positive(None, 30), 30);
+        assert_eq!(parse_positive(Some(""), 30), 30);
+        assert_eq!(parse_positive(Some("0"), 30), 30);
+        assert_eq!(parse_positive(Some("abc"), 30), 30);
+        assert_eq!(parse_positive(Some(" 64 "), 30), 64);
+    }
 }

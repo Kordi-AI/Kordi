@@ -21,6 +21,7 @@ use sqlx_postgres::{PgPool, Postgres};
 use uuid::Uuid;
 
 mod create;
+mod limits;
 mod preview;
 mod switch;
 mod view;
@@ -33,11 +34,10 @@ use view::view_response;
 pub(super) use view::{list, read};
 
 use super::profiles::{self, Profile};
-use super::{card, db_error, err, limited, ROOM_IP_LIMIT, ROOM_JOIN_LIMIT, ROOM_OPEN_SQL};
-use crate::auth::rate_limit::{
-    rate_limit_client_key, AccountActionLimit, CloudRateLimiter, RateLimitDecision,
-};
+use super::{card, db_error, err, ROOM_OPEN_SQL};
+use crate::auth::rate_limit::CloudRateLimiter;
 use crate::{auth::routes::CloudSession, server::ServerState};
+use limits::check_join_limits;
 
 pub(super) const MAX_MEMBERS: i64 = 200;
 const MAX_NAME_CHARS: usize = 80;
@@ -147,36 +147,6 @@ fn member_count_sql(param: u8) -> String {
     )
 }
 
-/// The per-address budget and key rooms are limited under.
-fn address_limit(
-    rate_limiter: &CloudRateLimiter,
-    connect_info: Option<ConnectInfo<SocketAddr>>,
-    headers: &HeaderMap,
-) -> (AccountActionLimit, String) {
-    let client = crate::client_ip::resolve_client_ip(headers, connect_info.map(|info| info.0.ip()));
-    let key = format!("ip:{}", rate_limit_client_key(client));
-    (rate_limiter.address_limit(ROOM_IP_LIMIT, client), key)
-}
-
-/// Codes are short, so guessing is limited per account and per address.
-/// Opening a room counts the same as joining one.
-async fn check_limits(
-    rate_limiter: &CloudRateLimiter,
-    account: &str,
-    connect_info: Option<ConnectInfo<SocketAddr>>,
-    headers: &HeaderMap,
-) -> Option<Response> {
-    let (ip_limit, ip_key) = address_limit(rate_limiter, connect_info, headers);
-    for (limit, key) in [(ROOM_JOIN_LIMIT, account), (ip_limit, ip_key.as_str())] {
-        if let RateLimitDecision::Limited { retry_after } =
-            rate_limiter.observe_account_limit(limit, key).await
-        {
-            return Some(limited(retry_after));
-        }
-    }
-    None
-}
-
 /// The request body, or the response for an unknown room kind.
 fn room_request(body: Option<Json<JoinRequest>>) -> Result<JoinRequest, Box<Response>> {
     let body = body.map(|Json(body)| body).unwrap_or_default();
@@ -206,7 +176,10 @@ fn room_name(name: &str) -> String {
 
 /// How entering a code went.
 enum Entered {
+    /// Joined the room open under the code.
     Room(Uuid),
+    /// No room was open under the code, so this opened one.
+    Opened(Uuid),
     Full,
     /// The code has an open room and only a new room was wanted.
     Taken,
@@ -243,6 +216,7 @@ async fn enter(
     .bind(code)
     .fetch_optional(&mut *tx)
     .await?;
+    let opened = open.is_none();
     let room_id = match open {
         Some(_) if new_only => return Ok(Entered::Taken),
         Some((room_id,)) => room_id,
@@ -281,7 +255,11 @@ async fn enter(
         .await?;
     notify_members(&mut tx, room_id, code).await?;
     tx.commit().await?;
-    Ok(Entered::Room(room_id))
+    Ok(if opened {
+        Entered::Opened(room_id)
+    } else {
+        Entered::Room(room_id)
+    })
 }
 
 pub(super) async fn join(
@@ -297,9 +275,11 @@ pub(super) async fn join(
         return room_not_found();
     }
     let account = session.account_id.as_str();
-    if let Some(response) = check_limits(&rate_limiter, account, connect_info, &headers).await {
-        return response;
-    }
+    let (ip_limit, ip_key) =
+        match check_join_limits(&rate_limiter, account, connect_info, &headers).await {
+            Ok(address) => address,
+            Err(response) => return *response,
+        };
     let pool = state.db_pool();
     let body = match room_request(body) {
         Ok(body) => body,
@@ -312,6 +292,11 @@ pub(super) async fn join(
     let name = room_name(&body.name);
     match enter(pool, &code, account, &body, &profile, &name, false).await {
         Ok(Entered::Room(room_id)) => view_response(pool, room_id, account).await,
+        Ok(Entered::Opened(room_id)) => {
+            // The room is open either way; the budget only slows the next guess.
+            let _ = rate_limiter.observe_account_limit(ip_limit, &ip_key).await;
+            view_response(pool, room_id, account).await
+        }
         Ok(Entered::Full | Entered::Taken) => room_full(),
         Err(error) => db_error(error),
     }

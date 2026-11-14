@@ -219,8 +219,14 @@ async fn a_viewer_who_has_not_allowed_ai_gets_no_rows_written_about_them() {
         (1, 0),
         "alex asked, so his own match is stored; nothing about him for priya"
     );
+    // Priya sees him ranked by the topic estimate only, which no model reads.
     let (_, body) = send(&app, "POST", &results, &priya_token, None).await;
-    assert_eq!(body["people"], json!([]), "{body}");
+    assert_eq!(
+        body["people"][0]["person"]["accountId"],
+        json!(alex),
+        "{body}"
+    );
+    assert_eq!(body["people"][0]["estimated"], json!(true), "{body}");
     assert_eq!(match_runs(&pool, &priya).await, 0, "his card is not sent");
 }
 

@@ -20,7 +20,7 @@ Build the runner from `deploy/render/Dockerfile.runner` and supply:
   on the API. The runner does not need database or object-store credentials.
 - `KORDI_CLOUD_SANDBOX_BACKEND=fly`.
 - `KORDI_CLOUD_RUNNER_CONCURRENCY=1` for the small validation worker; valid values
-  are 1 through 4, with 4 retained as the default for existing deployments.
+  are 1 through 16, with 4 retained as the default for existing deployments.
 - `KORDI_FLY_SANDBOX_APP`: the dedicated, secret-free sandbox app.
 - `KORDI_FLY_SANDBOX_TOKEN`: the app-scoped token. Rotate before its expiration.
 - `KORDI_FLY_SANDBOX_REGION`: an explicit available region near the backend.

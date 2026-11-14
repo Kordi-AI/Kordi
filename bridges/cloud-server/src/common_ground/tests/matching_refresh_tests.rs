@@ -39,6 +39,19 @@ async fn room_of(pool: &PgPool, code: &str) -> Uuid {
     room
 }
 
+/// Makes the room's stored themes old enough that a change of members runs
+/// them again (`THEME_REFRESH`).
+async fn age_themes(pool: &PgPool, room: Uuid) {
+    query(
+        "UPDATE cloud_common_ground_room_themes SET computed_at = now() - interval '3 minutes'
+         WHERE room_id = $1",
+    )
+    .bind(room)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 /// Theme runs ever queued for the room.
 async fn theme_runs(pool: &PgPool, room: Uuid) -> i64 {
     let (count,): (i64,) = query_as(
@@ -86,6 +99,7 @@ async fn previous_themes_stay_until_the_new_ones_land() {
         theme("Retrieval", &[&alex, &priya]),
     ];
     assert_eq!(topics(&body), before);
+    age_themes(&pool, room).await;
 
     // Lee joins: the previous themes stay, without him, while one new run
     // finds them again.
@@ -144,6 +158,7 @@ async fn previous_themes_leave_out_who_left_or_hid_their_card() {
     .await;
     let (_, body) = results(&app, &code, &alex_token).await;
     assert_eq!(topics(&body).len(), 3, "{body}");
+    age_themes(&pool, room).await;
 
     // Sam leaves: he is gone from the previous themes, and a theme left
     // with one person is dropped.
@@ -214,6 +229,7 @@ async fn previous_themes_need_a_run_that_may_replace_them() {
         ],
     )
     .await;
+    age_themes(&pool, room).await;
     let decline = |account: String| {
         let pool = pool.clone();
         async move {

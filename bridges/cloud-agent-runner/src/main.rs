@@ -75,8 +75,8 @@ async fn main() -> Result<()> {
         .parse::<usize>()
         .context("KORDI_CLOUD_RUNNER_CONCURRENCY must be an integer")?;
     anyhow::ensure!(
-        (1..=4).contains(&concurrency),
-        "Runner concurrency must be between 1 and 4"
+        (1..=16).contains(&concurrency),
+        "Runner concurrency must be between 1 and 16"
     );
     let mut workers: tokio::task::JoinSet<
         Result<RunnerStepOutcome, kordi_cloud_agent_runner::client::RunnerClientError>,
