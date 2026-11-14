@@ -9,7 +9,11 @@ pub struct CloudAgentRun {
     /// The server lets this run open and update plan and vote cards.
     #[serde(rename = "planCards", default)]
     pub plan_cards: bool,
-    #[serde(rename = "turnIdentity", default)]
+    #[serde(
+        rename = "turnIdentity",
+        default,
+        deserialize_with = "lenient_identity"
+    )]
     pub turn_identity: Option<kordi_core::types::RuntimeIdentity>,
     #[serde(rename = "historyMessages", default)]
     pub history_messages: Vec<serde_json::Value>,
@@ -48,4 +52,32 @@ pub struct AgentRuntimeRoute {
     #[serde(rename = "defaultModel")]
     pub default_model: Option<String>,
     pub thinking: Option<String>,
+}
+
+/// Reads the turn identity without letting it reject the whole lease. An
+/// account may have no display name, so a missing name gets the label the
+/// server uses; an identity that still does not fit is left out.
+fn lenient_identity<'de, D>(
+    deserializer: D,
+) -> Result<Option<kordi_core::types::RuntimeIdentity>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let Some(mut value) = Option::<serde_json::Value>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    if let Some(object) = value.as_object_mut() {
+        for field in ["agentName", "ownerName", "requesterName"] {
+            if object.get(field).is_none_or(serde_json::Value::is_null) {
+                object.insert(field.to_string(), "Participant".into());
+            }
+        }
+    }
+    match serde_json::from_value(value) {
+        Ok(identity) => Ok(Some(identity)),
+        Err(_) => {
+            tracing::warn!("cloud run lease carried an unreadable turn identity; ignoring it");
+            Ok(None)
+        }
+    }
 }

@@ -1,3 +1,4 @@
+pub(crate) mod attempts;
 mod authorization;
 mod claims;
 pub(crate) mod completion;
