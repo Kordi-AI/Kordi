@@ -41,4 +41,5 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "cloud run lease attempts",
         "0201_cloud_run_lease_attempts.sql"
     ),
+    migration!(206, "group closed state", "0206_group_closed_state.sql"),
 ];

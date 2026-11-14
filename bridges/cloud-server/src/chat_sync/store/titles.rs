@@ -46,6 +46,7 @@ pub async fn update_shared_title(
     if role != "owner" && role != "admin" {
         return Err(StoreError::Forbidden);
     }
+    super::closed_state::require_open(&mut transaction, conversation_id).await?;
     if current_version != request.expected_version {
         return Err(StoreError::VersionConflict(Box::new(
             load_conversation(&mut transaction, conversation_id, account_id).await?,

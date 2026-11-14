@@ -213,7 +213,7 @@ async fn a_group_keeps_an_admin_and_its_last_person_dissolves_it() {
         vec!["Eve left the group".to_string()]
     );
 
-    // The last person dissolves the group instead.
+    // The last person closes the group instead.
     assert_eq!(
         conflict_code(store::leave_group(&pool, &member, &space).await),
         store::LAST_GROUP_MEMBER_CODE

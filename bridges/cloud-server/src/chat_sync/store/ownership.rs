@@ -69,6 +69,7 @@ pub async fn transfer_group_owner(
     if kind != "group" || role != "owner" {
         return Err(StoreError::Forbidden);
     }
+    super::closed_state::require_open(&mut transaction, conversation_id).await?;
     if new_owner == account_id
         || is_service_member(new_owner)
         || !active_member_ids(&mut transaction, conversation_id)

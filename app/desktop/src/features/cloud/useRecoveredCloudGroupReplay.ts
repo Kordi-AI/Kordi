@@ -11,6 +11,7 @@ import { cloudSessionIdFromConversationId } from '@/features/collaboration/conve
 import { loadSession } from './session';
 import { subscribeCloudGroupCatalog } from './cloudGroupCatalogSync';
 import { cloudGroupCatalogRow } from './cloudGroupCatalog';
+import { isClosedConversation } from '@/features/chat/closedGroup';
 import type { ChatSyncConversation } from './chatSyncTypes';
 import { cloudMessageMetadataOnly } from './cloudMessageCache';
 import { cloudMessageFromChatSync } from './chatSyncMapping';
@@ -78,6 +79,7 @@ export function useRecoveredCloudGroupReplay({
       catalogGroupTitle?: string | null;
       catalogGroupAvatar?: CloudGroupControlEnvelope['groupAvatar'];
       catalogGroupOrigin?: string | null;
+      catalogGroupClosedAt?: string | null;
     },
   ) => Promise<void>;
   applyHistoryPage: ApplyBrowserGroupHistoryPage;
@@ -142,6 +144,9 @@ export function useRecoveredCloudGroupReplay({
       hasSession: sessionId => Boolean(canonicalStateRef.current?.sessions.some(
         session => session.id === sessionId,
       )),
+      isSessionClosed: sessionId => isClosedConversation(canonicalStateRef.current?.sessions.find(
+        session => session.id === sessionId,
+      )),
       rememberConversations: conversations => {
         const byId = bootstrapRef.current?.accountId === accountId
           ? bootstrapRef.current.conversations : new Map<string, ChatSyncConversation>();
@@ -155,6 +160,7 @@ export function useRecoveredCloudGroupReplay({
           catalogGroupTitle: row.conversation.group_title,
           catalogGroupAvatar: row.conversation.group_avatar,
           catalogGroupOrigin: row.conversation.origin,
+          catalogGroupClosedAt: row.conversation.closed?.closed_at,
         });
         replayCallbacksRef.current.flushCanonicalState();
       },
@@ -217,6 +223,7 @@ export function useRecoveredCloudGroupReplay({
             catalogGroupTitle: row.conversation.group_title,
             catalogGroupAvatar: row.conversation.group_avatar,
             catalogGroupOrigin: row.conversation.origin,
+            catalogGroupClosedAt: row.conversation.closed?.closed_at,
           });
           replayCallbacksRef.current.flushCanonicalState();
         }

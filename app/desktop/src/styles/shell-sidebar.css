@@ -261,6 +261,15 @@
   color: var(--app-sidebar-preview-text);
 }
 
+/* A closed group or channel stays listed, dimmed; its time stays at full strength. */
+.app-workspace-sidebar .app-session-row-closed.app-participant-space-row-button > :first-child,
+.app-workspace-sidebar .app-session-row-closed .app-participant-space-row-title,
+.app-workspace-sidebar .app-session-row-closed .app-participant-space-row-preview,
+.app-workspace-sidebar .app-session-row-closed .app-participant-space-session-title,
+.app-workspace-sidebar .app-session-row-closed .app-participant-space-session-preview {
+  opacity: 0.55;
+}
+
 .app-saved-messages-avatar {
   background: color-mix(in oklab, var(--app-accent) 84%, #5b4ba2);
   color: rgb(255 255 255 / 0.96);

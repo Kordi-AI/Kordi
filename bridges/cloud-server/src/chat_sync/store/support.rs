@@ -130,6 +130,7 @@ pub(super) async fn load_conversation(
         origin: super::grounding_origin::conversation_origin(transaction, conversation_id).await?,
         personal_agent,
         organization: super::organization::label(transaction, conversation_id).await?,
+        closed: super::closed_state::conversation_closed(transaction, conversation_id).await?,
         forked_from_session_id: row.8,
         forked_from_message_id: row.9,
         latest_message_sequence: row.10,
@@ -178,6 +179,7 @@ pub(super) async fn load_active_conversation_projections(
     let members = member_rows(transaction, conversation_id).await?;
     let origin = super::grounding_origin::conversation_origin(transaction, conversation_id).await?;
     let organization = super::organization::label(transaction, conversation_id).await?;
+    let closed = super::closed_state::conversation_closed(transaction, conversation_id).await?;
     let personal_agent =
         super::personal_session::conversation_personal_agent(transaction, conversation_id).await?;
     let kind = parse_kind(&row.1)?;
@@ -199,6 +201,7 @@ pub(super) async fn load_active_conversation_projections(
                     origin: origin.clone(),
                     personal_agent: personal_agent.clone(),
                     organization: organization.clone(),
+                    closed: closed.clone(),
                     forked_from_session_id: row.8.clone(),
                     forked_from_message_id: row.9.clone(),
                     latest_message_sequence: row.10,

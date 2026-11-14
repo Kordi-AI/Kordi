@@ -106,6 +106,7 @@ import type {
 UseChatMessageActionsArgs
 } from './types';
 import { agentVoiceSend, queuedMessageWithAgentTranscript, startAgentVoiceTranscription } from './voiceAgentTranscription';
+import { closeSessionAfterGroupSendFailure } from '@/features/chat/closedGroup';
 
 export {
 canonicalNoProviderFailedAgentMessageRequest,
@@ -652,6 +653,7 @@ export function useChatMessageActions({
       } catch (error) {
         const failureDetail = collaborationSendFailureDetail(error, 'Unable to send group message');
         setDesktopChatError(failureDetail);
+        closeSessionAfterGroupSendFailure(error, canonicalSessionId, setCanonicalSessionState);
         setCanonicalSessionState((current) => markOptimisticCanonicalMessageFailed(
           current,
           canonicalSessionId,
@@ -933,6 +935,7 @@ export function useChatMessageActions({
           });
         } catch (error) {
           const failureDetail = collaborationSendFailureDetail(error, 'Unable to retry group message');
+          closeSessionAfterGroupSendFailure(error, activeConvCanonicalSessionId, setCanonicalSessionState);
           setCanonicalSessionState((current) => markOptimisticCanonicalMessageFailed(
             current,
             activeConvCanonicalSessionId,
@@ -1095,6 +1098,7 @@ export function useChatMessageActions({
       } catch (error) {
         const failureDetail = collaborationSendFailureDetail(error, 'Unable to send group mention');
         setDesktopChatError(failureDetail);
+        closeSessionAfterGroupSendFailure(error, activeConvCanonicalSessionId, setCanonicalSessionState);
         setCanonicalSessionState((current) => markOptimisticCanonicalMessageFailed(
           current,
           activeConvCanonicalSessionId,
@@ -1171,6 +1175,7 @@ export function useChatMessageActions({
       } catch (error) {
         const failureDetail = collaborationSendFailureDetail(error, 'Unable to send group message');
         setDesktopChatError(failureDetail);
+        closeSessionAfterGroupSendFailure(error, activeConvCanonicalSessionId, setCanonicalSessionState);
         setCanonicalSessionState((current) => markOptimisticCanonicalMessageFailed(
           current,
           activeConvCanonicalSessionId,

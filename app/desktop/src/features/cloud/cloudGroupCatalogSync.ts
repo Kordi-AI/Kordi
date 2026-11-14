@@ -16,15 +16,32 @@ export function publishCloudGroupCatalog(
   }));
 }
 
+/**
+ * A catalog row creates a missing session, and re-applies to an existing one
+ * only to carry a close that has not reached it yet.
+ */
+export function cloudGroupCatalogRowNeedsApply(
+  row: NonNullable<ReturnType<typeof cloudGroupCatalogRow>>,
+  hasSession: (sessionId: string) => boolean,
+  isSessionClosed: (sessionId: string) => boolean,
+): boolean {
+  const sessionId = row.envelope.groupId;
+  if (!hasSession(sessionId)) return true;
+  return Boolean(row.conversation.closed?.closed_at?.trim()) && !isSessionClosed(sessionId);
+}
+
 export function subscribeCloudGroupCatalog({
   accountId,
   hasSession,
+  isSessionClosed = () => false,
   rememberConversations,
   applyRow,
   reportError,
 }: {
   accountId: string;
   hasSession: (sessionId: string) => boolean;
+  /** Whether a session already shows as closed here; a newly closed one is applied again. */
+  isSessionClosed?: (sessionId: string) => boolean;
   rememberConversations: (conversations: ChatSyncConversation[]) => void;
   applyRow: (row: NonNullable<ReturnType<typeof cloudGroupCatalogRow>>) => Promise<void>;
   reportError: (error: unknown) => void;
@@ -40,7 +57,7 @@ export function subscribeCloudGroupCatalog({
       for (const conversation of detail.conversations) {
         if (!active) return;
         const row = cloudGroupCatalogRow(conversation, accountId);
-        if (!row || hasSession(row.envelope.groupId)) continue;
+        if (!row || !cloudGroupCatalogRowNeedsApply(row, hasSession, isSessionClosed)) continue;
         try {
           await applyRow(row);
         } catch (error) {

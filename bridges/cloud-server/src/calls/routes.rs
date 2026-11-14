@@ -301,6 +301,11 @@ fn store_error(context: &str, error: CallStoreError) -> Response {
             "CALL_STATE_CONFLICT",
             "The call has already changed state.",
         ),
+        CallStoreError::GroupClosed => error_response(
+            StatusCode::CONFLICT,
+            crate::chat_sync::store::GROUP_CLOSED_CODE,
+            "This group was closed.",
+        ),
         CallStoreError::Database(error) => {
             eprintln!("[calls] {context}: {error}");
             error_response(

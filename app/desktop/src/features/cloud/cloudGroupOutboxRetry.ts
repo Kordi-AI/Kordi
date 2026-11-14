@@ -1,5 +1,6 @@
 import { chatSendRetryAfterMs, chatSendRetryDelayMs, isTransientChatSendError } from './chatSendRetry';
 import type { CloudGroupOutboxEntry } from './cloudGroupOutbox';
+import { isGroupClosedError } from '@/features/chat/closedGroup';
 
 /**
  * Attempts after which a recipient whose send keeps failing for a lasting
@@ -35,7 +36,9 @@ export function applyCloudGroupDeliveryRound(
     const attempts = (entry.attemptsByRecipientId[recipientId] ?? 0) + 1;
     entry.attemptsByRecipientId[recipientId] = attempts;
     retryAfterMs = Math.max(retryAfterMs, chatSendRetryAfterMs(outcome.reason) ?? 0);
-    if (!isTransientChatSendError(outcome.reason) && attempts >= CLOUD_GROUP_OUTBOX_MAX_ATTEMPTS) {
+    // A closed group refuses every later attempt too: stop at once.
+    if (isGroupClosedError(outcome.reason)
+      || (!isTransientChatSendError(outcome.reason) && attempts >= CLOUD_GROUP_OUTBOX_MAX_ATTEMPTS)) {
       pending.delete(recipientId);
       exhausted.add(recipientId);
     }

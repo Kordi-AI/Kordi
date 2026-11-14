@@ -60,6 +60,7 @@ pub async fn add_conversation_members(
     if kind != "group" || (role != "owner" && role != "admin") {
         return Err(StoreError::Forbidden);
     }
+    super::closed_state::require_open(&mut transaction, conversation_id).await?;
     let current = active_member_ids(&mut transaction, conversation_id).await?;
     let missing = desired
         .iter()
@@ -227,6 +228,7 @@ pub async fn accept_invited_conversation_member(
     if kind != "group" || (inviter_role != "owner" && inviter_role != "admin") {
         return Err(StoreError::Forbidden);
     }
+    super::closed_state::require_open(transaction, conversation_id).await?;
 
     let existing_state: Option<(String,)> = query_as(
         "SELECT membership_state FROM cloud_chat_conversation_members

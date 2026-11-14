@@ -15,6 +15,8 @@ struct CloudWireSnapshot: Codable {
     var messageProjectionVersion: Int? = nil
     /// The last personal-agent list, so the section fills before the first refresh.
     var personalAgents: [CloudPersonalAgent]? = nil
+    /// Sessions of closed groups and channels, so they stay read-only offline.
+    var closedSessionIds: [String]? = nil
 }
 
 enum CloudSyncRecoveryPolicy {
@@ -66,7 +68,8 @@ actor CloudWireCache {
         sessionForksById: [String: CloudSessionForkSummary]? = nil,
         visibility: CloudSessionVisibility? = nil,
         sessionPinsByID: [String: CloudSessionPin]? = nil,
-        personalAgents: [CloudPersonalAgent]? = nil
+        personalAgents: [CloudPersonalAgent]? = nil,
+        closedSessionIds: [String]? = nil
     ) {
         guard let directory, let url = snapshotURL(accountId: accountId) else { return }
         do {
@@ -81,7 +84,8 @@ actor CloudWireCache {
                 sessionPinsByID: sessionPinsByID,
                 visibility: visibility,
                 messageProjectionVersion: CloudWireSnapshot.currentMessageProjectionVersion,
-                personalAgents: personalAgents
+                personalAgents: personalAgents,
+                closedSessionIds: closedSessionIds
             )
             try encoder.encode(snapshot).write(to: url, options: .atomic)
         } catch {

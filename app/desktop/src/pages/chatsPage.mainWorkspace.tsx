@@ -69,6 +69,8 @@ import { SupportConversationEmptyState } from '@/features/support/SupportReportD
 import { SupportReportSubmissionProvider } from '@/features/support/SupportReportSubmissionContext';
 import { ConversationCallBanner } from '@/features/cloud/ConversationCallBanner';
 import { ModelRecoveryProvider } from '@/features/chat/ModelRecoveryProvider';
+import { isClosedConversation, isClosedParticipantSpace } from '@/features/chat/closedGroup';
+import { ClosedConversationBar } from '@/pages/ClosedConversationBar';
 import { MessageSeenByProvider } from '@/features/chat/MessageSeenByProvider';
 
 type ChatMainWorkspaceProps = {
@@ -123,6 +125,10 @@ export function ChatMainWorkspace({
     auth.onOpenAccountAuthentication ?? auth.onOpenAuthSettings;
   const activePaneKind = conversationPaneKind(activeConv);
   const isEmptySelection = isEmptyChatSelectionId(activeConv.id);
+  const activeClosed = !isEmptySelection && isClosedConversation(activeConv);
+  const activeSpace = activeClosed
+    ? session.participantSpaces.find((space) => space.id === activeConv.participantSpaceId)
+    : undefined;
   const needsProvider = localAgentConversationNeedsProvider({
     activePaneKind,
     activeConversationUsesCollaboration:
@@ -371,7 +377,14 @@ export function ChatMainWorkspace({
                 queuedMessages: transcript.queuedDesktopMessages,
                 onEditQueuedMessage: transcript.onEditQueuedMessage,
                 onCancelQueuedMessage: transcript.onCancelQueuedMessage,
-                composer: isEmptySelection ? null : (
+                composer: isEmptySelection ? null : activeClosed ? (
+                  <ClosedConversationBar
+                    sessionId={activeConv.canonicalSessionId ?? activeConv.id}
+                    sessionName={activeConv.name}
+                    groupClosed={!activeSpace || isClosedParticipantSpace(activeSpace)}
+                    onDelete={session.onDeleteChatSession}
+                  />
+                ) : (
                   <ChatComposerShell
                     chatComposerAttachments={composer.chatComposerAttachments}
                     saveDesktopAttachments={composer.saveDesktopAttachments}

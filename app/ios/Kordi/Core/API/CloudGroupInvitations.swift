@@ -193,14 +193,14 @@ extension CloudAPIClient {
         )
     }
 
-    /// `DELETE /v2/chat/group-spaces/{groupSpaceId}`: removes every member and
-    /// every channel. Group owners and admins only.
+    /// `DELETE /v2/chat/group-spaces/{groupSpaceId}`: closes every channel,
+    /// keeping members and history. Group owners and admins only.
     func dissolveGroupSpace(token: String, groupSpaceId: String) async throws {
         try await sendWithoutResponse(
             path: "/v2/chat/group-spaces/\(Self.groupInvitePathSegment(groupSpaceId))",
             method: "DELETE",
             token: token,
-            fallback: "Could not dissolve the group."
+            fallback: "Could not close the group."
         )
     }
 }

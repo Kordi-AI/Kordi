@@ -101,6 +101,7 @@ pub async fn edit_message(
         return Err(StoreError::NotFound);
     }
     require_active_writer(&mut transaction, conversation_id, account_id).await?;
+    super::super::closed_state::require_open(&mut transaction, conversation_id).await?;
     if sender_account_id != account_id {
         return Err(StoreError::Forbidden);
     }
@@ -206,6 +207,8 @@ pub async fn delete_message(
     if sender_account_id != account_id {
         return Err(StoreError::Forbidden);
     }
+    // Hiding a message for oneself (above) stays possible in a closed group.
+    super::super::closed_state::require_open(&mut transaction, conversation_id).await?;
     if current.deleted_at.is_some() {
         transaction.commit().await?;
         return Ok(());

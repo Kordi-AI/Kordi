@@ -521,26 +521,30 @@ private struct GroupManagePage: View {
     @State private var isLeaving = false
     @State private var leaveError: String?
 
+    static let closeConsequence = "Everyone keeps the history. No one can send messages."
+
     var body: some View {
         List {
-            Section {
-                Button(role: .destructive) {
-                    confirmsDissolve = true
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "circle.slash")
-                            .frame(width: GroupInfoMetrics.avatarSize)
-                        Text("Dissolve group")
-                        Spacer()
-                        if isDissolving { ProgressView() }
+            if !model.isGroupSpaceClosed(space) {
+                Section {
+                    Button(role: .destructive) {
+                        confirmsDissolve = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "circle.slash")
+                                .frame(width: GroupInfoMetrics.avatarSize)
+                            Text("Close group")
+                            Spacer()
+                            if isDissolving { ProgressView() }
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .disabled(isDissolving)
+                    .groupInfoRow()
+                    .accessibilityIdentifier("group-dissolve-row")
+                } footer: {
+                    Text(Self.closeConsequence)
                 }
-                .disabled(isDissolving)
-                .groupInfoRow()
-                .accessibilityIdentifier("group-dissolve-row")
-            } footer: {
-                Text("Removes everyone and deletes every channel.")
             }
             Section {
                 GroupLeaveRow(isLeaving: isLeaving) { confirmsLeave = true }
@@ -564,13 +568,13 @@ private struct GroupManagePage: View {
             confirmsDissolve = true
         }
         .confirmationDialog(
-            "Dissolve \(space.displayName)?",
+            "Close \(space.displayName)?",
             isPresented: $confirmsDissolve,
             titleVisibility: .visible
         ) {
-            Button("Dissolve group", role: .destructive) { dissolve() }
+            Button("Close group", role: .destructive) { dissolve() }
         } message: {
-            Text("Everyone is removed and its messages are deleted.")
+            Text(Self.closeConsequence)
         }
     }
 

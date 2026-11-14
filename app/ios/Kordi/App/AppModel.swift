@@ -222,6 +222,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var threadNextPage: [String: Int64] = [:]
     @Published private(set) var threadReadCursors: [String: [String: Int64]] = [:]
     @Published private(set) var pinnedGroupSpaceIds = Set<String>()
+    /// Sessions of closed groups and channels. Closing is final, so entries
+    /// are only added (docs/development/group-closed-state.md).
+    @Published private(set) var closedSessionIds = Set<String>()
     @Published private(set) var messagesByConversation: [String: [ChatMessage]] = [:]
     @Published private(set) var subsessions: [String: CloudAgentSubsession] = [:]
     @Published private(set) var stoppingSubsessionIDs: Set<String> = []
@@ -459,6 +462,7 @@ final class AppModel: ObservableObject {
             projectError = nil
             if let snapshot = await wireCache.load(accountId: restoredAccount.accountId) {
                 personalAgents = snapshot.personalAgents
+                closedSessionIds = Set(snapshot.closedSessionIds ?? [])
                 if let visibility = snapshot.visibility {
                     restoreCachedConversationCatalog(accountId: restoredAccount.accountId, visibility: visibility)
                 }
@@ -805,6 +809,7 @@ final class AppModel: ObservableObject {
         threadNextPage = [:]
         pendingThreadRoute = nil
         pinnedGroupSpaceIds = []
+        closedSessionIds = []
         archivedConversations = []
         agentRunState = [:]
         agentExecutionLocation = [:]
@@ -2616,6 +2621,7 @@ final class AppModel: ObservableObject {
                 finishPendingAgentRequest(conversationId: conversation.id, requestMessageId: localId, failed: true)
             }
             noteIfAIConsentRequired(error)
+            if GroupClosedState.isClosedError(error) { markSessionsClosed([conversation.sessionId]) }
             markMessageFailed(localId, error: userFacing(error, fallback: "Message not sent."))
         }
     }
@@ -4958,11 +4964,11 @@ final class AppModel: ObservableObject {
         contacts.insert(removed.contact, at: min(removed.index, contacts.count))
     }
 
-    /// Dissolves the whole group for everyone: every member is removed and
-    /// every channel deleted. Group owners and admins only.
+    /// Closes the whole group for everyone: members and history stay, and no
+    /// one can send. The closer keeps it like everyone else. Admins only.
     func dissolveGroupSpace(_ space: GroupSpaceSummary) async -> Bool {
         guard let account, space.canManage(accountId: account.accountId) else {
-            errorMessage = "Only a group admin can dissolve this group."
+            errorMessage = "Only a group admin can close this group."
             return false
         }
         if !previewMode {
@@ -4970,17 +4976,11 @@ final class AppModel: ObservableObject {
             do {
                 try await api.dissolveGroupSpace(token: token, groupSpaceId: space.preferenceId)
             } catch {
-                errorMessage = userFacing(error, fallback: "Could not dissolve the group.")
+                errorMessage = userFacing(error, fallback: "Could not close the group.")
                 return false
             }
         }
-        beginSessionVisibilityMutation()
-        defer { endSessionVisibilityMutation() }
-        pinnedGroupSpaceIds.remove(space.preferenceId)
-        for conversation in space.membershipSessions + space.sessions {
-            removeConversationLocally(conversation)
-        }
-        cacheCurrentConversations()
+        markSessionsClosed((space.membershipSessions + space.sessions).map(\.sessionId))
         return true
     }
 
@@ -5008,7 +5008,7 @@ final class AppModel: ObservableObject {
         return nil
     }
 
-    /// Whether this account may dissolve `conversation`: a group admin, and
+    /// Whether this account may close `conversation`: a group admin, and
     /// never the group's first channel, which is the group itself.
     func canDissolveChannel(_ conversation: ConversationSummary, in space: GroupSpaceSummary) -> Bool {
         guard conversation.kind == .group, space.sessions.count > 1,
@@ -5020,7 +5020,7 @@ final class AppModel: ObservableObject {
 
     func dissolveGroupChannel(_ conversation: ConversationSummary, in space: GroupSpaceSummary) async -> Bool {
         guard canDissolveChannel(conversation, in: space) else {
-            errorMessage = "Only a group admin can dissolve this channel."
+            errorMessage = "Only a group admin can close this channel."
             return false
         }
         if !previewMode {
@@ -5028,15 +5028,54 @@ final class AppModel: ObservableObject {
             do {
                 try await api.dissolveGroupChannel(token: token, groupSpaceId: space.preferenceId, sessionId: conversation.sessionId)
             } catch {
-                errorMessage = userFacing(error, fallback: "Could not dissolve the channel.")
+                errorMessage = userFacing(error, fallback: "Could not close the channel.")
                 return false
             }
         }
-        beginSessionVisibilityMutation()
-        defer { endSessionVisibilityMutation() }
-        removeConversationLocally(conversation)
-        cacheCurrentConversations()
+        markSessionsClosed([conversation.sessionId])
         return true
+    }
+
+    func isConversationClosed(_ conversation: ConversationSummary) -> Bool {
+        closedSessionIds.contains(conversation.sessionId)
+    }
+
+    func isGroupSpaceClosed(_ space: GroupSpaceSummary) -> Bool {
+        space.isClosed(closedSessionIds: closedSessionIds)
+    }
+
+    /// What Delete chat removes for a closed chat: its whole group when the
+    /// group is closed or this is its first channel, else just this channel.
+    func closedChatDeleteTarget(for conversation: ConversationSummary) -> ClosedChatDeleteTarget {
+        let space = GroupSpaceCatalog.build(
+            conversations: conversations + archivedConversations,
+            ownAccountId: account?.accountId ?? ""
+        ).first { $0.membershipSessions.contains { $0.sessionId == conversation.sessionId } }
+        guard let space, isGroupSpaceClosed(space) || space.authoritySession?.sessionId == conversation.sessionId
+        else { return .channel(conversation) }
+        return .group(space)
+    }
+
+    /// A closed group is left, which is how it leaves this account's list; a
+    /// closed channel of an open group is deleted like any other chat.
+    func deleteClosedChat(_ target: ClosedChatDeleteTarget) async -> Bool {
+        switch target {
+        case .channel(let conversation):
+            return await deleteConversation(conversation)
+        case .group(let space):
+            guard let failure = await leaveGroupSpace(space) else { return true }
+            errorMessage = failure
+            return false
+        }
+    }
+
+    private func markSessionsClosed<Ids: Sequence<String>>(_ sessionIds: Ids, persists: Bool = true) {
+        let added = Set(sessionIds.compactMap(\.nonEmpty)).subtracting(closedSessionIds)
+        guard !added.isEmpty else { return }
+        closedSessionIds.formUnion(added)
+        if persists, let accountId = account?.accountId, !previewMode {
+            Task { await persistCloudSnapshot(accountId: accountId) }
+        }
     }
 
     /// The group's live invitation link, or nil when it has none yet.
@@ -7179,6 +7218,8 @@ final class AppModel: ObservableObject {
         let canonicalParticipantsBySessionId = await api.cachedChatParticipantsBySessionId()
         let canonicalForksBySessionId = await api.cachedChatSessionForksById()
         guard self.account?.accountId == account.accountId, token == expectedToken, visibilityRevision == sessionVisibilityMutationRevision else { return }
+        // The sync pass that brought these snapshots persists them.
+        markSessionsClosed(GroupClosedState.closedSessionIds(in: canonicalConversations), persists: false)
         for (sessionId, fork) in canonicalForksBySessionId {
             sessionForksById[sessionId] = fork
         }
@@ -7787,7 +7828,8 @@ final class AppModel: ObservableObject {
             sessionForksById: hasHydratedForkLineage ? sessionForksById : nil,
             visibility: hasHydratedSessionVisibility ? currentCloudSessionVisibility : nil,
             sessionPinsByID: sessionPinsByID,
-            personalAgents: personalAgents
+            personalAgents: personalAgents,
+            closedSessionIds: closedSessionIds.sorted()
         )
     }
 
@@ -8393,6 +8435,7 @@ final class AppModel: ObservableObject {
         deviceReviewRequired = false
         if let snapshot = await wireCache.load(accountId: response.account.accountId) {
             if let visibility = snapshot.visibility { applyCloudSessionVisibility(visibility) }
+            closedSessionIds = Set(snapshot.closedSessionIds ?? [])
             sessionPinsByID = snapshot.sessionPinsByID ?? [:]
             cloudMessagesByPeer = snapshot.messagesByPeer
             sessionForksById = snapshot.sessionForksById ?? [:]

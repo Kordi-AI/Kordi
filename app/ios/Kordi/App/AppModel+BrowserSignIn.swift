@@ -184,6 +184,7 @@ extension AppModel {
             case "oauth_not_configured": return "This sign-in provider is temporarily unavailable."
             case "device_review_required": return "Approve this device from another device first."
             case "ai_consent_required": return AIConsentCopy.declinedTitle
+            case GroupClosedState.errorCode: return GroupClosedState.sendFailureMessage
             default: return error.message.nonEmpty ?? fallback
             }
         }
