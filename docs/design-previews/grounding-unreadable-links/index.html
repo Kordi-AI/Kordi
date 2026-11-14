@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unreadable links</title>
+<style>
+/* Tokens copied from docs/design-previews/card-auto-rebuild/index.html. */
+:root {
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --ground: #e9e8e4; --chrome: #dddcd7; --chrome-on: #ffffff; --chrome-text: #3c3c43;
+  --text: #000000; --muted: rgba(60,60,67,.62); --line: rgba(60,60,67,.14);
+  --accent: #2f62d3; --accent-fg: #ffffff; --red-text: #c4113f;
+  --shadow: 0 30px 70px rgba(30,30,25,.22), 0 2px 6px rgba(30,30,25,.08);
+  --m-main: #fafafa; --m-card: #f0f0f0; --m-line: rgba(0,0,0,.1); --m-line2: rgba(0,0,0,.15); --m-edge: rgba(0,0,0,.18);
+  --m-fg: #1d1d1f; --m-fg2: rgb(76 70 65); --m-fg3: rgba(0,0,0,.4); --m-hover: rgba(0,0,0,.045);
+  --i-bg: #f2f2f7; --i-card: #ffffff; --i-line: rgba(60,60,67,.29); --i-muted: rgba(60,60,67,.6);
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --ground: #121214; --chrome: #2c2c2e; --chrome-on: #48484a; --chrome-text: #ebebf5;
+  --text: #ffffff; --muted: rgba(235,235,245,.6); --line: rgba(84,84,88,.6);
+  --accent: #6a9bff; --red-text: rgb(253 164 175);
+  --shadow: 0 30px 70px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.4);
+  --m-main: #17181a; --m-card: #1f2023; --m-line: rgba(255,255,255,.08); --m-line2: rgba(255,255,255,.14); --m-edge: rgba(255,255,255,.1);
+  --m-fg: rgba(255,255,255,.92); --m-fg2: rgba(255,255,255,.6); --m-fg3: rgba(255,255,255,.4); --m-hover: rgba(255,255,255,.06);
+  --i-bg: #000000; --i-card: #1c1c1e; --i-line: rgba(84,84,88,.65); --i-muted: rgba(235,235,245,.6);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { min-height: 100vh; background: var(--ground); color: var(--text); font: 15px/1.38 var(--sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
+:focus, :focus-visible { outline: none; }
+[hidden] { display: none !important; }
+
+/* Review header */
+.rv { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 12px 20px; border-bottom: .5px solid var(--line); }
+.rv h1 { margin: 0 6px 0 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.rv .grow { flex: 1; }
+.seg { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--chrome); flex: none; }
+.seg button { height: 28px; padding: 0 10px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--chrome-text); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--chrome-on); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+.rv-btn { height: 34px; padding: 0 12px; border-radius: 10px; background: var(--chrome); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.stage { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 16px 24px; }
+.note { margin: 0; max-width: 760px; font-size: 12px; color: var(--muted); text-align: center; }
+
+/* Mac build screen, after app/desktop/src/styles/commonGround.css */
+.mac { width: min(760px, 100%); height: clamp(520px, calc(100vh - 140px), 860px); display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: var(--m-main); color: var(--m-fg); box-shadow: 0 0 0 .5px var(--m-edge), var(--shadow); font-size: 13px; line-height: 1.4; }
+.m-bar { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--m-line); }
+.m-bar i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+.m-bar i:nth-child(2) { background: #febc2e; } .m-bar i:nth-child(3) { background: #28c840; }
+.m-body { flex: 1; overflow-y: auto; padding: 20px 36px 40px; }
+.m-in { max-width: 560px; margin: 0 auto; }
+.hero { display: flex; flex-direction: column; align-items: center; margin-top: 4px; }
+.ava { width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(150deg, #e9a20b, #f83e9c); }
+.hero h2 { margin: 10px 0 0; font-size: 19px; font-weight: 600; }
+.sec { margin-top: 18px; }
+.sec-title { margin: 0 2px 8px; color: var(--m-fg2); font-size: 12.5px; font-weight: 600; }
+.group { overflow: hidden; border: 1px solid var(--m-line); border-radius: 10px; background: var(--m-card); transition: border-color .2s var(--ease); }
+.group:focus-within { border-color: var(--m-line2); }
+.row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; }
+.row .grow { flex: 1; }
+.ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: color-mix(in srgb, #847ac4 18%, transparent); color: #847ac4; font-size: 13px; }
+.sw { position: relative; width: 32px; height: 19px; border-radius: 10px; background: var(--m-line2); flex: none; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s var(--ease); }
+.sw[aria-checked="true"] { background: var(--accent); }
+.sw[aria-checked="true"]::after { transform: translateX(13px); }
+textarea.ta { display: block; width: 100%; min-height: 72px; padding: 10px 12px; border: 0; background: transparent; color: inherit; font: inherit; resize: vertical; }
+textarea.ta::placeholder { color: var(--m-fg2); }
+.links-note { margin: 6px 0 0; padding: 0 12px; list-style: none; font-size: 11.5px; line-height: 1.5; color: var(--m-fg2); }
+.links-note li { display: flex; gap: 6px; align-items: baseline; }
+.links-note li.bad { color: var(--red-text); }
+.links-note .dot { flex: none; width: 5px; height: 5px; border-radius: 50%; background: currentColor; transform: translateY(-1px); }
+.links-note .act { color: var(--m-fg); font-weight: 500; text-decoration: underline; text-decoration-color: var(--m-line2); text-underline-offset: 2px; }
+.links-note .act:hover { text-decoration-color: currentColor; }
+.actions { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 18px; }
+.err { margin: 6px 0 0; font-size: 12px; line-height: 1.4; color: var(--red-text); text-align: center; }
+.pill { min-width: 76px; height: 32px; padding: 0 18px; border-radius: 999px; background: var(--accent); color: var(--accent-fg); font-size: 13px; font-weight: 600; }
+.pill:disabled { opacity: .42; cursor: default; }
+.wait { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 100%; color: var(--m-fg2); }
+.spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.done { text-align: center; padding: 48px 0; color: var(--m-fg2); }
+.done b { display: block; color: var(--m-fg); font-size: 15px; margin-bottom: 4px; }
+
+/* iPhone, after CommonGroundBuildView.swift */
+.phone { width: 390px; max-width: 100%; height: clamp(620px, calc(100vh - 140px), 844px); border-radius: 46px; padding: 12px; background: #0b0b0c; box-shadow: var(--shadow); }
+.screen { height: 100%; border-radius: 36px; overflow: hidden; background: var(--i-bg); color: var(--text); display: flex; flex-direction: column; }
+.i-top { height: 54px; flex: none; }
+.i-body { flex: 1; overflow-y: auto; padding: 0 16px 32px; }
+.phone .ava { width: 92px; height: 92px; }
+.phone .hero h2 { font-size: 22px; }
+.phone .sec { margin-top: 16px; }
+.phone .sec-title { color: var(--i-muted); font-size: 15px; font-weight: 600; margin: 0 4px 8px; }
+.phone .group { border: 0; border-radius: 22px; background: var(--i-card); }
+.phone .row { min-height: 52px; padding: 8px 16px; font-size: 17px; }
+.phone textarea.ta { font-size: 17px; padding: 14px 16px; min-height: 88px; }
+.phone textarea.ta::placeholder { color: var(--i-muted); }
+.phone .links-note { padding: 0 16px; font-size: 13px; color: var(--i-muted); }
+.phone .links-note li.bad { color: var(--red-text); }
+.phone .links-note .act { color: var(--text); }
+.phone .actions { align-items: stretch; }
+.phone .err { text-align: left; padding: 0 16px; font-size: 15px; margin: 0 0 8px; }
+.phone .pill { height: 50px; border-radius: 25px; font-size: 17px; }
+.phone .wait, .phone .done { color: var(--i-muted); }
+</style>
+</head>
+<body>
+<header class="rv">
+  <h1>Unreadable links</h1>
+  <div class="seg" id="opt"><button data-v="a">A · after Build</button><button data-v="b">B · as you type</button></div>
+  <div class="seg" id="mode"><button data-v="mac">Mac</button><button data-v="ios">iPhone</button></div>
+  <div class="seg" id="theme"><button data-v="light">Light</button><button data-v="dark">Dark</button></div>
+  <span class="grow"></span>
+  <button class="rv-btn" id="reset">Reset</button>
+</header>
+<main class="stage">
+  <p class="note" id="note"></p>
+  <div id="frame"></div>
+</main>
+<script>
+const SAMPLE = 'https://www.linkedin.com/in/your-name/';
+const params = new URLSearchParams(location.search);
+const st = {
+  option: params.get('option') === 'a' ? 'a' : 'b',
+  mode: params.get('mode') === 'ios' ? 'ios' : 'mac',
+  theme: params.get('theme') === 'dark' ? 'dark' : 'light',
+  links: SAMPLE, notes: '', memory: false,
+  phase: 'edit', // edit | building | done
+  unread: [], error: null,
+};
+
+/* Sites that only show a sign-in page to Kordi's reader. Synthetic list for the preview. */
+const SIGN_IN_SITES = { 'linkedin.com': 'LinkedIn', 'facebook.com': 'Facebook', 'instagram.com': 'Instagram' };
+function host(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } }
+function site(url) { const h = host(url); const key = Object.keys(SIGN_IN_SITES).find((k) => h === k || h.endsWith('.' + k)); return key ? SIGN_IN_SITES[key] : null; }
+function entries() { return st.links.split(/[;\n]/).map((s) => s.trim()).filter((s) => /^https?:\/\//i.test(s)); }
+
+/* What the server would answer, per link. */
+function reasonFor(url) {
+  const h = host(url);
+  if (site(url)) return 'sign_in';
+  if (h.endsWith('.invalid')) return 'unreachable';
+  if (h === 'x.com' && /\/status\//.test(url)) return 'blocked';
+  if (/missing/.test(url)) return 'not_found';
+  if (/\.(zip|png|jpg)$/i.test(url)) return 'unreadable';
+  return null;
+}
+/* One line per link that was not read: the reason in plain words. */
+function lineFor(url, reason) {
+  const name = site(url) || host(url);
+  switch (reason) {
+    case 'sign_in': return `${name} needs sign-in, so Kordi can't read it.`;
+    case 'blocked': return `${name} blocked Kordi from reading it.`;
+    case 'not_found': return `Nothing found at ${name}.`;
+    case 'unreachable': return `Couldn't reach ${name}.`;
+    default: return `${name} has no text Kordi can read.`;
+  }
+}
+
+function render() {
+  document.documentElement.dataset.theme = st.theme;
+  for (const [id, key] of [['opt', 'option'], ['mode', 'mode'], ['theme', 'theme']]) {
+    for (const b of document.querySelectorAll(`#${id} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === st[key]));
+  }
+  const q = new URLSearchParams({ option: st.option, mode: st.mode, theme: st.theme });
+  history.replaceState(null, '', '?' + q);
+  document.getElementById('note').textContent = st.option === 'a'
+    ? 'A: nothing changes until Build. After Build, each unread link gets a reason in red, and the Build error says the link is why nothing was built.'
+    : 'B: everything in A, plus a sign-in site (LinkedIn, Facebook, Instagram) is flagged as soon as it is pasted, before a build is spent on it.';
+  const frame = document.getElementById('frame');
+  const ios = st.mode === 'ios';
+  frame.innerHTML = ios
+    ? `<div class="phone"><div class="screen"><div class="i-top"></div><div class="i-body">${content(true)}</div></div></div>`
+    : `<div class="mac"><div class="m-bar"><i></i><i></i><i></i></div><div class="m-body"><div class="m-in">${content(false)}</div></div></div>`;
+  wire();
+}
+
+function linkNotes() {
+  const items = [];
+  if (st.phase === 'edit' && st.unread.length && st.unreadFor === st.links) {
+    for (const u of st.unread) items.push({ bad: true, text: lineFor(u.url, u.reason) });
+  } else if (st.option === 'b') {
+    for (const url of entries()) if (site(url)) items.push({ bad: false, text: lineFor(url, 'sign_in') });
+  }
+  if (!items.length) return '';
+  const act = `<li><button class="act" data-act="notes">Paste the text into Notes</button></li>`;
+  return `<ul class="links-note" aria-live="polite">${items.map((i) => `<li class="${i.bad ? 'bad' : ''}"><span class="dot"></span><span>${esc(i.text)}</span></li>`).join('')}${act}</ul>`;
+}
+
+function content(ios) {
+  if (st.phase === 'building') return `<div class="wait"><div class="spin"></div>${ios ? 'Reading sources' : 'Building your card'}</div>`;
+  if (st.phase === 'done') return `<div class="done"><b>Card built</b>From ${esc(st.used.join(', '))}. <button class="act" data-act="back" style="text-decoration:underline">Back to sources</button></div>`;
+  const canBuild = st.memory || st.links.trim() || st.notes.trim();
+  return `
+    <div class="hero"><div class="ava"></div><h2>Work</h2></div>
+    <div class="sec"><div class="sec-title">Kordi</div><div class="group"><div class="row"><span class="ic">✦</span><span class="grow">Memory</span><button class="sw" role="switch" aria-label="Memory" aria-checked="${st.memory}" data-act="memory"></button></div></div></div>
+    <div class="sec"><div class="sec-title">Links</div><div class="group"><textarea class="ta" id="links" aria-label="Links" placeholder="Homepage; ORCID; papers">${esc(st.links)}</textarea></div>${linkNotes()}</div>
+    <div class="sec"><div class="sec-title">Notes</div><div class="group"><textarea class="ta" id="notes" aria-label="Notes" placeholder="What are you working on?">${esc(st.notes)}</textarea></div></div>
+    <div class="actions">${st.error ? `<p class="err" role="alert">${esc(st.error)}</p>` : ''}<button class="pill" data-act="build" ${canBuild ? '' : 'disabled'}>${ios ? (st.error ? 'Try again' : 'Build profile') : 'Build'}</button></div>`;
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function wire() {
+  const links = document.getElementById('links');
+  const notes = document.getElementById('notes');
+  if (links) links.addEventListener('input', () => { st.links = links.value; st.error = null; refreshNotes(); });
+  if (notes) notes.addEventListener('input', () => { st.notes = notes.value; st.error = null; refreshActions(); });
+  for (const el of document.querySelectorAll('[data-act]')) el.addEventListener('click', () => act(el.dataset.act));
+}
+/* Re-render the line under Links without losing the caret. */
+function refreshNotes() {
+  const sec = document.getElementById('links').closest('.sec');
+  sec.querySelector('.links-note')?.remove();
+  sec.insertAdjacentHTML('beforeend', linkNotes());
+  sec.querySelector('[data-act="notes"]')?.addEventListener('click', () => act('notes'));
+  refreshActions();
+}
+function refreshActions() {
+  const box = document.querySelector('.actions');
+  box.querySelector('.err')?.remove();
+  box.querySelector('.pill').disabled = !(st.memory || st.links.trim() || st.notes.trim());
+}
+
+function act(name) {
+  if (name === 'memory') { st.memory = !st.memory; st.error = null; render(); return; }
+  if (name === 'notes') { const n = document.getElementById('notes'); n.focus(); n.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+  if (name === 'back') { st.phase = 'edit'; render(); return; }
+  if (name === 'build') build();
+}
+
+function build() {
+  const urls = entries();
+  const unread = urls.map((url) => ({ url, reason: reasonFor(url) })).filter((u) => u.reason);
+  const readable = urls.length - unread.length;
+  const other = st.memory || st.notes.trim();
+  st.phase = 'building'; st.error = null; render();
+  // Proposed server: when every source is an unread link, the build fails at once without a model run.
+  const allUnread = !other && readable === 0 && unread.length > 0;
+  setTimeout(() => {
+    st.unread = unread; st.unreadFor = st.links;
+    if (allUnread) {
+      st.phase = 'edit';
+      st.error = unread.length === 1 ? "Kordi couldn't read your link, so there's nothing to build from." : "Kordi couldn't read your links, so there's nothing to build from.";
+    } else {
+      st.phase = 'done';
+      st.used = [st.memory && 'Memory', readable && 'Links', st.notes.trim() && 'Notes'].filter(Boolean);
+    }
+    render();
+  }, allUnread ? 700 : 1400);
+}
+
+for (const [id, key] of [['opt', 'option'], ['mode', 'mode'], ['theme', 'theme']]) {
+  for (const b of document.querySelectorAll(`#${id} button`)) b.addEventListener('click', () => { st[key] = b.dataset.v; render(); });
+}
+document.getElementById('reset').addEventListener('click', () => { Object.assign(st, { links: SAMPLE, notes: '', memory: false, phase: 'edit', unread: [], error: null }); render(); });
+render();
+</script>
+</body>
+</html>

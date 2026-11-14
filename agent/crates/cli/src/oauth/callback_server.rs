@@ -89,8 +89,8 @@ async fn handle_connection(
         send_response(
             &mut stream,
             400,
-            "Bad request.",
-            "This sign-in callback is not valid. Return to Kordi and try signing in again.",
+            "Couldn’t sign in",
+            "Go back to Kordi and try again.",
         )
         .await;
         anyhow::bail!("OAuth callback did not use GET");
@@ -103,8 +103,8 @@ async fn handle_connection(
         send_response(
             &mut stream,
             404,
-            "Not found.",
-            "This sign-in callback is not valid. Return to Kordi and try signing in again.",
+            "Couldn’t sign in",
+            "Go back to Kordi and try again.",
         )
         .await;
         anyhow::bail!("Unexpected OAuth callback path");
@@ -136,20 +136,21 @@ async fn handle_connection(
             &sensitive_values,
         )
         .to_string();
-        let friendly_body = if error.is_empty() {
-            "The provider did not return a valid code. Return to Kordi and try signing in again."
-        } else {
-            "The provider stopped the sign-in flow. Return to Kordi and try signing in again."
-        };
-        send_response(&mut stream, 400, "Couldn’t sign in.", friendly_body).await;
+        send_response(
+            &mut stream,
+            400,
+            "Couldn’t sign in",
+            "Go back to Kordi and try again.",
+        )
+        .await;
         anyhow::bail!("OAuth callback error: {safe_message}");
     }
 
     send_response(
         &mut stream,
         200,
-        "Signed in.",
-        "Your account is connected. You can close this window and return to Kordi.",
+        "You’re signed in",
+        "You can close this tab and go back to Kordi.",
     )
     .await;
 
@@ -235,36 +236,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn auth_success_page_matches_the_latest_kordi_completion_surface() {
+    fn auth_success_page_matches_the_kordi_completion_surface() {
         let html = render_auth_response_page(
-            "Signed in.",
-            "Your account is connected. You can close this window and return to Kordi.",
+            "You’re signed in",
+            "You can close this tab and go back to Kordi.",
         );
 
-        assert!(html.contains("Signed in."));
-        assert!(html.contains("return to Kordi"));
+        assert!(html.contains("<h1>You’re signed in</h1>"));
+        assert!(html.contains("<p>You can close this tab and go back to Kordi.</p>"));
+        assert!(html.contains("<title>Sign in · Kordi</title>"));
         assert!(html.contains("rel=\"icon\" type=\"image/svg+xml\""));
         assert!(html.contains("data:image/svg+xml"));
-        assert!(html.contains("font-family: Geist"));
+        assert!(html.contains(
+            "--sans: Geist, -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif"
+        ));
         assert!(html.contains("--paper: #fcfaf8"));
-        assert!(html.contains("class=\"brand\""));
-        assert!(html.contains("<footer>&copy; Kordi 2026</footer>"));
+        assert!(html.contains("<header class=\"mast\">"));
+        assert!(html.contains("<span>kordi</span>"));
+        assert!(html.contains("font-weight: 600;"));
         assert!(html.contains("prefers-color-scheme: dark"));
+        assert!(!html.contains("&copy; Kordi 2026"));
         assert!(!html.contains("Close window"));
         assert!(!html.contains("<button"));
-        assert!(!html.contains("border-radius: 30px"));
         assert!(!html.contains("box-shadow"));
+        assert!(!html.contains("https://"));
     }
 
     #[test]
     fn auth_error_page_uses_clear_retry_copy_without_internal_details() {
-        let html = render_auth_response_page(
-            "Couldn’t sign in.",
-            "The provider did not return a valid code. Return to Kordi and try signing in again.",
-        );
+        let html = render_auth_response_page("Couldn’t sign in", "Go back to Kordi and try again.");
 
-        assert!(html.contains("Couldn’t sign in."));
-        assert!(html.contains("Return to Kordi and try signing in again"));
+        assert!(html.contains("<h1>Couldn’t sign in</h1>"));
+        assert!(html.contains("Go back to Kordi and try again."));
         assert!(html.contains("role=\"status\" aria-live=\"polite\""));
         assert!(!html.contains("Missing 'code' parameter"));
         assert!(!html.contains("OAuth callback"));

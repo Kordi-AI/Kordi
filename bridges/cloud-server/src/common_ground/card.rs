@@ -94,6 +94,9 @@ pub(super) struct UnreadLink {
     pub reason: String,
 }
 
+/// A build whose sources were all links that could not be read; it fails
+/// without a run.
+pub(super) const LINKS_UNREAD: &str = "links_unread";
 /// A build whose run ended without reporting back: it was cancelled, lost or
 /// expired, so the card shows it failed instead of quietly going idle.
 pub(super) const BUILD_INTERRUPTED: &str = "build_interrupted";
