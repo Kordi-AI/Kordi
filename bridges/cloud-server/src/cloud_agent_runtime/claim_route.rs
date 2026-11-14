@@ -72,7 +72,7 @@ pub(super) async fn claim_cloud_agent_run(
         );
     }
     // The requester must not have declined AI; another person's agent runs
-    // only when its owner allowed AI (`crate::ai_consent`). Kordi Support's
+    // only when its owner allowed AI (`crate::ai_consent`). KordiSpot's
     // account is operated by Kordi, not a person, so only the requester
     // counts there.
     let owner = input.owner_account_id.trim();
