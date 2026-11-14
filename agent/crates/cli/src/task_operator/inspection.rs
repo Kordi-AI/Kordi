@@ -20,6 +20,11 @@ fn assistant_text(message: &kordi_core::types::AssistantMessage) -> Option<Strin
     (!text.is_empty()).then_some(text)
 }
 
+/// The summary of a session whose last request never reached an end: the
+/// process that ran it is gone.
+pub const INTERRUPTED_SUMMARY: &str =
+    "The background session was interrupted before producing a final result.";
+
 pub(crate) fn inspect_persisted_background_session(
     conn: &rusqlite::Connection,
     session_id: &str,
@@ -97,7 +102,7 @@ pub(super) fn inspect_background_messages(
     }
 
     if pending_request || status.is_none() {
-        let interrupted = "The background session was interrupted before producing a final result.";
+        let interrupted = INTERRUPTED_SUMMARY;
         return BackgroundSessionInspection {
             status: "failed".to_string(),
             summary: Some(match summary {

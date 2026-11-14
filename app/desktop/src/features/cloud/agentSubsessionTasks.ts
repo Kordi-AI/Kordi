@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CloudAuthClient, CloudAuthError } from './authClient';
 import { CLOUD_SESSION_CHANGED_EVENT, loadSession } from './session';
 import type { AgentSubsessionTask, CloudAgentSubsession } from './agentSubsessionTypes';
+import { stoppedLabel } from '@/features/chat/backgroundStopReason';
 
 export function agentSubsessionStatusNotice(task: Pick<CloudAgentSubsession, 'status' | 'live' | 'queued' | 'startedAtMs'>) {
   if (task.queued && !(task.status === 'running' && task.startedAtMs != null)) return 'Queued next';
@@ -13,7 +14,7 @@ export function agentThreadStatus(task: AgentSubsessionTask) {
   if (task.queued) return 'Queued next';
   if (task.status === 'done') return 'Done';
   if (task.status === 'failed') return 'Failed';
-  if (task.status === 'stopped') return 'Stopped';
+  if (task.status === 'stopped') return stoppedLabel(task.stopReason);
   return 'Status unavailable';
 }
 

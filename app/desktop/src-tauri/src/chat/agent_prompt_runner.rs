@@ -120,6 +120,7 @@ async fn run_agent_prompt_once(
         retry_reason: None,
         transcript_refresh_required: false,
         background_follow_up: None,
+        stop_reason: None,
     }));
 
     let result = {
@@ -413,6 +414,7 @@ mod tests {
             retry_reason: None,
             transcript_refresh_required: false,
             background_follow_up: None,
+            stop_reason: None,
         };
         let default_route = AgentRunRoute {
             model: Some("gpt-5".to_string()),

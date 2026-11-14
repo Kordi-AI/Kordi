@@ -4,6 +4,7 @@ import { acquireDesktopExecutionLease } from './cloudDesktopExecutionLease';
 import { encodeCloudAgentResponse, promptTextForCloudAgentMention } from './cloudAgentMessages';
 import { fetchDesktopSubsessionSnapshot } from '@/lib/desktopBackgroundSessions';
 import { cancelDesktopChatTurn, fetchDesktopChatTurnState, startDesktopChatMessage } from '@/lib/desktop';
+import { notifySubsessionActivity } from './subsessionActivity';
 
 const running=new Set<string>();
 
@@ -31,6 +32,7 @@ export async function discoverSubsessionFollowups() {
         let turn=await startDesktopChatMessage(request.subsessionId,promptTextForCloudAgentMention(request.text),[],null,lease.contextMessages(request.contextMessages??[]),[],source.parentSessionId,request.messageId,lease.deadline);
         turnId=turn.id;
         lease.attach(turn.id);
+        notifySubsessionActivity(request.subsessionId);
         let last='';
         for (;;) {
           if ((await loadSession())?.accountId!==account.accountId) throw Error('Account changed.');
@@ -45,7 +47,7 @@ export async function discoverSubsessionFollowups() {
       } catch {
         if (turnId) await cancelDesktopChatTurn(turnId).catch(()=>undefined);
         await lease?.cancel().catch(()=>undefined);
-      } finally {lease?.dispose();running.delete(key);}
+      } finally {lease?.dispose();running.delete(key);if (turnId) notifySubsessionActivity(request.subsessionId);}
     })();
   }
 }

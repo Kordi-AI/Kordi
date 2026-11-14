@@ -55,6 +55,7 @@ mod tests {
             retry_reason: None,
             transcript_refresh_required: false,
             background_follow_up: None,
+            stop_reason: None,
         }))
     }
 

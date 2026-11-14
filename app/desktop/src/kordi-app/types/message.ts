@@ -442,4 +442,6 @@ export type DesktopChatTurnSnapshot = {
   pendingCollaborationAgentRequest?: CollaborationAgentRequestControl | null;
   /** How a reply that keeps its partial text ended early. */
   ending?: 'stopped' | 'interrupted';
+  /** Why the turn was stopped, recorded by whatever stopped it. */
+  stopReason?: import('@/features/chat/backgroundStopReason').TurnStopReason | null;
 };

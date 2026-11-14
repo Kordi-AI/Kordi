@@ -34,3 +34,13 @@ test('active clocks reset per execution and stop when no runtime is confirmed', 
   assert.equal(agentThreadStatus({ ...running, startedAtMs: null, live: false, queued: true }), 'Queued next');
   assert.equal(agentThreadElapsed({ ...task, queued: true }), null);
 });
+
+test('a stopped thread says why it stopped', () => {
+  const stopped = { ...task, status: 'stopped' };
+  assert.equal(agentThreadStatus(stopped), 'Stopped');
+  assert.equal(agentThreadStatus({ ...stopped, stopReason: { kind: 'user', accountId: 'owner', byDisplayName: 'Alex Rivera' } }), 'Stopped by Alex Rivera');
+  assert.equal(agentThreadStatus({ ...stopped, stopReason: { kind: 'lease_lapsed', status: 409, code: 'subsession_version_conflict' } }),
+    'Stopped: the cloud refused updates (version conflict)');
+  assert.equal(agentThreadStatus({ ...stopped, stopReason: { kind: 'lease_lapsed' } }), 'Stopped: the app stopped renewing it');
+  assert.equal(agentThreadStatus({ ...stopped, stopReason: { kind: 'app_quit' } }), 'Stopped: the app quit');
+});

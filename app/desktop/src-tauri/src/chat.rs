@@ -53,10 +53,13 @@ use session_lifecycle::is_missing_session_error;
 pub(crate) use attachments::allow_attachment_asset_scope;
 
 pub(crate) use models::DesktopStoredChatAttachment;
+#[cfg(test)]
+pub(crate) use models::DesktopSyncRefusal;
 pub use models::{
     DesktopArtifactDirectory, DesktopArtifactDirectoryEntry, DesktopBackgroundFollowUp,
     DesktopChatArtifactPreview, DesktopChatArtifactPreviewLine, DesktopChatForkSessionResult,
     DesktopChatMessageRoute, DesktopChatState, DesktopChatToolSnapshot, DesktopChatTurnSnapshot,
+    DesktopTurnStopReason,
 };
 
 pub(crate) use agent_prompt_runner::{run_agent_prompt, DesktopAgentModelRouting};
@@ -111,6 +114,8 @@ struct DesktopChatTurnHandle {
     snapshot: Arc<Mutex<DesktopChatTurnSnapshot>>,
     cancel: tokio_util::sync::CancellationToken,
     execution_lease_deadline: Arc<Mutex<Option<std::time::Instant>>>,
+    /// The last update the cloud refused, named if the lease lapses.
+    lease_refusal: Arc<Mutex<Option<models::DesktopSyncRefusal>>>,
 }
 
 #[derive(Clone, Default)]
@@ -308,8 +313,14 @@ pub async fn desktop_chat_run_skill_command(
 pub async fn desktop_chat_cancel_turn(
     manager: State<'_, DesktopChatManager>,
     turn_id: String,
+    reason: Option<models::DesktopTurnStopReason>,
 ) -> Result<DesktopChatTurnSnapshot, String> {
-    cancel_turn_by_id(manager.inner(), &turn_id).await
+    cancel_turn_by_id(
+        manager.inner(),
+        &turn_id,
+        reason.and_then(models::DesktopTurnStopReason::sanitized),
+    )
+    .await
 }
 
 #[tauri::command]

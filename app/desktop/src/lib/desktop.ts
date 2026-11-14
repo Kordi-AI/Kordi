@@ -903,8 +903,8 @@ export async function startDesktopChatMessage(
   }));
 }
 
-export function renewDesktopChatExecutionLease(turnId: string, deadlineMs: number) {
-  return invokeDesktop<void>('desktop_chat_renew_execution_lease', { turnId, deadlineMs });
+export function renewDesktopChatExecutionLease(turnId: string, deadlineMs: number, refusal: import('@/features/chat/backgroundStopReason').SubsessionSyncRefusal | null = null) {
+  return invokeDesktop<void>('desktop_chat_renew_execution_lease', { turnId, deadlineMs, refusal });
 }
 
 export type DesktopShapeAgentRoute = {
@@ -926,8 +926,8 @@ export async function runDesktopChatSkillCommand(sessionId: string, text: string
   return invokeDesktop<string>('desktop_chat_run_skill_command', { sessionId, text });
 }
 
-export async function cancelDesktopChatTurn(turnId: string) {
-  return invokeDesktop<DesktopChatTurnSnapshot>('desktop_chat_cancel_turn', { turnId });
+export async function cancelDesktopChatTurn(turnId: string, reason: import('@/features/chat/backgroundStopReason').TurnStopReason | null = null) {
+  return invokeDesktop<DesktopChatTurnSnapshot>('desktop_chat_cancel_turn', { turnId, reason });
 }
 
 export async function fetchDesktopChatTurnState(turnId: string) {

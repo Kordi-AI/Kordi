@@ -4,6 +4,8 @@ import { cancelDesktopChatTurn, fetchDesktopChatSessionActiveTurn, fetchDesktopC
 import { CLOUD_SESSION_CHANGED_EVENT, loadSession } from '@/features/cloud/session';
 import { CloudAuthClient } from '@/features/cloud/authClient';
 import type { CloudAgentSubsession } from '@/features/cloud/agentSubsessionTypes';
+import { onSubsessionActivity } from '@/features/cloud/subsessionActivity';
+import { backgroundSessionRowExecution } from './relatedAgentSessions';
 
 // The shared transcript contains presentation IDs, not cancellable runtime IDs.
 // Resolve the turn on this device, in the active account, before offering Stop.
@@ -67,18 +69,22 @@ export function useBackgroundSessionControl(sessionId: string, shared?: CloudAge
           setError('Could not confirm that this task stopped. Try again.');
         }
       }
-      if (current === generation.current) timer = setTimeout(() => { void poll(); }, last && !last.completed ? 1500 : 10000);
+      if (current === generation.current) { if (timer) clearTimeout(timer); timer = setTimeout(() => { void poll(); }, last && !last.completed ? 1500 : 10000); }
     };
     void poll();
-    return () => { generation.current += 1; if (timer) clearTimeout(timer); };
+    // A continue or a follow-up turn on this Mac: look again now.
+    const stopListening = onSubsessionActivity(sessionId, () => {
+      if (current !== generation.current) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void poll(); }, 0);
+    });
+    return () => { generation.current += 1; stopListening(); if (timer) clearTimeout(timer); };
   }, [sessionId, accountId, revision]);
 
   const visibleTurn = turn?.sessionId === sessionId ? turn : null;
   const remoteSnapshot = remoteResult?.sessionId === sessionId && remoteResult.ownerAccountId === accountId
     && remoteResult.version >= (shared?.version ?? 0) ? remoteResult : shared;
-  const remoteExecutionIsNewer = Boolean(remoteSnapshot && (!visibleTurn
-    || (remoteSnapshot.startedAtMs ?? 0) > (visibleTurn.startedAtMs ?? 0)));
-  const localExecution = remoteExecutionIsNewer ? null : visibleTurn;
+  const localExecution = backgroundSessionRowExecution(visibleTurn, remoteSnapshot)?.localTurn ?? null;
   const canStopRemotely = Boolean(accountId && remoteSnapshot?.ownerAccountId === accountId && remoteSnapshot.status === 'running');
   const stop = async () => {
     if (stopPending.current || !(localExecution && !localExecution.completed) && !canStopRemotely) return;
@@ -97,7 +103,7 @@ export function useBackgroundSessionControl(sessionId: string, shared?: CloudAge
         setRemoteResult(result);
         // Persist cancellation of queued work before cancelling the local turn.
         if (localExecution && !localExecution.completed) {
-          const cancelled = await cancelDesktopChatTurn(localExecution.id);
+          const cancelled = await cancelDesktopChatTurn(localExecution.id, { kind: 'user', ...(accountId ? { accountId } : {}) });
           if (current !== generation.current) return;
           setTurn(cancelled);
         }
@@ -106,7 +112,7 @@ export function useBackgroundSessionControl(sessionId: string, shared?: CloudAge
         return;
       }
       if (!localExecution) return;
-      const cancelled = await cancelDesktopChatTurn(localExecution.id);
+      const cancelled = await cancelDesktopChatTurn(localExecution.id, { kind: 'user', ...(accountId ? { accountId } : {}) });
       if (current !== generation.current) return;
       setTurn(cancelled);
       if (cancelled.completed) { stopPending.current = false; setStopping(false); }

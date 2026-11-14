@@ -13,6 +13,24 @@ pub(super) async fn stop(
     Path(id): Path<Uuid>,
     Json(request): Json<StopRequest>,
 ) -> Result<Json<Snapshot>, ApiError> {
+    let result = stop_execution(&state, &session, id, request).await;
+    if let Err(refusal) = &result {
+        super::stop_reason::log_refusal(
+            "POST /v1/cloud/agent-subsessions/:id/stop",
+            id,
+            &session.account_id,
+            refusal,
+        );
+    }
+    result
+}
+
+async fn stop_execution(
+    state: &ServerState,
+    session: &CloudSession,
+    id: Uuid,
+    request: StopRequest,
+) -> Result<Json<Snapshot>, ApiError> {
     let pool = state.db_pool();
     let mut tx = pool.begin().await.map_err(db_error)?;
     // Share the session's admission/publishing lock so Stop cannot race a new execution.
@@ -37,8 +55,8 @@ pub(super) async fn stop(
                WHERE status IN ('queued','leased','running') AND (subsession_id=$1 OR run_id IN \
                (SELECT run_id FROM cloud_agent_subsession_chat WHERE subsession_id=$1))")
             .bind(id).execute(&mut *tx).await.map_err(db_error)?;
-        query("UPDATE cloud_agent_subsessions SET status='stopped',execution_finished_at=now(),version=version+1,updated_at=now() WHERE subsession_id=$1")
-            .bind(id).execute(&mut *tx).await.map_err(db_error)?;
+        query("UPDATE cloud_agent_subsessions SET status='stopped',stop_reason=$2,execution_finished_at=now(),version=version+1,updated_at=now() WHERE subsession_id=$1")
+            .bind(id).bind(super::stop_reason::user(&session.account_id)).execute(&mut *tx).await.map_err(db_error)?;
     }
     tx.commit().await.map_err(db_error)?;
     snapshot(pool, id, &session.account_id, true)

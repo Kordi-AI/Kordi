@@ -28,9 +28,11 @@ async fn new_admission_preserves_recent_terminal_snapshots_for_publishers() {
                 retry_reason: None,
                 transcript_refresh_required: false,
                 background_follow_up: None,
+                stop_reason: None,
             })),
             cancel: tokio_util::sync::CancellationToken::new(),
             execution_lease_deadline: Arc::new(Mutex::new(None)),
+            lease_refusal: Default::default(),
         }
     }
     let manager = DesktopChatManager::default();
@@ -116,6 +118,7 @@ fn persisted_abort_completes_only_its_mounted_live_turn() {
         retry_reason: None,
         transcript_refresh_required: false,
         background_follow_up: None,
+        stop_reason: None,
     };
 
     assert!(!reconcile_persisted_cancelled_turn(
@@ -158,6 +161,7 @@ fn tool_result_before_start_keeps_the_background_session_result() {
         retry_reason: None,
         transcript_refresh_required: false,
         background_follow_up: None,
+        stop_reason: None,
     }));
     let result = "Background session: {\"sessionId\":\"child\",\"title\":\"Count lines\",\"status\":\"running\"}";
     apply_desktop_turn_event(
@@ -224,6 +228,7 @@ fn a_retry_shows_the_provider_reason_until_it_ends() {
         retry_reason: None,
         transcript_refresh_required: false,
         background_follow_up: None,
+        stop_reason: None,
     }));
     let reason = "Codex is at capacity, please try again later (code=turn_rate_limit_exceeded)";
     apply_desktop_turn_event(
@@ -268,15 +273,17 @@ async fn a_server_lease_longer_than_forty_seconds_keeps_the_turn_running() {
             retry_reason: None,
             transcript_refresh_required: false,
             background_follow_up: None,
+            stop_reason: None,
         })),
         cancel: tokio_util::sync::CancellationToken::new(),
         execution_lease_deadline: Arc::new(Mutex::new(None)),
+        lease_refusal: Default::default(),
     };
     let watched = handle.clone();
     let manager = DesktopChatManager::default();
     manager.turns.lock().await.insert("leased".into(), handle);
     // A slow server answered with a 120 s lease; the renderer stops 5 s early.
-    renew_execution_lease(&manager, "leased", now + 115_000)
+    renew_execution_lease(&manager, "leased", now + 115_000, None)
         .await
         .unwrap();
     let deadline = watched.execution_lease_deadline.lock().unwrap().unwrap();
@@ -287,7 +294,49 @@ async fn a_server_lease_longer_than_forty_seconds_keeps_the_turn_running() {
     );
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     assert!(!watched.cancel.is_cancelled());
-    watched.cancel.cancel();
+
+    // The first stop reason wins; a later stop does not rename it.
+    let owner_stop = super::super::DesktopTurnStopReason {
+        account_id: Some("acct_owner".into()),
+        ..super::super::DesktopTurnStopReason::of_kind("user")
+    };
+    let cancelled = cancel_turn_by_id(&manager, "leased", Some(owner_stop.clone()))
+        .await
+        .unwrap();
+    assert_eq!(cancelled.stop_reason, Some(owner_stop.clone()));
+    assert!(watched.cancel.is_cancelled());
+    let again = cancel_turn_by_id(
+        &manager,
+        "leased",
+        Some(super::super::DesktopTurnStopReason::of_kind("signed_out")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(again.stop_reason, Some(owner_stop));
+}
+
+#[test]
+fn stop_reasons_from_the_web_view_keep_known_kinds_only() {
+    use super::super::DesktopTurnStopReason;
+    assert_eq!(DesktopTurnStopReason::of_kind("reboot").sanitized(), None);
+    let reason = DesktopTurnStopReason {
+        status: Some(42),
+        code: Some("x".repeat(65)),
+        ..DesktopTurnStopReason::of_kind("lease_lapsed")
+    }
+    .sanitized()
+    .unwrap();
+    assert_eq!(reason, DesktopTurnStopReason::of_kind("lease_lapsed"));
+    assert_eq!(
+        serde_json::to_value(DesktopTurnStopReason::lease_lapsed(Some(
+            &super::super::DesktopSyncRefusal {
+                status: 401,
+                code: "unauthorized".into()
+            }
+        )))
+        .unwrap(),
+        serde_json::json!({"kind":"lease_lapsed","status":401,"code":"unauthorized"})
+    );
 }
 
 #[test]
@@ -311,6 +360,7 @@ fn streamed_text_starts_a_paragraph_after_a_tool_call_or_message_start() {
         retry_reason: None,
         transcript_refresh_required: false,
         background_follow_up: None,
+        stop_reason: None,
     }));
     for event in [
         TurnEvent::TextStart,
