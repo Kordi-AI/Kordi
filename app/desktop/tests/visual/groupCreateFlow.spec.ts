@@ -17,18 +17,18 @@ for (const theme of ['light', 'dark'] as const) {
     await page.screenshot({ path: test.info().outputPath(`group-created-line-${theme}.png`) });
   });
 
-  test(`group admins dissolve a channel from its menu (${theme})`, async ({ page }) => {
+  test(`group admins close a channel from its menu (${theme})`, async ({ page }) => {
     await page.goto(`${preview}?theme=${theme}&mode=channel`);
-    const dissolve = page.getByRole('button', { name: 'Dissolve channel', exact: true });
+    const dissolve = page.getByRole('button', { name: 'Close channel', exact: true });
     await expect(dissolve).toBeVisible();
     await settle(page);
     await page.screenshot({ path: test.info().outputPath(`channel-menu-dissolve-${theme}.png`) });
     await dissolve.click();
-    const confirm = page.getByRole('dialog', { name: 'Dissolve QA?' });
-    await expect(confirm.getByText('Everyone loses access to this channel.')).toBeVisible();
+    const confirm = page.getByRole('dialog', { name: 'Close QA?' });
+    await expect(confirm.getByText('Everyone keeps the history. No one can send messages.')).toBeVisible();
     await settle(page);
     await page.screenshot({ path: test.info().outputPath(`channel-dissolve-confirm-${theme}.png`) });
-    await confirm.getByRole('button', { name: 'Dissolve', exact: true }).click();
+    await confirm.getByRole('button', { name: 'Close channel', exact: true }).click();
     await expect(page.getByTestId('done')).toHaveText('dissolved:session:group:launch:session:group:qa');
     await expect(confirm).toHaveCount(0);
   });

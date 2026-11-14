@@ -3,6 +3,7 @@ import type {
   DesktopCollaborationState,
 } from '@/kordi-app/types';
 import { isRetryableCloudDeliveryError } from '@/features/cloud/cloudAuthError';
+import { GROUP_CLOSED_SEND_FAILURE, isGroupClosedError } from '@/features/chat/closedGroup';
 
 import {
   failedPreparedCanonicalUserMessage,
@@ -25,6 +26,7 @@ export function collaborationSendFailureDetail(
   error: unknown,
   fallback = 'Unable to send collaboration message',
 ) {
+  if (isGroupClosedError(error)) return GROUP_CLOSED_SEND_FAILURE;
   return error instanceof Error ? error.message : fallback;
 }
 

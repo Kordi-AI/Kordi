@@ -51,6 +51,7 @@ export function buildChatsPageProps(args: MainContentShellArgs): ComponentProps<
     setDesktopSessionRenameDraft: args.setDesktopSessionRenameDraft,
     onRenameDesktopSession: args.handleRenameDesktopSession,
     onRenameChatSession: args.handleRenameChatSession,
+    onDeleteChatSession: args.handleDeleteChatSession,
     },
     transcript: {
     chatTranscriptScrollRef: args.chatTranscriptScrollRef,

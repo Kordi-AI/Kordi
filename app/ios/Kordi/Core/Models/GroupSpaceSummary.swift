@@ -44,6 +44,18 @@ struct GroupSpaceSummary: Identifiable, Hashable {
         sessions.contains { $0.canManageGroup(accountId: accountId) }
     }
 
+    /// The first channel, whose session id is the group space id: the group itself.
+    var authoritySession: ConversationSummary? {
+        membershipSessions.first { normalizedGroupSpaceId($0.sessionId) == preferenceId }
+    }
+
+    /// Closed when its first channel is closed, or, without one, when every channel is.
+    func isClosed(closedSessionIds: Set<String>) -> Bool {
+        if let authoritySession { return closedSessionIds.contains(authoritySession.sessionId) }
+        return !membershipSessions.isEmpty
+            && membershipSessions.allSatisfy { closedSessionIds.contains($0.sessionId) }
+    }
+
     var accessibilitySummary: String {
         let sessionLabel = sessions.count == 1 ? "1 session" : "\(sessions.count) sessions"
         let unread = unreadCount > 0 ? ", \(unreadCount) unread" : ""
@@ -51,6 +63,26 @@ struct GroupSpaceSummary: Identifiable, Hashable {
             ? ", \(unreadMentionCount) unread mention\(unreadMentionCount == 1 ? "" : "s")"
             : ""
         return "\(displayName), \(sessionLabel)\(unread)\(mentions). \(BlobEmojiComposerText.plainText(lastMessage))"
+    }
+}
+
+/// Delete chat on a closed group or channel (docs/development/group-closed-state.md).
+enum ClosedChatDeleteTarget: Identifiable, Hashable {
+    case group(GroupSpaceSummary)
+    case channel(ConversationSummary)
+
+    var id: String {
+        switch self {
+        case .group(let space): return "group:\(space.id)"
+        case .channel(let conversation): return conversation.sessionId
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .group(let space): return space.displayName
+        case .channel(let conversation): return conversation.displayName
+        }
     }
 }
 

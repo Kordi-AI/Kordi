@@ -23,8 +23,10 @@ export type SessionContextMenuTarget = {
   muted?: boolean;
   unread?: boolean;
   /** An agent's personal session: read state and mute only. */ personalAgent?: { agentId: string };
-  /** A group channel other than its first, for a group admin: it can be dissolved. */
+  /** A group channel other than its first, for a group admin: it can be closed. */
   dissolvableChannel?: { groupSpaceId: string };
+  /** The chat belongs to a closed group: deleting it leaves the group. */
+  closedGroup?: boolean;
 };
 
 export type GroupContextMenuTarget = {
@@ -36,12 +38,18 @@ export type GroupContextMenuTarget = {
   archived?: boolean;
   pinned?: boolean;
   muted?: boolean;
+  /** The group was closed: the menu keeps Pin, Archive and Delete chat. */
+  closed?: boolean;
+  /** The chat Delete chat removes for a closed group, which leaves it. */
+  deleteSessionId?: string;
 };
 
 export type SessionActionTarget = {
   sessionId: string;
   sessionName: string;
   anchorRect?: AppDialogAnchor | null;
+  /** Deleting leaves a closed group: it does not come back. */
+  closedGroup?: boolean;
 };
 
 type SessionContextMenuProps = {
@@ -161,6 +169,7 @@ export function SessionContextMenu({
               sessionId: target.sessionId,
               sessionName: target.sessionName,
               anchorRect: { left: target.x, top: target.y, width: 1, height: 1 },
+              ...(target.closedGroup ? { closedGroup: true } : {}),
             });
           }}
         >
@@ -170,7 +179,7 @@ export function SessionContextMenu({
         {target.dissolvableChannel && onDissolveChannel ? (
           <button
             type="button"
-            data-session-context-action="dissolve-channel"
+            data-session-context-action="close-channel"
             className="app-dense-menu-row app-dense-menu-danger"
             onClick={() => {
               onClose();
@@ -183,7 +192,7 @@ export function SessionContextMenu({
             }}
           >
             <CircleOff aria-hidden="true" />
-            Dissolve channel
+            Close channel
           </button>
         ) : null}
       </div>
@@ -199,6 +208,7 @@ export function GroupContextMenu({
   onMarkRead,
   onArchive,
   onRestore,
+  onDelete,
 }: {
   target: GroupContextMenuTarget;
   onClose: () => void;
@@ -207,7 +217,10 @@ export function GroupContextMenu({
   onMarkRead: (sessionIds: string[]) => void;
   onArchive: (groupSpaceId: string, sessionIds: string[]) => void;
   onRestore: (groupSpaceId: string, sessionIds: string[]) => void;
+  /** Offered for a closed group only. */
+  onDelete?: (target: SessionActionTarget) => void;
 }) {
+  const deleteSessionId = target.closed ? target.deleteSessionId?.trim() : '';
   const run = (action: () => void) => {
     onClose();
     action();
@@ -236,7 +249,7 @@ export function GroupContextMenu({
             {target.pinned ? 'Unpin group' : 'Pin group'}
           </button>
         ) : null}
-        <button
+        {target.closed ? null : <button
           type="button"
           data-group-context-action="read"
           className="app-dense-menu-row"
@@ -244,8 +257,8 @@ export function GroupContextMenu({
         >
           <CheckCircle2 aria-hidden="true" />
           Mark group as read
-        </button>
-        <button
+        </button>}
+        {target.closed ? null : <button
           type="button"
           data-group-context-action="mute"
           className="app-dense-menu-row"
@@ -259,7 +272,7 @@ export function GroupContextMenu({
             ? <Bell aria-hidden="true" />
             : <BellOff aria-hidden="true" />}
           {target.muted ? 'Unmute group' : 'Mute group'}
-        </button>
+        </button>}
         <button
           type="button"
           data-group-context-action={target.archived ? 'restore' : 'archive'}
@@ -275,6 +288,25 @@ export function GroupContextMenu({
             : <Archive aria-hidden="true" />}
           {target.archived ? 'Restore group' : 'Archive group'}
         </button>
+        {deleteSessionId && onDelete ? (
+          <>
+            <div className="app-dense-menu-divider" />
+            <button
+              type="button"
+              data-group-context-action="delete"
+              className="app-dense-menu-row app-dense-menu-danger"
+              onClick={() => run(() => onDelete({
+                sessionId: deleteSessionId,
+                sessionName: target.groupName,
+                anchorRect: { left: target.x, top: target.y, width: 1, height: 1 },
+                closedGroup: true,
+              }))}
+            >
+              <Trash2 aria-hidden="true" />
+              Delete chat
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -371,7 +403,9 @@ export function DeleteSessionDialog({ target, onCancel, onConfirm }: DeleteSessi
     >
       <AppDialogTitle id="remove-chat-dialog-title" className="text-[13px] leading-5">Delete this chat from your list?</AppDialogTitle>
       <p className="app-transient-muted mt-2 text-[11px] leading-4">
-        This does not delete it for other participants. It will return only when a new visible message arrives.
+        {target.closedGroup
+          ? 'It leaves your chat list. Others keep it.'
+          : 'This does not delete it for other participants. It will return only when a new visible message arrives.'}
       </p>
       {error ? (
         <ErrorLine className="mt-2">{error}</ErrorLine>

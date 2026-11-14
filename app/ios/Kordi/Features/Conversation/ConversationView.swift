@@ -265,6 +265,7 @@ struct ConversationView: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.timeZone) private var timeZone
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
     private let initialConversation: ConversationSummary
     private let initialMessageID: String?
     private let showsThreadUnreadDivider: Bool
@@ -276,6 +277,9 @@ struct ConversationView: View {
     private let onNavigateThread: ((String, String?) -> Void)?
     private let onReplyInConversation: ((MessageActionSource) -> Void)?
     private let onOpenSessionDetails: ((ConversationSummary) -> Void)?
+    /// Leaves this screen after Delete chat on a closed chat; defaults to `dismiss`.
+    private let onClosedChatDeleted: ((ClosedChatDeleteTarget) -> Void)?
+    @State private var closedDeleteTarget: ClosedChatDeleteTarget?
     @State private var draft = ""
     @State private var isSending = false
     @State private var stagedMessageIDs: [String] = []
@@ -407,9 +411,11 @@ struct ConversationView: View {
         scopedThreadRootMessageID: String? = nil,
         onNavigateThread: ((String, String?) -> Void)? = nil,
         onReplyInConversation: ((MessageActionSource) -> Void)? = nil,
-        onOpenSessionDetails: ((ConversationSummary) -> Void)? = nil
+        onOpenSessionDetails: ((ConversationSummary) -> Void)? = nil,
+        onClosedChatDeleted: ((ClosedChatDeleteTarget) -> Void)? = nil
     ) {
         initialConversation = conversation
+        self.onClosedChatDeleted = onClosedChatDeleted
         self.initialMessageID = initialMessageID
         self.showsThreadUnreadDivider = showsThreadUnreadDivider
         self.companionContext = companionContext
@@ -855,7 +861,17 @@ struct ConversationView: View {
                 .contentShape(Rectangle())
 
                 if selectedMessageIDs.isEmpty {
-                    if !isWaitingForLinkedBackgroundSession {
+                    if model.isConversationClosed(conversation) {
+                        ClosedConversationBar(
+                            groupClosed: {
+                                if case .group = model.closedChatDeleteTarget(for: conversation) { return true }
+                                return false
+                            }(),
+                            showsDelete: scopedThreadRootMessageID == nil
+                        ) {
+                            closedDeleteTarget = model.closedChatDeleteTarget(for: conversation)
+                        }
+                    } else if !isWaitingForLinkedBackgroundSession {
                         ComposerView(
                             text: $draft,
                             attachments: $attachments,
@@ -1369,6 +1385,9 @@ struct ConversationView: View {
             synchronizeReadPresentation()
         }
         let conversationPresentations = conversationLifecycle
+        .closedChatDeleteConfirmation($closedDeleteTarget) { deleted in
+            if let onClosedChatDeleted { onClosedChatDeleted(deleted) } else { dismiss() }
+        }
         .fileImporter(
             isPresented: $showFileImporter,
             allowedContentTypes: [.item],
@@ -4255,5 +4274,36 @@ private struct NavigationMinimalBackButtonBridge: UIViewControllerRepresentable 
                 candidate = controller.parent
             }
         }
+    }
+}
+
+/// Replaces the composer in a closed group or channel; the history stays readable.
+struct ClosedConversationBar: View {
+    /// The whole group was closed, not only this channel.
+    var groupClosed = true
+    let showsDelete: Bool
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(groupClosed ? "This group was closed" : "This channel was closed")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+            if showsDelete {
+                Button("Delete chat", action: onDelete)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.red)
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("closed-chat-delete")
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 46)
+        .background(Color(uiColor: .secondarySystemBackground), in: Capsule())
+        .padding(.horizontal, 10)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("closed-conversation-bar")
     }
 }

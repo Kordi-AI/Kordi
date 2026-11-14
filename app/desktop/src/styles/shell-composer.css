@@ -207,3 +207,33 @@
   background: rgba(245, 158, 11, 0.14);
   color: rgb(254 243 199);
 }
+
+/* A closed group or channel: one line in place of the composer. */
+.app-closed-conversation-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  height: 46px;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--app-sidebar-selected-bg) 55%, transparent);
+  color: var(--app-sidebar-preview-text);
+  font-size: 12.5px;
+}
+
+.app-closed-conversation-delete {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 2px 4px;
+  color: var(--app-danger-text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.app-closed-conversation-delete:hover,
+.app-closed-conversation-delete:focus-visible {
+  outline: none;
+  background: color-mix(in oklab, var(--app-sidebar-selected-bg) 80%, transparent);
+}

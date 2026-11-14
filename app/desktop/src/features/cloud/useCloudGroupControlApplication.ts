@@ -385,6 +385,7 @@ export function useCloudGroupControlApplication({
       catalogGroupTitle?: string | null;
       catalogGroupAvatar?: CloudGroupControlEnvelope['groupAvatar'];
       catalogGroupOrigin?: string | null;
+      catalogGroupClosedAt?: string | null;
       replay?: BrowserGroupHistoryReplay;
     } = {},
   ) => {
@@ -407,6 +408,7 @@ export function useCloudGroupControlApplication({
       catalogGroupTitle: options.catalogGroupTitle,
       catalogGroupAvatar: options.catalogGroupAvatar,
       catalogGroupOrigin: options.catalogGroupOrigin,
+      catalogGroupClosedAt: options.catalogGroupClosedAt,
       runtime: {
         account,
         client,

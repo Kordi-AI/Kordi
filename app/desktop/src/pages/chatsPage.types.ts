@@ -97,6 +97,8 @@ export type ChatsPageSession = {
   setDesktopSessionRenameDraft: Dispatch<SetStateAction<string>>;
   onRenameDesktopSession: (baselineName: string) => Promise<void>;
   onRenameChatSession: (sessionId: string, title: string) => Promise<void>;
+  /** Delete chat; on a closed group it leaves the group. */
+  onDeleteChatSession?: (sessionId: string) => Promise<void>;
 };
 
 export type ChatsPageTranscript = {

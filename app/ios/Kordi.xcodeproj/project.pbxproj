@@ -367,6 +367,7 @@
 		BADCC945C605ECC12EA2DA54 /* ProviderLoginPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A5680CB41441ABA9ECC9151 /* ProviderLoginPolicy.swift */; };
 		BAE153F27E5E1485C3D5424F /* ConversationMotionProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE9C2F4A6D2AEEB995AC122B /* ConversationMotionProbe.swift */; };
 		BB05DE1C9AF4979FDDBB3C3C /* AgentModelRouteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6135C6E8792F750CC351DC28 /* AgentModelRouteUITests.swift */; };
+		BB132476E42D0927DDA9846A /* GroupClosedStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3174170DC55B893267D5D8BB /* GroupClosedStateTests.swift */; };
 		BBABE1A5AB1150B025556056 /* ProviderLoginController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79311A2E20AB174050C9F8A1 /* ProviderLoginController.swift */; };
 		BC01C5D7FB643F5F18C116FE /* blob-emoji in Resources */ = {isa = PBXBuildFile; fileRef = 3D5D26C1845AB19D9120CB8D /* blob-emoji */; };
 		BD168B3F6BE8A731506F7A3A /* ChatRowSwipeGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DECAF58B49CE2DE63185B4C /* ChatRowSwipeGesture.swift */; };
@@ -648,6 +649,7 @@
 		30170A4D2C1A1AF7B87BF136 /* noto-emoji */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "noto-emoji"; path = "Kordi/Resources/noto-emoji"; sourceTree = SOURCE_ROOT; };
 		309CD0A7C2C6D11A2519E80E /* PersonalAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalAgentTests.swift; sourceTree = "<group>"; };
 		310F9B146798BBE0C0C3F2B2 /* CommonGroundTileHue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundTileHue.swift; sourceTree = "<group>"; };
+		3174170DC55B893267D5D8BB /* GroupClosedStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupClosedStateTests.swift; sourceTree = "<group>"; };
 		328D64891C42264C1660455B /* ConversationTimelineVirtualizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTimelineVirtualizationTests.swift; sourceTree = "<group>"; };
 		330FA05DEA807B716B3BA48B /* CommonGroundNearbyLocator+Background.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommonGroundNearbyLocator+Background.swift"; sourceTree = "<group>"; };
 		3310BE41F1F31B92D8D6151B /* ForwardMessageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForwardMessageSheet.swift; sourceTree = "<group>"; };
@@ -1639,6 +1641,7 @@
 				D3BDEA26F6B2936B8130310A /* EmojiAnimationTests.swift */,
 				5FF8982F88272CFCECE0D898 /* GroupAgentTargetTests.swift */,
 				216678652A940F2F115F8A26 /* GroupAvatarTests.swift */,
+				3174170DC55B893267D5D8BB /* GroupClosedStateTests.swift */,
 				2FE8118A29D27F692382BAD6 /* GroupInviteTests.swift */,
 				FD8D24A6689116C11FF7A038 /* InitialAgentModelNoticeTests.swift */,
 				1B3BED33D4A29116EAD073A0 /* KordiAppEnvironmentTests.swift */,
@@ -2239,6 +2242,7 @@
 				43AD849D638FA91F9791A089 /* EmojiAnimationTests.swift in Sources */,
 				7450B6513CBD85BE88B9D802 /* GroupAgentTargetTests.swift in Sources */,
 				0BC208ED5A89747823F3B780 /* GroupAvatarTests.swift in Sources */,
+				BB132476E42D0927DDA9846A /* GroupClosedStateTests.swift in Sources */,
 				0AB588921F99386970D8A100 /* GroupInviteTests.swift in Sources */,
 				BA1EBAE68A68B522D0B2C8C8 /* InitialAgentModelNoticeTests.swift in Sources */,
 				F72232A5E55E5DDBF7C08493 /* KordiAppEnvironmentTests.swift in Sources */,
