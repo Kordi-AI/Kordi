@@ -610,6 +610,49 @@ final class ComposerMentionTargetCatalogTests: XCTestCase {
         XCTAssertFalse(targets.contains { $0.agentId == "cloud-agent:acct_group_only" })
     }
 
+    func testGroupMemberDefaultAgentIsMentionableWithoutAContactWhenOpen() {
+        let participants = [
+            CloudGroupParticipant(accountId: "acct_me", displayName: "Me", avatarUrl: nil, role: "self"),
+            CloudGroupParticipant(accountId: "acct_contact", displayName: "Contact", avatarUrl: nil, role: "member"),
+            CloudGroupParticipant(accountId: "acct_room", displayName: "Alex Rivera", avatarUrl: nil, role: "member"),
+            CloudGroupParticipant(accountId: "acct_private", displayName: "Private", avatarUrl: nil, role: "member"),
+        ]
+        // The server lists only open default agents; acct_private is absent.
+        let open = [
+            groupMemberDefaultAgent(owner: "acct_room", ownerName: "Alex Rivera"),
+            groupMemberDefaultAgent(owner: "acct_contact", ownerName: "Contact"),
+        ]
+        let targets = ComposerMentionTargetCatalog.targets(
+            account: account,
+            conversation: conversation(kind: .group, peerAccountID: "acct_room", participants: participants),
+            ownedAgents: [],
+            sharedAgents: [],
+            contacts: [contact(accountID: "acct_contact", name: "Contact")],
+            groupMemberDefaultAgents: open
+        )
+
+        let agents = targets.filter { $0.kind == .agent }
+        XCTAssertEqual(
+            agents.map(\.id).sorted(),
+            ["agent:cloud-agent:acct_contact", "agent:cloud-agent:acct_me", "agent:cloud-agent:acct_room"]
+        )
+        let room = agents.first { $0.agentId == "cloud-agent:acct_room" }
+        XCTAssertEqual(room?.displayName, "Alex Rivera's Kordi")
+        XCTAssertEqual(room?.accountId, "acct_room")
+        XCTAssertNotNil(room?.avatarSource)
+
+        // Outside group chats, a default agent still needs a contact.
+        let direct = ComposerMentionTargetCatalog.targets(
+            account: account,
+            conversation: conversation(kind: .person, peerAccountID: "acct_room"),
+            ownedAgents: [],
+            sharedAgents: [],
+            contacts: [],
+            groupMemberDefaultAgents: open
+        )
+        XCTAssertFalse(direct.contains { $0.agentId == "cloud-agent:acct_room" })
+    }
+
     func testOwnerIDsIncludeGroupOnlyParticipantsAndRemoveDuplicates() {
         let conversation = conversation(
             kind: .group,
@@ -729,6 +772,17 @@ final class ComposerMentionTargetCatalogTests: XCTestCase {
         )
     }
 
+    private func groupMemberDefaultAgent(owner: String, ownerName: String) -> CloudGroupMemberDefaultAgent {
+        CloudGroupMemberDefaultAgent(
+            agentId: "cloud-agent:\(owner)",
+            ownerAccountId: owner,
+            ownerDisplayName: ownerName,
+            name: "Kordi",
+            avatar: mentionTestAgentAvatar(entityId: "cloud-agent:\(owner)"),
+            isDefaultAgent: true
+        )
+    }
+
     private func contact(accountID: String, name: String) -> CloudContact {
         CloudContact(
             accountId: accountID,
@@ -766,6 +820,23 @@ final class CloudSharedAgentLookupTests: XCTestCase {
         XCTAssertEqual(batches.map(\.count), [50, 50, 1])
         XCTAssertEqual(Set(batches.flatMap { $0 }), Set(owners))
     }
+
+    func testGroupMemberDefaultAgentLookupKeepsOnlyDefaultAgents() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SharedAgentsURLProtocol.self]
+        let client = CloudAPIClient(
+            baseURL: URL(string: "http://127.0.0.1:17081")!,
+            session: URLSession(configuration: configuration)
+        )
+
+        let agents = try await client.listGroupMemberDefaultAgents(
+            token: "test-session",
+            ownerAccountIds: ["acct_alex", "acct_bea"]
+        )
+
+        XCTAssertEqual(agents.map(\.agentId), ["cloud-agent:acct_alex", "cloud-agent:acct_bea"])
+        XCTAssertTrue(agents.allSatisfy { $0.isDefaultAgent == true })
+    }
 }
 
 private final class SharedAgentsURLProtocol: URLProtocol {
@@ -799,7 +870,10 @@ private final class SharedAgentsURLProtocol: URLProtocol {
         Self.ownerBatches.append(owners)
         Self.lock.unlock()
 
-        let agents = owners.map { owner in
+        let includeDefaults = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .contains(where: { $0.name == "includeDefaultAgents" && $0.value == "true" }) == true
+        var agents: [[String: Any]] = owners.map { owner in
             [
                 "agentId": "agent_\(owner)",
                 "ownerAccountId": owner,
@@ -820,6 +894,31 @@ private final class SharedAgentsURLProtocol: URLProtocol {
                     "updatedAt": "2026-08-17T00:00:00Z"
                 ]
             ]
+        }
+        if includeDefaults {
+            agents += owners.map { owner in
+                [
+                    "agentId": "cloud-agent:\(owner)",
+                    "ownerAccountId": owner,
+                    "ownerDisplayName": owner,
+                    "accessScope": "participant_conversations",
+                    "name": "Kordi",
+                    "role": "Default agent",
+                    "updatedAt": "2026-08-17T00:00:00Z",
+                    "isDefaultAgent": true,
+                    "avatar": [
+                        "entityType": "agent",
+                        "entityId": "cloud-agent:\(owner)",
+                        "source": "generated",
+                        "style": "thumbs",
+                        "seed": "default-agent-\(owner)",
+                        "rendererVersion": CanonicalAvatarSystem.rendererVersion,
+                        "uploadedAsset": NSNull(),
+                        "version": 1,
+                        "updatedAt": "2026-08-17T00:00:00Z"
+                    ]
+                ]
+            }
         }
         let payload = try! JSONSerialization.data(withJSONObject: ["agents": agents])
         let response = HTTPURLResponse(

@@ -135,10 +135,11 @@ export class CloudAgentsClient {
       .filter((agent): agent is CloudAgentDefinition => Boolean(agent));
   }
 
+  /** Factory agents shared in conversations, plus the default agents of group co-members. */
   async listSharedCloudAgents(token: string, ownerAccountIds: string[]): Promise<SharedCloudAgentSummary[]> {
     const owners = [...new Set(ownerAccountIds.map((value) => value.trim()).filter(Boolean))];
     if (owners.length === 0) return [];
-    const body = await this.send<CloudAgentListResponse>(`/v1/cloud/agents/shared?ownerAccountIds=${encodeURIComponent(owners.join(','))}`, {
+    const body = await this.send<CloudAgentListResponse>(`/v1/cloud/agents/shared?ownerAccountIds=${encodeURIComponent(owners.join(','))}&includeDefaultAgents=true`, {
       method: 'GET',
       headers: this.authHeaders(token),
     }, 'Could not list shared Agents.');
