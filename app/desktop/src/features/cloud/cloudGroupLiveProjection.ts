@@ -1,5 +1,5 @@
 import { cloudAgentTurnReplyText } from './cloudAgentReplyText';
-import { agentExchangeTurnIsYielding } from './agentExchangeOutcome';
+import { agentExchangeTurnIsWaiting, agentExchangeTurnIsYielding } from './agentExchangeOutcome';
 import type { CanonicalSessionState, DesktopChatTurnSnapshot } from '@/kordi-app/types';
 import { isTerminalCloudAgentTurn } from '@/features/canonical/cloudAgentTurnLifecycle';
 import { cloudGroupAgentRuntimeSessionId } from './cloudAgentRuntime';
@@ -31,6 +31,10 @@ export function projectCloudGroupLiveTurns(
     if (!turn.sessionId.endsWith(suffix)) return message;
     const scope = turn.sessionId.slice(0, -suffix.length);
     if (scope !== base && !scope.startsWith(`${base}:cloud_agent_`)) return message;
+    // Once the turn has yielded, the server's slot says whom it waits for and
+    // when it resumes; the finished local turn no longer speaks for it.
+    if (turn.completed && agentExchangeTurnIsWaiting(turn)
+      && typeof record(message.content).agentExchangeStatus === 'string') return message;
     changed = true;
     return withLiveTurn(message, turn);
   });

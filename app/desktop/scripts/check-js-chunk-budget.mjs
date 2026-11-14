@@ -94,7 +94,9 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // and the shared unanswered-request state) adds 1.2 kB with the community profile, so it moves to 5.958 MB.
 // Offering group members' default agents in the @ menu and ending a refused agent request at once add
 // 0.2 kB, so it moves to 5.959 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_959_000;
+// One agent task row (a yield or reply kept in its processing row, which a member's cleanup leaves
+// in place) adds under 1 kB, so it moves to 5.961 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_961_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -136,7 +138,8 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The same Digest notification permission line adds 0.2 kB over it there, so it moves to 5.984 MB.
 // Offering group members' default agents in the @ menu, refreshing it on open and focus, and ending a
 // refused agent request at once add 0.2 kB there, so it moves to 5.985 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_985_000;
+// The same single agent task row adds under 1 kB there, so it moves to 5.987 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_987_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
