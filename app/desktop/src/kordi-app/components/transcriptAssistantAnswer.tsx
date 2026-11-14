@@ -10,6 +10,7 @@ import { useSupportReportSubmission } from '@/features/support/supportReportSubm
 import { cn } from '@/lib/utils';
 import { MarkdownContent } from './markdown';
 import type { MessageMention } from '../types';
+import { KORDI_SUPPORT_NAME } from '@/features/support/supportIdentity';
 
 const ASSISTANT_ANSWER_FOLDED_VISIBLE_LINES = 6;
 
@@ -58,9 +59,9 @@ export function SupportContactTypingIndicator() {
       className="app-support-contact-typing"
       data-support-contact-typing="true"
       role="status"
-      aria-label="Kordi Support is typing"
+      aria-label={`${KORDI_SUPPORT_NAME} is typing`}
     >
-      <span className="sr-only">Kordi Support is typing</span>
+      <span className="sr-only">{KORDI_SUPPORT_NAME} is typing</span>
       <span className="app-support-contact-typing-dot app-support-contact-typing-dot-1" aria-hidden="true" />
       <span className="app-support-contact-typing-dot app-support-contact-typing-dot-2" aria-hidden="true" />
       <span className="app-support-contact-typing-dot app-support-contact-typing-dot-3" aria-hidden="true" />

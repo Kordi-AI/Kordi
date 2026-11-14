@@ -1,6 +1,6 @@
 # Service models on Google Cloud
 
-Kordi Support and Grounding/System can use Vertex AI Chat Completions with
+KordiSpot and Grounding/System can use Vertex AI Chat Completions with
 Google Cloud workload identity. Member-owned provider accounts are unaffected.
 The two services keep their existing account and agent IDs, so switching the
 provider preserves their conversations and ownership boundaries.

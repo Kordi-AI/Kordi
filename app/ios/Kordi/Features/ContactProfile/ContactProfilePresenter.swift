@@ -131,7 +131,7 @@ enum ContactProfileRoute: Hashable {
 }
 
 /// The header of a chat opens the contact profile page for a person and the
-/// session details page for everything else (agents, groups, Kordi Support).
+/// session details page for everything else (agents, groups, KordiSpot).
 struct ConversationDetailsPage: View {
     @EnvironmentObject private var model: AppModel
     let conversation: ConversationSummary

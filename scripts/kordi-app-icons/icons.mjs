@@ -138,11 +138,29 @@ export function inlineMarkDataUrl() {
   return `data:image/svg+xml,${svg.replace(/%/g, '%25').replace(/#/g, '%23').replace(/</g, '%3C').replace(/>/g, '%3E')}`;
 }
 
-// Kordi Support avatar: the ink bird on white.
+// Question mark centred on the origin: a stroked hook and stem, then the dot.
+function questionMarkMarkup({ x, y, scale, color, width }) {
+  return `<g transform="translate(${x},${y}) scale(${scale})">`
+    + `<path d="M-32,-34 C-32,-72 32,-72 32,-36 C32,-10 0,-4 0,20" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`
+    + `<circle cx="0" cy="56" r="${width * 0.62}" fill="${color}"/></g>`;
+}
+
+// KordiSpot avatar: the ink bird on white, its wing an amber question mark.
+// iOS draws the same shapes in `KordiMark` (`KordiBirdWing.questionMark`).
 export function supportAvatarSvg() {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" fill="#ffffff"/>
-  <g transform="translate(36,36) scale(0.86)">${birdMarkup({ shadow: false })}</g>
+  <g transform="translate(36,36) scale(0.86)"><defs>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="-100" y="-100" width="712" height="712">
+      <g fill="#fff" stroke="#fff">${BODY}${TAIL}</g>
+      <g fill="#000">${EYE}</g>
+    </mask>
+  </defs>
+  <g transform="${PLACE}">
+    <g fill="${AMBER}" stroke="${AMBER}">${BEAK}</g>
+    <rect x="-100" y="-100" width="712" height="712" fill="${INK}" mask="url(#cut)"/>
+    ${questionMarkMarkup({ x: 324, y: 300, scale: 1.06, color: AMBER, width: 25 })}
+  </g></g>
 </svg>
 `;
 }
