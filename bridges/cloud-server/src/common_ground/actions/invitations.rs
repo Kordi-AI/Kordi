@@ -1,5 +1,6 @@
-//! Room group invitations outside the room: the viewer's pending ones across
-//! rooms, listed in Contacts › Requests, and declining one.
+//! Group invitations outside the room: the viewer's pending ones across
+//! rooms, and live invitations from people (see `group_invites`), listed
+//! together in Contacts › Requests, and declining a room one.
 
 use std::sync::Arc;
 
@@ -14,6 +15,7 @@ use serde_json::json;
 use sqlx_core::query_as::query_as;
 use uuid::Uuid;
 
+use super::group_invites::pending_group_invitations;
 use super::room_view::group_members;
 use crate::auth::routes::CloudSession;
 use crate::common_ground::people::person;
@@ -34,9 +36,11 @@ type PendingRow = (
     DateTime<Utc>,
 );
 
-/// `GET /v1/cloud/common-ground/invitations`: room group invitations the
-/// viewer has not answered, newest first. Only rooms the viewer is still in
-/// count, and only groups they are not already in, through a live link.
+/// `GET /v1/cloud/common-ground/invitations`: group invitations the viewer
+/// has not answered, newest first: room ones (`kind` "room"; only rooms the
+/// viewer is still in count, and only groups they are not already in,
+/// through a live link) and live ones from people (`kind` "group"). When a
+/// group has both, only the room one is listed.
 pub(in crate::common_ground) async fn pending(
     State(state): State<Arc<ServerState>>,
     Extension(session): Extension<CloudSession>,
@@ -96,7 +100,7 @@ pub(in crate::common_ground) async fn pending(
         Ok(counts) => counts.into_iter().collect(),
         Err(error) => return db_error(error),
     };
-    let invitations: Vec<_> = rows
+    let mut invitations: Vec<(DateTime<Utc>, serde_json::Value)> = rows
         .into_iter()
         .map(
             |(
@@ -112,7 +116,8 @@ pub(in crate::common_ground) async fn pending(
                 avatar,
                 created_at,
             )| {
-                json!({
+                let invitation = json!({
+                    "kind": "room",
                     "invitationRef": reference,
                     "code": code,
                     "roomName": room_name,
@@ -123,9 +128,30 @@ pub(in crate::common_ground) async fn pending(
                     "memberCount": counts.get(&conversation).copied().unwrap_or(0),
                     "from": person(&from, from_name.as_deref(), from_handle.as_deref(), avatar.as_deref()),
                     "createdAt": created_at,
-                })
+                });
+                (created_at, invitation)
             },
         )
+        .collect();
+    let from_people = match pending_group_invitations(pool, &session.account_id).await {
+        Ok(from_people) => from_people,
+        Err(error) => return db_error(error),
+    };
+    let room_spaces: std::collections::HashSet<String> = invitations
+        .iter()
+        .filter_map(|(_, invitation)| invitation["groupSpaceId"].as_str().map(str::to_string))
+        .collect();
+    invitations.extend(
+        from_people
+            .into_iter()
+            .filter(|(_, space, _)| !room_spaces.contains(space))
+            .map(|(created_at, _, invitation)| (created_at, invitation)),
+    );
+    // Stable, so room invitations keep their order among equal times.
+    invitations.sort_by(|a, b| b.0.cmp(&a.0));
+    let invitations: Vec<_> = invitations
+        .into_iter()
+        .map(|(_, invitation)| invitation)
         .collect();
     (StatusCode::OK, Json(json!({ "invitations": invitations }))).into_response()
 }

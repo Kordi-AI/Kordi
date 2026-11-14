@@ -137,6 +137,17 @@ Routes under `/v1/cloud/common-ground/`. Every person returned in Common ground 
 - `POST rooms/:code/group`: Start group; adds your contacts and invites the other room members. An optional `topic` records the room topic the group is for.
 - `POST rooms/:code/invitations/:ref/join`: Join; accepts a room group invitation addressed to you.
 
+### Inviting Grounding people into groups
+
+An active owner or admin of a group invites people they share Grounding with: both still in the same room, a pairing, or a match they opened, with no block either way and only when the person lets them see their card. Contacts are added directly; everyone else gets an invitation (`cloud_common_ground_group_invitations`, migration 0202) that they join or decline from Contacts › Requests.
+
+- `GET people/:id/groups`: the person-page picker. `contact`, and up to 100 groups you own or administer, newest activity first, each with `groupSpaceId`, `conversationId`, `name`, `memberCount`, up to four `members` (owner first) and `state` (`member`, `invited` or null) for that person. 404 `common_ground_person_not_found` unless you may invite them.
+- `GET group-people?groupSpaceId=…`: Group › Add people. Up to 100 people you may invite who are not your contacts, not in the group and not blocked with anyone in it, each as `{ person, source, invited }`. `source` is the most recent room you both are still in; null for a match or pairing. Rooms come first.
+- `POST group-invitations` with `{ groupSpaceId, accountIds }` (1 to 20 ids): returns `invited` (including ones already pending), `added` (contacts) and `skipped` with a `reason`: `member`, `declined` (the person declined an invitation to this group before), `unavailable` (not invitable, or blocked with someone in the group; never says who) or `limit` (50 live pending invitations per inviter). At most 20 requests that create an invitation per hour. 403 `common_ground_group_forbidden` unless you own or administer the group.
+- `GET invitations` lists room invitations with `kind: "room"` and live person invitations with `kind: "group"` (`code` null, `roomName` the room you were invited from or null) together, newest first. When a group has both, only the room one is listed.
+- `POST group-invitations/:id/join` and `.../decline`: invitee only. An invitation is live only while its inviter is still an owner or admin and the invitee is not in the group; joining a stale one withdraws it and answers 404 "This invitation is no longer available." A block with anyone in the group answers 400 `common_ground_invitation_unavailable`, a full group 409 `common_ground_group_full`. Declining is quiet: the inviter is not told, and the same group cannot invite that person again.
+- **Hint.** `common_ground.invitations.updated` (`{}`) goes to the invitee when an invitation is created, and to their own account after they join or decline, so their devices refresh `GET invitations`.
+
 ### Matching
 
 - A `cg_match_` run matches one viewer with up to 8 people; a `cg_room_` run finds a room's themes. Results are stored per pair of profiles and count only while both cards are at the revisions they were computed from.

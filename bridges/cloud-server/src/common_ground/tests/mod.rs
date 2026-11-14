@@ -15,6 +15,8 @@ mod contact_permission_tests;
 pub(crate) mod db_fixture;
 mod flow_tests;
 mod group_intro_tests;
+mod group_invitation_support;
+mod group_invitation_tests;
 mod group_origin_tests;
 mod join_request_support;
 mod join_request_tests;

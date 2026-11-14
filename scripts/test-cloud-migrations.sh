@@ -101,6 +101,7 @@ tests=(
   memory_tests::upgrade_after_197_backfills_missing_memory_categories
   common_ground_rematch_tests::upgrade_from_199_adds_card_rematch_marks
   common_ground_join_request_tests::upgrade_from_200_adds_room_join_requests
+  common_ground_group_invitation_tests::upgrade_from_201_adds_group_invitations
 )
 index=0
 for test_name in "${tests[@]}"; do

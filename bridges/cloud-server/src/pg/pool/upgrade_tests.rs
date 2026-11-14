@@ -9,6 +9,7 @@ mod account_handle_tests;
 mod agent_avatar_tests;
 mod apple_token_tests;
 mod common_ground_daily_tests;
+mod common_ground_group_invitation_tests;
 mod common_ground_join_request_tests;
 mod common_ground_nearby_tests;
 mod common_ground_rematch_tests;
