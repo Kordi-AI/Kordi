@@ -33,6 +33,9 @@ type PublishedSubsessionRow = (
 );
 
 type ApiError = (StatusCode, Json<Value>);
+/// Request id prefix of a background task's follow-up turn on the Mac.
+const FOLLOW_UP_REQUEST_PREFIX: &str =
+    crate::document_shares::agents::create::reply::FOLLOW_UP_PREFIX;
 fn error(status: StatusCode, code: &str) -> ApiError {
     (status, Json(json!({"error":{"code":code,"message":code}})))
 }
@@ -151,6 +154,36 @@ fn payload(body: &str) -> Option<Value> {
     } else {
         Some(value)
     }
+}
+
+/// The person's request a background session answers. A task started from a
+/// follow-up turn names that turn's request, `background-result:<session>:
+/// <status>`; it answers the request of the background session it reports
+/// on, in the same conversation and by the same owner.
+async fn root_request(
+    pool: &PgPool,
+    conversation_id: Uuid,
+    owner: &str,
+    request_id: &str,
+) -> Result<String, ApiError> {
+    let reported = request_id
+        .strip_prefix(FOLLOW_UP_REQUEST_PREFIX)
+        .and_then(|rest| rest.rsplit_once(':'))
+        .and_then(|(session, _status)| Uuid::parse_str(session).ok());
+    let Some(reported) = reported else {
+        return Ok(request_id.to_string());
+    };
+    let root: Option<(String,)> = query_as(
+        "SELECT parent_request_id FROM cloud_agent_subsessions \
+         WHERE subsession_id=$1 AND parent_conversation_id=$2 AND owner_account_id=$3",
+    )
+    .bind(reported)
+    .bind(conversation_id)
+    .bind(owner)
+    .fetch_optional(pool)
+    .await
+    .map_err(db_error)?;
+    Ok(root.map_or_else(|| request_id.to_string(), |(root,)| root))
 }
 
 async fn request_agent(
@@ -383,6 +416,13 @@ async fn write(
         .await
         .map_err(db_error)?
         .ok_or_else(|| error(StatusCode::FORBIDDEN, "subsession_parent_forbidden"))?;
+    let parent_request = root_request(
+        pool,
+        parent,
+        &session.account_id,
+        &request.parent_request_id,
+    )
+    .await?;
     let existing: Option<PublishedSubsessionRow> = query_as(
         "SELECT owner_account_id, publisher_device_id, parent_conversation_id, parent_request_id, agent_id, version, title, status, messages FROM cloud_agent_subsessions WHERE subsession_id=$1 FOR UPDATE"
     ).bind(id).fetch_optional(&mut *transaction).await.map_err(db_error)?;
@@ -391,7 +431,7 @@ async fn write(
         owner,
         _creator_device,
         conversation,
-        parent_request,
+        stored_request,
         _agent,
         version,
         title,
@@ -402,7 +442,7 @@ async fn write(
         if _creator_device != session.device_id
             || owner != session.account_id
             || conversation != parent
-            || parent_request != request.parent_request_id
+            || stored_request != parent_request
         {
             return Err(error(
                 StatusCode::FORBIDDEN,
@@ -426,15 +466,9 @@ async fn write(
         if request.expected_version != 0 {
             return Err(error(StatusCode::CONFLICT, "subsession_version_conflict"));
         }
-        let agent_id = request_agent(
-            pool,
-            parent,
-            &request.parent_request_id,
-            &session.account_id,
-        )
-        .await?;
+        let agent_id = request_agent(pool, parent, &parent_request, &session.account_id).await?;
         let changed = query("INSERT INTO cloud_agent_subsessions(subsession_id,parent_conversation_id,parent_session_id,parent_request_id,owner_account_id,publisher_device_id,agent_id,title,status,messages,execution_started_at,execution_finished_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE((SELECT to_timestamp(min((m->>'timestampMs')::double precision)/1000) FROM jsonb_array_elements($10::jsonb) m WHERE (m->>'timestampMs')::bigint>0),now()),CASE WHEN $9<>'running' THEN COALESCE((SELECT to_timestamp(max((m->>'timestampMs')::double precision)/1000) FROM jsonb_array_elements($10::jsonb) m WHERE m->>'role'='assistant' AND (m->>'timestampMs')::bigint>0),now()) END) ON CONFLICT DO NOTHING")
-            .bind(id).bind(parent).bind(&request.parent_session_id).bind(&request.parent_request_id).bind(&session.account_id).bind(&session.device_id).bind(agent_id).bind(&request.title).bind(&request.status).bind(messages)
+            .bind(id).bind(parent).bind(&request.parent_session_id).bind(&parent_request).bind(&session.account_id).bind(&session.device_id).bind(agent_id).bind(&request.title).bind(&request.status).bind(messages)
             .execute(&mut *transaction).await.map_err(db_error)?;
         if changed.rows_affected() != 1 {
             return Err(error(StatusCode::CONFLICT, "subsession_version_conflict"));
