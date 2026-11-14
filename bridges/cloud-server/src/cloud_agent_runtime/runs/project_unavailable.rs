@@ -148,7 +148,7 @@ pub async fn fail_unroutable_mention(
                 .unwrap_or_default()
                 .iter()
                 .find_map(|m| {
-                    (m["targetKind"] == "agent")
+                    (m["targetKind"] == "agent" && !super::group_target::names_facilitator(m))
                         .then(|| m["humanId"].as_str().map(str::to_owned))
                         .flatten()
                 })

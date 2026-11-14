@@ -1,0 +1,26 @@
+{
+  "kind": "systemAgent",
+  "id": "mention-greeting",
+  "description": "A member greets the Facilitator by @mention: it always answers, with a short offer of concrete help.",
+  "title": "Dinner crew",
+  "members": [
+    {"key": "maya", "name": "Maya Chen"},
+    {"key": "jordan", "name": "Jordan Lee"}
+  ],
+  "turns": [
+    {
+      "messages": [
+        {"from": "maya", "text": "anyone around this weekend?", "minutesAgo": 4},
+        {"from": "jordan", "text": "@Facilitator hi", "minutesAgo": 1, "mentions": ["system"]}
+      ],
+      "expect": {
+        "reply": "message",
+        "allowedActions": [],
+        "card": {"status": "none"}
+      },
+      "stub": [
+        {"final": {"message": "Hi Jordan! I can find a time for this weekend or open a vote. Just ask.", "hooksHandled": []}}
+      ]
+    }
+  ]
+}

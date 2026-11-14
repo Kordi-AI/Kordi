@@ -26,6 +26,9 @@ pub use super::retry::{fail, release_stale_runs};
 
 /// Stored run ids keep the old prefix.
 pub const RUN_PREFIX: &str = "pip_";
+/// The reply to a direct request when the model returned nothing to post.
+pub(super) const REQUEST_FALLBACK: &str =
+    "Hi! I can find a time, open a vote, or keep track of who does what. Just ask.";
 const SWEEP_BATCH: i64 = 10;
 
 /// A SQL pattern for an RFC 3339 time as the sweep row stores it.
@@ -59,7 +62,8 @@ pub(super) const SWEEP_SQL: &str = concat!(
        AND s.retry_after <= now()
        AND (
          -- Members' new messages (never the System agent's own), once the chat has been
-         -- quiet for 30 seconds, or two minutes after the first one.
+         -- quiet for 30 seconds, or two minutes after the first one, or right away when
+         -- one of them asks the System agent directly (`requests::note_direct_request`).
          (c.latest_message_sequence > s.seen_sequence
           AND EXISTS (SELECT 1 FROM cloud_chat_messages msg
             WHERE msg.conversation_id = c.conversation_id
@@ -74,6 +78,9 @@ pub(super) const SWEEP_SQL: &str = concat!(
                 AND msg.conversation_sequence > s.seen_sequence AND msg.sender_account_id <> $1
               ORDER BY msg.conversation_sequence ASC LIMIT 1)
               <= now() - interval '2 minutes'
+            OR CASE WHEN jsonb_typeof(s.hooks_fired->'requestSequence') = 'number'
+                 THEN (s.hooks_fired->>'requestSequence')::bigint > s.seen_sequence
+                 ELSE false END
           ))
          -- Votes or answers changed the card, and it has been quiet for 45 seconds.
          OR (card.revision > CASE
@@ -420,8 +427,12 @@ pub async fn complete(
         .filter(|_| !workflow_posted)
         .map(str::trim)
         .filter(|text| !text.is_empty());
+    // Someone who asked the System agent directly always gets an answer.
+    let asked_directly = run.input["trigger"]["kind"] == "request";
+    let answered = workflow_posted || card_touched || message.is_some() || !documents.is_empty();
     let response_message_id = match message
         .or_else(|| (!documents.is_empty()).then_some("I drafted a document for the group."))
+        .or_else(|| (asked_directly && !answered).then_some(REQUEST_FALLBACK))
     {
         Some(text) if !text.is_empty() => {
             post_text(pool, run_id, &run, text, card_touched, &documents).await?

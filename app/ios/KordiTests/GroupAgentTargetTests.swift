@@ -48,6 +48,8 @@ struct GroupAgentTargetTests {
         let mentions = ComposerMentionTargetCatalog.mentions(in: text, selectedTarget: facilitator, targets: targets)
         #expect(mentions.map(\.targetIdentityId) == ["agent:cloud-agent:acct_kordi_pip"])
         #expect(mentions.first?.agentId == nil)
+        #expect(mentions.first?.humanId == nil)
+        #expect(mentions.first?.nodeId == nil)
         #expect(ComposerMentionTargetCatalog.groupTarget(in: text, selectedTarget: facilitator, targets: targets, senderAccountId: "acct_sender", participants: participants) == nil)
         // Beside a person's agent, that agent still gets the request.
         let both = "@Facilitator and @Kordipeer check status"

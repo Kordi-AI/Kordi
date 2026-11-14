@@ -45,7 +45,7 @@ impl Chat {
 
     /// Finishes the System agent's active run as a runner would, and returns
     /// the text and mentions of the message it posted (null when silent).
-    async fn finish_run(&self, message: Option<&str>) -> Value {
+    pub(super) async fn finish_run(&self, message: Option<&str>) -> Value {
         let (run_id,): (String,) = query_as(
             "SELECT active_run_id FROM cloud_pip_conversation_state WHERE conversation_id = $1",
         )

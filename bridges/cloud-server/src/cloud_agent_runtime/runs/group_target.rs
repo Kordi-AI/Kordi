@@ -172,7 +172,7 @@ fn mention_target(
 /// The mention the Mac and iPhone composers send for "@Facilitator".
 const FACILITATOR_MENTION_TARGET: &str = "agent:cloud-agent:acct_kordi_pip";
 
-fn names_facilitator(mention: &Value) -> bool {
+pub(super) fn names_facilitator(mention: &Value) -> bool {
     let target = text(mention, "targetIdentityId");
     target == FACILITATOR_MENTION_TARGET
         || crate::system_agent::service_account_id()

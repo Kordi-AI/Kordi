@@ -22,6 +22,7 @@ mod ownership_facts;
 mod ownership_store;
 mod post;
 mod prompt;
+pub mod requests;
 mod retry;
 pub mod store;
 mod triggers;

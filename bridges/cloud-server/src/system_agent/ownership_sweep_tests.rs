@@ -371,3 +371,59 @@ async fn asking_the_facilitator_while_another_agent_runs_waits_then_answers() {
     assert_eq!(asked["isNew"], true);
     assert_eq!(asked["addressesSystemAgent"], true);
 }
+
+#[tokio::test]
+#[ignore = "requires a task-owned PostgreSQL database in KORDI_DIGEST_TEST_DATABASE_URL"]
+async fn a_direct_request_is_taken_right_away_and_always_answered() {
+    let chat = Chat::new().await;
+    let ask = group(
+        chat.chat,
+        json!({"id": Uuid::new_v4().to_string(), "senderAccountId": chat.bob, "createdAtMs": 1,
+            "text": "@Facilitator hi",
+            "mentions": [{"label": "Facilitator", "targetKind": "agent",
+                "targetIdentityId": format!("agent:cloud-agent:{}", chat.config.account_id),
+                "startUtf16": 0, "lengthUtf16": 12, "displayText": "@Facilitator"}]}),
+    );
+    let request = SendMessageRequest {
+        client_message_id: Uuid::new_v4(),
+        kind: "text".to_string(),
+        content: json!({"schema": 1, "blocks": [{"type": "text", "text": ask}], "legacy_attachments": []}),
+        reply_to_message_id: None,
+        attachment_ids: Vec::new(),
+    };
+    // Just sent: the chat has not been quiet for 30 seconds.
+    let sent = crate::chat_sync::store::send_message(&chat.pool, &chat.bob, chat.chat, request)
+        .await
+        .unwrap()
+        .value;
+    assert_eq!(chat.sweep().await, 0, "ordinary messages wait for quiet");
+    super::requests::mark(&chat.pool, &sent, &chat.config.account_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        chat.hooks().await["requestSequence"],
+        sent.conversation_sequence
+    );
+    assert_eq!(chat.sweep().await, 1, "a direct request does not wait");
+
+    // The model returned nothing; the person still gets an answer.
+    let posted = chat.finish_run(None).await;
+    assert_eq!(posted["text"], super::store::REQUEST_FALLBACK);
+
+    // Plain chat is never marked.
+    say(&chat.pool, &chat.bob, chat.chat, "lol nice photo").await;
+    let (plain,): (Value,) = query_as(
+        "SELECT content FROM cloud_chat_messages WHERE conversation_id = $1
+         ORDER BY conversation_sequence DESC LIMIT 1",
+    )
+    .bind(chat.chat)
+    .fetch_one(&chat.pool)
+    .await
+    .unwrap();
+    let mut plain_message = sent.clone();
+    plain_message.content = plain;
+    assert!(!super::requests::asks_system_agent(
+        &plain_message,
+        &chat.config.account_id
+    ));
+}

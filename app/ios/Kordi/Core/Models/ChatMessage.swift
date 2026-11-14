@@ -888,8 +888,9 @@ struct MessageMention: Codable, Hashable {
         lengthUtf16 = nsRange.length
         displayText = String(text[range])
         sourceHostId = nil
-        nodeId = target.kind == .all ? target.id : target.accountId
-        humanId = target.kind == .all ? nil : target.accountId
+        // The Facilitator's mention names no person, so no one's agent is asked.
+        nodeId = target.isFacilitator ? nil : target.kind == .all ? target.id : target.accountId
+        humanId = target.kind == .all || target.isFacilitator ? nil : target.accountId
         agentId = target.agentId
         displayLabel = target.displayName
     }
