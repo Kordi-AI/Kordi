@@ -511,7 +511,7 @@ test('buildCollaborationMentionTargetsByScope includes group-only people but onl
   assert.deepEqual(
     targets.chat.map((target) => `${target.targetKind}:${target.label}:${target.nodeId}`),
     [
-      'all:All:group:session:group:cloud',
+      'all:All:group:session:group:cloud', 'agent:Facilitator:agent:cloud-agent:acct_kordi_pip',
       'agent:BabyTREE:acct_me',
       'person:Alice:acct_alice',
       "agent:Alice's Kordi:acct_alice",

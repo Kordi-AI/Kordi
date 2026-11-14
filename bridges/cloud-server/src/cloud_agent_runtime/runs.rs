@@ -10,6 +10,7 @@ mod envelopes;
 mod errors;
 pub(crate) mod exchanges;
 pub(crate) mod facilitator_handoff;
+pub(crate) mod facilitator_slot;
 mod feature_runs;
 mod group_member_target;
 mod group_mentions;

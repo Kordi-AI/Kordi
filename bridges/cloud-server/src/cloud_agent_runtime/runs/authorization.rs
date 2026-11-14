@@ -414,7 +414,7 @@ pub(super) fn system_agent_target(
     if !participants.iter().any(|p| p.account_id == sender) {
         participants.push(super::envelopes::CloudGroupParticipant {
             account_id: sender.into(),
-            display_name: "System agent".into(),
+            display_name: crate::system_agent::DEFAULT_SYSTEM_AGENT_NAME.into(),
             avatar_url: None,
             agent_id: None,
             agent_display_name: None,

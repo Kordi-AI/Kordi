@@ -7,7 +7,7 @@ import type { Message } from '../../src/kordi-app/types';
 
 const messages: Message[] = [
   {
-    id: 'selection-review-introduction', role: 'person', sender: 'System', senderType: 'human',
+    id: 'selection-review-introduction', role: 'person', sender: 'Facilitator', senderType: 'human',
     time: '14:51', showSenderMeta: true,
     text: 'Welcome to the sample workshop. Try selecting just a few words, then drag across a line break.\n\n@Alex: exploring how teams organize research notes, compare early ideas, and build useful prototypes; can help with interview planning, qualitative analysis, and keeping project documentation clear.\n@Sam: building a shared project timeline and testing a new search interface; can help with interaction design, prototype feedback, and CSS layouts.\n@Taylor: studying conversation history and participant setup; can help with evaluation, data modeling, and writing clear summaries.',
     mentions: [{ label: 'Alex', targetKind: 'person' }, { label: 'Sam', targetKind: 'person' }, { label: 'Taylor', targetKind: 'person' }],

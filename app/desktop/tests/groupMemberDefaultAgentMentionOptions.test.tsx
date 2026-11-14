@@ -124,7 +124,9 @@ test('buildCollaborationMentionTargetsByScope offers a non-contact group memberâ
   assert.equal(alexAgent?.humanId, 'acct_alex');
   // The viewer's own default agent stays the local agent, listed once.
   assert.equal(agents.some((target) => target.agentId === 'cloud-agent:acct_bea'), false);
-  assert.equal(agents.length, 2);
+  // The Facilitator leads the agents in every group, then the local agent and Alex's.
+  assert.equal(agents[0]?.label, 'Facilitator');
+  assert.equal(agents.length, 3);
   // Outside group chats, a default agent comes only from the contact list.
   const projectTargets = targets.project.filter((target) => target.targetKind === 'agent' && target.agentId === 'cloud-agent:acct_alex');
   assert.equal(projectTargets.length, 0);

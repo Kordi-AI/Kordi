@@ -39,9 +39,9 @@ enum MessageAuthorIdentity {
             $0.displayName.localizedCaseInsensitiveCompare(message.authorName) == .orderedSame
         }
         // The plan agent posts in the chat without being a member, so it is
-        // never in groupParticipants; it shows as System, not as the group.
+        // never in groupParticipants; it shows as the Facilitator, not as the group.
         if participant == nil, conversation.kind == .group,
-           KordiSystemAgentIdentity.isLegacyName(message.authorName) || message.authorName == KordiSystemIdentity.displayName {
+           KordiSystemAgentIdentity.isLegacyName(message.authorName) || KordiSystemIdentity.isDisplayName(message.authorName) {
             return KordiSystemIdentity.avatar
         }
         if isAgentInSharedSpace {
