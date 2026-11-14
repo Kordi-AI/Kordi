@@ -370,6 +370,9 @@ pub fn spawn(pool: PgPool) {
             if let Err(error) = super::stop::release_stopped_runs(&pool).await {
                 eprintln!("[cloud_agent_runtime] stopped run sweep: {error}");
             }
+            if let Err(error) = super::attempts::fail_exhausted_runs(&pool).await {
+                eprintln!("[cloud_agent_runtime] exhausted run sweep: {error}");
+            }
             if releases.is_multiple_of(BACKFILL_EVERY_RELEASES) {
                 if let Err(error) =
                     backfill_terminal_responses(&pool, BACKFILL_WINDOW_MINUTES).await
