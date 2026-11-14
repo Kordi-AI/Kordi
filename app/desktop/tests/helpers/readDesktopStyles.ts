@@ -25,6 +25,7 @@ const SHELL_STYLE_FILES = [
   '../../src/styles/shell-factory-foundation.css',
   '../../src/styles/shell-factory-rail.css',
   '../../src/styles/shell-factory-library.css',
+  '../../src/styles/shell-factory-library-detail.css',
   '../../src/styles/shell-factory-conversation.css',
   '../../src/styles/shell-factory-routes.css',
   '../../src/styles/shell-factory-composer.css',

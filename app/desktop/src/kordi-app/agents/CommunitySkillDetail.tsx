@@ -2,14 +2,13 @@ import { useEffect, useState } from 'react';
 import { Check, Download, ExternalLink, Globe2, LoaderCircle } from 'lucide-react';
 
 import { ErrorLine } from '@/components/ui/ErrorLine';
+import { openDesktopExternalUrl, type DesktopSkillLibraryEntry } from '@/lib/desktop';
 import {
   fetchDesktopCommunitySkillDetail,
   installDesktopCommunitySkill,
-  openDesktopExternalUrl,
   type DesktopCommunitySkillDetail,
   type DesktopCommunitySkillSummary,
-  type DesktopSkillLibraryEntry,
-} from '@/lib/desktop';
+} from '@/lib/desktopCommunitySkills';
 import {
   FactoryDetailHeader,
   FactoryDetailTabs,

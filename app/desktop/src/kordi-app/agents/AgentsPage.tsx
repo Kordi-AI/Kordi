@@ -19,8 +19,7 @@ import { AgentStudioCompactBody } from './AgentStudioCompactBody';
 import { AgentStudioConversation } from './AgentStudioConversation';
 import { AgentStudioRail } from './AgentStudioRail';
 import { AgentStudioWorkspace } from './AgentStudioWorkspace';
-import { CapabilityLibraryView } from './CapabilityLibraryView';
-import { CommunitySkillDetail } from './CommunitySkillDetail';
+import { FactoryLibraryDetail } from './FactoryLibraryDetail';
 import {
   agentBuilderSkillSlug,
   factoryAgentCreateInput,
@@ -41,7 +40,6 @@ import {
   type AgentStudioCapabilityKind,
   type FactoryBuildRoute,
   type FactoryLibraryArtifact,
-  type FactoryLibraryFilter,
   type FactoryLibrarySection,
   type FactorySection,
 } from './model';
@@ -51,7 +49,7 @@ import { useAgentBuilderSession } from './useAgentBuilderSession';
 import { useAgentsPageModel } from './useAgentsPageModel';
 import { useFactoryBuildRouting } from './useFactoryBuildRouting';
 import { useSkillLibrary } from './useSkillLibrary';
-import { useCommunitySkillCatalog } from './useCommunitySkillCatalog';
+import { useFactoryLibraryFilter } from './useFactoryLibraryFilter';
 import { useFactoryCreationAvatar } from './useFactoryCreationAvatar';
 import { useFactoryAgentAvatarActions } from './useFactoryAgentAvatarActions';
 import { useFactoryBuildAgent } from './factoryBuildAgent';
@@ -82,7 +80,6 @@ export function AgentsPage({
 }: AgentsPageProps) {
   const [factorySection, setFactorySection] = useState<FactorySection>('agents');
   const [librarySection, setLibrarySection] = useState<FactoryLibrarySection>('skill');
-  const [libraryScope, setLibraryScope] = useState<FactoryLibraryFilter['scope']>('mine');
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<Partial<Record<FactoryLibrarySection, string>>>({});
   const [buildRoute, setBuildRoute] = useState<FactoryBuildRoute | null>(null);
   const [buildSeed, setBuildSeed] = useState<DesktopAgentBuilderSeed>({});
@@ -107,15 +104,7 @@ export function AgentsPage({
     ?? agents.find((agent) => agent.isOwned && !agent.cloudAgentId)
     ?? null;
   const skillLibrary = useSkillLibrary();
-  const communityCatalog = useCommunitySkillCatalog(factorySection === 'library' && libraryScope === 'community', factorySection === 'library');
-  const libraryFilter: FactoryLibraryFilter = libraryScope === 'community'
-    ? { scope: 'community', provider: communityCatalog.provider }
-    : { scope: 'mine', kind: librarySection };
-  const changeLibraryFilter = (filter: FactoryLibraryFilter) => {
-    setLibraryScope(filter.scope);
-    if (filter.scope === 'mine') setLibrarySection(filter.kind);
-    else communityCatalog.setProvider(filter.provider);
-  };
+  const { libraryScope, setLibraryScope, communityCatalog, libraryFilter, changeLibraryFilter } = useFactoryLibraryFilter(factorySection === 'library', librarySection, setLibrarySection);
   const {
     activeAgentConfig: modelActiveAgentConfig,
     activePersistedConfig,
@@ -707,31 +696,9 @@ export function AgentsPage({
           onCreateArtifact={startFactoryBuild}
         />
         {factorySection === 'agents' ? <AgentInspectionView agent={inspectedAgent} onEditInBuild={(agent) => void editAgentInBuild(agent)} onUpdateCloudAgent={onUpdateCloudAgent} onUpdateLocalAgentAvatar={onUpdateLocalAgentAvatar} /> : null}
-        {factorySection === 'library' && libraryScope === 'community' ? (
-          <CommunitySkillDetail
-            key={communityCatalog.selected?.id ?? 'none'}
-            summary={communityCatalog.selected}
-            loadingList={communityCatalog.loading}
-            installedSkills={skillLibrary.skills}
-            mutatingSkillId={skillLibrary.mutatingSkillId}
-            onInstalled={async (summaryId) => {
-              communityCatalog.markInstalled(summaryId);
-              await skillLibrary.refresh();
-            }}
-            onSetEnabled={skillLibrary.setEnabled}
-          />
-        ) : null}
-        {factorySection === 'library' && libraryScope === 'mine' ? (
-          <CapabilityLibraryView
-            key={`${librarySection}:${selectedLibraryId ?? 'none'}`}
-            kind={librarySection}
-            artifact={selectedLibraryArtifact}
-            skill={selectedSkill}
-            mutating={Boolean(selectedSkill && skillLibrary.mutatingSkillId === selectedSkill.id)}
-            onSetEnabled={skillLibrary.setEnabled}
-            onRemove={skillLibrary.remove}
-            onEditInBuild={(artifact) => void editLibraryArtifactInBuild(artifact)}
-          />
+        {factorySection === 'library' ? (
+          <FactoryLibraryDetail scope={libraryScope} kind={librarySection} selectedId={selectedLibraryId} artifact={selectedLibraryArtifact} skill={selectedSkill}
+            skillLibrary={skillLibrary} community={communityCatalog} onEditInBuild={(artifact) => void editLibraryArtifactInBuild(artifact)} />
         ) : null}
         {factorySection === 'build' ? <main className="app-agent-studio-main app-factory-build-main">
           {buildRoute ? (

@@ -60,6 +60,7 @@
 @import './styles/shell-factory-foundation.css';
 @import './styles/shell-factory-rail.css';
 @import './styles/shell-factory-library.css';
+@import './styles/shell-factory-library-detail.css';
 @import './styles/shell-factory-conversation.css';
 @import './styles/shell-factory-routes.css';
 @import './styles/shell-factory-composer.css';

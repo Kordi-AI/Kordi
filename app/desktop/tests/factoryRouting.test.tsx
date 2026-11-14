@@ -26,7 +26,8 @@ import {
 import type { Agent } from '../src/kordi-app/types';
 import { randomFactoryCreationAvatar } from '../src/kordi-app/agents/useFactoryCreationAvatar';
 import { parseBirdAvatarSeed } from '../src/features/cloud/birdAvatars';
-import type { DesktopAgentBuilderStatus, DesktopCommunitySkillSummary, DesktopSkillLibraryEntry } from '../src/lib/desktop';
+import type { DesktopAgentBuilderStatus, DesktopSkillLibraryEntry } from '../src/lib/desktop';
+import type { DesktopCommunitySkillSummary } from '../src/lib/desktopCommunitySkills';
 import { readDesktopShellCss } from './helpers/readDesktopStyles';
 
 const agent: Agent = {

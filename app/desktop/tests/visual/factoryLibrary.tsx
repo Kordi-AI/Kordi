@@ -7,7 +7,8 @@ import { CapabilityLibraryView } from '../../src/kordi-app/agents/CapabilityLibr
 import { CommunitySkillDetail } from '../../src/kordi-app/agents/CommunitySkillDetail';
 import type { FactoryLibraryArtifact, FactoryLibraryFilter, FactoryLibrarySection } from '../../src/kordi-app/agents/model';
 import { useCommunitySkillCatalog } from '../../src/kordi-app/agents/useCommunitySkillCatalog';
-import type { DesktopCommunitySkillSummary, DesktopSkillLibraryEntry } from '../../src/lib/desktop';
+import type { DesktopSkillLibraryEntry } from '../../src/lib/desktop';
+import type { DesktopCommunitySkillSummary } from '../../src/lib/desktopCommunitySkills';
 import '../../src/index.css';
 
 // The Factory Library: the filter menu in the search field, installed and community

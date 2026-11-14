@@ -5,7 +5,7 @@ import {
   fetchDesktopCommunitySkillProviders,
   searchDesktopCommunitySkills,
   type DesktopCommunitySkillSummary,
-} from '@/lib/desktop';
+} from '@/lib/desktopCommunitySkills';
 import type { FactoryCommunityProvider } from './model';
 
 const SEARCH_DELAY_MS = 320;

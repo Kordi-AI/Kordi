@@ -1,4 +1,5 @@
-import type { DesktopCommunitySkillDetail, DesktopCommunitySkillSummary, DesktopSkillLibraryEntry } from '@/lib/desktop';
+import type { DesktopSkillLibraryEntry } from '@/lib/desktop';
+import type { DesktopCommunitySkillDetail, DesktopCommunitySkillSummary } from '@/lib/desktopCommunitySkills';
 import { communityProviderLabel, type FactoryLibrarySection } from './model';
 
 /** The detail tab id for Overview; file tabs use the file path. */
