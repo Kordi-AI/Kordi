@@ -6,16 +6,12 @@ import { CloudAuthError } from '../src/features/cloud/cloudAuthError';
 import { createRoomInvitationsStore, normalizeRoomInvitation } from '../src/features/commonGround/roomInvitations';
 import { notifyCommonGroundRoomEvents, subscribeRoomHints } from '../src/features/commonGround/roomHints';
 import { ContactsRoomInvitationRow } from '../src/kordi-app/contacts/ContactsRoomInvitationRow';
-import { COMMON_GROUND_ROOM_FOCUS_EVENT, hasPendingRoomFocus, rememberRoomFocus, takePendingRoomFocus } from '../src/features/commonGround/roomFocus';
-import { ResultsScreen } from '../src/features/commonGround/ResultsScreen';
-import { CommonGroundStore } from '../src/features/commonGround/store';
-import type { CgHost } from '../src/features/commonGround/host';
-import { commonGroundFixtures } from './visual/commonGroundFixtures';
-import { mockServer, person, room } from './helpers/commonGroundServer';
+import { ContactsRoomInvitationDetail } from '../src/kordi-app/contacts/ContactsRoomInvitationDetail';
 
 const wire = (ref: string, patch: Record<string, unknown> = {}) => ({
   invitationRef: ref, code: '4821', roomName: 'Build night', groupSpaceId: `session:group:${ref}`, conversationId: `conv_${ref}`,
-  name: 'Infrastructure and CI', from: { accountId: 'acct_alex', name: 'Alex Rivera', avatarUrl: null }, createdAt: '2026-11-13T10:00:00Z', ...patch,
+  name: 'Infrastructure and CI', from: { accountId: 'acct_alex', name: 'Alex Rivera', avatarUrl: null }, createdAt: '2026-11-13T10:00:00Z',
+  members: [{ accountId: 'acct_alex', name: 'Alex Rivera', avatarUrl: null }, { accountId: 'acct_bea', name: 'Bea Okafor', avatarUrl: null }], memberCount: 2, ...patch,
 });
 
 function transport(replies: Array<unknown | Error>, account = 'acct_dana') {
@@ -108,51 +104,96 @@ test('a Grounding room hint reaches room hint listeners, which refresh the invit
   assert.equal(seen, 1);
 });
 
-test('the Requests row names the inviter and group and resolves kordi-avatar markers', () => {
+test('the Requests row shows the inviter over the group, with labelled Decline and Join icons', () => {
   const invitation = normalizeRoomInvitation(wire('cgi_1', {
     from: { accountId: 'acct_alex', name: 'Alex Rivera', avatarUrl: 'kordi-avatar://dicebear-rust-10.6.0-styles-10.5.0/lorelei/alex_seed?version=1' },
   }));
   assert.ok(invitation);
-  const markup = renderToStaticMarkup(createElement(ContactsRoomInvitationRow, { invitation, busy: false, onJoin: () => undefined, onDecline: () => undefined }));
-  assert.match(markup, /Alex Rivera invited you/);
-  assert.match(markup, />Infrastructure and CI</);
-  assert.match(markup, /aria-label="Open Infrastructure and CI"/);
-  assert.match(markup, />Join</);
-  assert.match(markup, />Decline</);
+  const calls: string[] = [];
+  const markup = renderToStaticMarkup(createElement(ContactsRoomInvitationRow, {
+    invitation, active: true, busy: false, onOpen: () => calls.push('open'), onJoin: () => undefined, onDecline: () => undefined,
+  }));
+  assert.match(markup, />Alex Rivera</);
+  assert.match(markup, /Invited you to Infrastructure and CI/);
+  assert.match(markup, /aria-label="Decline" title="Decline"/);
+  assert.match(markup, /aria-label="Join" title="Join"/);
+  assert.match(markup, /app-contact-row-selected/);
+  assert.match(markup, /aria-current="true"/);
   assert.doesNotMatch(markup, /src="kordi-avatar:/);
   assert.match(markup, /boring-marble-v1\/alex_seed\.png/);
 });
 
-test('opening an invitation keeps the room and group until the Grounding page takes them', () => {
-  const target = new EventTarget();
-  let announced: unknown = null;
-  target.addEventListener(COMMON_GROUND_ROOM_FOCUS_EVENT, (event) => { announced = (event as CustomEvent).detail; });
-  rememberRoomFocus({ code: '4821', groupSpaceId: 'session:group:cgi_1' }, target);
-  assert.deepEqual(announced, { code: '4821', groupSpaceId: 'session:group:cgi_1' });
-  assert.equal(hasPendingRoomFocus(), true);
-  assert.deepEqual(takePendingRoomFocus(), { code: '4821', groupSpaceId: 'session:group:cgi_1' });
-  assert.equal(takePendingRoomFocus(), null);
+test('members decode from the list, and an older server without them lists none', () => {
+  const invitation = normalizeRoomInvitation(wire('cgi_1'));
+  assert.ok(invitation);
+  assert.deepEqual(invitation.members.map((member) => member.name), ['Alex Rivera', 'Bea Okafor']);
+  assert.equal(invitation.memberCount, 2);
+  const older = normalizeRoomInvitation(wire('cgi_2', { members: undefined, memberCount: undefined }));
+  assert.ok(older);
+  assert.deepEqual(older.members, []);
+  assert.equal(older.memberCount, 0);
 });
 
-test('the room opens on the invited group, with its group and invitation rows focused', async () => {
-  const fx = commonGroundFixtures('light');
-  const group = { groupSpaceId: 'session:group:cgi_1', conversationId: 'conv_1', name: 'Infrastructure and CI', memberCount: 2, members: [person('acct_alex')], joined: false };
-  const other = { ...group, groupSpaceId: 'session:group:other', name: 'Other group' };
-  const invitation = { invitationRef: 'cgi_1', groupSpaceId: group.groupSpaceId, name: group.name, from: { ...person('acct_alex'), name: 'Alex Rivera' }, createdAt: '2026-11-13T10:00:00Z' };
-  const server = mockServer({ 'POST rooms/4821/results': { status: 200, body: { ...fx.results, groups: [other, group], invitations: [invitation] } } });
-  const store = new CommonGroundStore(server.client, { profiles: true });
-  store.set({ rooms: { '4821': room('4821') } });
-  store.openRoom('4821', group.groupSpaceId);
-  assert.deepEqual(store.top(), { name: 'results', code: '4821', focusGroup: group.groupSpaceId });
-  await store.loadScreen({ name: 'results', code: '4821' });
-  const host: CgHost = {
-    self: fx.self, profiles: true, memoryAvailable: false, connectors: null, agentFiles: null, device: null,
-    openChat: () => undefined, acceptRequest: async () => undefined, contactsChanged: () => undefined,
-    openGroup: () => undefined, openUrl: () => undefined,
-  };
-  const markup = renderToStaticMarkup(createElement(ResultsScreen, { code: '4821', focusGroup: group.groupSpaceId, state: store.getSnapshot(), store, host }));
-  assert.equal((markup.match(/is-focused/g) ?? []).length, 2);
-  assert.match(markup, /Alex Rivera invited you to Infrastructure and CI/);
-  const plain = renderToStaticMarkup(createElement(ResultsScreen, { code: '4821', state: store.getSnapshot(), store, host }));
-  assert.doesNotMatch(plain, /is-focused/);
+const noop = { join: async () => ({ ok: true as const, groupSpaceId: '' }), decline: async () => ({ ok: true as const, groupSpaceId: '' }), select: () => undefined };
+
+test('the invitation detail leads with the group, then who invited you, Decline and Join, and the members', () => {
+  const invitation = normalizeRoomInvitation(wire('cgi_1'));
+  assert.ok(invitation);
+  const markup = renderToStaticMarkup(createElement(ContactsRoomInvitationDetail, { invitation, state: { busyRef: null, error: null, outcome: null }, store: noop }));
+  assert.match(markup, /aria-label="Invitation to Infrastructure and CI"/);
+  assert.match(markup, />Infrastructure and CI</);
+  assert.match(markup, /Alex Rivera · from Build night/);
+  assert.match(markup, />Decline</);
+  assert.match(markup, />Join</);
+  assert.match(markup, />Members</);
+  assert.match(markup, />Bea Okafor</);
+  assert.doesNotMatch(markup, /topic|Share code|Suggested/i);
+});
+
+test('after an answer the detail shows one line instead of the buttons', () => {
+  const invitation = normalizeRoomInvitation(wire('cgi_1'));
+  assert.ok(invitation);
+  const joined = renderToStaticMarkup(createElement(ContactsRoomInvitationDetail, { invitation, state: { busyRef: null, error: null, outcome: 'joined' }, store: noop }));
+  assert.match(joined, /You joined Infrastructure and CI\./);
+  assert.doesNotMatch(joined, />Join</);
+  const declined = renderToStaticMarkup(createElement(ContactsRoomInvitationDetail, { invitation, state: { busyRef: null, error: null, outcome: 'declined' }, store: noop }));
+  assert.match(declined, />Declined</);
+});
+
+test('selecting an invitation keeps it open after answering, with the outcome', async () => {
+  const fake = transport([
+    { invitations: [wire('cgi_1')] },
+    { status: 'joined', groupSpaceId: 'session:group:cgi_1' },
+    { invitations: [] },
+  ]);
+  const store = createRoomInvitationsStore(fake.transport);
+  await store.refresh();
+  const [invitation] = store.getSnapshot().invitations;
+  store.select(invitation);
+  assert.equal(store.getSnapshot().selected?.invitationRef, 'cgi_1');
+  await store.join(invitation);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(store.getSnapshot().selected?.invitationRef, 'cgi_1');
+  assert.equal(store.getSnapshot().outcome, 'joined');
+  assert.deepEqual(store.getSnapshot().invitations, []);
+  store.select(null);
+  assert.equal(store.getSnapshot().selected, null);
+  assert.equal(store.getSnapshot().outcome, null);
+});
+
+test('an invitation opened from Requests takes the Contacts main pane until it is closed', async () => {
+  const { renderContactsPage } = await import('./helpers/contactsPageFixtures');
+  const { roomInvitationsStore } = await import('../src/features/commonGround/roomInvitations');
+  const invitation = normalizeRoomInvitation(wire('cgi_1'));
+  assert.ok(invitation);
+  const store = roomInvitationsStore();
+  store.select(invitation);
+  try {
+    const markup = renderContactsPage([]);
+    assert.match(markup, /aria-label="Invitation to Infrastructure and CI"/);
+    assert.doesNotMatch(markup, /No contact selected/);
+  } finally {
+    store.select(null);
+  }
+  assert.doesNotMatch(renderContactsPage([]), /Invitation to Infrastructure and CI/);
 });

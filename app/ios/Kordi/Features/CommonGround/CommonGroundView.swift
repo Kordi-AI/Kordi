@@ -63,8 +63,7 @@ enum CommonGroundRoute: Hashable {
     case build
     case card
     case lobby(String)
-    /// A room's results; `focus` is a group to scroll to and highlight.
-    case results(String, focus: String? = nil)
+    case results(String)
     case match(String)
     case person(String, paired: Bool)
     /// Nearby people, and one person seen through Nearby.
@@ -114,7 +113,7 @@ struct CommonGroundView: View {
                     case .build: CommonGroundBuildView()
                     case .card: CommonGroundCardView(path: $path)
                     case .lobby(let code): CommonGroundLobbyView(code: code, path: $path)
-                    case .results(let code, let focus): CommonGroundResultsView(code: code, focusGroupSpaceId: focus, path: $path)
+                    case .results(let code): CommonGroundResultsView(code: code, path: $path)
                     case .match(let id): CommonGroundMatchView(personID: id)
                     case .person(let id, let paired): CommonGroundPersonView(personID: id, paired: paired, path: $path)
                     case .nearby: CommonGroundNearbyView(path: $path)
@@ -123,7 +122,6 @@ struct CommonGroundView: View {
                 }
         }
         .modifier(CommonGroundNearbyAlertOpening(path: $path, enabled: model.nearbyEnabled))
-        .modifier(CommonGroundRoomInvitationOpening(path: $path))
         .overlay(alignment: .top) { CommonGroundToast(text: $model.notice) }
         .environmentObject(model)
         .environment(\.commonGroundOpenConversation, onOpenConversation)

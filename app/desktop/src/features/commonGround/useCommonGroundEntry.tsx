@@ -19,7 +19,6 @@ import { CommonGroundContactsRow } from './CommonGroundContactsRow';
 import { CommonGroundLazyPanel } from './CommonGroundLazyPanel';
 import { desktopAgentFiles, desktopDeviceAccess } from './deviceAccess';
 import { COMMON_GROUND_PAIR_LINK_EVENT, hasPendingPairLink } from './pairLink';
-import { COMMON_GROUND_ROOM_FOCUS_EVENT, hasPendingRoomFocus } from './roomFocus';
 import type { CgConnectorsAccess, CgHost } from './host';
 import type { CgPerson } from './types';
 
@@ -58,7 +57,7 @@ function openConnectorsSettings(providerId: ConnectorsSettingsTarget['providerId
  */
 export function useCommonGroundEntry(handlers: ContactsSelectionHandlers, options: CommonGroundEntryOptions): CommonGroundEntry {
   // A pairing link opens Grounding, which redeems the code.
-  const [selected, setSelected] = useState(() => hasPendingPairLink() || hasPendingRoomFocus() || hasHelpGrounding(options.account?.accountId ?? ''));
+  const [selected, setSelected] = useState(() => hasPendingPairLink() || hasHelpGrounding(options.account?.accountId ?? ''));
   useEffect(() => {
     consumeHelpGrounding(options.account?.accountId ?? '');
     const open = () => {
@@ -70,11 +69,7 @@ export function useCommonGroundEntry(handlers: ContactsSelectionHandlers, option
   useEffect(() => {
     const onPairLink = () => setSelected(true);
     window.addEventListener(COMMON_GROUND_PAIR_LINK_EVENT, onPairLink);
-    window.addEventListener(COMMON_GROUND_ROOM_FOCUS_EVENT, onPairLink);
-    return () => {
-      window.removeEventListener(COMMON_GROUND_PAIR_LINK_EVENT, onPairLink);
-      window.removeEventListener(COMMON_GROUND_ROOM_FOCUS_EVENT, onPairLink);
-    };
+    return () => window.removeEventListener(COMMON_GROUND_PAIR_LINK_EVENT, onPairLink);
   }, []);
   const authClient = useMemo(() => defaultCloudAuthClient(), []);
   const { capabilities, status: capabilitiesStatus, refetch } = useCloudAuthCapabilitiesState(options.account ? authClient : null, cloudApiBaseUrl());

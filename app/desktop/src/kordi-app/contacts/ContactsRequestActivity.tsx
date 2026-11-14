@@ -1,5 +1,4 @@
 import { ErrorLine } from '@/components/ui/ErrorLine';
-import { rememberRoomFocus } from '@/features/commonGround/roomFocus';
 import { useRoomInvitations } from '@/features/commonGround/roomInvitations';
 import { ContactRequestRow } from '../components';
 import type { ContactRequest } from '../types';
@@ -15,6 +14,7 @@ export function ContactsRequestActivity({
   isContactRequestsOpen,
   onToggleRequests,
   onSelectRequest,
+  onCloseOverlay,
   requestActions,
 }: {
   incomingContactRequests: ContactRequest[];
@@ -23,6 +23,8 @@ export function ContactsRequestActivity({
   isContactRequestsOpen: boolean;
   onToggleRequests: () => void;
   onSelectRequest?: (request: ContactRequest) => void;
+  /** Closes an open contact or request, so an invitation can take the detail pane. */
+  onCloseOverlay?: () => void;
   requestActions: ContactRequestActions;
 }) {
   const rooms = useRoomInvitations();
@@ -51,8 +53,13 @@ export function ContactsRequestActivity({
         <ContactsRoomInvitationRow
           key={invitation.invitationRef}
           invitation={invitation}
+          active={rooms.selected?.invitationRef === invitation.invitationRef}
           busy={rooms.busyRef === invitation.invitationRef}
-          onOpen={() => rememberRoomFocus({ code: invitation.code, groupSpaceId: invitation.groupSpaceId })}
+          onOpen={() => {
+            // The invitation takes the detail pane from any open contact or request.
+            onCloseOverlay?.();
+            rooms.store.select(invitation);
+          }}
           onJoin={() => { void rooms.store.join(invitation); }}
           onDecline={() => { void rooms.store.decline(invitation); }}
         />

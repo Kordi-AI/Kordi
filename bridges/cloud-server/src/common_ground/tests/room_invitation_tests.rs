@@ -59,6 +59,19 @@ async fn an_invitee_sees_the_invitation_outside_the_room_and_declines_it() {
     assert_eq!(invitation["groupSpaceId"], s.space());
     assert_eq!(invitation["from"]["accountId"], s.alex.0);
     assert!(invitation["roomName"].is_string());
+    // Alex started the group and Priya was added; the System account is not a member here.
+    assert_eq!(invitation["memberCount"], 2);
+    let members: Vec<&Value> = invitation["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| &m["accountId"])
+        .collect();
+    assert_eq!(
+        members,
+        vec![&json!(s.alex.0), &json!(s.priya.0)],
+        "creator first"
+    );
     assert!(
         pending(&s, &s.sam.1).await.is_empty(),
         "only invitees see it"

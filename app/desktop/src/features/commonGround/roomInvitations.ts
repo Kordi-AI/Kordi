@@ -17,6 +17,9 @@ export type RoomGroupInvitation = {
   conversationId: string | null;
   name: string;
   from: { accountId: string; name: string; avatarUrl: string | null };
+  /** People already in the group, creator first, up to eight. */
+  members: Array<{ accountId: string; name: string; avatarUrl: string | null }>;
+  memberCount: number;
   createdAt: string;
 };
 
@@ -25,6 +28,10 @@ export type RoomInvitationsState = {
   /** The invitation an answer is being sent for. */
   busyRef: string | null;
   error: string | null;
+  /** The invitation open in the Contacts detail pane, kept after it is answered. */
+  selected: RoomGroupInvitation | null;
+  /** How the open invitation was answered. */
+  outcome: 'joined' | 'declined' | null;
 };
 
 type Transport = {
@@ -44,26 +51,32 @@ function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
+function person(value: unknown): RoomGroupInvitation['from'] | null {
+  const row = value && typeof value === 'object' ? value as Record<string, unknown> : null;
+  const accountId = text(row?.accountId);
+  return accountId ? { accountId, name: text(row?.name) ?? 'Someone', avatarUrl: text(row?.avatarUrl) } : null;
+}
+
 export function normalizeRoomInvitation(value: unknown): RoomGroupInvitation | null {
   if (!value || typeof value !== 'object') return null;
   const row = value as Record<string, unknown>;
-  const from = row.from && typeof row.from === 'object' ? row.from as Record<string, unknown> : null;
+  const from = person(row.from);
   const invitationRef = text(row.invitationRef);
   const code = text(row.code);
   const groupSpaceId = text(row.groupSpaceId);
-  const fromId = text(from?.accountId);
-  if (!invitationRef || !code || !groupSpaceId || !fromId) return null;
+  if (!invitationRef || !code || !groupSpaceId || !from) return null;
+  const members = Array.isArray(row.members) ? row.members.map(person).filter((member) => member !== null) : [];
   return {
-    invitationRef, code, groupSpaceId,
+    invitationRef, code, groupSpaceId, from, members,
     roomName: text(row.roomName) ?? '',
     conversationId: text(row.conversationId),
     name: text(row.name) ?? 'a group',
-    from: { accountId: fromId, name: text(from?.name) ?? 'Someone', avatarUrl: text(from?.avatarUrl) },
+    memberCount: typeof row.memberCount === 'number' ? row.memberCount : members.length,
     createdAt: text(row.createdAt) ?? '',
   };
 }
 
-const EMPTY: RoomInvitationsState = { invitations: [], busyRef: null, error: null };
+const EMPTY: RoomInvitationsState = { invitations: [], busyRef: null, error: null, selected: null, outcome: null };
 
 export function createRoomInvitationsStore(transport: Transport = defaultTransport) {
   let state = EMPTY;
@@ -86,7 +99,7 @@ export function createRoomInvitationsStore(transport: Transport = defaultTranspo
     }
     if (session.accountId !== account) {
       account = session.accountId;
-      set({ invitations: [], error: null });
+      set({ invitations: [], error: null, selected: null, outcome: null });
     }
     try {
       const body = await transport.request<{ invitations?: unknown }>(
@@ -115,7 +128,10 @@ export function createRoomInvitationsStore(transport: Transport = defaultTranspo
         { method: 'POST', headers: { authorization: `Bearer ${session.token}` } },
         action === 'join' ? 'Could not join the group.' : 'Could not decline the invitation.',
       );
-      set({ invitations: state.invitations.filter((row) => row.invitationRef !== invitation.invitationRef) });
+      set({
+        invitations: state.invitations.filter((row) => row.invitationRef !== invitation.invitationRef),
+        ...(state.selected?.invitationRef === invitation.invitationRef ? { outcome: action === 'join' ? 'joined' as const : 'declined' as const } : {}),
+      });
       return { ok: true as const, groupSpaceId: joined?.groupSpaceId ?? invitation.groupSpaceId };
     } catch (error) {
       // A gone invitation (404) is already answered; drop it.
@@ -138,6 +154,8 @@ export function createRoomInvitationsStore(transport: Transport = defaultTranspo
       return () => { listeners.delete(listener); };
     },
     refresh,
+    /** Opens an invitation in the Contacts detail pane, or closes it with null. */
+    select: (invitation: RoomGroupInvitation | null) => set({ selected: invitation, outcome: null, error: null }),
     join: (invitation: RoomGroupInvitation) => answer(invitation, 'join'),
     decline: (invitation: RoomGroupInvitation) => answer(invitation, 'decline'),
   };

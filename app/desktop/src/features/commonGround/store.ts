@@ -24,7 +24,7 @@ export type CgScreen =
   | { name: 'home' }
   | { name: 'build'; memory?: boolean }
   | { name: 'card' } | CgNearbyScreen
-  | { name: 'results'; code: string; focusGroup?: string }
+  | { name: 'results'; code: string }
   | { name: 'match'; accountId: string; profileId?: string }
   | { name: 'person'; accountId: string; profileId?: string };
 
@@ -379,8 +379,8 @@ export class CommonGroundStore {
   redeemPairCode = (code: string) => pairOps.redeemPairCode(this, code);
 
   /** Opens Results for a room from the Rooms list. */
-  openRoom(code: string, focusGroup?: string) {
-    this.open(focusGroup ? { name: 'results', code, focusGroup } : { name: 'results', code });
+  openRoom(code: string) {
+    this.open({ name: 'results', code });
   }
 
   async createGroup(code: string, name: string, memberIds: string[], topic?: string) {

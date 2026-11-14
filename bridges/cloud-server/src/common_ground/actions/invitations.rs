@@ -14,6 +14,7 @@ use serde_json::json;
 use sqlx_core::query_as::query_as;
 use uuid::Uuid;
 
+use super::room_view::group_members;
 use crate::auth::routes::CloudSession;
 use crate::common_ground::people::person;
 use crate::common_ground::{db_error, err, hint, rooms};
@@ -74,6 +75,27 @@ pub(in crate::common_ground) async fn pending(
         Ok(rows) => rows,
         Err(error) => return db_error(error),
     };
+    // The detail shows who is already in each group.
+    let service = crate::system_account::service_account_ids();
+    let conversations: Vec<Uuid> = rows.iter().map(|row| row.4).collect();
+    let mut members = match group_members(pool, &conversations, &service).await {
+        Ok(members) => members,
+        Err(error) => return db_error(error),
+    };
+    let counts: Result<Vec<(Uuid, i64)>, _> = query_as(
+        "SELECT conversation_id, COUNT(*) FROM cloud_chat_conversation_members
+         WHERE conversation_id = ANY($1) AND membership_state = 'active'
+           AND NOT (account_id = ANY($2))
+         GROUP BY conversation_id",
+    )
+    .bind(&conversations)
+    .bind(&service)
+    .fetch_all(pool)
+    .await;
+    let counts: std::collections::HashMap<Uuid, i64> = match counts {
+        Ok(counts) => counts.into_iter().collect(),
+        Err(error) => return db_error(error),
+    };
     let invitations: Vec<_> = rows
         .into_iter()
         .map(
@@ -97,6 +119,8 @@ pub(in crate::common_ground) async fn pending(
                     "groupSpaceId": space,
                     "conversationId": conversation,
                     "name": name,
+                    "members": members.remove(&conversation).unwrap_or_default(),
+                    "memberCount": counts.get(&conversation).copied().unwrap_or(0),
                     "from": person(&from, from_name.as_deref(), from_handle.as_deref(), avatar.as_deref()),
                     "createdAt": created_at,
                 })

@@ -65,10 +65,6 @@
 }
 .cg-row-nested + .cg-row::before { left: 12px; }
 .cg-row.is-button:hover { background: var(--cg-fill); }
-/* A row opened from elsewhere (a room invitation in Contacts): a short tint, never a ring. */
-.cg-row.is-focused { animation: cg-row-focus 1.8s ease-out; }
-@keyframes cg-row-focus { from, 30% { background: color-mix(in oklab, var(--app-accent) 16%, transparent); } to { background: transparent; } }
-@media (prefers-reduced-motion: reduce) { .cg-row.is-focused { animation: none; background: var(--cg-fill); } }
 .cg-row-text { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .cg-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .cg-row-sub { color: var(--utility-muted-text); font-size: 12px; }

@@ -435,6 +435,7 @@
 		D67B2FDF891943457DB0C1F3 /* PreviewMemoryCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29909C6255BCF356E3B6A61D /* PreviewMemoryCards.swift */; };
 		D6E3FF1559CAAAE57EDC446B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A3A55FE7BDA62F4175A28D2 /* Assets.xcassets */; };
 		D6EEB258E7B80832B07A67DC /* DocumentTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDB84E1E2B58F553721951F1 /* DocumentTabBar.swift */; };
+		D708E6D4899590BD26995252 /* ContactsRoomInvitationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE3708103FCA2B7EE5D9056F /* ContactsRoomInvitationDetailView.swift */; };
 		D71CF7D86C7DA8E741FA361B /* ContactsGroupsSectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54171AAE142F4CCFCF96DDE5 /* ContactsGroupsSectionTests.swift */; };
 		D75AEE36D66E402DD8E821B2 /* CommonGroundNearbyAlertsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AEC7D2B7496AC8D02C7FEEC /* CommonGroundNearbyAlertsSection.swift */; };
 		D79882BEF56FA4466D872F84 /* MessageSeenBy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2558A81681603592E29FB757 /* MessageSeenBy.swift */; };
@@ -1067,6 +1068,7 @@
 		FD490ECA738742A1C27BD23C /* ProviderAuthentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderAuthentication.swift; sourceTree = "<group>"; };
 		FD8A12B1B430F22A2E8EFCA4 /* SystemNoticeIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemNoticeIdentity.swift; sourceTree = "<group>"; };
 		FD8D24A6689116C11FF7A038 /* InitialAgentModelNoticeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InitialAgentModelNoticeTests.swift; sourceTree = "<group>"; };
+		FE3708103FCA2B7EE5D9056F /* ContactsRoomInvitationDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsRoomInvitationDetailView.swift; sourceTree = "<group>"; };
 		FEFE5854F35FB895C4354C9D /* ProviderLoginControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderLoginControllerTests.swift; sourceTree = "<group>"; };
 		FF9FC9164D6712EA68EA2B9C /* SafetyPreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyPreviews.swift; sourceTree = "<group>"; };
 		FFD06B611CEDD523B38F105A /* AccountEmailVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountEmailVerificationTests.swift; sourceTree = "<group>"; };
@@ -1099,6 +1101,7 @@
 			isa = PBXGroup;
 			children = (
 				2B2CDE9007D23506C3544B63 /* ContactsGroupsSection.swift */,
+				FE3708103FCA2B7EE5D9056F /* ContactsRoomInvitationDetailView.swift */,
 				5AFAED81BF65810378154948 /* ContactsRoomInvitationRow.swift */,
 				60C9761039C7ED339BC0C048 /* ContactsRowLayout.swift */,
 				7057F708821F2D5D4A0AE795 /* ContactsView.swift */,
@@ -2490,6 +2493,7 @@
 				BE74886AE325ED746A092256 /* ContactProfileTiles.swift in Sources */,
 				06F971BF13F3B530E1DEE284 /* ContactProfileView.swift in Sources */,
 				8068F40907738D6BF2CA3C73 /* ContactsGroupsSection.swift in Sources */,
+				D708E6D4899590BD26995252 /* ContactsRoomInvitationDetailView.swift in Sources */,
 				691BF7D7B54DBD3A2F4B37BF /* ContactsRoomInvitationRow.swift in Sources */,
 				0ECD5A149AA56F8FE8606C0A /* ContactsRowLayout.swift in Sources */,
 				EB453D88857B3296BE127B94 /* ContactsView.swift in Sources */,

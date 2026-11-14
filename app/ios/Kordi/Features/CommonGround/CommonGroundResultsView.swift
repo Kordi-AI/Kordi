@@ -29,13 +29,9 @@ struct CommonGroundResultsView: View {
     @Environment(\.commonGroundOpenConversation) private var openConversation
     @Environment(\.scenePhase) private var scenePhase
     let code: String
-    /// A group to scroll to and highlight once, e.g. from Contacts.
-    var focusGroupSpaceId: String? = nil
     @Binding var path: [CommonGroundRoute]
     @State private var tab = CommonGroundRoomTab.people
     @State private var draft: CommonGroundGroupDraft?
-    @State private var focusHandled = false
-    @State private var highlightedRow: String?
 
     private var results: CommonGroundResults? { model.results[code] }
     private var room: CommonGroundRoom? { model.rooms[code] }
@@ -43,14 +39,8 @@ struct CommonGroundResultsView: View {
     private var members: [CommonGroundPerson] { room?.members ?? results?.people.map(\.person) ?? [] }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            page.task(id: focusRowID) { await focus(proxy) }
-        }
-    }
-
-    private var page: some View {
         let topics = results?.topics ?? []
-        return CommonGroundPage(onBack: { path = [] }) {
+        CommonGroundPage(onBack: { path = [] }) {
             CommonGroundRoomHeader(title: model.roomTitle(code), status: status(topics: topics.count),
                                    code: code, people: [model.me] + members, closed: closed, leave: leave)
 
@@ -101,29 +91,6 @@ struct CommonGroundResultsView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
-    }
-
-    /// The focused group's invitation row, else its row under Groups,
-    /// once either has loaded.
-    private var focusRowID: String? {
-        guard let id = focusGroupSpaceId else { return nil }
-        if (results?.invitations ?? room?.invitations ?? []).contains(where: { $0.groupSpaceId == id }) { return "invitation:\(id)" }
-        if (results?.groups ?? room?.groups ?? []).contains(where: { $0.groupSpaceId == id }) { return "group:\(id)" }
-        return nil
-    }
-
-    /// Scrolls the focused row into view and tints it briefly.
-    private func focus(_ proxy: ScrollViewProxy) async {
-        guard !focusHandled, let rowID = focusRowID else { return }
-        focusHandled = true
-        withAnimation(.snappy) { proxy.scrollTo(rowID, anchor: .center) }
-        withAnimation(.easeIn(duration: 0.2)) { highlightedRow = rowID }
-        try? await Task.sleep(for: .seconds(1.5))
-        withAnimation(.easeOut(duration: 0.6)) { highlightedRow = nil }
-    }
-
-    private func highlight(_ rowID: String) -> Color {
-        highlightedRow == rowID ? chatTheme.accent.opacity(0.16) : .clear
     }
 
     private func status(topics: Int) -> String {
@@ -193,8 +160,6 @@ struct CommonGroundResultsView: View {
                     .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)
                     .padding(.vertical, 8)
                     .frame(minHeight: SessionDetailMetrics.rowMinHeight)
-                    .background(highlight("invitation:\(invitation.groupSpaceId)"))
-                    .id("invitation:\(invitation.groupSpaceId)")
                 }
             }
         }
@@ -223,8 +188,6 @@ struct CommonGroundResultsView: View {
                     .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)
                     .padding(.vertical, 8)
                     .frame(minHeight: SessionDetailMetrics.rowMinHeight)
-                    .background(highlight("group:\(group.groupSpaceId)"))
-                    .id("group:\(group.groupSpaceId)")
                     // Requests sent while the room was open can still be answered after it closes.
                     if group.joined {
                         ForEach(group.requests) { request in

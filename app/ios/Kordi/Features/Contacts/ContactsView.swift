@@ -6,6 +6,7 @@ struct ContactsView<PinnedRows: View>: View {
     @State private var showAddContact = false
     @State private var showsCommonGround = false
     @State private var profileSubject: ContactProfileSubject?
+    @State private var openedInvitation: RoomGroupInvitation?
     var onOpenConversation: ((ConversationSummary) -> Void)? = nil
     var onOpenGroup: ((GroupSpaceSummary) -> Void)? = nil
     /// Pushes Common ground on the main stack; without it the screen opens full screen.
@@ -76,8 +77,7 @@ struct ContactsView<PinnedRows: View>: View {
                         }
                         ForEach(model.roomGroupInvitations) { invitation in
                             ContactsRoomInvitationRow(invitation: invitation, onOpenConversation: onOpenConversation) {
-                                CommonGroundRoomInvitationInbox.shared.open(invitation)
-                                openCommonGround()
+                                openedInvitation = invitation
                             }
                                 .contactsListRow()
                         }
@@ -152,6 +152,9 @@ struct ContactsView<PinnedRows: View>: View {
         }
         .sheet(isPresented: $showAddContact) { AddContactSheet() }
         .contactProfileSheet(subject: $profileSubject, onOpenConversation: onOpenConversation)
+        .stableNavigationDestination(item: $openedInvitation) { invitation in
+            ContactsRoomInvitationDetailView(invitation: invitation)
+        }
         .fullScreenCover(isPresented: $showsCommonGround) {
             CommonGroundDestinationView(appModel: model, onClose: { showsCommonGround = false }) { showsCommonGround = false; onOpenConversation?($0) }
         }

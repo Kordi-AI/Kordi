@@ -31,7 +31,7 @@ const MAX_SHOWN_MEMBERS: usize = 8;
 
 /// The active people in each conversation, creator first, then by join
 /// order, at most [`MAX_SHOWN_MEMBERS`] each. Service accounts are left out.
-async fn group_members(
+pub(in crate::common_ground) async fn group_members(
     pool: &PgPool,
     conversations: &[Uuid],
     service: &[String],

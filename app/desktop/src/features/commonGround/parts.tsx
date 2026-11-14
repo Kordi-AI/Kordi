@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { ChevronLeft } from 'lucide-react';
 
 import { ErrorLine } from '@/components/ui/ErrorLine';
@@ -88,7 +88,7 @@ export function CgGroup({ children, className }: { children: ReactNode; classNam
   return <div className={cn('cg-group', className)}>{children}</div>;
 }
 
-export function CgRow({ lead, title, sub, trailing, onClick, label, helpTarget, focused = false }: {
+export function CgRow({ lead, title, sub, trailing, onClick, label, helpTarget }: {
   lead?: ReactNode;
   title: ReactNode;
   sub?: ReactNode;
@@ -96,14 +96,7 @@ export function CgRow({ lead, title, sub, trailing, onClick, label, helpTarget, 
   onClick?: () => void;
   label?: string;
   helpTarget?: string;
-  /** Scrolls the row into view and tints it briefly, for a row opened from elsewhere. */
-  focused?: boolean;
 }) {
-  const ref = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (focused) ref.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-  }, [focused]);
-  const className = cn('cg-row', onClick && 'is-button', focused && 'is-focused');
   const body = (
     <>
       {lead}
@@ -115,8 +108,8 @@ export function CgRow({ lead, title, sub, trailing, onClick, label, helpTarget, 
     </>
   );
   return onClick
-    ? <button ref={(node) => { ref.current = node; }} type="button" className={className} onClick={onClick} aria-label={label} data-help-target={helpTarget}>{body}</button>
-    : <div ref={(node) => { ref.current = node; }} className={className} data-help-target={helpTarget}>{body}</div>;
+    ? <button type="button" className="cg-row is-button" onClick={onClick} aria-label={label} data-help-target={helpTarget}>{body}</button>
+    : <div className="cg-row" data-help-target={helpTarget}>{body}</div>;
 }
 
 export function CgButton({ children, onClick, disabled, quiet = false, danger = false, type = 'button', label }: {

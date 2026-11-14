@@ -323,3 +323,18 @@
 .app-contacts-danger-action:hover {
   background: var(--app-transient-danger-hover-bg);
 }
+
+/* Group invitation rows: small round Decline and Join buttons above the row's select button. */
+.app-contacts-invite-icon {
+  border: 0;
+  background: color-mix(in oklab, var(--utility-foreground) 10%, transparent);
+  color: var(--utility-foreground);
+  cursor: pointer;
+}
+.app-contacts-invite-icon:focus { outline: none; }
+/* Keyboard focus shows as the hover fill, never a ring. */
+.app-contacts-invite-icon:hover,
+.app-contacts-invite-icon:focus-visible { background: color-mix(in oklab, var(--utility-foreground) 18%, transparent); }
+.app-contacts-invite-icon.is-join { background: var(--app-accent); color: var(--app-palette-accent-ink); }
+.app-contacts-invite-icon.is-join:hover,
+.app-contacts-invite-icon.is-join:focus-visible { background: color-mix(in oklab, var(--app-accent) 85%, var(--utility-foreground)); }

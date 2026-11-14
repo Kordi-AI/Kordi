@@ -5,7 +5,6 @@ import { CLOUD_SESSION_CHANGED_EVENT, CLOUD_SESSION_SIGNED_OUT_EVENT } from '@/f
 import { subscribeCardHints } from './cardHints';
 import { createCommonGroundClient } from './client';
 import { COMMON_GROUND_PAIR_LINK_EVENT, takePendingPairLink } from './pairLink';
-import { COMMON_GROUND_ROOM_FOCUS_EVENT, takePendingRoomFocus } from './roomFocus';
 import { localProfileMemory } from './profiles';
 import { subscribeRoomHints } from './roomHints';
 import { CommonGroundStore } from './store';
@@ -76,20 +75,5 @@ export function usePairLinkRedeem(store: CommonGroundStore, loaded: boolean) {
     if (!loaded) return;
     const code = takePendingPairLink();
     if (code) void redeemPairLink(store, code);
-  }, [store, loaded, arrivals]);
-}
-
-/** Opens a room asked for from elsewhere (a room invitation in Contacts), focused on its group. */
-export function useRoomFocus(store: CommonGroundStore, loaded: boolean) {
-  const [arrivals, setArrivals] = useState(0);
-  useEffect(() => {
-    const onFocus = () => setArrivals((count) => count + 1);
-    window.addEventListener(COMMON_GROUND_ROOM_FOCUS_EVENT, onFocus);
-    return () => window.removeEventListener(COMMON_GROUND_ROOM_FOCUS_EVENT, onFocus);
-  }, []);
-  useEffect(() => {
-    if (!loaded) return;
-    const focus = takePendingRoomFocus();
-    if (focus) store.openRoom(focus.code, focus.groupSpaceId);
   }, [store, loaded, arrivals]);
 }

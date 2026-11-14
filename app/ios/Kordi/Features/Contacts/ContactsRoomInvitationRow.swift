@@ -8,7 +8,7 @@ struct ContactsRoomInvitationRow: View {
     @EnvironmentObject private var model: AppModel
     let invitation: RoomGroupInvitation
     var onOpenConversation: ((ConversationSummary) -> Void)? = nil
-    /// Opens the room's results in Grounding.
+    /// Opens the invitation's detail screen.
     var onOpen: (() -> Void)? = nil
     @State private var working: Action?
     @State private var failure: RoomGroupInvitationError?
@@ -41,15 +41,16 @@ struct ContactsRoomInvitationRow: View {
         if let onOpen {
             Button(action: onOpen) { labelContent }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Open \(invitation.groupTitle)")
-                .accessibilityValue("\(invitation.from.displayName) invited you")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(invitation.from.displayName), invited you to \(invitation.groupName)")
+                .accessibilityAddTraits(.isButton)
         } else {
             labelContent
         }
     }
 
     private var labelContent: some View {
-        HStack(spacing: 12) {
+        ContactsRowLayout(title: invitation.from.displayName, subtitle: "Invited you to \(invitation.groupName)") {
             IdentityAvatar(
                 name: invitation.from.displayName,
                 imageSource: invitation.from.avatarUrl.nonEmpty,
@@ -58,56 +59,45 @@ struct ContactsRoomInvitationRow: View {
                 seed: invitation.from.accountId,
                 cornerRadius: 22
             )
-            .frame(width: 44, height: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(invitation.from.displayName) invited you")
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Text(invitation.groupTitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         }
-        .contentShape(Rectangle())
     }
 
     private var actions: some View {
         HStack(spacing: 8) {
             Button(action: decline) {
-                capsule("Decline", isWorking: working == .decline, foreground: .secondary,
-                        background: AnyShapeStyle(Color(uiColor: .tertiarySystemFill)), tint: .secondary)
+                iconButton("xmark", isWorking: working == .decline, foreground: Color.primary,
+                           background: Color(uiColor: .tertiarySystemFill))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Decline")
+            .help("Decline")
 
             Button(action: join) {
-                capsule("Join", isWorking: working == .join, foreground: AnyShapeStyle(chatTheme.accentForeground),
-                        background: AnyShapeStyle(chatTheme.accent), tint: chatTheme.accentForeground)
+                iconButton("checkmark", isWorking: working == .join, foreground: chatTheme.accentForeground,
+                           background: chatTheme.accent)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Join")
+            .help("Join")
         }
         .disabled(working != nil)
         .opacity(working != nil ? 0.6 : 1)
     }
 
-    private func capsule(_ title: String, isWorking: Bool, foreground: some ShapeStyle, background: AnyShapeStyle, tint: Color) -> some View {
+    private func iconButton(_ systemName: String, isWorking: Bool, foreground: Color, background: Color) -> some View {
         ZStack {
-            Text(title).opacity(isWorking ? 0 : 1)
+            Image(systemName: systemName)
+                .font(.footnote.weight(.bold))
+                .opacity(isWorking ? 0 : 1)
             if isWorking {
-                ProgressView().controlSize(.small).tint(tint)
+                ProgressView().controlSize(.small).tint(foreground)
             }
         }
-        .font(.subheadline.weight(.semibold))
         .foregroundStyle(foreground)
-        .padding(.horizontal, 14)
-        .frame(minHeight: 30)
-        .background(background, in: Capsule())
-        .frame(minHeight: 44)
+        .frame(width: 30, height: 30)
+        .background(background, in: Circle())
+        .frame(width: 36, height: 44)
         .contentShape(Rectangle())
-        .accessibilityLabel(title)
     }
 
     private func join() {
