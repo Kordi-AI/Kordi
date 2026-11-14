@@ -328,6 +328,7 @@ export type Message = {
   voiceMessage?: MessageVoice | null;
   planCard?: MessagePlanCard | null;
   facilitatorCard?: import("@/features/cloud/facilitatorCard").FacilitatorCard | null;
+  groupJoinRequest?: import("@/features/cloud/groupJoinRequest").GroupJoinRequestCard | null;
   eventSources?: MessageEventSource[] | null;
   detail?: string;
   statusChips?: string[];
