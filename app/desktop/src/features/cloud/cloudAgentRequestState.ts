@@ -177,8 +177,7 @@ export function cloudGroupAgentUnavailableFallbackRequest(input: {
   targetAgentId?: string | null;
   targetAgentDisplayName?: string | null;
   createdAtMs?: number | null;
-  /** Replaces the no-reply notice, as for a refused request. */
-  error?: string;
+  error?: string; // replaces the no-reply notice, as for a refused request
 }): AppendCanonicalMessageRequest {
   const createdAtMs = typeof input.createdAtMs === 'number'
     && Number.isFinite(input.createdAtMs)
