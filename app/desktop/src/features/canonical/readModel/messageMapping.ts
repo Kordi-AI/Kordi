@@ -411,6 +411,7 @@ export function mapCanonicalMessage(
     attachments: withoutVoiceAttachment(canonicalAttachments(content.attachments), voiceMessage),
     mentions,
     replyToMessageId: replyToMessageId ?? undefined,
+    ...(isAgentTurn && stringValue(content.cloudGroupMessageId) && !sourceRequestId && !replyToMessageId ? { answersNoRequest: true } : {}),
     replyAliasIds: replyAliasIds.length ? replyAliasIds : undefined,
     readReceiptSummary: isOwnMessage && role === 'user' ? canonicalReadReceiptSummary(content, identityById) : null,
     messageAction,

@@ -423,6 +423,8 @@ mod desktop_reply_row;
 mod digest_mac_first;
 #[path = "cloud_agent_runtime_e2e/execution_ownership.rs"]
 mod execution_ownership;
+#[path = "cloud_agent_runtime_e2e/follow_up_subsessions.rs"]
+mod follow_up_subsessions;
 #[path = "cloud_agent_runtime_e2e/group_document_tools.rs"]
 mod group_document_tools;
 #[path = "cloud_agent_runtime_e2e/group_owner_admission.rs"]

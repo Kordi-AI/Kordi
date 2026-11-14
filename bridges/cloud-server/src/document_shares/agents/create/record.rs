@@ -1,5 +1,6 @@
 //! Stores a created document and records it against its run until a reply
-//! takes it.
+//! takes it. A background session's reply stays in that session, so its
+//! document is posted in the parent group as the agent's own message at once.
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -10,6 +11,8 @@ use uuid::Uuid;
 
 use super::super::gating::RunFacts;
 use super::super::tools::ToolError;
+use super::group_message::{post, request_line, DocumentMessage};
+use super::reply::{mark_attached, RunDocument};
 use super::{parse, NewDocument, MAX_DOCUMENTS_PER_RUN};
 use crate::server::ServerState;
 
@@ -102,16 +105,71 @@ pub(crate) async fn execute(
     .execute(pool)
     .await?;
     record_artifact(pool, run_id, facts, &attachment_id, &document).await?;
+    let note = if facts.gate.background_session {
+        post_from_background_session(pool, run_id, facts, conversation_id, &attachment_id).await?;
+        "Saved. It is posted in the group as a document card from you and listed in the \
+         group's Artifacts. Do not call create_document again for this document; in your \
+         report, say briefly what it covers, without file paths."
+    } else {
+        "Saved. It will appear as a document card in your reply and in this group's \
+         Artifacts. Do not call create_document again for this document; reply briefly with \
+         what it covers, without file paths."
+    };
     Ok(json!({
         "created": true,
         "attachmentId": attachment_id,
         "title": document.title,
         "fileName": document.file_name,
         "format": document.format(),
-        "note": "Saved. It will appear as a document card in your reply and in this group's \
-                 Artifacts. Do not call create_document again for this document; reply \
-                 briefly with what it covers, without file paths.",
+        "note": note,
     }))
+}
+
+/// Posts a background session's document in the parent group now: no group
+/// reply will carry it. A retry finds the first message. When the group has
+/// no message to address it with yet, the fallback sweep posts it later.
+async fn post_from_background_session(
+    pool: &PgPool,
+    run_id: &str,
+    facts: &RunFacts,
+    conversation_id: Uuid,
+    attachment_id: &str,
+) -> Result<(), ToolError> {
+    let row: Option<(String, String, i64, bool)> = query_as(
+        "SELECT file_name, content_type, size_bytes, attached_at IS NOT NULL \
+         FROM cloud_agent_run_documents WHERE attachment_id = $1 AND run_id = $2",
+    )
+    .bind(attachment_id)
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((file_name, content_type, size_bytes, attached)) = row else {
+        return Err(ToolError::Server);
+    };
+    if attached {
+        return Ok(());
+    }
+    let documents = [RunDocument {
+        attachment_id: attachment_id.to_string(),
+        file_name,
+        content_type,
+        size_bytes,
+    }];
+    let text = request_line(pool, conversation_id, run_id).await?;
+    let message = DocumentMessage {
+        conversation_id,
+        text: text.as_deref().unwrap_or_default(),
+        run_id,
+        session_id: &facts.session_id,
+        owner_account_id: &facts.owner_account_id,
+        agent_id: &facts.agent_id,
+        documents: &documents,
+    };
+    if post(pool, message).await?.is_some() {
+        let mut conn = pool.acquire().await?;
+        mark_attached(&mut conn, &documents).await?;
+    }
+    Ok(())
 }
 
 /// Lists the document in the session's Artifacts activity.

@@ -50,7 +50,7 @@ pub use background_sessions::{
     activate_background_runtime_session, background_runtime_session_ids,
     background_runtime_snapshot, background_session_for_parent_message,
     background_session_turn_route, create_background_session, is_background_runtime_session,
-    session_exists, set_background_session_turn_route,
+    root_background_request_id, session_exists, set_background_session_turn_route,
 };
 pub use model_options::{
     authenticated_model_options, clear_desktop_model_options_cache,

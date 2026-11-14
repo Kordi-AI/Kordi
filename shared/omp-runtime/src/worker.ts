@@ -4,6 +4,7 @@ import { declareWorkerHostEntry } from '@oh-my-pi/pi-utils/worker-host';
 import { installDeferredWorkerInbox } from './workerInbox';
 import { parseCommand, RuntimeError, type JsonObject, type RunRequest, type ToolResult } from './protocol';
 import runtimePackage from '../package.json';
+import { wellFormedReplacer } from './wellFormed';
 
 if (process.argv.includes('--version')) {
   process.stdout.write(`kordi-omp ${runtimePackage.dependencies['@oh-my-pi/pi-coding-agent']}\n`);
@@ -176,8 +177,9 @@ let sequence = 0;
 let terminal = false;
 const controller = new AbortController();
 const pending = new Map<string, { kind: 'tool_result' | 'hook_result'; resolve: (result: any) => void; reject: (error: Error) => void; cleanup: () => void }>();
+// Every string is made well-formed: the host rejects a lone surrogate escape.
 const frame = (value: JsonObject) => `${JSON.stringify({ schemaVersion: 1,
-  ...(request ? { runId: request.runId, attemptId: request.attemptId, sequence: sequence + 1 } : {}), ...value })}\n`;
+  ...(request ? { runId: request.runId, attemptId: request.attemptId, sequence: sequence + 1 } : {}), ...value }, wellFormedReplacer)}\n`;
 function send(value: JsonObject) {
   if (terminal) return;
   let line = frame(value);

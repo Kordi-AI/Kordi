@@ -156,6 +156,7 @@ async fn save(state: &ServerState, run_id: &str, runner_id: &str, mut draft: Dra
             session_has_document: false,
             group_session: true,
             owner_request: false,
+            background_session: false,
         },
     };
     let args = json!({

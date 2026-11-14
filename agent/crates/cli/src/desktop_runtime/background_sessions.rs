@@ -297,6 +297,41 @@ fn set_background_turn_route_in_store(
     Ok(next)
 }
 
+/// The person's request that a background session started from `request_id`
+/// answers. A follow-up turn's request id names the finished background
+/// session it reports (`background-result:<session>:<status>`); that
+/// session's own parent request is followed until a person's request id is
+/// reached, so a task restarted from a follow-up registers with the cloud
+/// under the original request and its result lands with its follow-up reply.
+pub fn root_background_request_id(request_id: &str) -> Result<String> {
+    let conn = open_sessions_db()?;
+    root_request_from_store(&conn, request_id)
+}
+
+/// Longest chain of follow-up restarts followed back to the person's request.
+const MAX_FOLLOW_UP_CHAIN: usize = 16;
+
+fn root_request_from_store(conn: &rusqlite::Connection, request_id: &str) -> Result<String> {
+    let mut current = request_id.trim().to_string();
+    for _ in 0..MAX_FOLLOW_UP_CHAIN {
+        let Some((session_id, _status)) = current
+            .strip_prefix(BACKGROUND_FOLLOW_UP_ENTRY_PREFIX)
+            .and_then(|rest| rest.rsplit_once(':'))
+        else {
+            break;
+        };
+        let parent = kordi_session::store::get_session(conn, session_id)?
+            .and_then(|row| row.parent_session_message_id)
+            .map(|id| id.trim().to_string())
+            .filter(|id| !id.is_empty());
+        let Some(parent) = parent else { break };
+        current = parent;
+    }
+    Ok(current)
+}
+
+#[cfg(test)]
+mod root_request_tests;
 #[cfg(test)]
 mod runtime_snapshot_tests;
 
