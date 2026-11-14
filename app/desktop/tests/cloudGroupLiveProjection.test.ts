@@ -3,6 +3,7 @@ import test from 'node:test';
 import { projectCloudGroupLiveTurns, projectCloudSelfAgentLiveTurns } from '../src/features/cloud/cloudGroupLiveProjection';
 import { cloudGroupAgentRuntimeSessionId } from '../src/features/cloud/cloudAgentRuntime';
 import { mapCanonicalMessage } from '../src/features/canonical/readModel/messageMapping';
+import { turnProgressLabel } from '../src/kordi-app/components/turnProgressLabels';
 import type { CanonicalSessionState, DesktopChatTurnSnapshot } from '../src/kordi-app/types';
 
 const state = {
@@ -54,6 +55,49 @@ test('peer, account, request, and group boundaries cannot project private progre
 test('authoritative terminal replies and subsequent edits win over retained local snapshots', () => {
   const final = { ...state, messages: [{ ...state.messages[0], status: 'received', contentText: 'Edited public answer', content: { deliveryState: 'complete' } }] };
   assert.equal(projectCloudGroupLiveTurns(final, { request: { ...turn, completed: true, assistantText: 'Old answer' } }, 'owner'), final);
+});
+
+// The owner's agent asked the owner a question and its turn yielded (#2416).
+const yielded: DesktopChatTurnSnapshot = {
+  ...turn, status: 'complete', completed: true, succeeded: true, tools: [], completedAtMs: 1800,
+  assistantText: '{"agentExchangeOutcome":"waiting"}',
+};
+const members = {
+  ...state,
+  identities: [...state.identities,
+    { id: 'human:owner', kind: 'human', humanId: 'owner', displayName: 'Synthetic Owner' },
+    { id: 'human:member', kind: 'human', humanId: 'member', displayName: 'Synthetic Member' }],
+} as CanonicalSessionState;
+const serverSlot = (status: 'waiting' | 'processing') => ({
+  ...members,
+  messages: [{ ...members.messages[0], contentText: status === 'waiting' ? 'Waiting' : '',
+    content: { deliveryState: 'processing', requestId: 'request', agentExchangeStatus: status,
+      ...(status === 'waiting' ? { agentExchangeWaitingFor: 'Synthetic Owner', agentExchangeWaitingForAccountId: 'owner' } : {}) } }],
+}) as CanonicalSessionState;
+function label(projected: CanonicalSessionState, viewer: string, role = 'owned-agent') {
+  const identities = new Map(projected.identities.map(identity => [identity.id, identity]));
+  const mapped = mapCanonicalMessage({ ...projected.messages[0], senderRole: role }, identities, viewer);
+  assert.ok(mapped?.turn, 'the row stays visible');
+  assert.equal(mapped.turn.assistantText, '', 'the status line shows once, in the header');
+  return turnProgressLabel(mapped.turn);
+}
+
+test('a yielded turn keeps the owner\'s row waiting until the server names whom it waits for', () => {
+  const projected = projectCloudGroupLiveTurns(members, { request: yielded }, 'owner')!;
+  assert.equal(projected.messages[0].contentText, '', 'the waiting outcome never shows as text');
+  assert.equal(label(projected, 'human:owner'), 'Waiting');
+});
+
+test('the owner and every other member see the same waiting row, then processing', () => {
+  const waiting = serverSlot('waiting');
+  assert.equal(projectCloudGroupLiveTurns(waiting, { request: yielded }, 'owner'), waiting,
+    'the finished local turn no longer speaks for the slot');
+  assert.equal(label(waiting, 'human:owner'), 'Waiting');
+  assert.equal(label(waiting, 'human:member', 'external-agent'), 'Waiting');
+  const resumed = serverSlot('processing');
+  const ownerView = projectCloudGroupLiveTurns(resumed, { request: yielded }, 'owner')!;
+  assert.equal(label(ownerView, 'human:owner'), 'Processing reply', 'an answered question is never shown waiting again');
+  assert.equal(label(resumed, 'human:member', 'external-agent'), 'Processing reply');
 });
 
 const selfState = {

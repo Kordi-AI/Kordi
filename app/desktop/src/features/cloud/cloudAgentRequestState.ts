@@ -296,12 +296,11 @@ export function removeCloudGroupPendingRowsForTerminalResponse(
   targetAccountId: string,
 ): CanonicalSessionState | null {
   if (!current) return current;
+  // The reply takes the agent's own row in place (#2416), so that row stays until it lands; removing it first left a frame without it.
+  const slotId = `msg:cloud-agent-processing:${requestId.trim()}:${targetAccountId.trim()}`;
+  const replyElsewhere = current.messages.some((message) => message.id !== slotId && message.sourceTransport === 'cloud-group-agent' && objectContent(message.content).requestId === requestId.trim() && cloudAgentMessageOwnedBy(message, targetAccountId.trim()) && !cloudGroupPendingAgentRowMatches(message, requestId, targetAccountId));
   const nextMessages = current.messages.filter(
-    (message) => !cloudGroupPendingAgentRowMatches(
-      message,
-      requestId,
-      targetAccountId,
-    ),
+    (message) => (message.id === slotId && !replyElsewhere) || !cloudGroupPendingAgentRowMatches(message, requestId, targetAccountId),
   );
   return nextMessages.length === current.messages.length
     ? current

@@ -169,13 +169,7 @@ async fn the_cloud_runner_shows_the_slot_at_once_and_the_question_is_plain_with_
     // The task's slot waits for that person, in progress and in words.
     let (waiting, _) = f.wire_of(&slot).await;
     assert_eq!(waiting["deliveryState"], "processing");
-    assert!(
-        waiting["text"]
-            .as_str()
-            .unwrap()
-            .starts_with("Waiting for "),
-        "{waiting}"
-    );
+    assert_eq!(waiting["text"], "Waiting", "{waiting}");
 }
 
 #[tokio::test]
@@ -259,10 +253,7 @@ async fn a_cloud_yield_shows_waiting_in_place_and_names_the_agent() {
     never_blank(&versions);
     let last = versions.last().unwrap();
     assert_eq!(last["deliveryState"], "processing");
-    assert_eq!(
-        last["text"], "Waiting for Exchange Beta's Kordi.",
-        "{versions:?}"
-    );
+    assert_eq!(last["text"], "Waiting", "{versions:?}");
     assert!(
         last["structuredContent"]["agentExchangeWaitingForAccountId"].is_null(),
         "an agent's wait is nobody's reply"
@@ -301,7 +292,7 @@ async fn an_answering_slot_waits_for_its_owner_without_a_blank_version() {
     never_blank(&versions);
     let last = versions.last().unwrap();
     assert_eq!(last["deliveryState"], "processing");
-    assert_eq!(last["text"], "Waiting for Exchange Beta.", "{versions:?}");
+    assert_eq!(last["text"], "Waiting", "{versions:?}");
 }
 
 #[tokio::test]
