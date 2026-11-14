@@ -132,7 +132,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // there, so it moves to 5.977 MB.
 // The same PDF viewer and file card add 4.5 kB there, so it moves to 5.983 MB.
 // The same Digest notification permission line adds 0.2 kB over it there, so it moves to 5.984 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_984_000;
+// Offering group members' default agents in the @ menu, refreshing it on open and focus, and ending a
+// refused agent request at once add 0.2 kB there, so it moves to 5.985 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_985_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
