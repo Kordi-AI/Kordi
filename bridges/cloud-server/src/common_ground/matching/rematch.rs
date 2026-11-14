@@ -109,7 +109,16 @@ async fn one(
     if viewer.profile_id != marked.profile_id || others.is_empty() {
         return clear(pool, marked).await;
     }
-    let queued = queue_new_matches(pool, service, rate_limiter, viewer, others, None, None);
+    let queued = queue_new_matches(
+        pool,
+        service,
+        rate_limiter,
+        viewer,
+        others,
+        None,
+        None,
+        false,
+    );
     match queued.await? {
         (Queued::Pending(Pending::Running), true) => {
             clear(pool, marked).await.map(|_| Rematch::Queued)
