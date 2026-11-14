@@ -78,7 +78,9 @@ async fn main() -> Result<()> {
         (1..=4).contains(&concurrency),
         "Runner concurrency must be between 1 and 4"
     );
-    let mut workers = tokio::task::JoinSet::new();
+    let mut workers: tokio::task::JoinSet<
+        Result<RunnerStepOutcome, kordi_cloud_agent_runner::client::RunnerClientError>,
+    > = tokio::task::JoinSet::new();
     let mut poll = tokio::time::interval(Duration::from_millis(poll_ms));
     poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
@@ -86,7 +88,18 @@ async fn main() -> Result<()> {
             Some(result) = workers.join_next(), if !workers.is_empty() => match result {
                 Ok(Ok(RunnerStepOutcome::NoRun)) => {},
                 Ok(Ok(_)) => tracing::info!("cloud agent run finished"),
-                _ => tracing::warn!("cloud agent runner step failed"),
+                // The chain holds request paths, status codes and parse
+                // errors with quoted values removed, never prompt or reply text.
+                Ok(Err(error)) => tracing::warn!(
+                    run_id = error.run_id().unwrap_or("none"),
+                    error = %error.chain(),
+                    "cloud agent runner step failed"
+                ),
+                // A panic's message was already printed by the panic hook.
+                Err(error) => tracing::warn!(
+                    panicked = error.is_panic(),
+                    "cloud agent runner step task ended abnormally"
+                ),
             },
             _ = poll.tick(), if workers.len() < concurrency => {
                 let execution = client.for_execution();

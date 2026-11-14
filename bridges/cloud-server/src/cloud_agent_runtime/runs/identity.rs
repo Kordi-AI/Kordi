@@ -15,7 +15,7 @@ pub(crate) async fn identity_for_run(pool: &PgPool, run_id: &str) -> RunResult<V
         .fetch_one(pool)
         .await?;
     if let Some(saved) = saved {
-        return Ok(saved);
+        return Ok(with_names(saved));
     }
     let facilitator_assignment = request.starts_with(super::facilitator_handoff::REQUEST_PREFIX);
     let policy = if facilitator_assignment {
@@ -30,8 +30,8 @@ pub(crate) async fn identity_for_run(pool: &PgPool, run_id: &str) -> RunResult<V
     let (mut identity,): (Value,) = query_as(
         "SELECT
             jsonb_build_object('requestId',r.request_message_id,'agentId',COALESCE(NULLIF(r.execution_agent_id,''),'cloud-agent:'||r.owner_account_id),
-                'ownerAccountId',r.owner_account_id,'ownerName',owner.display_name,
-                'requesterAccountId',r.requester_account_id,'requesterName',requester.display_name,
+                'ownerAccountId',r.owner_account_id,'ownerName',COALESCE(NULLIF(btrim(owner.display_name),''),'Participant'),
+                'requesterAccountId',r.requester_account_id,'requesterName',COALESCE(NULLIF(btrim(requester.display_name),''),'Participant'),
                 'agentName',COALESCE((SELECT name FROM cloud_agent_definitions
                     WHERE agent_id=r.execution_agent_id AND owner_account_id=r.owner_account_id),
                     profile.display_name,'Kordi'))
@@ -89,5 +89,47 @@ pub(crate) async fn identity_for_run(pool: &PgPool, run_id: &str) -> RunResult<V
         .bind(&identity)
         .fetch_one(pool)
         .await?;
-    Ok(identity)
+    Ok(with_names(identity))
+}
+
+/// The label an account without a display name gets, as elsewhere in runs.
+const UNNAMED: &str = "Participant";
+
+/// Gives the owner and requester a name label when the stored identity has
+/// none. An account may have no display name, and runners read both names as
+/// strings, so an identity saved without one would make every lease of its
+/// run unreadable.
+pub(crate) fn with_names(mut identity: Value) -> Value {
+    if let Some(object) = identity.as_object_mut() {
+        for field in ["ownerName", "requesterName"] {
+            let named = object
+                .get(field)
+                .and_then(Value::as_str)
+                .is_some_and(|name| !name.trim().is_empty());
+            if !named {
+                object.insert(field.to_string(), Value::String(UNNAMED.to_string()));
+            }
+        }
+    }
+    identity
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    #[test]
+    fn identities_without_names_get_a_label() {
+        let identity = super::with_names(json!({
+            "agentName": "Facilitator",
+            "ownerName": "Facilitator",
+            "requesterName": null,
+        }));
+        assert_eq!(identity["requesterName"], "Participant");
+        assert_eq!(identity["ownerName"], "Facilitator");
+        let identity = super::with_names(json!({ "ownerName": " ", "agentName": "Kordi" }));
+        assert_eq!(identity["ownerName"], "Participant");
+        assert_eq!(identity["requesterName"], "Participant");
+        assert_eq!(identity["agentName"], "Kordi");
+    }
 }

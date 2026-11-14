@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 
+use super::attempts::attempts_limit;
 use super::{AgentRuntimeRoute, RunError, RunResult};
 use crate::connectors;
 use crate::connectors::delivery::LeaseConnectorTool;
@@ -136,6 +137,10 @@ const ELIGIBLE: &str = concat!(
     "status IN ('leased', 'running') ",
     "AND lease_expires_at IS NOT NULL ",
     "AND lease_expires_at::timestamptz <= $1::timestamptz ",
+    // A run whose leases kept lapsing is failed by the attempts sweep
+    // (`attempts::fail_exhausted_runs`) instead of being leased again.
+    "AND candidate.cloud_lease_attempts < ",
+    attempts_limit!(),
     ")) ",
     // Proactive runs need no project folder (`proactive::needs_no_project_folder`).
     "AND (starts_with(candidate.run_id, 'proactive_eval_') OR starts_with(candidate.run_id, 'proactive_run_') OR starts_with(candidate.run_id, 'personal_agent_eval_') OR NOT EXISTS(SELECT 1 FROM cloud_project_devices p JOIN cloud_devices d USING(device_id), jsonb_array_elements(p.projects) project WHERE p.account_id=candidate.owner_account_id AND (project->'sessions') ? candidate.session_id AND d.revoked_at IS NULL AND (p.updated_at>now()-make_interval(secs=>$3) OR (candidate.execution_backend='desktop' AND ",
@@ -225,7 +230,8 @@ async fn lease_eligible(
         // that prefers the owner's Mac waits until `desktop_preferred_until`.
         let row: Option<RunnerRunRow> = query_as(&format!(
             "UPDATE cloud_agent_fallback_runs \
-             SET status = 'leased', execution_backend = 'cloud', claimed_by = $4, lease_expires_at = $5, updated_at = $1 \
+             SET status = 'leased', execution_backend = 'cloud', claimed_by = $4, lease_expires_at = $5, updated_at = $1, \
+                 cloud_lease_attempts = cloud_lease_attempts + 1 \
              WHERE run_id = (SELECT candidate.run_id FROM cloud_agent_fallback_runs candidate {ELIGIBLE} FOR UPDATE SKIP LOCKED) \
              RETURNING run_id, status, prompt, owner_account_id, requester_account_id, session_id, sandbox_id, runtime_route_json, response_message_id, error_code, error_message, system_prompt"
         ))

@@ -823,6 +823,19 @@ struct CloudAgentDraft: Equatable {
     var isValid: Bool { validationMessage == nil }
 }
 
+/// Another group member's default Kordi agent that the viewer may mention:
+/// they share a group chat, and its Access and the owner's "Use my agent"
+/// allow it (docs/contact-permissions.md). Listed by
+/// `GET /v1/cloud/agents/shared?includeDefaultAgents=true`.
+struct CloudGroupMemberDefaultAgent: Codable, Hashable {
+    let agentId: String
+    let ownerAccountId: String
+    let ownerDisplayName: String?
+    let name: String
+    let avatar: CanonicalAvatarDescriptor?
+    let isDefaultAgent: Bool?
+}
+
 struct CloudAgent: Codable, Hashable, Identifiable {
     let agentId: String
     let ownerAccountId: String

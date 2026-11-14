@@ -51,7 +51,9 @@ enum AgentSessionQueuePresentation {
             $0.author == .me && [.sending, .failed, .cancelled].contains($0.deliveryState)
         }.map(\.id))
         let messages = messages.filter { message in
-            guard message.agentExecution?.completed == false,
+            // A reply row the server stored proves the server has the request,
+            // even while the sender's own bubble still says sending.
+            guard message.agentExecution?.completed == false, message.cloudMessageVersion == nil,
                   let requestID = message.requestMessageId else { return true }
             return !unacceptedRequestIDs.contains(requestID)
         }

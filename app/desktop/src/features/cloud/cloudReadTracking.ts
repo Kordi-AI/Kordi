@@ -19,7 +19,7 @@ export type CloudDirectReadTarget = {
   observedSequence: number;
 };
 
-// A built-in system agent chat (such as Kordi Support) is a direct
+// A built-in system agent chat (such as KordiSpot) is a direct
 // conversation with the agent owner, scoped to its own session instead of the
 // person-to-person session. Resolve the owner and that session.
 function systemAgentReadScope(

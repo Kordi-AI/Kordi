@@ -81,3 +81,58 @@ fn omp_common_ground_runs_send_medium_effort_for_a_default_route() {
     assert_eq!(omp_thinking("low"), "low");
     assert_eq!(omp_thinking("high"), "high");
 }
+
+/// A client whose server rejects the finished reply.
+struct RejectingComplete(FakeClient);
+
+#[async_trait]
+impl CloudAgentRunClient for RejectingComplete {
+    async fn lease_next_run(&self) -> Result<Option<CloudAgentRun>, RunnerClientError> {
+        self.0.lease_next_run().await
+    }
+    async fn mark_running(&self, run_id: &str) -> Result<(), RunnerClientError> {
+        self.0.mark_running(run_id).await
+    }
+    async fn complete_run(&self, run_id: &str, _: &str) -> Result<(), RunnerClientError> {
+        Err(RunnerClientError::Request(format!(
+            "/v1/cloud/agent-runs/{run_id}/complete returned 404 Not Found: {{\"errorCode\":\"agent_run_not_found\"}}"
+        )))
+    }
+    async fn fail_run(
+        &self,
+        run_id: &str,
+        code: &str,
+        message: &str,
+    ) -> Result<(), RunnerClientError> {
+        self.0.fail_run(run_id, code, message).await
+    }
+    async fn fetch_provider_auth(
+        &self,
+        run_id: &str,
+    ) -> Result<crate::client::ProviderAuthMaterial, RunnerClientError> {
+        self.0.fetch_provider_auth(run_id).await
+    }
+    async fn export_artifact(
+        &self,
+        run_id: &str,
+        input: crate::client::ArtifactExportInput,
+    ) -> Result<crate::client::ArtifactExportResponse, RunnerClientError> {
+        self.0.export_artifact(run_id, input).await
+    }
+}
+
+#[tokio::test]
+async fn a_failed_step_reports_its_run_and_cause() {
+    let client = RejectingComplete(FakeClient::with_run(card_run("cg_card_rejected")));
+    let error = legacy_fixture_run(
+        &client,
+        &CardProvider("{\"working_on\":[]}"),
+        temp_sandbox(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.run_id(), Some("cg_card_rejected"));
+    let chain = error.chain();
+    assert!(chain.contains("returned 404 Not Found"), "{chain}");
+    assert!(!chain.contains("Evidence"), "{chain}");
+}
