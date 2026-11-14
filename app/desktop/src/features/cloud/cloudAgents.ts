@@ -212,6 +212,11 @@ export type SharedCloudAgentSummary = {
   avatarUrl: string | null;
   avatar: CanonicalAvatarDescriptor;
   updatedAt: string;
+  /**
+   * The owner's default Kordi agent (`cloud-agent:<owner>`), listed when the
+   * viewer shares a group chat with the owner and may mention it.
+   */
+  isDefaultAgent?: boolean;
 };
 
 export function normalizeSharedCloudAgentSummary(value: unknown): SharedCloudAgentSummary | null {
@@ -236,6 +241,7 @@ export function normalizeSharedCloudAgentSummary(value: unknown): SharedCloudAge
     avatarUrl: cleanNullableText(record.avatarUrl),
     avatar,
     updatedAt,
+    ...(record.isDefaultAgent === true ? { isDefaultAgent: true } : {}),
   };
 }
 

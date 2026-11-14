@@ -39,7 +39,8 @@ enum ComposerMentionTargetCatalog {
         conversation: ConversationSummary,
         ownedAgents: [CloudAgent],
         sharedAgents: [CloudAgent],
-        contacts: [CloudContact] = []
+        contacts: [CloudContact] = [],
+        groupMemberDefaultAgents: [CloudGroupMemberDefaultAgent] = []
     ) -> [ComposerMentionTarget] {
         let ownerAccountIDs = Set(ownerAccountIDs(
             for: conversation,
@@ -93,6 +94,15 @@ enum ComposerMentionTargetCatalog {
         if conversation.kind != .agent {
             var seenDefaultAgentOwners = Set<String>()
             let contactAccountIDs = Set(contacts.map(\.accountId))
+            // People in the owner's group chats can mention the default agent
+            // without being contacts, when the server lists it as open to the
+            // viewer (docs/contact-permissions.md).
+            let openDefaultAgents = conversation.kind == .group
+                ? Dictionary(
+                    groupMemberDefaultAgents.map { ($0.ownerAccountId, $0) },
+                    uniquingKeysWith: { first, _ in first }
+                )
+                : [:]
             targets.append(defaultAgentTarget(
                 ownerAccountID: account.accountId,
                 ownerName: account.preferredName,
@@ -102,15 +112,19 @@ enum ComposerMentionTargetCatalog {
             ))
             seenDefaultAgentOwners.insert(account.accountId)
             for participant in conversation.groupParticipants
-                where contactAccountIDs.contains(participant.accountId)
+                where (contactAccountIDs.contains(participant.accountId)
+                    || openDefaultAgents[participant.accountId] != nil)
                     && seenDefaultAgentOwners.insert(participant.accountId).inserted {
                 let contact = contacts.first { $0.accountId == participant.accountId }
+                let open = openDefaultAgents[participant.accountId]
                 targets.append(defaultAgentTarget(
                     ownerAccountID: participant.accountId,
                     ownerName: contact?.preferredName ?? participant.displayName,
-                    agentID: contact?.defaultAgent?.agentId ?? participant.agentId,
-                    agentName: contact?.defaultAgent?.displayName ?? participant.agentDisplayName,
-                    agentAvatarSource: contact?.defaultAgent?.avatar.imageSource ?? participant.agentAvatarUrl
+                    agentID: contact?.defaultAgent?.agentId ?? participant.agentId ?? open?.agentId,
+                    agentName: contact?.defaultAgent?.displayName ?? participant.agentDisplayName ?? open?.name,
+                    agentAvatarSource: contact?.defaultAgent?.avatar.imageSource
+                        ?? participant.agentAvatarUrl
+                        ?? open?.avatar?.imageSource
                 ))
             }
             for contact in contacts

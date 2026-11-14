@@ -92,9 +92,11 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // moves to 5.956 MB.
 // Asking for notification permission from Digest (Allow, Open System Settings, the focus re-check
 // and the shared unanswered-request state) adds 1.2 kB with the community profile, so it moves to 5.958 MB.
+// Offering group members' default agents in the @ menu and ending a refused agent request at once add
+// 0.2 kB, so it moves to 5.959 MB.
 // The Facilitator in the group @ menu, its mention, and mentions that end a sentence add 1.5 kB,
-// so it moves to 5.96 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_960_000;
+// so it moves to 5.961 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_961_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -134,8 +136,10 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // there, so it moves to 5.977 MB.
 // The same PDF viewer and file card add 4.5 kB there, so it moves to 5.983 MB.
 // The same Digest notification permission line adds 0.2 kB over it there, so it moves to 5.984 MB.
-// The web app carries the same Facilitator @ menu and mention code, 1.5 kB, so it moves to 5.986 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_986_000;
+// Offering group members' default agents in the @ menu, refreshing it on open and focus, and ending a
+// refused agent request at once add 0.2 kB there, so it moves to 5.985 MB.
+// The web app carries the same Facilitator @ menu and mention code, 1.5 kB, so it moves to 5.987 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_987_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

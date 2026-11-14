@@ -346,7 +346,7 @@ spec:
                   key: inbox
                   optional: true
             - name: KORDI_SUPPORT_AGENT_NAME
-              value: "Kordi Support"
+              value: "KordiSpot"
             - name: KORDI_SUPPORT_AGENT_SUBTITLE
               value: "Ask questions or suggest improvements"
             - name: KORDI_SUPPORT_OPENAI_API_KEY

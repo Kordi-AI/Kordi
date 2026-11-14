@@ -76,6 +76,65 @@ pub async fn fail_unreachable_agent_request(
     {
         return Ok(None);
     }
+    let name = agent_display_name(pool, input).await?;
+    let message = format!("Couldn't reach {name}.");
+    match fail_request(pool, input, &message, AGENT_UNREACHABLE_ERROR_CODE).await {
+        Ok(run) => Ok(Some(run)),
+        Err(RunError::NotFound) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+pub const AGENT_UNREACHABLE_ERROR_CODE: &str = "agent_unreachable";
+
+/// A person's group request whose mention routes to this owner's agent, but
+/// whose agent the requester may not use ("Use my agent" off, or Access
+/// "Only me"): it ends at once with "<agent> isn't available." instead of a
+/// wait no run will end. The reply names no reason, so it shows no
+/// restriction (docs/contact-permissions.md).
+pub async fn fail_refused_agent_request(
+    pool: &PgPool,
+    input: &ClaimRunRequest,
+) -> RunResult<Option<CloudAgentRunResponse>> {
+    let Some(envelope) = super::envelopes::cloud_group_request_envelope_for_run(
+        pool,
+        &input.session_id,
+        &input.request_message_id,
+    )
+    .await?
+    else {
+        return Ok(None);
+    };
+    let Some(message) = envelope.message.as_ref() else {
+        return Ok(None);
+    };
+    let routes_to_owner = super::group_target::human_group_target(message, &envelope.participants)
+        .is_some_and(|target| target.owner_account_id == input.owner_account_id.trim());
+    if message.sender_kind.as_deref() == Some("agent")
+        || message.sender_account_id.trim() != input.requester_account_id.trim()
+        || !routes_to_owner
+    {
+        return Ok(None);
+    }
+    let name = agent_display_name(pool, input).await?;
+    let message = format!("{name} isn't available.");
+    match fail_request(
+        pool,
+        input,
+        &message,
+        crate::contact_permissions::AGENT_REFUSAL_CODE,
+    )
+    .await
+    {
+        Ok(run) => Ok(Some(run)),
+        Err(RunError::NotFound) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+/// The agent's name as members see it: a Factory agent's name, the default
+/// agent's own name, or "<owner>'s Kordi" for the plain default name.
+async fn agent_display_name(pool: &PgPool, input: &ClaimRunRequest) -> RunResult<String> {
     let agent_id = super::execution_agent_id(pool, input).await?;
     let (agent, owner): (String, String) = query_as(
         "SELECT COALESCE((SELECT name FROM cloud_agent_definitions WHERE agent_id=$2 AND owner_account_id=$1),NULLIF(btrim(p.display_name),''),'Kordi'),COALESCE(NULLIF(btrim(a.display_name),''),'someone')
@@ -87,20 +146,12 @@ pub async fn fail_unreachable_agent_request(
     .await?;
     // The agent's display name already names its owner ("Maya's Kordi");
     // only the plain default name needs the owner added.
-    let name = if agent == "Kordi" {
+    Ok(if agent == "Kordi" {
         format!("{owner}'s Kordi")
     } else {
         agent
-    };
-    let message = format!("Couldn't reach {name}.");
-    match fail_request(pool, input, &message, AGENT_UNREACHABLE_ERROR_CODE).await {
-        Ok(run) => Ok(Some(run)),
-        Err(RunError::NotFound) => Ok(None),
-        Err(error) => Err(error),
-    }
+    })
 }
-
-pub const AGENT_UNREACHABLE_ERROR_CODE: &str = "agent_unreachable";
 
 /// Right after a person's group message is stored: a mention that names a
 /// member's agent by id but cannot be routed ends at once with that agent's

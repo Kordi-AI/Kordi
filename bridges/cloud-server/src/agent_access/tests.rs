@@ -97,6 +97,12 @@ fn refused(status: u16, body: &Value) -> bool {
         && body["message"] == AGENT_REFUSAL_MESSAGE
 }
 
+/// A refused group @mention ends at once with a failed run (its reply is
+/// checked in tests/cloud_agent_runtime_e2e/group_member_default_agent.rs).
+fn mention_ended(status: u16, body: &Value) -> bool {
+    status == 200 && body["status"] == "failed"
+}
+
 /// A running reply of `owner`'s own agent in the group, as the desktop
 /// executor `claimed_by` holds it; returns its run id.
 async fn own_running_run(
@@ -239,7 +245,8 @@ async fn the_default_agent_is_open_until_its_owner_makes_it_private() {
             .unwrap();
     assert!(reply.is_some(), "the refusal reply is published");
 
-    // A new group @mention and a direct agent chat are refused with the generic 403.
+    // A new group @mention ends at once with "isn't available"; a direct
+    // agent chat is refused with the generic 403.
     let request = mention(&pool, &session, &riya, &mina, &members).await;
     let (status, body) = send(
         &app,
@@ -249,7 +256,7 @@ async fn the_default_agent_is_open_until_its_owner_makes_it_private() {
         Some(claim_body(&mina, &riya, &session, &request)),
     )
     .await;
-    assert!(refused(status, &body), "{status} {body}");
+    assert!(mention_ended(status, &body), "{status} {body}");
     let (status, body) = send(
         &app,
         "POST",
@@ -406,7 +413,7 @@ async fn the_per_person_switch_still_refuses_with_access_open() {
         Some(claim_body(&mina, &riya, &session, &request)),
     )
     .await;
-    assert!(refused(status, &body), "{status} {body}");
+    assert!(mention_ended(status, &body), "{status} {body}");
     let request = mention(&pool, &session, &sam, &mina, &members).await;
     let (status, body) = send(
         &app,

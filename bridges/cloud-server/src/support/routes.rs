@@ -238,7 +238,7 @@ async fn create_support_ticket(
     let Some(service) = state.support().cloned() else {
         return error(
             "support_unavailable",
-            "Kordi Support is not configured on this server.",
+            "KordiSpot is not configured on this server.",
             StatusCode::SERVICE_UNAVAILABLE,
         );
     };

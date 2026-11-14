@@ -275,10 +275,10 @@ Health check:
 curl https://kordi.ai/health
 ```
 
-## Built-in Kordi Support contact
+## Built-in KordiSpot contact
 
 When `KORDI_SUPPORT_ENABLED=true`, the server prepends one locked, system-owned
-`Kordi Support` agent to every signed-in user's contact list. Direct messages
+`KordiSpot` agent to every signed-in user's contact list. Direct messages
 to that exact agent are queued for the hosted runner. The contact detail also
 contains a support form for questions, product issues, and feedback.
 
@@ -350,7 +350,7 @@ It never borrows a provider-auth snapshot from the support owner or the person
 asking for help. Store the key only in the `kordi-support-openai` Secret:
 
 ```bash
-read -s -p "Kordi Support OpenAI API key: " KORDI_SUPPORT_OPENAI_API_KEY
+read -s -p "KordiSpot OpenAI API key: " KORDI_SUPPORT_OPENAI_API_KEY
 echo
 kubectl -n kordi-cloud create secret generic kordi-support-openai \
   --from-literal=api-key="$KORDI_SUPPORT_OPENAI_API_KEY" \
