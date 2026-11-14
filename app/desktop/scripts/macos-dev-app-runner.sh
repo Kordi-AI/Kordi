@@ -2,6 +2,13 @@
 # Cargo runner for macOS desktop previews. It starts the debug binary from a
 # minimal ad-hoc signed .app so macOS privacy prompts, such as Location
 # Services, can identify the app. A bare binary never gets a location prompt.
+#
+# The app is also started as its own privacy (TCC) responsible process through
+# macos-disclaim-exec.c. Otherwise macOS holds the launching editor, terminal
+# or agent responsible: Calendar and Location prompts never appear for it and
+# their status stays "not determined". The helper keeps exec semantics (same
+# pid, working directory, environment, output and signals), so Tauri dev can
+# still stream logs and restart the app.
 set -uo pipefail
 
 if [[ $# -eq 0 ]]; then
@@ -51,7 +58,37 @@ build_bundle() {
   codesign --force --sign - --identifier "$identifier" "$app" >/dev/null 2>&1 || return 1
 }
 
+# Compiles the disclaim helper once per source change. Prints its path, or
+# fails when no C compiler is available.
+disclaim_helper() {
+  local source="$script_dir/macos-disclaim-exec.c"
+  local dir="$bin_dir/dev-app-bundles/.launcher"
+  local helper="$dir/macos-disclaim-exec"
+  [[ -f "$source" ]] || return 1
+  if [[ ! -x "$helper" ]] || ! cmp -s "$source" "$dir/macos-disclaim-exec.c"; then
+    mkdir -p "$dir" || return 1
+    # Previews of several profiles can share this target directory; build
+    # aside and rename so a concurrent launch never runs a partial file.
+    local tmp="$helper.$$"
+    if ! { xcrun --sdk macosx clang -O2 -o "$tmp" "$source" >/dev/null 2>&1 \
+      || cc -O2 -o "$tmp" "$source" >/dev/null 2>&1; }; then
+      rm -f "$tmp"
+      return 1
+    fi
+    mv -f "$tmp" "$helper" || return 1
+    cp "$source" "$dir/macos-disclaim-exec.c.$$" && mv -f "$dir/macos-disclaim-exec.c.$$" "$dir/macos-disclaim-exec.c"
+  fi
+  printf '%s\n' "$helper"
+}
+
 if build_bundle; then
+  # KORDI_DEV_APP_DISCLAIM=0 keeps the launching tool responsible, as before.
+  if [[ "${KORDI_DEV_APP_DISCLAIM:-1}" != "0" ]]; then
+    if helper="$(disclaim_helper)"; then
+      exec "$helper" "$app/Contents/MacOS/$exe" "$@"
+    fi
+    echo "[kordi] Could not prepare the macOS launch helper; Calendar and Location prompts appear only when the launching app may show them." >&2
+  fi
   exec "$app/Contents/MacOS/$exe" "$@"
 fi
 echo "[kordi] Could not prepare the macOS dev app bundle; starting the bare binary. Location prompts will not appear." >&2

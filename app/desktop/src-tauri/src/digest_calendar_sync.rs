@@ -12,6 +12,8 @@ pub struct WrittenEvent {
 pub const CALENDAR_CHANGED_EVENT: &str = "digest-calendar-changed";
 
 /// Reports calendar permission; `request` prompts only while the system still reports "not determined".
+/// Pass `request` only for a person's action: a request macOS cannot show leaves the status
+/// "not determined" and posts `EKEventStoreChangedNotification`.
 #[tauri::command]
 pub async fn desktop_digest_calendar_access(request: bool) -> Result<String, String> {
     #[cfg(target_os = "macos")]
@@ -72,7 +74,8 @@ pub async fn desktop_digest_calendar_delete(
         Err("Device calendars are unavailable.".into())
     }
 }
-/// Starts forwarding device calendar changes to the webview as `digest-calendar-changed`. Idempotent.
+/// Starts forwarding device calendar changes to the webview as `digest-calendar-changed` while
+/// full access is granted. Idempotent.
 #[tauri::command]
 pub async fn desktop_digest_calendar_observe(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -316,7 +319,11 @@ mod native {
             // the shared store lives for the whole process.
             with_store(|_| ());
             let block = block2::RcBlock::new(move |_: NonNull<NSNotification>| {
-                let _ = app.emit(CALENDAR_CHANGED_EVENT, ());
+                // A refused permission request also posts a store change. Forwarding it while
+                // access is off would start a sync that checks access again, in a loop.
+                if status() == EKAuthorizationStatus::FullAccess {
+                    let _ = app.emit(CALENDAR_CHANGED_EVENT, ());
+                }
             });
             let token = unsafe {
                 NSNotificationCenter::defaultCenter().addObserverForName_object_queue_usingBlock(
