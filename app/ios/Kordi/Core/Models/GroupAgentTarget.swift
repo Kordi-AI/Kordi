@@ -71,7 +71,11 @@ struct GroupAgentTarget: Codable, Hashable {
         let explicit = target(agent: agent, owner: owner, sender: sender, participants: participants)
         guard (agent.isEmpty && owner.isEmpty) || explicit != nil else { return nil }
         let mentions = message.mentions ?? []
-        let agentMentions = mentions.filter { $0.targetKind == "agent" }
+        // A Facilitator mention is answered by the System agent itself, never
+        // routed to a person's agent.
+        let agentMentions = mentions.filter {
+            $0.targetKind == "agent" && clean($0.targetIdentityId) != KordiSystemAgentIdentity.mentionTargetId
+        }
         if !agentMentions.isEmpty {
             let targets = agentMentions.compactMap { mentionTarget($0, message: message, participants: participants) }
             guard targets.count == agentMentions.count, Set(targets).count == 1, let selected = targets.first,

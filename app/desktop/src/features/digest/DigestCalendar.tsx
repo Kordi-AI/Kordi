@@ -76,12 +76,12 @@ function DigestMonth({ month, selectedDay, events, candidates, onMonth, onDay, o
   </section>;
 }
 
-export function DigestAgenda({ day, events, candidates, sources, people, evidence, onEvent, onCandidate, sync, onCalendarSettings, onOpenPrivacy, onRetrySync, onImport, digestStatus, calendarStatus }: {
+export function DigestAgenda({ day, events, candidates, sources, people, evidence, onEvent, onCandidate, sync, onCalendarSettings, onAllowCalendar, onOpenPrivacy, onRetrySync, onImport, digestStatus, calendarStatus }: {
   day: string; events: CalendarEvent[]; candidates: DigestItem[];
   sources: DigestSource[];
   people: (item: DigestItem) => ReactNode; evidence: (item: DigestItem) => ReactNode;
   onEvent: (event: CalendarEvent) => void; onCandidate: (item: DigestItem) => void;
-  sync: CalendarSyncStatus; onCalendarSettings: () => void; onOpenPrivacy: () => void; onRetrySync: () => void; onImport: () => void;
+  sync: CalendarSyncStatus; onCalendarSettings: () => void; onAllowCalendar: () => void; onOpenPrivacy: () => void; onRetrySync: () => void; onImport: () => void;
   digestStatus?: ReactNode; calendarStatus?: ReactNode;
 }) {
   const scheduled = events.filter(event => eventOnDay(event, day));
@@ -107,7 +107,7 @@ export function DigestAgenda({ day, events, candidates, sources, people, evidenc
     </section>
     <section className="digest-calendar-connections">
       <h2>Your calendars</h2>
-      <CalendarSyncLine sync={sync} onOpenPrivacy={onOpenPrivacy} onRetry={onRetrySync}/>
+      <CalendarSyncLine sync={sync} onAllow={onAllowCalendar} onOpenPrivacy={onOpenPrivacy} onRetry={onRetrySync}/>
       {sync.phase!=='unavailable'&&<button onClick={onCalendarSettings}><Settings2 size={16} strokeWidth={1.6} aria-hidden="true"/> Calendar settings</button>}
       <button onClick={onImport}><FileUp size={16} strokeWidth={1.6} aria-hidden="true"/> Import ICS</button>
     </section>

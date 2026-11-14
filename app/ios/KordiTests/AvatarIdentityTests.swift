@@ -37,6 +37,7 @@ final class AvatarIdentityTests: XCTestCase {
     }
 
     func testKordiSupportUsesTheOfficialSupportIdentityFallback() {
+        XCTAssertTrue(KordiSupportIdentity.matches(name: "KordiSpot", seed: nil))
         XCTAssertTrue(KordiSupportIdentity.matches(name: "Kordi Support", seed: nil))
         XCTAssertTrue(KordiSupportIdentity.matches(name: nil, seed: "acct_kordi_support"))
         XCTAssertTrue(KordiSupportIdentity.matches(name: nil, seed: "cloud_agent_kordi_support"))

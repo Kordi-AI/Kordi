@@ -1,7 +1,7 @@
 # Blocking
 
 People can block anyone except themselves and Kordi service accounts (System,
-the System agent, and Kordi Support). The block list is private to the blocker,
+the System agent, and KordiSpot). The block list is private to the blocker,
 and the blocked person is never told. The server enforces every rule here;
 clients only present them.
 

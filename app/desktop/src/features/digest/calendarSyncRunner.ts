@@ -15,6 +15,8 @@ export type CalendarSyncStatus = {
   error: string | null;
   /** Events this device currently keeps in sync. */
   syncedCount: number;
+  /** True while macOS has not been asked and an in-app request can still show its prompt. */
+  canRequest: boolean;
 };
 export type CalendarSyncDeps = {
   isNative: () => boolean;
@@ -36,6 +38,7 @@ export type CalendarSyncDeps = {
 export const CALENDAR_SYNC_INTERVAL_MS = 15 * 60_000;
 export const CALENDAR_SYNC_DEBOUNCE_MS = 1_500;
 export const CALENDAR_SYNC_FOREGROUND_MIN_MS = 30_000;
+export const CALENDAR_ACCESS_REQUEST_EVENT = 'kordi:digest-calendar-access-request';
 const MAX_CALENDARS = 50;
 const MAX_SYNC_ITEMS = 500;
 const MAX_SYNC_BYTES = 512 * 1024;
@@ -76,13 +79,19 @@ export class CalendarPermissionError extends Error {
   constructor(readonly permission: DeviceCalendarAccess) { super('Calendar access is off.'); }
 }
 
-const initialStatus = (): CalendarSyncStatus => ({ phase: 'idle', permission: 'notDetermined', calendars: [], lastSyncedAt: null, error: null, syncedCount: 0 });
+const initialStatus = (): CalendarSyncStatus => ({ phase: 'idle', permission: 'notDetermined', calendars: [], lastSyncedAt: null, error: null, syncedCount: 0, canRequest: false });
 class CalendarSyncStore {
   private state = initialStatus();
   private listeners = new Set<() => void>();
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
-  publish(patch: Partial<CalendarSyncStatus>) { this.state = { ...this.state, ...patch }; this.listeners.forEach(listener => listener()); }
+  /** Unchanged fields never notify, so a repeated check cannot re-render the status line. */
+  publish(patch: Partial<CalendarSyncStatus>) {
+    const current = this.state as Record<string, unknown>;
+    if (Object.entries(patch).every(([key, value]) => Object.is(current[key], value))) return;
+    this.state = { ...this.state, ...patch };
+    this.listeners.forEach(listener => listener());
+  }
   reset() { this.publish(initialStatus()); }
 }
 const stores = new Map<string, CalendarSyncStore>();
@@ -92,10 +101,19 @@ export function calendarSyncStoreFor(accountId: string) {
   return store;
 }
 
+/**
+ * Reads calendar permission. Only an explicit person action may pass `request`: a request that macOS
+ * refuses to show (for example when another process is responsible for the app) leaves the status
+ * "not determined" and posts a store change, so asking from automatic runs would loop.
+ */
+export async function calendarPermission(deps: Pick<CalendarSyncDeps, 'access'>, request = false): Promise<DeviceCalendarAccess> {
+  const permission = await deps.access(false);
+  return permission === 'notDetermined' && request ? deps.access(true) : permission;
+}
+
 /** One full reconciliation. Device writes happen first so their identities can be recorded server-side during reconciliation. */
-export async function syncDeviceCalendarOnce(accountId: string, deps: CalendarSyncDeps, onCalendars?: (calendars: CalendarConnection[], permission: DeviceCalendarAccess) => void): Promise<{ calendars: CalendarConnection[]; permission: DeviceCalendarAccess; syncedCount: number; changed: boolean }> {
-  let permission = await deps.access(false);
-  if (permission === 'notDetermined') permission = await deps.access(true);
+export async function syncDeviceCalendarOnce(accountId: string, deps: CalendarSyncDeps, onCalendars?: (calendars: CalendarConnection[], permission: DeviceCalendarAccess) => void, options: { request?: boolean; permission?: DeviceCalendarAccess } = {}): Promise<{ calendars: CalendarConnection[]; permission: DeviceCalendarAccess; syncedCount: number; changed: boolean }> {
+  const permission = options.permission ?? await calendarPermission(deps, options.request);
   if (permission !== 'granted') throw new CalendarPermissionError(permission);
   const calendars = (await deps.calendars()).slice(0, MAX_CALENDARS);
   onCalendars?.(calendars, permission);
@@ -171,54 +189,85 @@ export async function syncDeviceCalendarOnce(accountId: string, deps: CalendarSy
   return { calendars, permission, syncedCount: Object.keys(next).length, changed };
 }
 
-/** Keeps the device calendar and the Kordi calendar converged for as long as the shell is open. */
+/**
+ * Keeps the device calendar and the Kordi calendar converged for as long as the shell is open.
+ * Automatic runs (start, timer, focus, device changes) only read the permission; the macOS prompt
+ * is shown only from `requestCalendarAccess`. The device observer runs only while access is granted.
+ */
 export function scheduleCalendarSync(accountId: string, deps: CalendarSyncDeps = defaultCalendarSyncDeps): () => void {
   const store = calendarSyncStoreFor(accountId);
   if (!deps.isNative()) { store.publish({ phase: 'unavailable', permission: 'unavailable' }); return () => {}; }
-  let stopped = false, running = false, queued = false, lastForeground = 0;
-  let debounce: ReturnType<typeof setTimeout> | undefined, unwatch: (() => void) | null = null;
-  const run = async () => {
-    if (stopped || running) { queued = running; return; }
+  let stopped = false, running = false, queued = false, queuedRequest = false, lastForeground = 0;
+  // Set once a request in this session left the status undetermined: macOS will not prompt this process.
+  let cannotAsk = false;
+  let debounce: ReturnType<typeof setTimeout> | undefined, unwatch: (() => void) | null = null, watching = false, watchGeneration = 0;
+  const startWatching = () => {
+    if (watching) return;
+    watching = true;
+    const generation = ++watchGeneration;
+    void deps.watch(trigger).then(stop => { if (stopped || generation !== watchGeneration) stop(); else unwatch = stop; }).catch(() => {
+      if (generation === watchGeneration) watching = false; /* Polling and foreground syncs still run without the observer. */
+    });
+  };
+  const stopWatching = () => { watching = false; watchGeneration++; unwatch?.(); unwatch = null; };
+  const run = async (request = false) => {
+    if (stopped) return;
+    if (running) { queued = true; queuedRequest = queuedRequest || request; return; }
     running = true;
-    store.publish({ phase: 'syncing', error: null });
     try {
+      const permission = await calendarPermission(deps, request);
+      if (stopped) return;
+      if (request && permission === 'notDetermined') cannotAsk = true;
+      if (permission !== 'granted') {
+        stopWatching();
+        store.publish({ phase: 'permission', permission, error: null, canRequest: permission === 'notDetermined' && !cannotAsk });
+        return;
+      }
+      startWatching();
+      // A background pass after a successful sync keeps the synced line instead of flashing "Syncing".
+      if (store.getSnapshot().phase !== 'synced') store.publish({ phase: 'syncing', permission, error: null, canRequest: false });
       const result = await syncDeviceCalendarOnce(accountId, deps, (calendars, permission) => {
         if (!stopped) store.publish({ calendars, permission });
-      });
-      if (!stopped) store.publish({ phase: 'synced', permission: result.permission, calendars: result.calendars, lastSyncedAt: new Date(deps.now()).toISOString(), syncedCount: result.syncedCount, error: null });
+      }, { permission });
+      if (!stopped) store.publish({ phase: 'synced', permission: result.permission, calendars: result.calendars, lastSyncedAt: new Date(deps.now()).toISOString(), syncedCount: result.syncedCount, error: null, canRequest: false });
     } catch (error) {
       if (stopped) return;
-      if (error instanceof CalendarPermissionError) store.publish({ phase: 'permission', permission: error.permission, error: null });
+      if (error instanceof CalendarPermissionError) { stopWatching(); store.publish({ phase: 'permission', permission: error.permission, error: null, canRequest: error.permission === 'notDetermined' && !cannotAsk }); }
       else store.publish({ phase: 'error', error: calendarErrorMessage(error, 'Calendar sync failed.') });
     } finally {
       running = false;
-      if (queued && !stopped) { queued = false; void run(); }
+      if (queued && !stopped) { const again = queuedRequest; queued = false; queuedRequest = false; void run(again); }
     }
   };
   const trigger = () => { if (stopped) return; clearTimeout(debounce); debounce = setTimeout(() => void run(), CALENDAR_SYNC_DEBOUNCE_MS); };
   const foreground = () => {
-    if (document.hidden || deps.now() - lastForeground < CALENDAR_SYNC_FOREGROUND_MIN_MS) return;
+    if (document.hidden) return;
+    // Returning from System Settings with access still off is a cheap status read, so it is never throttled.
+    if (store.getSnapshot().phase !== 'permission' && deps.now() - lastForeground < CALENDAR_SYNC_FOREGROUND_MIN_MS) return;
     lastForeground = deps.now();
     trigger();
   };
-  const onPreferences = (event: Event) => { if ((event as CustomEvent<{ accountId?: string }>).detail?.accountId === accountId) trigger(); };
+  const forThisAccount = (event: Event) => (event as CustomEvent<{ accountId?: string }>).detail?.accountId === accountId;
+  const onPreferences = (event: Event) => { if (forThisAccount(event)) trigger(); };
+  const onAccessRequest = (event: Event) => { if (forThisAccount(event)) { clearTimeout(debounce); void run(true); } };
   trigger();
-  void deps.watch(trigger).then(stop => { if (stopped) stop(); else unwatch = stop; }).catch(() => { /* Polling and foreground syncs still run without the observer. */ });
   // The tick runs even while the window is hidden: a background Kordi must still carry Kordi-created events to the device calendar.
   const interval = setInterval(trigger, CALENDAR_SYNC_INTERVAL_MS);
   window.addEventListener('focus', foreground);
   document.addEventListener('visibilitychange', foreground);
   window.addEventListener(CALENDAR_SYNC_PREFERENCES_EVENT, onPreferences);
   window.addEventListener(DIGEST_CALENDAR_SERVER_CHANGED_EVENT, onPreferences);
+  window.addEventListener(CALENDAR_ACCESS_REQUEST_EVENT, onAccessRequest);
   return () => {
     stopped = true;
     clearTimeout(debounce);
     clearInterval(interval);
-    unwatch?.();
+    stopWatching();
     window.removeEventListener('focus', foreground);
     document.removeEventListener('visibilitychange', foreground);
     window.removeEventListener(CALENDAR_SYNC_PREFERENCES_EVENT, onPreferences);
     window.removeEventListener(DIGEST_CALENDAR_SERVER_CHANGED_EVENT, onPreferences);
+    window.removeEventListener(CALENDAR_ACCESS_REQUEST_EVENT, onAccessRequest);
     store.reset();
   };
 }
@@ -234,4 +283,8 @@ export function useCalendarSyncStatus(accountId?: string | null): CalendarSyncSt
 /** Lets the Digest page ask for an immediate reconciliation after an in-app edit. */
 export function requestCalendarSync(accountId: string) {
   notifyCalendarSync(CALENDAR_SYNC_PREFERENCES_EVENT, accountId);
+}
+/** Shows the macOS calendar prompt from a person's action, then syncs when access is granted. */
+export function requestCalendarAccess(accountId: string) {
+  notifyCalendarSync(CALENDAR_ACCESS_REQUEST_EVENT, accountId);
 }

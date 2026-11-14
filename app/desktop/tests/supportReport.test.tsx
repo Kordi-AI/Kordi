@@ -492,7 +492,7 @@ test('the report review explains the privacy boundary before sending', () => {
   );
 
   assert.match(source, /Nothing is sent until you review and approve it/);
-  assert.match(source, /I allow Kordi to send the report shown above to Kordi Support/);
+  assert.match(source, /I allow Kordi to send the report shown above to \$\{KORDI_SUPPORT_NAME\}/);
   assert.match(source, /No chat transcript, files, provider credentials, or unrelated conversations are included/);
   assert.match(source, /disabled=\{!permissionGranted \|\| busy\}/);
   assert.match(source, /max-h-\[calc\(100dvh-1\.5rem\)\]/);

@@ -140,6 +140,55 @@ async fn legacy_support_migration_quarantines_only_private_backfill_rows() {
 }
 
 #[tokio::test]
+async fn support_rename_reaches_the_existing_support_account() {
+    use kordi_cloud_server::support::{
+        bootstrap_support_agent, PendingSupportConfig, SupportProviderAuth,
+    };
+
+    let Some(pool) = try_pool().await else {
+        eprintln!("DATABASE_URL not set — skipping Support rename test");
+        return;
+    };
+    let suffix = Uuid::new_v4().simple().to_string();
+    let owner_account_id = format!("acct_support_rename_{suffix}");
+    let agent_id = format!("cloud_agent_support_rename_{suffix}");
+    let support_email = format!("support-rename-{suffix}@example.test");
+    let pending = |name: &str| PendingSupportConfig {
+        system_prompt: "Synthetic support persona.".to_string(),
+        owner_account_id: owner_account_id.clone(),
+        owner_email: support_email.clone(),
+        agent_id: agent_id.clone(),
+        name: name.to_string(),
+        subtitle: "Ask questions or suggest improvements".to_string(),
+        inbox: support_email.clone(),
+        provider_auth: SupportProviderAuth::openai_api_key("test-support-key", "gpt-5.6-luna")
+            .expect("support provider auth"),
+    };
+
+    bootstrap_support_agent(&pool, pending("Kordi Support"))
+        .await
+        .expect("bootstrap Support with the old name");
+    bootstrap_support_agent(&pool, pending("KordiSpot"))
+        .await
+        .expect("bootstrap Support with the new name");
+
+    let (account_name,): (String,) =
+        query_as("SELECT display_name FROM cloud_accounts WHERE account_id = $1")
+            .bind(&owner_account_id)
+            .fetch_one(&pool)
+            .await
+            .expect("read Support account name");
+    let (agent_name,): (String,) =
+        query_as("SELECT name FROM cloud_agent_definitions WHERE agent_id = $1")
+            .bind(&agent_id)
+            .fetch_one(&pool)
+            .await
+            .expect("read Support agent name");
+    assert_eq!(account_name, "KordiSpot");
+    assert_eq!(agent_name, "KordiSpot");
+}
+
+#[tokio::test]
 async fn invalid_support_migration_quarantines_groups_for_every_member() {
     use kordi_cloud_server::support::{
         bootstrap_support_agent, PendingSupportConfig, SupportProviderAuth,
@@ -161,7 +210,7 @@ async fn invalid_support_migration_quarantines_groups_for_every_member() {
             owner_account_id: support_owner.clone(),
             owner_email: support_email.clone(),
             agent_id: "cloud_agent_kordi_support".to_string(),
-            name: "Kordi Support".to_string(),
+            name: "KordiSpot".to_string(),
             subtitle: "Ask questions or suggest improvements".to_string(),
             inbox: support_email,
             provider_auth: SupportProviderAuth::openai_api_key("test-support-key", "gpt-5.6-luna")
