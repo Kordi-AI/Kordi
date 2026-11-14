@@ -335,6 +335,10 @@ final class AppModel: ObservableObject {
     @Published private var ownedCloudAgents: [CloudAgent] = []
     @Published private var sharedCloudAgents: [CloudAgent] = []
     @Published private var groupMemberDefaultAgents: [CloudGroupMemberDefaultAgent] = []
+    /// Bumped when another account's agents change (`agent.directory.changed`,
+    /// such as a default agent's Access), so an open conversation refetches
+    /// which agents its composer may offer.
+    @Published private(set) var agentDirectoryRevision = 0
     private var hiddenCloudSessionIds = Set<String>()
     private var deletedCloudSessionIds = Set<String>()
     private var sessionVisibilityMutationRevision = 0
@@ -6958,6 +6962,9 @@ final class AppModel: ObservableObject {
                 guard sessionIdentity.contains(token), !Task.isCancelled else { return .stop }
                 applyCloudSyncEvents(state.pendingEvents)
                 await refreshPersonalAgentsIfNeeded(after: state.pendingEvents)
+                if state.pendingEvents.contains(where: { $0.eventType == "agent.directory.changed" }) {
+                    agentDirectoryRevision &+= 1
+                }
                 let hasDirectoryChanges = state.pendingEvents.contains {
                     $0.eventType != "message.upsert"
                         && $0.eventType != "session.pin.updated"

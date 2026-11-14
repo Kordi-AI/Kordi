@@ -64,8 +64,8 @@ pub use leases::{
     RunnerRunRequest, RunnerRunResponse,
 };
 pub use project_unavailable::{
-    fail_unavailable_project_request, fail_unreachable_agent_request, fail_unroutable_mention,
-    PROJECT_UNAVAILABLE_ERROR_CODE,
+    fail_refused_agent_request, fail_unavailable_project_request, fail_unreachable_agent_request,
+    fail_unroutable_mention, PROJECT_UNAVAILABLE_ERROR_CODE,
 };
 #[cfg(test)]
 use prompt_history::{fallback_prompt_with_history, CloudFallbackHistoryMessage};

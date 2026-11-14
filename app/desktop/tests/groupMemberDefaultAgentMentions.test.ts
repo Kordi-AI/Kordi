@@ -80,3 +80,14 @@ test('a typed mention of a group member’s default agent targets that agent', (
     ownerAccountId: 'acct_alex',
   });
 });
+
+test('the agent list refetch opens at most once per interval', async () => {
+  const { mentionAgentRefreshGate } = await import('../src/features/chat/messageActions/mentionAgentRefresh');
+  let now = 1_000;
+  const gate = mentionAgentRefreshGate(5_000, () => now);
+  assert.equal(gate(), true, 'the first menu open refetches');
+  now += 4_999;
+  assert.equal(gate(), false, 'typing in the open menu does not refetch again');
+  now += 1;
+  assert.equal(gate(), true, 'a later open refetches');
+});

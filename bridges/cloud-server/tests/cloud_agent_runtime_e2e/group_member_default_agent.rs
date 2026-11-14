@@ -95,6 +95,33 @@ impl Group {
             .status()
     }
 
+    /// The run that ended `request` and its reply text, if any.
+    async fn ended_run(
+        &self,
+        request_id: &str,
+    ) -> Option<(String, Option<String>, Option<String>, bool)> {
+        sqlx_core::query_as::query_as(
+            "SELECT status, error_code, error_message, response_message_id IS NOT NULL FROM cloud_agent_fallback_runs WHERE request_message_id=$1 AND owner_account_id=$2",
+        )
+        .bind(request_id)
+        .bind(&self.owner.account_id)
+        .fetch_optional(&self.pool)
+        .await
+        .unwrap()
+    }
+
+    /// A refused mention ends at once with one final reply every member sees.
+    async fn assert_ended_unavailable(&self, request_id: &str) {
+        let (status, code, text, replied) = self
+            .ended_run(request_id)
+            .await
+            .expect("the refused mention ends with a run");
+        assert_eq!(status, "failed");
+        assert_eq!(code.as_deref(), Some("agent_not_available"));
+        assert_eq!(text.as_deref(), Some("Owner's Kordi isn't available."));
+        assert!(replied, "the final reply is posted in the group");
+    }
+
     /// The owner's Mac claims the member's request.
     async fn mac_claim(&self, request_id: &str, wire_id: &str) -> (StatusCode, Value) {
         sqlx_core::query::query(
@@ -238,19 +265,31 @@ async fn group_member_default_agent_mentions_follow_use_my_agent_access_and_memb
         return;
     };
 
-    // "Use my agent" off refuses both paths.
+    // "Use my agent" off: the Cloud claim ends the mention with a final
+    // "isn't available" reply instead of a wait, and the owner's Mac is
+    // refused without answering.
     group.set_use_my_agent(false).await;
     let (request, wire) = group.ask_owner_agent().await;
-    assert_eq!(group.cloud_claim(&request).await, StatusCode::FORBIDDEN);
+    assert_eq!(group.cloud_claim(&request).await, StatusCode::OK);
+    group.assert_ended_unavailable(&request).await;
     let (status, body) = group.mac_claim(&request, &wire).await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
     group.clear_mac_readiness().await;
+
+    // The owner's Mac reaching a stale mention first ends it the same way.
+    let (request, wire) = group.ask_owner_agent().await;
+    let (status, body) = group.mac_claim(&request, &wire).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    group.clear_mac_readiness().await;
+    group.assert_ended_unavailable(&request).await;
+    assert_eq!(group.cloud_claim(&request).await, StatusCode::OK);
     group.set_use_my_agent(true).await;
 
-    // Access "Only me" refuses.
+    // Access "Only me" ends it the same way.
     group.set_default_access("private").await;
     let (request, _) = group.ask_owner_agent().await;
-    assert_eq!(group.cloud_claim(&request).await, StatusCode::FORBIDDEN);
+    assert_eq!(group.cloud_claim(&request).await, StatusCode::OK);
+    group.assert_ended_unavailable(&request).await;
     group.set_default_access("participant_conversations").await;
 
     // A former member is refused, even for a request sent while a member.
@@ -268,15 +307,19 @@ async fn group_member_default_agent_mentions_follow_use_my_agent_access_and_memb
     assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
     group.clear_mac_readiness().await;
 
+    assert!(
+        group.ended_run(&request).await.is_none(),
+        "a former member's request starts nothing"
+    );
     let (runs,): (i64,) = sqlx_core::query_as::query_as(
-        "SELECT count(*) FROM cloud_agent_fallback_runs WHERE requester_account_id=$1 AND owner_account_id=$2",
+        "SELECT count(*) FROM cloud_agent_fallback_runs WHERE requester_account_id=$1 AND owner_account_id=$2 AND status <> 'failed'",
     )
     .bind(&group.member.account_id)
     .bind(&group.owner.account_id)
     .fetch_one(&group.pool)
     .await
     .unwrap();
-    assert_eq!(runs, 0);
+    assert_eq!(runs, 0, "no refused mention ever runs");
 }
 
 #[tokio::test]
@@ -321,4 +364,16 @@ async fn shared_agent_list_offers_open_default_agents_to_group_members_only() {
         .listed_default_agents(&group.member, true)
         .await
         .is_empty());
+    // The Access change reaches the co-member at once, so their composer
+    // refetches and stops offering the agent.
+    let (hints,): (i64,) = sqlx_core::query_as::query_as(
+        "SELECT count(*) FROM cloud_chat_user_sync_events WHERE account_id=$1 AND event_type='agent.directory.changed' AND payload->>'ownerAccountId'=$2 AND payload->>'agentId'=$3",
+    )
+    .bind(&group.member.account_id)
+    .bind(&group.owner.account_id)
+    .bind(format!("cloud-agent:{}", group.owner.account_id))
+    .fetch_one(&group.pool)
+    .await
+    .unwrap();
+    assert!(hints >= 1, "the co-member gets agent.directory.changed");
 }

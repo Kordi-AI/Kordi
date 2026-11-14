@@ -111,7 +111,7 @@ pub(super) async fn claim_cloud_agent_run(
     // One refusal for every target, so it never shows the owner's choice.
     match super::runs::requester_may_use_owner_agents(state.db_pool(), &input).await {
         Ok(true) => {}
-        Ok(false) => return super::runs::agent_unavailable(),
+        Ok(false) => return refuse_unusable_agent(state.db_pool(), input).await,
         Err(error) => {
             return run_error_response(
                 "check agent permission",
@@ -314,5 +314,25 @@ pub(super) async fn claim_cloud_agent_run(
             "Could not claim Cloud agent fallback run.",
             error,
         ),
+    }
+}
+
+/// The requester may not use this agent. A person's group mention of it
+/// ends at once with a final "isn't available" reply that every member
+/// sees; anything else gets the plain refusal. Either way no reason shows.
+async fn refuse_unusable_agent(pool: &PgPool, mut input: ClaimRunRequest) -> Response {
+    match super::runs::request_identity(pool, &input.session_id, &input.request_message_id).await {
+        Ok(Some((id, _))) => input.request_message_id = id,
+        Ok(None) => return super::runs::agent_unavailable(),
+        Err(error) => {
+            return run_error_response("request identity", "Could not resolve the request.", error)
+        }
+    }
+    match super::runs::fail_refused_agent_request(pool, &input).await {
+        Ok(Some(run)) => Json(run).into_response(),
+        Ok(None) => super::runs::agent_unavailable(),
+        Err(error) => {
+            run_error_response("end refused request", "Could not end this request.", error)
+        }
     }
 }

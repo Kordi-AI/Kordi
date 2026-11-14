@@ -118,10 +118,15 @@ async fn claim_request(
         return denied();
     }
     // A restricted requester gets the one generic refusal on every route, so
-    // the Mac drops the request without answering in the conversation.
+    // the Mac drops the request without answering in the conversation. The
+    // server ends a person's group mention with the same final reply as the
+    // Cloud path, so the requester never waits on a run no one starts.
     match runs::requester_may_use_owner_agents(state.db_pool(), &input.run).await {
         Ok(true) => {}
-        Ok(false) => return runs::agent_unavailable(),
+        Ok(false) => {
+            end_refused_request(state.db_pool(), &mut input.run).await;
+            return runs::agent_unavailable();
+        }
         Err(e) => {
             return run_error_response("desktop claim", "Could not claim agent execution.", e)
         }
@@ -320,5 +325,21 @@ async fn claim_request(
         Ok(Some(value)) => context_scope_response(&state, value).await,
         Ok(None) => denied(),
         Err(e) => run_error_response("desktop claim", "Could not claim agent execution.", e),
+    }
+}
+
+async fn end_refused_request(pool: &sqlx_postgres::PgPool, run: &mut runs::ClaimRunRequest) {
+    let ended = async {
+        if let Some((id, _)) =
+            runs::request_identity(pool, &run.session_id, &run.request_message_id).await?
+        {
+            run.request_message_id = id;
+            runs::fail_refused_agent_request(pool, run).await?;
+        }
+        Ok::<_, runs::RunError>(())
+    }
+    .await;
+    if let Err(error) = ended {
+        eprintln!("[desktop-claim] end refused request: {error:?}");
     }
 }
