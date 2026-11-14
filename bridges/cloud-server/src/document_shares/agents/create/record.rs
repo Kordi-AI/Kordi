@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use super::super::gating::RunFacts;
 use super::super::tools::ToolError;
-use super::group_message::{post, DocumentMessage};
+use super::group_message::{post, request_line, DocumentMessage};
 use super::reply::{mark_attached, RunDocument};
 use super::{parse, NewDocument, MAX_DOCUMENTS_PER_RUN};
 use crate::server::ServerState;
@@ -155,8 +155,10 @@ async fn post_from_background_session(
         content_type,
         size_bytes,
     }];
+    let text = request_line(pool, conversation_id, run_id).await?;
     let message = DocumentMessage {
         conversation_id,
+        text: text.as_deref().unwrap_or_default(),
         run_id,
         session_id: &facts.session_id,
         owner_account_id: &facts.owner_account_id,

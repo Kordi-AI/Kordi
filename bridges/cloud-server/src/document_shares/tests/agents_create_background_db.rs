@@ -16,6 +16,8 @@ use super::super::agents_create_fixture::*;
 use super::super::agents_fixture::*;
 use super::super::db_fixture::*;
 use crate::connectors::delivery::deliver_to_run;
+use crate::document_shares::agents::create::fallback::post_unattached;
+use crate::document_shares::agents::tools;
 
 /// A background session of the owner's agent under `parent_session_id`.
 async fn background_session(f: &Fixture, conversation: Uuid, parent_session_id: &str) -> Uuid {
@@ -254,4 +256,67 @@ async fn a_background_session_outside_a_group_gets_no_document_tools() {
     // The run claims the group, but its background session is elsewhere.
     let run_id = follow_up_run(&f, &session_id, subsession, &f.owner, &executor).await;
     assert!(delivered_names(&f, &run_id).await.is_empty());
+}
+
+/// A background task's document that its follow-up reply never took: posted
+/// once its task has ended for the reply grace period, not after half an
+/// hour, with a line that names the request it belongs to.
+#[tokio::test]
+async fn a_background_tasks_document_posts_soon_after_its_task_ends() {
+    let Some(f) = fixture().await else { return };
+    let state = state(&f).await;
+    let (conversation, session_id) = group(&f).await;
+    let request_id = send_request(&f, conversation, &session_id).await;
+    let executor = format!("desktop:{}", Uuid::new_v4());
+    let run = (
+        session_id.as_str(),
+        request_id.as_str(),
+        executor.as_str(),
+        Some(1),
+    );
+    let parent = desktop_run_for(&f, run, &f.owner, vec![tools::create_descriptor()]).await;
+    let (status, created) = desktop_call(
+        &f,
+        &state,
+        &executor,
+        &parent,
+        "create_document",
+        plan_args(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created:?}");
+    let attachment_id = attachment_of(&created);
+    let task = background_session(&f, conversation, &session_id).await;
+    query("UPDATE cloud_agent_subsessions SET parent_request_id = $2 WHERE subsession_id = $1")
+        .bind(task)
+        .bind(&request_id)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+
+    // Running, then just ended: the follow-up reply may still take it.
+    post_unattached(&f.pool).await.unwrap();
+    assert!(messages_with(&f, &attachment_id).await.is_empty());
+    let ended = |minutes: i64| {
+        query(
+            "UPDATE cloud_agent_subsessions SET status = 'failed', \
+             execution_finished_at = now() - make_interval(mins => $2::int) \
+             WHERE subsession_id = $1",
+        )
+        .bind(task)
+        .bind(minutes as i32)
+        .execute(&f.pool)
+    };
+    ended(0).await.unwrap();
+    post_unattached(&f.pool).await.unwrap();
+    assert!(messages_with(&f, &attachment_id).await.is_empty());
+
+    ended(5).await.unwrap();
+    assert!(post_unattached(&f.pool).await.unwrap() >= 1);
+    let envelope = assert_carried_by_agent(&f, &attachment_id).await;
+    assert!(envelope["message"].get("requestId").is_none(), "{envelope}");
+    assert_eq!(
+        envelope["message"]["text"],
+        "For member's request: “@Kordi create a launch plan doc”"
+    );
 }
