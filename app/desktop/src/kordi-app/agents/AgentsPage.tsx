@@ -19,7 +19,8 @@ import { AgentStudioCompactBody } from './AgentStudioCompactBody';
 import { AgentStudioConversation } from './AgentStudioConversation';
 import { AgentStudioRail } from './AgentStudioRail';
 import { AgentStudioWorkspace } from './AgentStudioWorkspace';
-import { CapabilityLibraryView, type FactorySkillLibraryMode } from './CapabilityLibraryView';
+import { CapabilityLibraryView } from './CapabilityLibraryView';
+import { CommunitySkillDetail } from './CommunitySkillDetail';
 import {
   agentBuilderSkillSlug,
   factoryAgentCreateInput,
@@ -40,6 +41,7 @@ import {
   type AgentStudioCapabilityKind,
   type FactoryBuildRoute,
   type FactoryLibraryArtifact,
+  type FactoryLibraryFilter,
   type FactoryLibrarySection,
   type FactorySection,
 } from './model';
@@ -49,6 +51,7 @@ import { useAgentBuilderSession } from './useAgentBuilderSession';
 import { useAgentsPageModel } from './useAgentsPageModel';
 import { useFactoryBuildRouting } from './useFactoryBuildRouting';
 import { useSkillLibrary } from './useSkillLibrary';
+import { useCommunitySkillCatalog } from './useCommunitySkillCatalog';
 import { useFactoryCreationAvatar } from './useFactoryCreationAvatar';
 import { useFactoryAgentAvatarActions } from './useFactoryAgentAvatarActions';
 import { useFactoryBuildAgent } from './factoryBuildAgent';
@@ -79,7 +82,7 @@ export function AgentsPage({
 }: AgentsPageProps) {
   const [factorySection, setFactorySection] = useState<FactorySection>('agents');
   const [librarySection, setLibrarySection] = useState<FactoryLibrarySection>('skill');
-  const [librarySkillMode, setLibrarySkillMode] = useState<FactorySkillLibraryMode>('installed');
+  const [libraryScope, setLibraryScope] = useState<FactoryLibraryFilter['scope']>('mine');
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<Partial<Record<FactoryLibrarySection, string>>>({});
   const [buildRoute, setBuildRoute] = useState<FactoryBuildRoute | null>(null);
   const [buildSeed, setBuildSeed] = useState<DesktopAgentBuilderSeed>({});
@@ -104,6 +107,15 @@ export function AgentsPage({
     ?? agents.find((agent) => agent.isOwned && !agent.cloudAgentId)
     ?? null;
   const skillLibrary = useSkillLibrary();
+  const communityCatalog = useCommunitySkillCatalog(factorySection === 'library' && libraryScope === 'community', factorySection === 'library');
+  const libraryFilter: FactoryLibraryFilter = libraryScope === 'community'
+    ? { scope: 'community', provider: communityCatalog.provider }
+    : { scope: 'mine', kind: librarySection };
+  const changeLibraryFilter = (filter: FactoryLibraryFilter) => {
+    setLibraryScope(filter.scope);
+    if (filter.scope === 'mine') setLibrarySection(filter.kind);
+    else communityCatalog.setProvider(filter.provider);
+  };
   const {
     activeAgentConfig: modelActiveAgentConfig,
     activePersistedConfig,
@@ -178,11 +190,14 @@ export function AgentsPage({
       plugin: entriesFor('plugin', availablePlugins),
     };
   }, [agents, availablePlugins, availableTools, builds]);
-  const selectedLibraryId = selectedLibraryIds[librarySection] ?? (
-    librarySection === 'skill'
-      ? skillLibrary.skills[0]?.id
-      : libraryArtifacts[librarySection][0]?.id
-  ) ?? null;
+  // A remembered selection can disappear (a removed skill); fall back to the first item.
+  const libraryIdsInSection = librarySection === 'skill'
+    ? skillLibrary.skills.map((skill) => skill.id)
+    : libraryArtifacts[librarySection].map((artifact) => artifact.id);
+  const rememberedLibraryId = selectedLibraryIds[librarySection];
+  const selectedLibraryId = (rememberedLibraryId && libraryIdsInSection.includes(rememberedLibraryId)
+    ? rememberedLibraryId
+    : libraryIdsInSection[0]) ?? null;
   const selectedSkill = librarySection === 'skill'
     ? skillLibrary.skills.find((skill) => skill.id === selectedLibraryId) ?? null
     : null;
@@ -658,6 +673,7 @@ export function AgentsPage({
     setFactorySection(context?.section ?? 'agents');
     if (context?.section === 'agents' && context.selectedId) onOpenAgent(context.selectedId);
     if (context?.section === 'library' && context.librarySection) {
+      setLibraryScope('mine');
       setLibrarySection(context.librarySection);
       if (context.selectedId) setSelectedLibraryIds((current) => ({ ...current, [context.librarySection!]: context.selectedId! }));
     }
@@ -675,14 +691,15 @@ export function AgentsPage({
           libraryArtifacts={libraryArtifacts}
           selectedLibraryId={selectedLibraryId}
           section={factorySection}
-          librarySection={librarySection}
-          libraryCommunity={librarySection === 'skill' && librarySkillMode === 'community'}
+          libraryFilter={libraryFilter}
+          community={communityCatalog}
           canCreateAgent={Boolean(onCreateCloudAgent)}
           onSectionChange={openFactorySection}
-          onLibrarySectionChange={setLibrarySection}
+          onLibraryFilterChange={changeLibraryFilter}
           onOpenBuild={(summary) => { void openBuildSummary(summary); }}
           onOpenAgent={(agentId) => { setFactorySection('agents'); onOpenAgent(agentId); }}
           onOpenLibraryArtifact={(kind, artifactId) => {
+            setLibraryScope('mine');
             setLibrarySection(kind);
             setSelectedLibraryIds((current) => ({ ...current, [kind]: artifactId }));
             setFactorySection('library');
@@ -690,16 +707,29 @@ export function AgentsPage({
           onCreateArtifact={startFactoryBuild}
         />
         {factorySection === 'agents' ? <AgentInspectionView agent={inspectedAgent} onEditInBuild={(agent) => void editAgentInBuild(agent)} onUpdateCloudAgent={onUpdateCloudAgent} onUpdateLocalAgentAvatar={onUpdateLocalAgentAvatar} /> : null}
-        {factorySection === 'library' ? (
+        {factorySection === 'library' && libraryScope === 'community' ? (
+          <CommunitySkillDetail
+            key={communityCatalog.selected?.id ?? 'none'}
+            summary={communityCatalog.selected}
+            loadingList={communityCatalog.loading}
+            installedSkills={skillLibrary.skills}
+            mutatingSkillId={skillLibrary.mutatingSkillId}
+            onInstalled={async (summaryId) => {
+              communityCatalog.markInstalled(summaryId);
+              await skillLibrary.refresh();
+            }}
+            onSetEnabled={skillLibrary.setEnabled}
+          />
+        ) : null}
+        {factorySection === 'library' && libraryScope === 'mine' ? (
           <CapabilityLibraryView
             key={`${librarySection}:${selectedLibraryId ?? 'none'}`}
             kind={librarySection}
             artifact={selectedLibraryArtifact}
             skill={selectedSkill}
-            skillMode={librarySkillMode}
-            installedSkills={skillLibrary.skills}
-            onSkillModeChange={setLibrarySkillMode}
-            onCommunityInstalled={async () => { await skillLibrary.refresh(); }}
+            mutating={Boolean(selectedSkill && skillLibrary.mutatingSkillId === selectedSkill.id)}
+            onSetEnabled={skillLibrary.setEnabled}
+            onRemove={skillLibrary.remove}
             onEditInBuild={(artifact) => void editLibraryArtifactInBuild(artifact)}
           />
         ) : null}

@@ -47,7 +47,7 @@ export function SidebarListAction({ icon: Icon, label, onClick, disabled, expand
   );
 }
 
-export function SidebarSearchField({ value, onChange, placeholder, label, className, autoFocus, onEnter }: {
+export function SidebarSearchField({ value, onChange, placeholder, label, className, autoFocus, onEnter, trailing }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
@@ -56,9 +56,11 @@ export function SidebarSearchField({ value, onChange, placeholder, label, classN
   autoFocus?: boolean;
   /** Runs on Enter, for fields that search on demand instead of as you type. */
   onEnter?: () => void;
+  /** A control at the right edge of the field, such as a filter menu. It sits outside the label. */
+  trailing?: ReactNode;
 }) {
-  return (
-    <label className={cn('app-input-shell app-workspace-search mb-2 flex items-center gap-2 rounded-lg px-2.5 py-1.5', className)}>
+  const field = (
+    <label className={cn(trailing ? 'flex min-w-0 flex-1 items-center gap-2' : 'app-input-shell app-workspace-search mb-2 flex items-center gap-2 rounded-lg px-2.5 py-1.5', !trailing && className)}>
       <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
       <input
         value={value}
@@ -74,5 +76,12 @@ export function SidebarSearchField({ value, onChange, placeholder, label, classN
         className="w-full min-w-0 bg-transparent text-[13px] text-white outline-none placeholder:text-slate-400"
       />
     </label>
+  );
+  if (!trailing) return field;
+  return (
+    <div className={cn('app-input-shell app-workspace-search app-sidebar-search-with-trailing mb-2 flex items-center gap-2 rounded-lg py-1.5 pl-2.5 pr-1', className)}>
+      {field}
+      {trailing}
+    </div>
   );
 }

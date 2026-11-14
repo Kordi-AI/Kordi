@@ -640,6 +640,12 @@ export async function searchDesktopCommunitySkills(
   return invokeDesktop<DesktopCommunitySkillSummary[]>('desktop_skill_community_search', { provider, query });
 }
 
+/** The catalog's most-installed skills, shown before the user types a search. */
+export async function fetchDesktopCommunityPopularSkills(provider: 'clawhub' | 'skills-sh') {
+  if (!isNativeDesktopShell()) return [] as DesktopCommunitySkillSummary[];
+  return invokeDesktop<DesktopCommunitySkillSummary[]>('desktop_skill_community_popular', { provider });
+}
+
 export async function fetchDesktopCommunitySkillProviders() {
   if (!isNativeDesktopShell()) return ['clawhub'] as Array<'clawhub' | 'skills-sh'>;
   return invokeDesktop<Array<'clawhub' | 'skills-sh'>>('desktop_skill_community_providers');

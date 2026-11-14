@@ -1,193 +1,158 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Blocks, Check, FileText, LoaderCircle, Puzzle, Wrench } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Blocks, Copy, FolderOpen, Pencil, Puzzle, Trash2, Wrench } from 'lucide-react';
 
 import { ErrorLine } from '@/components/ui/ErrorLine';
-import { handleDocumentCopySurfaceKeyDown } from '@/features/contentSelection';
+import { revealDesktopAttachment } from '@/features/chat/attachmentDesktopActions';
 import {
   fetchDesktopSkillLibraryDetail,
+  isNativeDesktopShell,
   readDesktopSkillLibraryFile,
   type DesktopSkillLibraryEntry,
 } from '@/lib/desktop';
-import { cn } from '@/lib/utils';
-import { CommunitySkillView } from './SkillLibraryView';
+import {
+  FactoryDetailHeader,
+  FactoryDetailTabs,
+  FactoryEnabledSwitch,
+  FactoryFileView,
+  FactoryMoreMenu,
+  FactoryOverview,
+  type FactoryDocMode,
+  type FactoryMenuItem,
+} from './FactoryLibraryDetailParts';
+import { factoryErrorMessage, factoryItemMeta, OVERVIEW_TAB, skillFolderPath, skillSource } from './factoryLibraryUtils';
 import type { FactoryLibraryArtifact, FactoryLibrarySection } from './model';
 
 const KIND_ICONS = { skill: Puzzle, tool: Wrench, plugin: Blocks } satisfies Record<FactoryLibrarySection, typeof Puzzle>;
-
-export type FactorySkillLibraryMode = 'installed' | 'community';
 
 function kindLabel(kind: FactoryLibrarySection) {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
-function skillSource(skill: DesktopSkillLibraryEntry) {
-  if (skill.provider?.trim()) return skill.provider === 'skills-sh' ? 'skills.sh' : skill.provider.trim();
-  if (skill.origin === 'built') return 'Kordi Factory';
-  if (skill.origin === 'project' || skill.scope === 'project') return 'This project';
-  if (skill.origin === 'community') return 'Community';
-  if (skill.scope === 'package') return 'Installed package';
-  if (['installed', 'external'].includes(skill.origin) || ['global', 'shared', 'external'].includes(skill.scope)) return 'Local library';
-  return skill.sourceLabel.replace(/^settings:/i, '') || 'Local library';
+function artifactSource(artifact: FactoryLibraryArtifact) {
+  if (artifact.status === 'Published') return 'Kordi Factory';
+  return artifact.kind === 'tool' ? 'Built in' : 'Installed';
 }
 
-function SkillModeSwitch({
-  mode,
-  count,
-  onChange,
-}: {
-  mode: FactorySkillLibraryMode;
-  count: number;
-  onChange: (mode: FactorySkillLibraryMode) => void;
-}) {
-  return (
-    <div className="app-factory-skill-mode" role="tablist" aria-label="Skill sources">
-      <button type="button" role="tab" aria-selected={mode === 'installed'} className={cn(mode === 'installed' && 'is-active')} onClick={() => onChange('installed')}>My skills <span>{count}</span></button>
-      <button type="button" role="tab" aria-selected={mode === 'community'} className={cn(mode === 'community' && 'is-active')} onClick={() => onChange('community')}>Community</button>
-    </div>
-  );
+function copyText(text: string) {
+  void navigator.clipboard?.writeText(text).catch(() => undefined);
 }
 
+/** Inspection of one item from the user's own library: a skill, tool or plugin. */
 export function CapabilityLibraryView({
   kind,
   artifact,
   skill,
-  skillMode = 'installed',
-  installedSkills = [],
-  onSkillModeChange = () => undefined,
-  onCommunityInstalled = () => undefined,
+  mutating = false,
+  onSetEnabled,
+  onRemove,
   onEditInBuild,
 }: {
   kind: FactoryLibrarySection;
   artifact: FactoryLibraryArtifact | null;
   skill?: DesktopSkillLibraryEntry | null;
-  skillMode?: FactorySkillLibraryMode;
-  installedSkills?: DesktopSkillLibraryEntry[];
-  onSkillModeChange?: (mode: FactorySkillLibraryMode) => void;
-  onCommunityInstalled?: (skill: DesktopSkillLibraryEntry) => Promise<void> | void;
+  mutating?: boolean;
+  onSetEnabled?: (skill: DesktopSkillLibraryEntry, enabled: boolean) => Promise<unknown> | void;
+  onRemove?: (skill: DesktopSkillLibraryEntry) => Promise<boolean> | boolean;
   onEditInBuild: (artifact: FactoryLibraryArtifact) => void;
 }) {
   const [files, setFiles] = useState<Array<{ path: string; text: boolean }>>([]);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [content, setContent] = useState('');
-  const [loading, setLoading] = useState(kind === 'skill' && Boolean(skill));
+  const [contents, setContents] = useState<Record<string, string>>({});
+  const [tab, setTab] = useState(OVERVIEW_TAB);
+  const [docMode, setDocMode] = useState<FactoryDocMode>('rendered');
+  const [loadingPath, setLoadingPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const requestRef = useRef(0);
   const Icon = KIND_ICONS[kind];
+  const skillId = skill?.id;
+  const skillName = skill?.name;
 
   useEffect(() => {
     const request = requestRef.current + 1;
     requestRef.current = request;
-    if (kind !== 'skill' || !skill) return undefined;
-    void fetchDesktopSkillLibraryDetail(skill.id)
+    if (kind !== 'skill' || !skillId) return undefined;
+    void fetchDesktopSkillLibraryDetail(skillId)
       .then((detail) => {
         if (requestRef.current !== request) return;
-        setFiles(detail.files);
-        const path = detail.files.find((file) => file.path === 'SKILL.md')?.path ?? detail.files[0]?.path ?? null;
-        setSelectedPath(path);
-        setContent(path === 'SKILL.md' ? detail.skillMd : '');
+        const ordered = [...detail.files].sort((left, right) => (
+          Number(right.path === 'SKILL.md') - Number(left.path === 'SKILL.md') || left.path.localeCompare(right.path)
+        ));
+        setFiles(ordered);
+        setContents({ 'SKILL.md': detail.skillMd });
       })
       .catch((loadError) => {
-        if (requestRef.current === request) setError(loadError instanceof Error ? loadError.message : `Unable to inspect ${skill.name}.`);
-      })
-      .finally(() => {
-        if (requestRef.current === request) setLoading(false);
+        if (requestRef.current === request) setError(factoryErrorMessage(loadError, `Unable to inspect ${skillName ?? 'this skill'}.`));
       });
     return () => { requestRef.current += 1; };
-  }, [kind, skill]);
+  }, [kind, skillId, skillName]);
 
-  const usage = useMemo(() => artifact?.usedBy.join(', ') || 'Not used by an agent', [artifact?.usedBy]);
-
-  const openFile = async (path: string) => {
-    if (!skill || path === selectedPath) return;
+  const openTab = async (path: string) => {
+    setTab(path);
+    if (!skill || path === OVERVIEW_TAB || path in contents) return;
+    if (!files.find((file) => file.path === path)?.text) return;
     const request = requestRef.current + 1;
     requestRef.current = request;
-    setSelectedPath(path);
-    setLoading(true);
+    setLoadingPath(path);
     setError(null);
     try {
       const text = await readDesktopSkillLibraryFile(skill.id, path);
-      if (requestRef.current === request) setContent(text);
+      if (requestRef.current === request) setContents((current) => ({ ...current, [path]: text }));
     } catch (readError) {
-      if (requestRef.current === request) setError(readError instanceof Error ? readError.message : `Unable to read ${path}.`);
+      if (requestRef.current === request) setError(factoryErrorMessage(readError, `Unable to read ${path}.`));
     } finally {
-      if (requestRef.current === request) setLoading(false);
+      if (requestRef.current === request) setLoadingPath(null);
     }
   };
 
-  if (kind === 'skill' && skillMode === 'community') {
-    return (
-      <main className="app-agent-studio-main app-factory-community-main">
-        <header className="app-agent-studio-header">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="app-agent-studio-factory-mark" aria-hidden="true"><Puzzle className="h-5 w-5" /></span>
-            <h2>Skills</h2>
-          </div>
-          <SkillModeSwitch mode={skillMode} count={installedSkills.length} onChange={onSkillModeChange} />
-        </header>
-        <CommunitySkillView
-          skills={installedSkills}
-          agentTargets={[]}
-          onInstalled={onCommunityInstalled}
-          onAddToAgent={() => undefined}
-        />
-      </main>
-    );
+  if (!artifact) {
+    return <main className="app-agent-studio-main"><div className="app-skill-library-state"><Icon className="h-4 w-4" /><strong>No {kind} selected</strong></div></main>;
   }
 
-  if (!artifact) {
-    return <main className="app-agent-studio-main"><div className="app-skill-library-state"><Icon className="h-4 w-4" /><strong>No {kind} selected</strong><span>Choose a {kind} to inspect.</span></div></main>;
+  const menuItems: FactoryMenuItem[] = skill ? [
+    ...(isNativeDesktopShell() ? [{ label: 'Show in Finder', icon: FolderOpen, onSelect: () => { void revealDesktopAttachment(skill.sourcePath).catch(() => undefined); } }] : []),
+    { label: 'Copy path', icon: Copy, onSelect: () => copyText(skillFolderPath(skill)) },
+    ...(skill.removable && onRemove ? [{ label: 'Remove', icon: Trash2, danger: true, onSelect: () => setConfirmRemove(true) }] : []),
+  ] : [{ label: 'Copy identifier', icon: Copy, onSelect: () => copyText(artifact.name) }];
+  const meta = skill
+    ? factoryItemMeta('Skill', skillSource(skill), skill.version ? `v${skill.version.replace(/^v/i, '')}` : null)
+    : factoryItemMeta(kindLabel(kind), artifactSource(artifact));
+  const details: Array<[string, string]> = [['Used by', artifact.usedBy.join(', ') || 'No agent']];
+  if (skill) {
+    details.push(['Source', skillSource(skill)]);
+    if (skill.version) details.push(['Version', skill.version]);
+    details.push(['Files', String(files.length || skill.fileCount)]);
+  } else {
+    details.push(['Source', artifactSource(artifact)], ['Identifier', artifact.name]);
   }
+  const activeTab = files.some((file) => file.path === tab) ? tab : OVERVIEW_TAB;
 
   return (
     <main className="app-agent-studio-main app-factory-inspect-main">
-      <header className="app-agent-studio-header">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="app-agent-studio-factory-mark" aria-hidden="true"><Icon className="h-5 w-5" /></span>
-          <div className="min-w-0"><h2>{artifact.name}</h2><p>{kindLabel(kind)} · {artifact.status}</p></div>
+      <FactoryDetailHeader icon={Icon} name={artifact.name} meta={meta}>
+        {skill && onSetEnabled ? (
+          <>
+            <FactoryEnabledSwitch enabled={skill.enabled} disabled={mutating} onChange={(enabled) => { void onSetEnabled(skill, enabled); }} />
+            <span className="app-factory-action-divider" aria-hidden="true" />
+          </>
+        ) : null}
+        <button type="button" className="app-button-quiet app-agent-studio-button is-small" onClick={() => onEditInBuild(artifact)}><Pencil className="h-3.5 w-3.5" />Edit in Build</button>
+        <FactoryMoreMenu items={menuItems} />
+      </FactoryDetailHeader>
+      {confirmRemove && skill && onRemove ? (
+        <div className="app-factory-confirm" role="alertdialog" aria-label={`Remove ${skill.name}`}>
+          <span>Remove {skill.name}?</span>
+          <button type="button" className="app-button-quiet app-agent-studio-button is-small" onClick={() => setConfirmRemove(false)}>Cancel</button>
+          <button type="button" className="app-button-quiet app-agent-studio-button is-small is-danger" disabled={mutating} onClick={() => { void Promise.resolve(onRemove(skill)).then((removed) => { if (removed) setConfirmRemove(false); }); }}>Remove</button>
         </div>
-        <div className="app-agent-studio-header-actions">
-          {kind === 'skill' ? <SkillModeSwitch mode={skillMode} count={installedSkills.length} onChange={onSkillModeChange} /> : null}
-          <button type="button" className="app-button-quiet app-agent-studio-button is-primary" onClick={() => onEditInBuild(artifact)}>Edit in Build</button>
-        </div>
-      </header>
-
-      <div className="app-factory-library-detail">
-        <aside className="app-factory-library-overview app-scroll-area">
-          <section>
-            <h3>About</h3>
-            <p>{artifact.description || 'No description.'}</p>
-          </section>
-          <section>
-            <h3>Details</h3>
-            <dl>
-              <div><dt>Status</dt><dd><Check className="h-3.5 w-3.5" />{artifact.status}</dd></div>
-              <div><dt>Used by</dt><dd>{usage}</dd></div>
-              {skill ? <><div><dt>Source</dt><dd>{skillSource(skill)}</dd></div><div><dt>Version</dt><dd>{skill.version || 'Unversioned'}</dd></div><div><dt>Files</dt><dd>{skill.fileCount}</dd></div></> : <div><dt>Identifier</dt><dd>{artifact.id}</dd></div>}
-            </dl>
-          </section>
-        </aside>
-
-        <section className="app-factory-library-preview">
-          {error ? <ErrorLine className="mt-0 px-2.5 py-[7px]">{error}</ErrorLine> : null}
-          {kind === 'skill' ? (
-            <>
-              <nav className="app-factory-library-file-tabs" aria-label={`${artifact.name} files`}>
-                {files.map((file) => <button key={file.path} type="button" aria-current={file.path === selectedPath ? 'true' : undefined} className={cn(file.path === selectedPath && 'is-active')} onClick={() => void openFile(file.path)}><FileText className="h-3.5 w-3.5" /><span>{file.path}</span></button>)}
-              </nav>
-              <div className="app-factory-library-code">
-                {loading ? <div className="app-skill-library-loading"><LoaderCircle className="h-4 w-4 animate-spin" />Loading file…</div> : <pre data-kordi-copy-surface="document" tabIndex={0} onKeyDown={handleDocumentCopySurfaceKeyDown}>{content || 'No text preview is available.'}</pre>}
-              </div>
-            </>
-          ) : (
-            <div className="app-factory-library-definition">
-              <Icon className="h-6 w-6" />
-              <div><strong>{artifact.name}</strong><span>{kindLabel(kind)}</span></div>
-              <p>{artifact.description || 'No description.'}</p>
-              <code>{artifact.id}</code>
-              <button type="button" className="app-button-quiet app-agent-studio-button" onClick={() => onEditInBuild(artifact)}>Change in Build</button>
-            </div>
-          )}
-        </section>
+      ) : null}
+      {error ? <ErrorLine className="mx-4 mt-3 px-2.5 py-[7px]">{error}</ErrorLine> : null}
+      {files.length > 0 ? (
+        <FactoryDetailTabs files={files.map((file) => file.path)} active={activeTab} onChange={(next) => { void openTab(next); }} docMode={docMode} onDocModeChange={setDocMode} />
+      ) : null}
+      <div className="app-factory-detail-body">
+        {activeTab === OVERVIEW_TAB
+          ? <FactoryOverview about={artifact.description} details={details} />
+          : <FactoryFileView path={activeTab} text={contents[activeTab] ?? null} loading={loadingPath === activeTab} mode={docMode} />}
       </div>
     </main>
   );

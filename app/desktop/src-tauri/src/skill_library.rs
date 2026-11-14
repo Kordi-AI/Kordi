@@ -81,6 +81,26 @@ struct ClawHubSearchItem {
     owner_handle: Option<String>,
 }
 
+/// One page of the ClawHub leaderboard (`GET /skills?sort=downloads`).
+#[derive(Debug, Deserialize)]
+struct ClawHubListResponse {
+    #[serde(default)]
+    items: Vec<ClawHubListItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawHubListItem {
+    slug: String,
+    display_name: Option<String>,
+    summary: Option<String>,
+    #[serde(default)]
+    stats: ClawHubStats,
+    updated_at: Option<i64>,
+    owner_handle: Option<String>,
+    latest_version: Option<ClawHubLatestVersion>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ClawHubSkillEnvelope {
@@ -293,29 +313,104 @@ async fn clawhub_search(
         .into_iter()
         .take(COMMUNITY_RESULT_LIMIT)
         .map(|item| {
-            let owner = item.owner_handle;
-            DesktopCommunitySkillSummary {
-                id: format!(
-                    "clawhub:{}:{}",
-                    owner.as_deref().unwrap_or("unknown"),
-                    item.slug
-                ),
-                provider: "clawhub".to_string(),
-                source_url: clawhub_source_url(owner.as_deref(), &item.slug),
-                installed: installed_match(installed, "clawhub", owner.as_deref(), &item.slug),
-                owner,
-                slug: item.slug.clone(),
-                name: if item.display_name.trim().is_empty() {
-                    item.slug
-                } else {
-                    item.display_name
+            clawhub_summary(
+                ClawHubSummaryParts {
+                    owner: item.owner_handle,
+                    slug: item.slug,
+                    display_name: item.display_name,
+                    summary: item.summary,
+                    version: item.version,
+                    downloads: item.downloads,
+                    stars: 0,
+                    updated_at: item.updated_at,
                 },
-                description: item.summary,
-                version: item.version,
-                downloads: item.downloads,
-                stars: 0,
-                updated_at_ms: item.updated_at,
-            }
+                installed,
+            )
+        })
+        .collect())
+}
+
+struct ClawHubSummaryParts {
+    owner: Option<String>,
+    slug: String,
+    display_name: String,
+    summary: String,
+    version: Option<String>,
+    downloads: u64,
+    stars: u64,
+    updated_at: Option<i64>,
+}
+
+fn clawhub_summary(
+    parts: ClawHubSummaryParts,
+    installed: &[SkillLibraryEntry],
+) -> DesktopCommunitySkillSummary {
+    let owner = parts.owner;
+    DesktopCommunitySkillSummary {
+        id: format!(
+            "clawhub:{}:{}",
+            owner.as_deref().unwrap_or("unknown"),
+            parts.slug
+        ),
+        provider: "clawhub".to_string(),
+        source_url: clawhub_source_url(owner.as_deref(), &parts.slug),
+        installed: installed_match(installed, "clawhub", owner.as_deref(), &parts.slug),
+        owner,
+        name: if parts.display_name.trim().is_empty() {
+            parts.slug.clone()
+        } else {
+            parts.display_name
+        },
+        slug: parts.slug,
+        description: parts.summary,
+        version: parts.version,
+        downloads: parts.downloads,
+        stars: parts.stars,
+        updated_at_ms: parts.updated_at,
+    }
+}
+
+/// Most-downloaded ClawHub skills, shown before the user types a query.
+async fn clawhub_popular(
+    client: &Client,
+    installed: &[SkillLibraryEntry],
+) -> Result<Vec<DesktopCommunitySkillSummary>, String> {
+    let limit = COMMUNITY_RESULT_LIMIT.to_string();
+    let url = catalog_url(
+        CLAWHUB_API,
+        "skills",
+        &[
+            ("sort", "downloads"),
+            ("nonSuspiciousOnly", "true"),
+            ("limit", &limit),
+        ],
+    )?;
+    let response: ClawHubListResponse = response_json(
+        client
+            .get(url)
+            .send()
+            .await
+            .map_err(|error| format!("ClawHub could not be reached: {error}"))?,
+    )
+    .await?;
+    Ok(response
+        .items
+        .into_iter()
+        .take(COMMUNITY_RESULT_LIMIT)
+        .map(|item| {
+            clawhub_summary(
+                ClawHubSummaryParts {
+                    owner: item.owner_handle,
+                    slug: item.slug,
+                    display_name: item.display_name.unwrap_or_default(),
+                    summary: item.summary.unwrap_or_default(),
+                    version: item.latest_version.map(|latest| latest.version),
+                    downloads: item.stats.downloads,
+                    stars: item.stats.stars,
+                    updated_at: item.updated_at,
+                },
+                installed,
+            )
         })
         .collect())
 }
@@ -344,7 +439,14 @@ async fn skills_sh_search(
             .map_err(|error| format!("Skills.sh could not be reached: {error}"))?,
     )
     .await?;
-    Ok(response
+    Ok(skills_sh_summaries(response, installed))
+}
+
+fn skills_sh_summaries(
+    response: SkillsShSearchResponse,
+    installed: &[SkillLibraryEntry],
+) -> Vec<DesktopCommunitySkillSummary> {
+    response
         .data
         .into_iter()
         .take(COMMUNITY_RESULT_LIMIT)
@@ -362,7 +464,32 @@ async fn skills_sh_search(
             source_url: item.url,
             installed: installed_match(installed, "skills-sh", Some(&item.source), &item.slug),
         })
-        .collect())
+        .collect()
+}
+
+/// The skills.sh all-time leaderboard (`GET /skills`), shown before the user types a query.
+/// It returns the same item shape as search.
+async fn skills_sh_popular(
+    client: &Client,
+    installed: &[SkillLibraryEntry],
+) -> Result<Vec<DesktopCommunitySkillSummary>, String> {
+    let token = skills_sh_token()?;
+    let limit = COMMUNITY_RESULT_LIMIT.to_string();
+    let url = catalog_url(
+        SKILLS_SH_API,
+        "skills",
+        &[("view", "all-time"), ("per_page", &limit)],
+    )?;
+    let response: SkillsShSearchResponse = response_json(
+        client
+            .get(url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|error| format!("Skills.sh could not be reached: {error}"))?,
+    )
+    .await?;
+    Ok(skills_sh_summaries(response, installed))
 }
 
 async fn clawhub_detail(
@@ -889,6 +1016,20 @@ pub async fn desktop_skill_community_search(
 }
 
 #[tauri::command]
+pub async fn desktop_skill_community_popular(
+    provider: String,
+) -> Result<Vec<DesktopCommunitySkillSummary>, String> {
+    let cwd = cwd()?;
+    let installed = skill_library::list_skills(&cwd).map_err(|error| error.to_string())?;
+    let client = http_client()?;
+    match provider.trim() {
+        "clawhub" => clawhub_popular(&client, &installed).await,
+        "skills-sh" => skills_sh_popular(&client, &installed).await,
+        _ => Err("Unknown community skill provider".to_string()),
+    }
+}
+
+#[tauri::command]
 pub async fn desktop_skill_community_detail(
     provider: String,
     owner: Option<String>,
@@ -1001,6 +1142,55 @@ pub async fn desktop_skill_community_install(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clawhub_leaderboard_items_map_to_community_summaries() {
+        let response: ClawHubListResponse = serde_json::from_str(
+            r#"{"items":[{"ownerHandle":"pixel-forge","slug":"figma-to-code","displayName":"Figma to code","summary":null,"stats":{"downloads":21500,"stars":12},"updatedAt":5,"latestVersion":{"version":"1.2.0"}},{"slug":"bare","stats":{}}],"nextCursor":null}"#,
+        )
+        .expect("leaderboard parses");
+        let summaries: Vec<_> = response
+            .items
+            .into_iter()
+            .map(|item| {
+                clawhub_summary(
+                    ClawHubSummaryParts {
+                        owner: item.owner_handle,
+                        slug: item.slug,
+                        display_name: item.display_name.unwrap_or_default(),
+                        summary: item.summary.unwrap_or_default(),
+                        version: item.latest_version.map(|latest| latest.version),
+                        downloads: item.stats.downloads,
+                        stars: item.stats.stars,
+                        updated_at: item.updated_at,
+                    },
+                    &[],
+                )
+            })
+            .collect();
+        assert_eq!(summaries[0].id, "clawhub:pixel-forge:figma-to-code");
+        assert_eq!(summaries[0].name, "Figma to code");
+        assert_eq!(summaries[0].version.as_deref(), Some("1.2.0"));
+        assert_eq!(summaries[0].downloads, 21500);
+        assert_eq!(
+            summaries[0].source_url,
+            "https://clawhub.ai/pixel-forge/skills/figma-to-code"
+        );
+        assert_eq!(summaries[1].name, "bare");
+        assert_eq!(summaries[1].description, "");
+    }
+
+    #[test]
+    fn skills_sh_leaderboard_uses_the_search_item_shape() {
+        let response: SkillsShSearchResponse = serde_json::from_str(
+            r#"{"data":[{"id":"vercel-labs/skills/find-skills","slug":"find-skills","name":"find-skills","source":"vercel-labs/skills","installs":24531,"sourceType":"github","installUrl":"https://github.com/vercel-labs/skills","url":"https://skills.sh/vercel-labs/skills/find-skills"}],"pagination":{"page":0,"perPage":40,"total":1,"hasMore":false}}"#,
+        )
+        .expect("leaderboard parses");
+        let summaries = skills_sh_summaries(response, &[]);
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].owner.as_deref(), Some("vercel-labs/skills"));
+        assert_eq!(summaries[0].downloads, 24531);
+    }
 
     #[test]
     fn community_paths_reject_parent_and_absolute_components() {
