@@ -92,7 +92,9 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // moves to 5.956 MB.
 // Asking for notification permission from Digest (Allow, Open System Settings, the focus re-check
 // and the shared unanswered-request state) adds 1.2 kB with the community profile, so it moves to 5.958 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_958_000;
+// Quick Grounding match estimates (estimated entries, their detail screen and the slower hinted poll)
+// add 2 kB, so it moves to 5.96 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_960_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
