@@ -75,7 +75,10 @@ struct ContactsView<PinnedRows: View>: View {
                                 .contactsListRow()
                         }
                         ForEach(model.roomGroupInvitations) { invitation in
-                            ContactsRoomInvitationRow(invitation: invitation, onOpenConversation: onOpenConversation)
+                            ContactsRoomInvitationRow(invitation: invitation, onOpenConversation: onOpenConversation) {
+                                CommonGroundRoomInvitationInbox.shared.open(invitation)
+                                openCommonGround()
+                            }
                                 .contactsListRow()
                         }
                         ForEach(outgoingRequests) { request in

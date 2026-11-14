@@ -6,6 +6,12 @@ import { CloudAuthError } from '../src/features/cloud/cloudAuthError';
 import { createRoomInvitationsStore, normalizeRoomInvitation } from '../src/features/commonGround/roomInvitations';
 import { notifyCommonGroundRoomEvents, subscribeRoomHints } from '../src/features/commonGround/roomHints';
 import { ContactsRoomInvitationRow } from '../src/kordi-app/contacts/ContactsRoomInvitationRow';
+import { COMMON_GROUND_ROOM_FOCUS_EVENT, hasPendingRoomFocus, rememberRoomFocus, takePendingRoomFocus } from '../src/features/commonGround/roomFocus';
+import { ResultsScreen } from '../src/features/commonGround/ResultsScreen';
+import { CommonGroundStore } from '../src/features/commonGround/store';
+import type { CgHost } from '../src/features/commonGround/host';
+import { commonGroundFixtures } from './visual/commonGroundFixtures';
+import { mockServer, person, room } from './helpers/commonGroundServer';
 
 const wire = (ref: string, patch: Record<string, unknown> = {}) => ({
   invitationRef: ref, code: '4821', roomName: 'Build night', groupSpaceId: `session:group:${ref}`, conversationId: `conv_${ref}`,
@@ -108,10 +114,45 @@ test('the Requests row names the inviter and group and resolves kordi-avatar mar
   }));
   assert.ok(invitation);
   const markup = renderToStaticMarkup(createElement(ContactsRoomInvitationRow, { invitation, busy: false, onJoin: () => undefined, onDecline: () => undefined }));
-  assert.match(markup, /Alex Rivera/);
-  assert.match(markup, /Invited you to Infrastructure and CI/);
+  assert.match(markup, /Alex Rivera invited you/);
+  assert.match(markup, />Infrastructure and CI</);
+  assert.match(markup, /aria-label="Open Infrastructure and CI"/);
   assert.match(markup, />Join</);
   assert.match(markup, />Decline</);
   assert.doesNotMatch(markup, /src="kordi-avatar:/);
   assert.match(markup, /boring-marble-v1\/alex_seed\.png/);
+});
+
+test('opening an invitation keeps the room and group until the Grounding page takes them', () => {
+  const target = new EventTarget();
+  let announced: unknown = null;
+  target.addEventListener(COMMON_GROUND_ROOM_FOCUS_EVENT, (event) => { announced = (event as CustomEvent).detail; });
+  rememberRoomFocus({ code: '4821', groupSpaceId: 'session:group:cgi_1' }, target);
+  assert.deepEqual(announced, { code: '4821', groupSpaceId: 'session:group:cgi_1' });
+  assert.equal(hasPendingRoomFocus(), true);
+  assert.deepEqual(takePendingRoomFocus(), { code: '4821', groupSpaceId: 'session:group:cgi_1' });
+  assert.equal(takePendingRoomFocus(), null);
+});
+
+test('the room opens on the invited group, with its group and invitation rows focused', async () => {
+  const fx = commonGroundFixtures('light');
+  const group = { groupSpaceId: 'session:group:cgi_1', conversationId: 'conv_1', name: 'Infrastructure and CI', memberCount: 2, members: [person('acct_alex')], joined: false };
+  const other = { ...group, groupSpaceId: 'session:group:other', name: 'Other group' };
+  const invitation = { invitationRef: 'cgi_1', groupSpaceId: group.groupSpaceId, name: group.name, from: { ...person('acct_alex'), name: 'Alex Rivera' }, createdAt: '2026-11-13T10:00:00Z' };
+  const server = mockServer({ 'POST rooms/4821/results': { status: 200, body: { ...fx.results, groups: [other, group], invitations: [invitation] } } });
+  const store = new CommonGroundStore(server.client, { profiles: true });
+  store.set({ rooms: { '4821': room('4821') } });
+  store.openRoom('4821', group.groupSpaceId);
+  assert.deepEqual(store.top(), { name: 'results', code: '4821', focusGroup: group.groupSpaceId });
+  await store.loadScreen({ name: 'results', code: '4821' });
+  const host: CgHost = {
+    self: fx.self, profiles: true, memoryAvailable: false, connectors: null, agentFiles: null, device: null,
+    openChat: () => undefined, acceptRequest: async () => undefined, contactsChanged: () => undefined,
+    openGroup: () => undefined, openUrl: () => undefined,
+  };
+  const markup = renderToStaticMarkup(createElement(ResultsScreen, { code: '4821', focusGroup: group.groupSpaceId, state: store.getSnapshot(), store, host }));
+  assert.equal((markup.match(/is-focused/g) ?? []).length, 2);
+  assert.match(markup, /Alex Rivera invited you to Infrastructure and CI/);
+  const plain = renderToStaticMarkup(createElement(ResultsScreen, { code: '4821', state: store.getSnapshot(), store, host }));
+  assert.doesNotMatch(plain, /is-focused/);
 });

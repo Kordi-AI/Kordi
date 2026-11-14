@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// A pending invitation to a group started in a Grounding room, listed
 /// outside the room so it can be answered from Contacts.
@@ -19,6 +19,11 @@ struct RoomGroupInvitation: Decodable, Hashable, Identifiable {
     /// The group's name, or a neutral fallback when the server sends none.
     var groupName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "a group"
+    }
+
+    /// The group's name on its own line, with a neutral fallback.
+    var groupTitle: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "Group"
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -184,4 +189,40 @@ extension AppModel {
 struct RoomGroupInvitationError: Error, Identifiable {
     let id = UUID()
     let message: String
+}
+
+/// A room invitation tapped in Contacts. Contacts opens Grounding, and
+/// Grounding takes the room from here and shows its results.
+@MainActor
+final class CommonGroundRoomInvitationInbox: ObservableObject {
+    struct Target: Equatable {
+        let code: String
+        let groupSpaceId: String
+    }
+
+    static let shared = CommonGroundRoomInvitationInbox()
+    @Published var target: Target?
+
+    func open(_ invitation: RoomGroupInvitation) {
+        target = Target(code: invitation.code, groupSpaceId: invitation.groupSpaceId)
+    }
+
+    func take() -> Target? {
+        defer { target = nil }
+        return target
+    }
+}
+
+/// Inside Grounding: a tapped invitation shows its room's results with the
+/// group in view, so Back leads to Grounding's home.
+struct CommonGroundRoomInvitationOpening: ViewModifier {
+    @ObservedObject private var inbox = CommonGroundRoomInvitationInbox.shared
+    @Binding var path: [CommonGroundRoute]
+
+    func body(content: Content) -> some View {
+        content.task(id: inbox.target) {
+            guard let target = inbox.take() else { return }
+            path = [.results(target.code, focus: target.groupSpaceId)]
+        }
+    }
 }

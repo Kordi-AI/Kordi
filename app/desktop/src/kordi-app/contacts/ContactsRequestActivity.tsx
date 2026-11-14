@@ -1,4 +1,5 @@
 import { ErrorLine } from '@/components/ui/ErrorLine';
+import { rememberRoomFocus } from '@/features/commonGround/roomFocus';
 import { useRoomInvitations } from '@/features/commonGround/roomInvitations';
 import { ContactRequestRow } from '../components';
 import type { ContactRequest } from '../types';
@@ -51,6 +52,7 @@ export function ContactsRequestActivity({
           key={invitation.invitationRef}
           invitation={invitation}
           busy={rooms.busyRef === invitation.invitationRef}
+          onOpen={() => rememberRoomFocus({ code: invitation.code, groupSpaceId: invitation.groupSpaceId })}
           onJoin={() => { void rooms.store.join(invitation); }}
           onDecline={() => { void rooms.store.decline(invitation); }}
         />

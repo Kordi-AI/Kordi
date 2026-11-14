@@ -95,7 +95,8 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // tests 0.2 kB more, so it moves to 5.963 MB.
 // Room group invitations in Contacts › Requests (their list, Join and Decline, and the Contacts
 // badge) add 3.7 kB, so it moves to 5.967 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_967_000;
+// Opening the room from such an invitation, focused on its group, adds 1.4 kB, so it moves to 5.969 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_969_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -137,7 +138,8 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The same room group join requests add 5.3 kB there, so it moves to 5.989 MB.
 // The same room group invitations in Contacts › Requests add 3.7 kB there, and the cloud community
 // build the web browser tests use is 0.3 kB larger, so it moves to 5.994 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_994_000;
+// Opening the room from such an invitation adds 1.4 kB there, so it moves to 5.995 MB.
+const MAX_WEB_APP_DIST_BYTES = 5_995_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

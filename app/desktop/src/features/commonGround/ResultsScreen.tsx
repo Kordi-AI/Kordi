@@ -52,7 +52,7 @@ function GroupTrailing({ code, group, state, store, host, closed }: { code: stri
   );
 }
 
-function GroupsSection({ code, results, state, store, host, closed }: { code: string; results: CgResults; state: CgState; store: CommonGroundStore; host: CgHost; closed: boolean }) {
+function GroupsSection({ code, results, state, store, host, closed, focusGroup }: { code: string; results: CgResults; state: CgState; store: CommonGroundStore; host: CgHost; closed: boolean; focusGroup?: string }) {
   const groups = results.groups ?? [];
   const invitations = state.support.invitations ? results.invitations ?? [] : [];
   if (!groups.length && !invitations.length) return null;
@@ -65,6 +65,7 @@ function GroupsSection({ code, results, state, store, host, closed }: { code: st
               lead={<CgAvatarGrid people={group.members ?? []} size={30} />}
               title={group.name}
               sub={groupLine(group) || undefined}
+              focused={group.groupSpaceId === focusGroup}
               trailing={<GroupTrailing code={code} group={group} state={state} store={store} host={host} closed={closed} />}
             />
             {(group.requests ?? []).map((request) => {
@@ -91,6 +92,7 @@ function GroupsSection({ code, results, state, store, host, closed }: { code: st
             key={invitation.invitationRef}
             lead={<CgAvatar person={invitation.from} size={32} />}
             title={`${invitation.from.name} invited you to ${invitation.name}`}
+            focused={invitation.groupSpaceId === focusGroup}
             trailing={(
               <CgButton onClick={() => void store.joinInvitation(code, invitation.invitationRef).then((id) => { if (id) host.openGroup(id); })}>
                 Join
@@ -103,7 +105,7 @@ function GroupsSection({ code, results, state, store, host, closed }: { code: st
   );
 }
 
-export function ResultsScreen({ code, state, store, host }: { code: string; state: CgState; store: CommonGroundStore; host: CgHost }) {
+export function ResultsScreen({ code, focusGroup, state, store, host }: { code: string; focusGroup?: string; state: CgState; store: CommonGroundStore; host: CgHost }) {
   const [tab, setTab] = useState<'people' | 'topics'>('people');
   const [starting, setStarting] = useState<CgGroupDraft | null>(null);
   const [copied, setCopied] = useState(false);
@@ -206,7 +208,7 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
       </CgSection>}
       {waiting ? <div className="cg-hint">Waiting for others</div> : null}
       {finding ? <CgProgress inline line="Finding overlap" /> : null}
-      <GroupsSection code={code} results={results} state={state} store={store} host={host} closed={closed} />
+      <GroupsSection code={code} results={results} state={state} store={store} host={host} closed={closed} focusGroup={focusGroup} />
       {closed ? (
         <div className="cg-actions-end">
           <button type="button" className="cg-button is-danger-quiet" onClick={() => void store.leaveRoom(code)}>Remove</button>

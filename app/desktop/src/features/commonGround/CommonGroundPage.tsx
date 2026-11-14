@@ -13,7 +13,7 @@ import { CgNotice, CgProgress, CgSignedInAccount } from './parts';
 import { PersonScreen } from './PersonScreen';
 import { ResultsScreen } from './ResultsScreen';
 import { currentProfile, hasAnyCard, type CommonGroundStore } from './store';
-import { useCommonGround, usePairLinkRedeem } from './useCommonGround';
+import { useCommonGround, usePairLinkRedeem, useRoomFocus } from './useCommonGround';
 import { buildScreenKey, ownerIsCurrent } from './wallet';
 import { WalletShell } from './WalletShell';
 
@@ -47,6 +47,7 @@ function CommonGroundPageBody({ store, host }: { store: CommonGroundStore; host:
     return () => window.removeEventListener(OPEN_GROUNDING_EVENT, navigate);
   }, [host.self.accountId, state.loaded, ownerReady, store, demo]);
   usePairLinkRedeem(store, state.loaded);
+  useRoomFocus(store, state.loaded);
   if (demo && tour?.groundingScreen) return <HelpGroundingDemo screen={tour.groundingScreen} />;
   const screen = state.stack[state.stack.length - 1];
   const props = { state, store, host };
@@ -76,7 +77,7 @@ function CommonGroundPageBody({ store, host }: { store: CommonGroundStore; host:
   } else if (screen.name === 'card') {
     body = <CardScreen state={state} store={store} memoryRouting={host.memoryRouting} memoryCards={host.memoryCards} />;
   } else if (screen.name === 'results') {
-    body = <ResultsScreen code={screen.code} {...props} />;
+    body = <ResultsScreen code={screen.code} focusGroup={screen.focusGroup} {...props} />;
   } else if (screen.name === 'match') {
     body = <MatchScreen accountId={screen.accountId} profileId={screen.profileId} {...props} />;
   } else {

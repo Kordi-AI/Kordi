@@ -8,12 +8,12 @@ struct ContactsRoomInvitationRow: View {
     @EnvironmentObject private var model: AppModel
     let invitation: RoomGroupInvitation
     var onOpenConversation: ((ConversationSummary) -> Void)? = nil
+    /// Opens the room's results in Grounding.
+    var onOpen: (() -> Void)? = nil
     @State private var working: Action?
     @State private var failure: RoomGroupInvitationError?
 
     private enum Action { case join, decline }
-
-    private var text: String { "\(invitation.from.displayName) invited you to \(invitation.groupName)" }
 
     var body: some View {
         Group {
@@ -37,7 +37,18 @@ struct ContactsRoomInvitationRow: View {
         }
     }
 
-    private var label: some View {
+    @ViewBuilder private var label: some View {
+        if let onOpen {
+            Button(action: onOpen) { labelContent }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(invitation.groupTitle)")
+                .accessibilityValue("\(invitation.from.displayName) invited you")
+        } else {
+            labelContent
+        }
+    }
+
+    private var labelContent: some View {
         HStack(spacing: 12) {
             IdentityAvatar(
                 name: invitation.from.displayName,
@@ -48,13 +59,20 @@ struct ContactsRoomInvitationRow: View {
                 cornerRadius: 22
             )
             .frame(width: 44, height: 44)
-            Text(text)
-                .font(.callout)
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(invitation.from.displayName) invited you")
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(invitation.groupTitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         }
+        .contentShape(Rectangle())
     }
 
     private var actions: some View {
