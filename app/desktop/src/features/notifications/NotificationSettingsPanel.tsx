@@ -12,6 +12,7 @@ import {
   nativeNotificationPermissionState,
   requestNativeNotificationPermission,
 } from './nativeNotifications';
+import { markNotificationRequestStalled, notificationRequestStalled } from './notificationRequestStall';
 
 type NotificationPermissionState = NotificationPermission | 'checking' | 'unavailable';
 
@@ -52,7 +53,9 @@ const preferenceRows: Array<{
 
 export function NotificationSettingsPanel({ isNativeShell }: { isNativeShell: boolean }) {
   const preferences = useNotificationPreferences();
-  const [permission, setPermission] = useState<NotificationPermissionState>('checking');
+  const [readPermission, setPermission] = useState<NotificationPermissionState>('checking');
+  // When macOS would not show its prompt, only System Settings can turn notifications on.
+  const permission: NotificationPermissionState = isNativeShell && readPermission === 'default' && notificationRequestStalled() ? 'denied' : readPermission;
   const [isUpdatingPermission, setIsUpdatingPermission] = useState(false);
 
   useEffect(() => {
@@ -84,7 +87,13 @@ export function NotificationSettingsPanel({ isNativeShell }: { isNativeShell: bo
     setIsUpdatingPermission(true);
     try {
       if (isNativeShell) {
-        setPermission(await requestNativeNotificationPermission());
+        try {
+          setPermission(await requestNativeNotificationPermission());
+        } catch {
+          // The request returned without an answer. Re-read the status instead of offering it again.
+          markNotificationRequestStalled();
+          setPermission(await nativeNotificationPermissionState().catch(() => 'unavailable' as const));
+        }
       } else if (typeof Notification !== 'undefined') {
         setPermission(await Notification.requestPermission());
       }
