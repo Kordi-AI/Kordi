@@ -11,7 +11,7 @@ nothing new is written there.
   closes one channel other than the first. The routes keep their historical
   paths, and the response keeps the `dissolved` key.
 - Closing sets `closed_at` and `closed_by_account_id` on each conversation
-  (migration 0203), bumps its version and sends `conversation.updated` to each
+  (migration 0206), bumps its version and sends `conversation.updated` to each
   member. The snapshot carries `closed: { closed_at, closed_by_account_id }`.
   Bootstrap carries the same field, so a device that was offline learns of the
   close on its next sync. Closing twice changes nothing and sends nothing.
