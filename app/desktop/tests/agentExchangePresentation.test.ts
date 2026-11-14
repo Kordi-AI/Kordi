@@ -33,7 +33,7 @@ test('the question retains waiting and processing feedback until durable complet
   const waiting = agentExchangeProgressTurn('waiting', text, 'question', 'session')!;
   const processing = agentExchangeProgressTurn('processing', text, 'question', 'session')!;
   assert.notEqual(liveTurnSnapshotKey(waiting), liveTurnSnapshotKey(processing));
-  for (const [turn, label] of [[waiting, 'Waiting for reply'], [processing, 'Processing reply']] as const) {
+  for (const [turn, label] of [[waiting, 'Waiting'], [processing, 'Processing reply']] as const) {
     const html = renderToStaticMarkup(createElement(TurnProgress, { turn, renderTool: () => null, legacyAnswer: text }));
     assert.match(html, new RegExp(label));
     assert.match(html, /What is 12/);
@@ -42,7 +42,7 @@ test('the question retains waiting and processing feedback until durable complet
   for (const status of ['completed', 'failed', 'cancelled']) assert.equal(agentExchangeProgressTurn(status, text, 'question', 'session'), null);
 });
 
-test('a question to a person names who the agent is waiting for', () => {
+test('a question to a person reads Waiting and keeps whom it waits for', () => {
   const text = '@Maya Which day works?';
   const body = `kordi-cloud-agent-response:${Buffer.from(JSON.stringify({ kind: 'agent-response', requestId: 'agent-exchange:id:sent', text, deliveryState: 'complete', agentExchangeStatus: 'waiting', agentExchangeWaitingFor: 'Maya Chen' })).toString('base64url')}`;
   const parsed = parseCloudAgentResponse(body)!;
@@ -50,13 +50,14 @@ test('a question to a person names who the agent is waiting for', () => {
   const waiting = agentExchangeProgressTurn(parsed.agentExchangeStatus, text, 'question', 'session', null, parsed.agentExchangeWaitingFor)!;
   assert.equal(waiting.agentExchangeWaitingFor, 'Maya Chen');
   const html = renderToStaticMarkup(createElement(TurnProgress, { turn: waiting, renderTool: () => null, legacyAnswer: text }));
-  assert.match(html, /Waiting for Maya Chen/);
+  assert.match(html, /Waiting/);
+  assert.doesNotMatch(html, /Waiting for/);
   const processing = agentExchangeProgressTurn('processing', text, 'question', 'session', null, 'Maya Chen')!;
   assert.match(renderToStaticMarkup(createElement(TurnProgress, { turn: processing, renderTool: () => null, legacyAnswer: text })), /Processing reply/);
   assert.equal(agentExchangeProgressTurn('waiting', text, 'question', 'session', null, '  ')!.agentExchangeWaitingFor, undefined);
 });
 
-test('a question to the requester reads as waiting for their reply on their own Mac', () => {
+test('a question reads Waiting for the requester and for everyone else', () => {
   const text = 'What time are you free?';
   const body = `kordi-cloud-agent-response:${Buffer.from(JSON.stringify({ kind: 'agent-response', requestId: 'agent-exchange:id:sent', text, deliveryState: 'complete', agentExchangeStatus: 'waiting', agentExchangeWaitingFor: 'Sam Lee', agentExchangeWaitingForRequester: true })).toString('base64url')}`;
   const parsed = parseCloudAgentResponse(body)!;
@@ -65,8 +66,10 @@ test('a question to the requester reads as waiting for their reply on their own 
     turn: agentExchangeProgressTurn(parsed.agentExchangeStatus, text, 'question', 'session', null, parsed.agentExchangeWaitingFor, forViewer)!,
     renderTool: () => null, legacyAnswer: text,
   }));
-  assert.match(label(true), /Waiting for your reply/);
-  assert.match(label(false), /Waiting for Sam Lee/);
+  for (const forViewer of [true, false]) {
+    assert.match(label(forViewer), /Waiting/);
+    assert.doesNotMatch(label(forViewer), /Waiting for/);
+  }
 });
 
 test('a question waits for the viewer when it names their account', () => {
