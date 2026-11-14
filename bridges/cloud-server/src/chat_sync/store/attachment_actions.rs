@@ -224,6 +224,7 @@ pub async fn set_attachment_reaction(
     let mut transaction = pool.begin().await?;
     let current =
         locked_message(&mut transaction, account_id, conversation_id, message_key).await?;
+    super::closed_state::require_open(&mut transaction, conversation_id).await?;
     if active {
         crate::safety::blocks::refuse_blocked_direct(&mut transaction, conversation_id, account_id)
             .await?;
@@ -283,6 +284,9 @@ pub async fn delete_attachment(
         locked_message(&mut transaction, account_id, conversation_id, message_key).await?;
     if for_everyone && current.sender_account_id != account_id {
         return Err(StoreError::Forbidden);
+    }
+    if for_everyone {
+        super::closed_state::require_open(&mut transaction, conversation_id).await?;
     }
     if current.deleted_at.is_some() {
         return Ok(None);

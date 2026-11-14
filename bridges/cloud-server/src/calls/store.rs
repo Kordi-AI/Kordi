@@ -49,6 +49,8 @@ pub enum CallStoreError {
     NotFound,
     Forbidden,
     Conflict,
+    /// The conversation is a closed group (docs/development/group-closed-state.md).
+    GroupClosed,
     Invariant(&'static str),
 }
 

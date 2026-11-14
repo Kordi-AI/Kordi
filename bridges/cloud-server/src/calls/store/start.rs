@@ -37,6 +37,15 @@ pub async fn start(
     .fetch_optional(&mut *transaction)
     .await?;
     let conversation_kind = conversation.ok_or(CallStoreError::Forbidden)?.0;
+    let closed: (bool,) = query_as(
+        "SELECT closed_at IS NOT NULL FROM cloud_chat_conversations WHERE conversation_id = $1",
+    )
+    .bind(conversation_id)
+    .fetch_one(&mut *transaction)
+    .await?;
+    if closed.0 {
+        return Err(CallStoreError::GroupClosed);
+    }
     let kind = match conversation_kind.as_str() {
         "direct" => request.kind,
         "group" => CallKind::Meeting,

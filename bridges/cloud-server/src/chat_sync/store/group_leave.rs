@@ -12,6 +12,10 @@
 //!
 //! Leaving again after leaving changes nothing and succeeds, so a client can
 //! retry a request whose response it lost.
+//!
+//! Leaving a closed group is how anyone, its last admin and last person
+//! included, removes it from their list: none of the checks above apply and
+//! nothing is posted, since a closed group takes no new messages.
 
 use super::dissolve::{group_channels, normalized_space};
 use super::service_members::service_member_ids;
@@ -63,6 +67,9 @@ pub async fn leave_group(
         }
         _ => return Err(StoreError::Forbidden),
     };
+    let closed = super::closed_state::require_open(&mut transaction, authority)
+        .await
+        .is_err();
     let others: Vec<(String,)> = query_as(
         "SELECT role FROM cloud_chat_conversation_members \
          WHERE conversation_id = $1 AND account_id <> $2 AND membership_state = 'active' \
@@ -73,21 +80,26 @@ pub async fn leave_group(
     .bind(service_member_ids())
     .fetch_all(&mut *transaction)
     .await?;
-    if others.is_empty() {
+    if closed {
+        // No admin or last-person rule for a group nobody can write in.
+    } else if others.is_empty() {
         return Err(StoreError::Conflict {
             code: LAST_GROUP_MEMBER_CODE,
-            message: "You're the only person in this group. Dissolve it instead.",
+            message: "You're the only person in this group. Close it instead.",
         });
     }
     let is_admin = |role: &str| role == "owner" || role == "admin";
-    if is_admin(role.as_str()) && !others.iter().any(|(other,)| is_admin(other.as_str())) {
+    if !closed && is_admin(role.as_str()) && !others.iter().any(|(other,)| is_admin(other.as_str()))
+    {
         return Err(StoreError::Conflict {
             code: LAST_GROUP_ADMIN_CODE,
             message: "Make someone else an admin before leaving.",
         });
     }
 
-    super::group_events::post_member_left(&mut transaction, authority, account_id).await?;
+    if !closed {
+        super::group_events::post_member_left(&mut transaction, authority, account_id).await?;
+    }
     for (conversation_id, _) in &channels {
         if leave_conversation(&mut transaction, *conversation_id, account_id).await? {
             outcome.conversation_ids.push(*conversation_id);

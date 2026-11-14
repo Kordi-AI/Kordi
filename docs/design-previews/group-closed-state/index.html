@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Closed group · Kordi proposal</title>
+<style>
+:root{
+  --font:-apple-system,"SF Pro Text",system-ui,sans-serif;
+  --page:#ecebe8;--chip:rgba(120,120,128,.14);--note:#55524c;
+  --side:#f4f2ee;--side-row:#e9e5de;--title:#1d1b18;--preview:#6e6a63;--time:#8a857d;--divider:rgba(0,0,0,.08);
+  --main:#fbfaf8;--bubble-in:#ffffff;--bubble-out:#e6e1f6;--sender:#7b6fb8;--composer:#ffffff;--composer-border:rgba(0,0,0,.09);
+  --accent:#6d8fb5;--frame:#d6d3cd;--ios-bg:#ffffff;--ios-sep:rgba(60,60,67,.18);--ios-secondary:rgba(60,60,67,.6);--ios-group:#f2f2f7;
+  --menu:#ffffff;--menu-shadow:0 8px 28px rgba(0,0,0,.18);--danger:#d6453d;
+}
+:root[data-theme="dark"]{
+  --page:#161413;--chip:rgba(120,120,128,.28);--note:#a39e96;
+  --side:#2a2422;--side-row:#3a3230;--title:#f2efea;--preview:#a49c95;--time:#9a928b;--divider:rgba(255,255,255,.07);
+  --main:#1f1b1a;--bubble-in:#2e2826;--bubble-out:#3a3352;--sender:#b1a6e6;--composer:#2a2523;--composer-border:rgba(255,255,255,.08);
+  --accent:#7aa2cf;--frame:#3a3533;--ios-bg:#000;--ios-sep:rgba(84,84,88,.6);--ios-secondary:rgba(235,235,245,.6);--ios-group:#1c1c1e;
+  --menu:#2c2c2e;--menu-shadow:0 8px 28px rgba(0,0,0,.5);--danger:#ff6961;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--title);font-family:var(--font);-webkit-font-smoothing:antialiased}
+.bar{display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:14px 24px;font-size:13px;color:var(--note)}
+.bar strong{color:var(--title);font-weight:600;margin-right:8px}
+.seg{display:inline-flex;gap:2px;background:var(--chip);border-radius:8px;padding:2px;margin-left:6px}
+.seg button{font:inherit;font-size:12px;border:0;background:transparent;color:var(--title);padding:4px 10px;border-radius:6px;cursor:pointer;outline:none}
+.seg button[aria-pressed="true"]{background:var(--main);box-shadow:0 1px 2px rgba(0,0,0,.15);font-weight:600}
+h2{font-size:15px;font-weight:600;margin:22px 24px 10px}
+.row{display:flex;flex-wrap:wrap;gap:28px;padding:0 24px 8px;align-items:flex-start}
+.cap{font-size:12px;font-weight:600;color:var(--note);margin:0 0 8px 4px}
+.note{max-width:900px;padding:0 24px;font-size:13px;line-height:1.55;color:var(--note)}
+.note b{color:var(--title);font-weight:600}
+.tag{font-size:11px;font-weight:600;color:var(--accent);background:color-mix(in oklab,var(--accent) 16%,transparent);padding:2px 8px;border-radius:10px;margin-left:6px}
+
+/* Mac */
+.mac{display:flex;width:860px;height:470px;border-radius:12px;overflow:hidden;border:1px solid var(--frame);background:var(--main)}
+.rail{width:52px;background:var(--side);border-right:1px solid var(--divider);display:flex;flex-direction:column;align-items:center;gap:18px;padding-top:18px}
+.rail i{width:20px;height:20px;border-radius:6px;border:1.6px solid var(--preview);opacity:.7}
+.rail i.on{border-color:var(--accent);opacity:1}
+.side{width:300px;background:var(--side);border-right:1px solid var(--divider);padding:12px 8px;display:flex;flex-direction:column;gap:2px}
+.search{height:32px;border-radius:9px;background:color-mix(in oklab,var(--side-row) 70%,transparent);margin:0 2px 10px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--preview)}
+.grp{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px;border-radius:12px}
+.grp.sel{background:var(--side-row)}
+.av{width:44px;height:44px;border-radius:10px;display:grid;grid-template-columns:1fr 1fr;gap:2px;overflow:hidden}
+.av span{background:linear-gradient(135deg,#9db4d3,#c9d6e6)}
+.av span:nth-child(1){background:linear-gradient(135deg,#8a6a4c,#b48d6a)}
+.av span:nth-child(4){background:transparent}
+.t{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p{font-size:11.5px;color:var(--preview);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{display:flex;flex-direction:column;align-items:flex-end;gap:6px;font-size:11px;color:var(--time)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.acts{display:flex;gap:10px;color:var(--preview);font-size:14px;margin-bottom:2px}
+.chan{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin-left:16px;padding:7px 10px 7px 12px;border-left:1px solid var(--divider)}
+.chan.sel{background:var(--side-row);border-radius:0 10px 10px 0}
+.chan .t{font-size:12px;font-weight:500}
+.closed .t,.closed .av,.closed .p{opacity:.55}
+.closed .p{font-style:normal}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.head{height:48px;border-bottom:1px solid var(--divider);display:flex;align-items:center;padding:0 18px;font-size:13px;font-weight:600;gap:8px}
+.head small{font-weight:400;color:var(--preview)}
+.msgs{flex:1;padding:16px 20px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.m{max-width:72%}
+.m .s{font-size:11px;color:var(--sender);margin:0 0 3px 10px;font-weight:500}
+.m .b{background:var(--bubble-in);border-radius:16px;padding:8px 12px;font-size:13px;line-height:1.35}
+.m.out{align-self:flex-end}.m.out .b{background:var(--bubble-out)}
+.day{align-self:center;font-size:11px;color:var(--time)}
+.composer{margin:0 18px 16px;height:74px;border-radius:18px;background:var(--composer);border:1px solid var(--composer-border);padding:12px 14px;font-size:13px;color:var(--preview);position:relative}
+.composer .send{position:absolute;right:12px;bottom:10px;width:28px;height:28px;border-radius:50%;background:var(--accent)}
+.closedline{margin:0 18px 18px;padding:14px 0 4px;text-align:center;font-size:12.5px;color:var(--preview);border-top:1px solid var(--divider)}
+.closedbar{margin:0 18px 16px;height:46px;border-radius:14px;background:color-mix(in oklab,var(--side-row) 55%,transparent);display:flex;align-items:center;justify-content:center;gap:14px;font-size:12.5px;color:var(--preview)}
+.closedbar a{color:var(--danger);text-decoration:none;font-weight:500}
+.menu{position:absolute;width:178px;background:var(--menu);border-radius:10px;box-shadow:var(--menu-shadow);padding:5px;font-size:12.5px}
+.menu div{padding:6px 10px;border-radius:6px}
+.menu .dz{color:var(--danger)}
+.menu hr{border:0;border-top:1px solid var(--divider);margin:4px 6px}
+
+/* iPhone */
+.phone{width:320px;height:640px;border-radius:44px;background:var(--ios-bg);border:1px solid var(--frame);overflow:hidden;position:relative;display:flex;flex-direction:column}
+.status{height:44px;flex:0 0 44px}
+.ititle{font-size:30px;font-weight:700;padding:4px 16px 8px}
+.irow{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:12px;padding:10px 16px;align-items:center;position:relative}
+.irow:after{content:"";position:absolute;left:80px;right:0;bottom:0;border-bottom:.5px solid var(--ios-sep)}
+.irow .av{width:52px;height:52px;border-radius:50%}
+.irow .t{font-size:16px}
+.irow .p{font-size:14px;color:var(--ios-secondary);margin-top:3px}
+.irow .meta{color:var(--ios-secondary);font-size:13px}
+.irow .dot{width:20px;height:20px;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;display:grid;place-items:center}
+.inav{height:52px;display:flex;align-items:center;justify-content:center;flex-direction:column;border-bottom:.5px solid var(--ios-sep);position:relative}
+.inav b{font-size:16px}.inav small{font-size:12px;color:var(--ios-secondary)}
+.inav .back{position:absolute;left:14px;top:14px;color:var(--accent);font-size:22px;line-height:1}
+.imsgs{flex:1;padding:14px 12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.imsgs .m{max-width:78%}.imsgs .m .b{font-size:15px;border-radius:18px;background:var(--ios-group)}
+.imsgs .m.out .b{background:var(--bubble-out)}
+.icomposer{height:46px;margin:6px 10px 30px;border-radius:23px;border:1px solid var(--ios-sep);display:flex;align-items:center;padding:0 16px;color:var(--ios-secondary);font-size:15px}
+.iclosed{margin:6px 0 34px;padding-top:12px;text-align:center;font-size:14px;color:var(--ios-secondary);border-top:.5px solid var(--ios-sep)}
+.iclosedbar{margin:6px 10px 30px;height:46px;border-radius:23px;background:var(--ios-group);display:flex;align-items:center;justify-content:center;gap:14px;font-size:14px;color:var(--ios-secondary)}
+.iclosedbar a{color:var(--danger);font-weight:500}
+.sheet{position:absolute;left:8px;right:8px;bottom:8px}
+.sheet .grp2{background:color-mix(in oklab,var(--ios-group) 92%,transparent);backdrop-filter:blur(20px);border-radius:14px;overflow:hidden;margin-bottom:8px;text-align:center}
+.sheet .grp2 div{padding:14px;border-top:.5px solid var(--ios-sep);font-size:17px;color:var(--accent)}
+.sheet .grp2 div:first-child{border-top:0}
+.sheet .grp2 .h{font-size:13px;color:var(--ios-secondary);padding:12px 16px}
+.sheet .grp2 .h b{display:block;font-size:13px;margin-bottom:2px}
+.sheet .dz{color:var(--danger)!important}
+.sheet .cancel{font-weight:600}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.25)}
+footer{padding:20px 24px 36px;font-size:12px;color:var(--note)}
+</style>
+</head>
+<body>
+<div class="bar">
+  <strong>Closed group</strong>
+  <label>Theme<span class="seg" data-key="theme"><button data-v="light">Light</button><button data-v="dark">Dark</button></span></label>
+  <label>Footer<span class="seg" data-key="footer"><button data-v="a">A · One line</button><button data-v="b">B · Line + Delete chat</button></span></label>
+  <label>Creator<span class="seg" data-key="creator"><button data-v="keep">Keeps it, like everyone</button><button data-v="drop">Loses it on close</button></span></label>
+</div>
+
+<h2>Mac</h2>
+<div class="row" id="mac"></div>
+<h2>iPhone</h2>
+<div class="row" id="ios"></div>
+<h2>Closing it</h2>
+<div class="row" id="confirm"></div>
+
+<div class="note" id="notes"></div>
+<footer>Design proposal · Sample data · Serves from loopback only</footer>
+
+<script>
+const DEF={theme:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light",footer:"a",creator:"keep"};
+const OK={theme:["light","dark"],footer:["a","b"],creator:["keep","drop"]};
+const q=new URLSearchParams(location.search),st={};
+for(const k in DEF){const v=q.get(k);st[k]=OK[k].includes(v)?v:DEF[k];}
+const AV='<div class="av"><span></span><span></span><span></span><span></span></div>';
+function sidebar(state){
+  const closed=state!=="open";
+  const g=`<div class="grp sel ${closed?"closed":""}">${AV}<div style="min-width:0"><div class="t">Infrastructure and CI</div><div class="p">${closed?"Closed":"Bea: hi"}</div></div>
+    <div class="meta">${closed?"":'<div class="acts">··· &nbsp;+&nbsp; ⌃</div>'}<span>20:23</span></div></div>
+    <div class="chan sel ${closed?"closed":""}"><div style="min-width:0"><div class="t"># Channel 1</div><div class="p">${closed?"Closed":"hi"}</div></div><div class="meta"><span>20:23</span>${closed?"":'<span class="dot"></span>'}</div></div>`;
+  const other=`<div class="grp">${AV}<div style="min-width:0"><div class="t">Developer tools and CI</div><div class="p">Chen: shipping the runner fix</div></div><div class="meta"><span>20:32</span></div></div>`;
+  return `<div class="side"><div class="search">Search contacts, groups, sessions</div>${state==="gone"?"":g}${other}</div>`;
+}
+function conv(state){
+  const closed=state!=="open";
+  const foot=!closed?'<div class="composer">Message # Channel 1<span class="send"></span></div>'
+    :st.footer==="a"?'<div class="closedline">This group was closed</div>'
+    :'<div class="closedbar"><span>This group was closed</span><a href="#" onclick="return false">Delete chat</a></div>';
+  return `<div class="main"><div class="head">Infrastructure and CI <small>· # Channel 1</small></div>
+   <div class="msgs"><div class="day">Today 20:20</div>
+    <div class="m"><div class="s">Bea Okafor</div><div class="b">Can someone check the runner logs?</div></div>
+    <div class="m"><div class="s">Chen Liu</div><div class="b">Looking now. The cache step timed out again.</div></div>
+    <div class="m out"><div class="b">hi</div></div></div>${foot}</div>`;
+}
+function mac(label,state,menu){
+  return `<div><div class="cap">${label}</div><div class="mac" style="position:relative"><div class="rail"><i class="on"></i><i></i><i></i><i></i></div>${sidebar(state)}${state==="gone"?'<div class="main" style="display:grid;place-items:center;color:var(--preview);font-size:13px">No chat selected</div>':conv(state)}${menu||""}</div></div>`;
+}
+const MAC_MENU=`<div class="menu" style="left:230px;top:96px"><div>Mark as read</div><div>Pin</div><div>Mute</div><div>Archive</div><hr><div class="dz">Delete chat</div></div>`;
+function iList(closed){
+  const r=(t,p,time,badge,c)=>`<div class="irow ${c?"closed":""}">${AV}<div style="min-width:0"><div class="t">${t}</div><div class="p">${p}</div></div><div class="meta"><span>${time}</span>${badge?`<span class="dot">${badge}</span>`:'<span style="height:20px"></span>'}</div></div>`;
+  return `<div class="phone"><div class="status"></div><div class="ititle">Chats</div>
+   ${r("Developer tools and CI","Chen: shipping the runner fix","20:32","",false)}
+   ${closed?r("Infrastructure and CI","Closed","20:23","",true):r("Infrastructure and CI","Bea: hi","20:23","1",false)}
+   ${r("Smoke study group","See you at 3","11:11","",false)}</div>`;
+}
+function iConv(closed){
+  const foot=!closed?'<div class="icomposer">Message</div>':st.footer==="a"?'<div class="iclosed">This group was closed</div>':'<div class="iclosedbar"><span>This group was closed</span><a>Delete chat</a></div>';
+  return `<div class="phone"><div class="status"></div><div class="inav"><span class="back">‹</span><b>Infrastructure and CI</b><small># Channel 1</small></div>
+   <div class="imsgs"><div class="day" style="align-self:center;font-size:12px;color:var(--ios-secondary)">Today 20:20</div>
+    <div class="m"><div class="s">Bea Okafor</div><div class="b">Can someone check the runner logs?</div></div>
+    <div class="m"><div class="s">Chen Liu</div><div class="b">Looking now. The cache step timed out again.</div></div>
+    <div class="m out"><div class="b">hi</div></div></div>${foot}</div>`;
+}
+function iSheet(){
+  return `<div class="phone">${iList(true).replace('<div class="phone">','').replace(/<\/div>$/,'')}<div class="dim"></div>
+  <div class="sheet"><div class="grp2"><div class="h"><b>Delete Infrastructure and CI?</b>It leaves your chat list. Others keep it.</div><div class="dz">Delete chat</div></div><div class="grp2"><div class="cancel">Cancel</div></div></div></div>`;
+}
+function confirmMac(){
+  return `<div><div class="cap">Mac · Manage › Close group</div><div class="mac" style="width:420px;height:200px;display:grid;place-items:center;background:var(--main)">
+   <div style="width:320px;background:var(--menu);border-radius:14px;box-shadow:var(--menu-shadow);padding:18px">
+    <div style="font-size:14px;font-weight:600">Close Infrastructure and CI?</div>
+    <div style="font-size:12.5px;color:var(--preview);margin:6px 0 16px">Everyone keeps the history. No one can send messages.</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;font-size:12.5px"><span style="padding:6px 12px;border-radius:8px;background:var(--chip)">Cancel</span><span style="padding:6px 12px;border-radius:8px;background:var(--danger);color:#fff">Close group</span></div></div></div></div>`;
+}
+function confirmIos(){
+  return `<div><div class="cap">iPhone · Manage › Close group</div><div class="phone" style="height:330px"><div class="status"></div><div class="dim"></div>
+  <div class="sheet"><div class="grp2"><div class="h"><b>Close Infrastructure and CI?</b>Everyone keeps the history. No one can send messages.</div><div class="dz">Close group</div></div><div class="grp2"><div class="cancel">Cancel</div></div></div></div></div>`;
+}
+function render(){
+  document.documentElement.dataset.theme=st.theme;
+  document.querySelectorAll(".seg").forEach(s=>s.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(st[s.dataset.key]===b.dataset.v))));
+  const creatorLabel=st.creator==="keep"?"Creator, after closing":"Creator, after closing (removed)";
+  document.getElementById("mac").innerHTML=
+    mac("Member, before (today’s bug: it stays like this)","open")+
+    mac("Member, after closing","closed")+
+    mac(creatorLabel,st.creator==="keep"?"closed":"gone")+
+    mac("Right-click a closed group","closed",MAC_MENU);
+  document.getElementById("ios").innerHTML=
+    `<div><div class="cap">Chats</div>${iList(true)}</div>`+
+    `<div><div class="cap">Open closed group</div>${iConv(true)}</div>`+
+    `<div><div class="cap">Swipe › Delete</div>${iSheet()}</div>`;
+  document.getElementById("confirm").innerHTML=confirmMac()+confirmIos();
+  document.getElementById("notes").innerHTML=`
+   <p><b>Row.</b> A closed group (and each closed channel) stays in the list with its avatar and title dimmed, “Closed” as the preview, no unread dot and no new-channel button. The time is when it was closed.</p>
+   <p><b>Conversation.</b> History stays readable. The composer is replaced by one line: “This group was closed”. Footer A is the line alone; Delete chat lives in the row’s menu and swipe. Footer B adds Delete chat next to the line.<span class="tag">A recommended</span></p>
+   <p><b>Removing it.</b> Delete chat takes it out of your list only (on the server you leave the group). Others keep their copy.</p>
+   <p><b>Creator.</b> Recommended: the creator keeps it like everyone else and deletes it when they want, so closing never destroys anyone’s history by surprise. The alternative removes it from the creator’s list as soon as they close it.<span class="tag">Keep recommended</span></p>
+   <p><b>Wording.</b> “Dissolve group” becomes “Close group”, and “Dissolve channel” becomes “Close channel”. Today’s dialog says messages are deleted; after this change they are kept.</p>`;
+  const u=new URLSearchParams(st);history.replaceState(null,"","?"+u);
+}
+document.querySelectorAll(".seg").forEach(s=>s.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;st[s.dataset.key]=b.dataset.v;render();}));
+render();
+</script>
+</body>
+</html>

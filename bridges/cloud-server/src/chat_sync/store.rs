@@ -232,6 +232,12 @@ mod attachment_actions;
 mod blocked_writes;
 pub use attachment_actions::{delete_attachment, message_for_viewer, set_attachment_reaction};
 mod channels;
+mod closed_state;
+pub use closed_state::{
+    conversation_is_closed, group_space_closed, session_conversation_closed, GROUP_CLOSED_CODE,
+};
+#[allow(unused_imports)]
+pub(crate) use closed_state::{group_closed_error, require_open};
 mod conversation;
 pub use channels::create_group_channel;
 mod dissolve;

@@ -96,7 +96,9 @@ pub(in crate::common_ground) async fn room_extras(
                          AND member.account_id = $2 AND member.membership_state = 'active')
          FROM cloud_common_ground_room_groups room_group
          JOIN cloud_accounts account ON account.account_id = room_group.created_by
-         WHERE room_group.room_id = $1
+         JOIN cloud_chat_conversations conversation
+           ON conversation.conversation_id = room_group.conversation_id
+         WHERE room_group.room_id = $1 AND conversation.closed_at IS NULL
          ORDER BY room_group.created_at, room_group.group_space_id",
     )
     .bind(room_id)

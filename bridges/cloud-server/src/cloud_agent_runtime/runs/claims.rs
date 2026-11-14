@@ -211,6 +211,10 @@ async fn claim_run_with_executor(
             return Err(super::RunError::ContextUnavailable("Open Kordi on the project Mac to run this task. Project files are available only on that device."));
         }
     }
+    // A closed group takes no agent runs (docs/development/group-closed-state.md).
+    if crate::chat_sync::store::session_conversation_closed(pool, &input.session_id).await? {
+        return Err(super::RunError::GroupClosed);
+    }
     // Every claim path admits runs here; a restricted requester, or one the
     // agent's Access leaves out, gets none, not even a run admitted before.
     let agent_id = super::execution_agent_id(pool, input).await?;
