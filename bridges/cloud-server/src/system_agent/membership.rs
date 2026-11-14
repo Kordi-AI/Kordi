@@ -1,6 +1,8 @@
-//! The System agent is a standing member of every group conversation except
-//! Grounding groups, where notices come from System instead. Membership is not
-//! a setting: it is added at creation and backfilled at startup.
+//! The System agent (the Facilitator) is a standing member of every group
+//! conversation, Grounding groups included, so members can always @ it.
+//! Membership is not a setting: it is added at creation and backfilled at
+//! startup. In Grounding groups it only answers direct requests; their
+//! notices come from the notice account (`crate::system_account`).
 
 use sqlx_core::query::query;
 use sqlx_core::query_as::query_as;
@@ -21,15 +23,6 @@ pub async fn join_conversation(
     system_agent_account_id: &str,
     conversation_id: Uuid,
 ) -> Result<bool, sqlx_core::Error> {
-    let (room_group,): (bool,) = query_as(
-        "SELECT EXISTS(SELECT 1 FROM cloud_common_ground_room_groups WHERE conversation_id = $1)",
-    )
-    .bind(conversation_id)
-    .fetch_one(pool)
-    .await?;
-    if room_group {
-        return Ok(false);
-    }
     let inserted = crate::chat_sync::store::join_service_member(
         pool,
         conversation_id,
@@ -58,7 +51,7 @@ pub async fn join_conversation(
 }
 
 /// Backfills the System agent into every existing conversation of a supported
-/// kind, except Grounding groups.
+/// kind, including Grounding groups it left before it could be mentioned there.
 pub async fn join_all_groups(
     pool: &PgPool,
     system_agent_account_id: &str,
@@ -67,9 +60,6 @@ pub async fn join_all_groups(
         "SELECT conversation.conversation_id
          FROM cloud_chat_conversations conversation
          WHERE conversation.kind = ANY($2)
-           AND NOT EXISTS (
-               SELECT 1 FROM cloud_common_ground_room_groups room_group
-               WHERE room_group.conversation_id = conversation.conversation_id)
            AND NOT EXISTS (
                SELECT 1 FROM cloud_chat_conversation_members member
                WHERE member.conversation_id = conversation.conversation_id
@@ -89,35 +79,17 @@ pub async fn join_all_groups(
     Ok(joined)
 }
 
-/// Takes the System agent out of every Grounding group it is still in, such as
-/// groups started before System posted their notices. Members' devices hear
-/// about it through `membership.updated`.
-pub async fn leave_room_groups(
+/// Whether `conversation_id` is a Grounding group, where the System agent
+/// only answers people who ask it directly.
+pub(super) async fn is_room_group(
     pool: &PgPool,
-    system_agent_account_id: &str,
-) -> Result<u64, sqlx_core::Error> {
-    let joined: Vec<(Uuid,)> = query_as(
-        "SELECT DISTINCT member.conversation_id
-         FROM cloud_chat_conversation_members member
-         JOIN cloud_common_ground_room_groups room_group
-           ON room_group.conversation_id = member.conversation_id
-         WHERE member.account_id = $1 AND member.membership_state = 'active'",
+    conversation_id: Uuid,
+) -> Result<bool, sqlx_core::Error> {
+    let (room_group,): (bool,) = query_as(
+        "SELECT EXISTS(SELECT 1 FROM cloud_common_ground_room_groups WHERE conversation_id = $1)",
     )
-    .bind(system_agent_account_id)
-    .fetch_all(pool)
+    .bind(conversation_id)
+    .fetch_one(pool)
     .await?;
-    let mut left = 0;
-    for (conversation_id,) in joined {
-        let removed = crate::chat_sync::store::remove_service_member(
-            pool,
-            conversation_id,
-            system_agent_account_id,
-        )
-        .await
-        .map_err(|error| sqlx_core::Error::Protocol(error.to_string()))?;
-        if removed {
-            left += 1;
-        }
-    }
-    Ok(left)
+    Ok(room_group)
 }

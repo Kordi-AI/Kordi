@@ -631,7 +631,8 @@ final class ComposerMentionTargetCatalogTests: XCTestCase {
             groupMemberDefaultAgents: open
         )
 
-        let agents = targets.filter { $0.kind == .agent }
+        // The Facilitator, listed in every group, is covered by its own tests.
+        let agents = targets.filter { $0.kind == .agent && !$0.isFacilitator }
         XCTAssertEqual(
             agents.map(\.id).sorted(),
             ["agent:cloud-agent:acct_contact", "agent:cloud-agent:acct_me", "agent:cloud-agent:acct_room"]

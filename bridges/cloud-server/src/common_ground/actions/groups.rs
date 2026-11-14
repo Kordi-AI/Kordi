@@ -149,13 +149,26 @@ pub(in crate::common_ground) async fn start_group(
         Ok(created) => created,
         Err(response) => return *response,
     };
-    // The System account, not the System agent, sits in a group started here
-    // and posts its notices: the intro, written on the System agent's key, and
-    // a line for each person who joins.
+    // The notice account posts this group's notices: the intro, written on
+    // the System agent's key, and a line for each person who joins. The
+    // System agent joins too, like in any group, so members can @ it; here it
+    // only answers when asked.
     if let Err(error) = crate::system_account::join(pool, created.conversation_id).await {
         eprintln!("[common-ground] Could not add System to a new group: {error}");
     }
     if let Some(system_agent) = state.system_agent() {
+        let config = system_agent.config();
+        if config.group_chat_enabled {
+            let joined = crate::system_agent::membership::join_conversation(
+                pool,
+                &config.account_id,
+                created.conversation_id,
+            )
+            .await;
+            if let Err(error) = joined {
+                eprintln!("[common-ground] Could not add the System agent to a new group: {error}");
+            }
+        }
         let intro = intro::NewIntro {
             room_id,
             group_space_id: &created.group_space_id,
@@ -164,7 +177,6 @@ pub(in crate::common_ground) async fn start_group(
             topic: topic.as_deref(),
             creator: viewer,
             added: &created.added,
-            invited: &created.invited,
         };
         if let Err(error) = intro::queue(pool, system_agent.config(), intro).await {
             eprintln!("[common-ground] Could not queue a group intro: {error}");

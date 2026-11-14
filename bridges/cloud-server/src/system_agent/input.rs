@@ -83,7 +83,7 @@ fn decode_cloud_text(text: &str) -> String {
 }
 
 /// The first text block's envelope, which carries mentions and targets.
-fn content_envelope(content: &Value) -> Option<Value> {
+pub(super) fn content_envelope(content: &Value) -> Option<Value> {
     content
         .get("blocks")
         .and_then(Value::as_array)
@@ -98,7 +98,7 @@ fn content_envelope(content: &Value) -> Option<Value> {
         })
 }
 
-fn message_text(content: &Value) -> String {
+pub(super) fn message_text(content: &Value) -> String {
     let mut out = String::new();
     for block in content
         .get("blocks")
