@@ -2,8 +2,8 @@ use super::*;
 
 #[tokio::test]
 #[ignore = "requires a dedicated PostgreSQL fixture; run scripts/test-cloud-migrations.sh"]
-async fn upgrade_from_200_adds_room_join_requests() {
-    let pool = fixture(200).await;
+async fn upgrade_from_201_adds_room_join_requests() {
+    let pool = fixture(201).await;
     execute(&pool, "INSERT INTO cloud_common_ground_rooms(room_id,code,name,created_by) VALUES('00000000-0000-0000-0000-0000000000a1','1234','Fixture room','fixture-owner')").await;
     execute(&pool, "INSERT INTO cloud_common_ground_room_groups(group_space_id,room_id,conversation_id,name,created_by) VALUES('session:group:fixture','00000000-0000-0000-0000-0000000000a1','00000000-0000-0000-0000-0000000000b1','Fixture group','fixture-owner')").await;
     let (a, b) = tokio::join!(apply_migrations(&pool), apply_migrations(&pool));
@@ -55,7 +55,7 @@ async fn upgrade_from_200_adds_room_join_requests() {
     // Running the released SQL again keeps the rows.
     let migration = EMBEDDED_MIGRATIONS
         .iter()
-        .find(|m| m.version == 201)
+        .find(|m| m.version == 202)
         .unwrap();
     let mut tx = pool.begin().await.unwrap();
     sqlx_core::raw_sql::raw_sql(migration.sql)

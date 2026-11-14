@@ -99,7 +99,10 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // The Daily calendar access fix adds 1 kB on top, so it moves to 5.97 MB.
 // The invitation detail in Contacts (group, inviter, members, Join and Decline) replaces the room
 // jump and adds 1.7 kB, so it moves to 5.972 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_972_000;
+// Asking for notification permission from Digest (Allow, Open System Settings, the focus re-check
+// and the shared unanswered-request state) adds 1.2 kB with the community profile, so it moves to 5.958 MB.
+// Together, the room group join requests above and that permission request come to 5.974 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_974_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -144,7 +147,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // Opening the room from such an invitation adds 1.4 kB there, so it moves to 5.995 MB.
 // The Daily calendar access fix adds 1 kB there too, so it moves to 5.997 MB.
 // The same invitation detail adds 1.7 kB there, so it moves to 5.999 MB.
-const MAX_WEB_APP_DIST_BYTES = 5_999_000;
+// The same Digest notification permission line adds 0.2 kB over it there, so it moves to 5.984 MB.
+// Together, the room group join requests above and that permission line come to 6.001 MB there.
+const MAX_WEB_APP_DIST_BYTES = 6_001_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
