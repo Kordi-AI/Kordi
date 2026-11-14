@@ -16,7 +16,7 @@ export function ContactsRoomInvitationDetail({
   store: Pick<RoomInvitationsStore, 'join' | 'decline' | 'select'>;
 }) {
   const busy = state.busyRef === invitation.invitationRef;
-  const line = invitation.roomName ? `${invitation.from.name} · from ${invitation.roomName}` : invitation.from.name;
+  const line = `${invitation.from.name} · from ${invitation.roomName || 'Grounding'}`;
   return (
     <section aria-label={`Invitation to ${invitation.name}`} className="app-contacts-detail-pane relative min-h-0 min-w-0 flex-1 overflow-y-auto">
       <div className="app-contacts-detail-content relative mx-auto w-full max-w-[420px] px-6 pb-10 pt-10">

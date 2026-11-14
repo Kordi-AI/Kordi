@@ -1,5 +1,6 @@
 import { isChatNavigation } from '@/features/chat/chatNavigation';
 import { useRoomInvitations } from '@/features/commonGround/roomInvitations';
+import { inviteGroundingPeople, listGroupGroundingPeople } from '@/features/commonGround/groupPeople';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import { Archive, ChevronLeft } from 'lucide-react';
@@ -458,6 +459,8 @@ export function WorkspaceSidebar({
         onAddContact={onAddContactByNodeId}
         onCreateGroupInvitation={onCreateGroupInvite}
         onListGroupInvitations={onListGroupInvites}
+        onListGroundingPeople={cloudAccount ? listGroupGroundingPeople : undefined}
+        onInviteGroundingPeople={cloudAccount ? inviteGroundingPeople : undefined}
         onDissolveGroup={onDissolveChatGroup ? async (groupSpaceId, sessionIds) => {
           await onDissolveChatGroup(groupSpaceId, sessionIds);
           setIsGroupDetailsDialogOpen(false);

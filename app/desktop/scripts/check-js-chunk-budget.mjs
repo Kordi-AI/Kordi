@@ -99,7 +99,9 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // The Daily calendar access fix adds 1 kB on top, so it moves to 5.97 MB.
 // The invitation detail in Contacts (group, inviter, members, Join and Decline) replaces the room
 // jump and adds 1.7 kB, so it moves to 5.972 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_972_000;
+// Inviting Grounding people into groups (the person-page group picker, Add people's From Grounding
+// section and person invitations in Contacts › Requests) adds 9.7 kB, so it moves to 5.981 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_981_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.

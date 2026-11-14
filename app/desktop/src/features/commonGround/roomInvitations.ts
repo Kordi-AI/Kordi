@@ -1,17 +1,22 @@
-// Room group invitations outside the Grounding page: "Alex invited you to Infrastructure and CI"
-// in Contacts › Requests and in the Contacts badge. The list refreshes on Grounding room hints
-// (a new invitation, a join or a decline on another device), when the window regains focus,
-// and when the account changes. It stays small: the sidebar imports it outside the lazy page.
+// Group invitations outside the Grounding page: "Alex invited you to Infrastructure and CI"
+// in Contacts › Requests and in the Contacts badge. Room invitations (`kind: "room"`) come from a
+// room's group; person invitations (`kind: "group"`, no code) come from someone you share
+// Grounding with. The list refreshes on Grounding room and invitation hints (a new invitation, a
+// join or a decline on another device), when the window regains focus, and when the account
+// changes. It stays small: the sidebar imports it outside the lazy page.
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { defaultCloudAuthClient } from '@/features/cloud/authClient';
 import { CloudAuthError } from '@/features/cloud/cloudAuthError';
 import { cachedSessionSnapshot, CLOUD_SESSION_CHANGED_EVENT, loadSession } from '@/features/cloud/session';
-import { subscribeRoomHints } from './roomHints';
+import { subscribeInvitationHints, subscribeRoomHints } from './roomHints';
 
 export type RoomGroupInvitation = {
   invitationRef: string;
-  code: string;
+  /** "room" for a room's group (answered through the room's code), "group" for a person invitation. */
+  kind: 'room' | 'group';
+  code: string | null;
+  /** The room both people share; empty when there is none ("from Grounding"). */
   roomName: string;
   groupSpaceId: string;
   conversationId: string | null;
@@ -62,18 +67,28 @@ export function normalizeRoomInvitation(value: unknown): RoomGroupInvitation | n
   const row = value as Record<string, unknown>;
   const from = person(row.from);
   const invitationRef = text(row.invitationRef);
+  const kind = row.kind === 'group' ? 'group' : 'room';
   const code = text(row.code);
   const groupSpaceId = text(row.groupSpaceId);
-  if (!invitationRef || !code || !groupSpaceId || !from) return null;
+  // A room invitation is answered through its room, so it needs the code.
+  if (!invitationRef || (kind === 'room' && !code) || !groupSpaceId || !from) return null;
   const members = Array.isArray(row.members) ? row.members.map(person).filter((member) => member !== null) : [];
   return {
-    invitationRef, code, groupSpaceId, from, members,
+    invitationRef, kind, code, groupSpaceId, from, members,
     roomName: text(row.roomName) ?? '',
     conversationId: text(row.conversationId),
     name: text(row.name) ?? 'a group',
     memberCount: typeof row.memberCount === 'number' ? row.memberCount : members.length,
     createdAt: text(row.createdAt) ?? '',
   };
+}
+
+/** Room invitations answer through their room; person invitations through their own route. */
+export function answerPath(invitation: RoomGroupInvitation, action: 'join' | 'decline'): string {
+  const ref = encodeURIComponent(invitation.invitationRef);
+  return invitation.kind === 'room' && invitation.code
+    ? `/v1/cloud/common-ground/rooms/${encodeURIComponent(invitation.code)}/invitations/${ref}/${action}`
+    : `/v1/cloud/common-ground/group-invitations/${ref}/${action}`;
 }
 
 const EMPTY: RoomInvitationsState = { invitations: [], busyRef: null, error: null, selected: null, outcome: null };
@@ -122,7 +137,7 @@ export function createRoomInvitationsStore(transport: Transport = defaultTranspo
     try {
       const session = await transport.token();
       if (!session) throw new Error('Sign in to answer the invitation.');
-      const path = `/v1/cloud/common-ground/rooms/${encodeURIComponent(invitation.code)}/invitations/${encodeURIComponent(invitation.invitationRef)}/${action}`;
+      const path = answerPath(invitation, action);
       const joined = await transport.request<{ groupSpaceId?: string; conversationId?: string } | null>(
         path,
         { method: 'POST', headers: { authorization: `Bearer ${session.token}` } },
@@ -172,13 +187,14 @@ export function roomInvitationsStore(): RoomInvitationsStore {
     wired = true;
     const store = shared;
     subscribeRoomHints(() => { void store.refresh(); });
+    subscribeInvitationHints(() => { void store.refresh(); });
     window.addEventListener(CLOUD_SESSION_CHANGED_EVENT, () => { void store.refresh(); });
     window.addEventListener('focus', () => { void store.refresh(); });
   }
   return shared;
 }
 
-/** The signed-in account's pending room group invitations; loads them on first use. */
+/** The signed-in account's pending group invitations; loads them on first use. */
 export function useRoomInvitations(): RoomInvitationsState & { store: RoomInvitationsStore } {
   const store = roomInvitationsStore();
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
