@@ -85,7 +85,7 @@ For a test or self-hosted server, register callback URLs for that server's publi
 
 Contacts are rendered in the existing chat UI. Person chats use the hosted message API and map server `delivered_at` / `read_at` into desktop delivery chips.
 
-Every production account also receives a locked `Kordi Support` contact from
+Every production account also receives a locked `KordiSpot` contact from
 the hosted server. It is a distinct system-agent identity even when its owner
 account is also present as a normal human contact. Users can chat with that
 agent or submit a durable question, issue report, or feedback form from its
