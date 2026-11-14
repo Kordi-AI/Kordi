@@ -6,12 +6,23 @@ import type {
 } from './authClient';
 import {
   cloudGroupControlWithAttachmentReferences,
+  parseCloudGroupControl,
 } from './cloudGroupMessages';
 import {
   CloudGroupOutbox,
   type CloudGroupOutboxAttachmentSource,
   type CloudGroupOutboxEntry,
 } from './cloudGroupOutbox';
+
+/** The send options a queued group message carries in its envelope. The first send and every
+ * retry pass the same ones, so the durable send queue sees the same request each time. */
+export function cloudGroupOutboxMessageOptions(envelope: string) {
+  const message = parseCloudGroupControl(envelope)?.message;
+  const voiceMessage = message?.voiceMessage?.mediaId
+    ? { ...message.voiceMessage, mediaId: message.voiceMessage.mediaId }
+    : null;
+  return { messageKind: message?.messageKind, voiceMessage };
+}
 
 export function cloudGroupOutboxAttachmentSources(
   attachments: readonly AttachmentItem[],

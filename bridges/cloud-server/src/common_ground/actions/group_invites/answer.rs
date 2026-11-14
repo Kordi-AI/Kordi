@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use super::{invitation_not_found, HINT, NAME_SQL};
 use crate::auth::routes::{write_audit, CloudSession};
-use crate::chat_sync::store::{accept_invited_conversation_member, StoreError};
+use crate::chat_sync::store::{accept_invited_conversation_member, post_member_joined, StoreError};
 use crate::common_ground::actions::join_requests::can_decide;
 use crate::common_ground::{db_error, err, hint, intro};
 use crate::server::ServerState;
@@ -219,10 +219,15 @@ async fn join_in(
             StatusCode::BAD_REQUEST,
         ))));
     }
-    match accept_invited_conversation_member(tx, &invitation.inviter, &invitation.space, viewer)
-        .await
+    let joined = match accept_invited_conversation_member(
+        tx,
+        &invitation.inviter,
+        &invitation.space,
+        viewer,
+    )
+    .await
     {
-        Ok(_) => {}
+        Ok(conversation) => conversation,
         Err(StoreError::InvalidInput("group member count is invalid")) => {
             return Ok(Err(Box::new(err(
                 "common_ground_group_full",
@@ -231,14 +236,27 @@ async fn join_in(
             ))));
         }
         Err(error) => return Err(error),
+    };
+    // Everyone in the group reads who joined. A group started from a room
+    // gets System's joined line instead when the invitation came through
+    // that room (see `after_join`).
+    if !posts_room_line(invitation) {
+        post_member_joined(tx, joined.id, viewer).await?;
     }
     mark(tx, invitation.id, "accepted").await?;
     hint(tx, viewer, HINT, json!({})).await?;
     Ok(Ok(Joined::Now))
 }
 
+/// Whether System posts the room's joined line for this join, in place of
+/// the plain joined notice.
+fn posts_room_line(invitation: &Invitation) -> bool {
+    invitation.room_group && invitation.source_room_id.is_some()
+}
+
 /// After a new join: the audit event and, in a group started from a room,
-/// System's joined line when the invitation came through a room.
+/// System's joined line when the invitation came through a room. Other
+/// groups read the joined notice posted inside the join transaction.
 async fn after_join(state: &Arc<ServerState>, invitation: &Invitation) {
     let pool = state.db_pool();
     let _ = write_audit(
@@ -253,7 +271,10 @@ async fn after_join(state: &Arc<ServerState>, invitation: &Invitation) {
         }),
     )
     .await;
-    let Some(room_id) = invitation.source_room_id.filter(|_| invitation.room_group) else {
+    let Some(room_id) = invitation
+        .source_room_id
+        .filter(|_| posts_room_line(invitation))
+    else {
         return;
     };
     let posted = match crate::system_account::join(pool, invitation.conversation_id).await {

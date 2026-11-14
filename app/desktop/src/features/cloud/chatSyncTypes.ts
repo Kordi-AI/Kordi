@@ -124,7 +124,9 @@ export type ChatSyncConversationInput = {
   memberAccountIds?: string[];
   sharedTitle?: string | null;
   accountId?: string | null;
-  replaceMembers?: boolean;
+  /** A group membership control's changes to an existing group: add the listed members and remove
+   * these. Without it an existing group keeps its members; only owners and admins change them. */
+  memberChanges?: { removeAccountIds: string[] };
   sourceGroupSpaceId?: string;
 };
 export type CloudThreadRead = { root_message_id: string; root_client_message_id: string; last_read_sequence: number };

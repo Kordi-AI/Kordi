@@ -238,8 +238,8 @@ mod dissolve;
 pub use dissolve::{dissolve_group, dissolve_group_channel, DissolveOutcome};
 mod group_events;
 pub use group_events::{
-    group_created_text, group_member_left_text, post_group_created, GROUP_CREATED_EVENT,
-    GROUP_MEMBER_LEFT_EVENT,
+    group_created_text, group_member_joined_text, group_member_left_text, post_group_created,
+    post_member_joined, GROUP_CREATED_EVENT, GROUP_MEMBER_JOINED_EVENT, GROUP_MEMBER_LEFT_EVENT,
 };
 mod group_leave;
 pub use group_leave::{leave_group, LeaveOutcome, LAST_GROUP_ADMIN_CODE, LAST_GROUP_MEMBER_CODE};
