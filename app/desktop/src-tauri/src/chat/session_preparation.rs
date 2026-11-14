@@ -376,10 +376,16 @@ pub(super) async fn prepare_desktop_session_for_send(
         let owner_tools = owner_requester.then(|| runtime.next_turn_tool_names().ok());
         // ponytail: this per-turn registry is enough for background navigation;
         // keep one registry across turns only when parent-side child control is required.
+        // A follow-up turn's tasks answer the person's original request, so
+        // they register with the cloud and report under it.
+        let parent_request = request_message_id.map(|id| {
+            kordi_cli::desktop_runtime::root_background_request_id(id)
+                .unwrap_or_else(|_| id.to_string())
+        });
         let runner = ManagedChildAgentRunner::new(
             manager.clone(),
             prompt_session_id,
-            request_message_id.map(str::to_string),
+            parent_request,
             profile,
         )
         .with_shared_context(

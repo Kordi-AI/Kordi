@@ -641,6 +641,10 @@ struct MainTabView: View {
             path = [.conversation(chat)]
             model.startedAgentChat = nil
         }
+        .onReceive(NotificationCenter.default.publisher(for: .kordiCommonGroundHint)) { notification in
+            guard let hint = notification.object as? CommonGroundSyncHint else { return }
+            model.scheduleRoomGroupInvitationRefresh(for: hint)
+        }
         .task(id: model.pendingThreadRoute) {
             guard let route = model.pendingThreadRoute else { return }
             let destination = MainTab.destination(for: route.conversation.kind)
@@ -785,6 +789,7 @@ struct MainTabView: View {
 
     private var pendingIncomingRequestCount: Int {
         model.contactRequests.lazy.filter { $0.isIncoming && $0.status == "pending" }.count
+            + model.roomGroupInvitations.count
     }
 
     private var unreadTabCounts: MainTabUnreadCounts {

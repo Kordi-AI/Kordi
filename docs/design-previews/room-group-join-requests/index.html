@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room Group Join Requests</title>
+<style>
+  :root {
+    --ground: #e9e8e4;
+    --window: #f7f7f6;
+    --card: #efefee;
+    --fill: #e4e4e2;
+    --line: #dcdcda;
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --accent: #2f6bd9;
+    --accent-hover: #285fc4;
+    --accent-text: #fff;
+    --bubble: #ececeb;
+    --ios-bg: #f2f2f7;
+    --ios-card: #ffffff;
+    --ios-line: #e5e5ea;
+    --ios-muted: #8e8e93;
+    --ok: #1e8a5f;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #121214; --window: #1e1e1f; --card: #262627; --fill: #303032; --line: #38383a;
+      --ink: #f2f2f2; --muted: #9b9ba1; --accent: #5b8cf0; --accent-hover: #6f9bf3; --bubble: #2a2a2c;
+      --ios-bg: #000; --ios-card: #1c1c1e; --ios-line: #38383a; --ios-muted: #8e8e93; --ok: #3fbf86;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #121214; --window: #1e1e1f; --card: #262627; --fill: #303032; --line: #38383a;
+    --ink: #f2f2f2; --muted: #9b9ba1; --accent: #5b8cf0; --accent-hover: #6f9bf3; --bubble: #2a2a2c;
+    --ios-bg: #000; --ios-card: #1c1c1e; --ios-line: #38383a; --ios-muted: #8e8e93; --ok: #3fbf86;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 13px/1.4 var(--sans); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  /* No blue focus rings: a neutral outline only. */
+  button:focus { outline: none; }
+  button:focus-visible { outline: 2px solid color-mix(in oklab, var(--ink) 30%, transparent); outline-offset: 2px; }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: center; padding: 16px; }
+  .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: color-mix(in oklab, var(--ink) 8%, transparent); }
+  .seg button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; font-size: 12px; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--window); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .bar label { color: var(--muted); font-size: 12px; margin-right: 6px; }
+  .reset { border: 0; background: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+
+  .stage { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; align-items: flex-start; padding: 0 16px 40px; }
+  .caption { color: var(--muted); font-size: 12px; margin: 0 0 8px 4px; }
+
+  /* Mac window */
+  .mac { width: min(620px, 100%); border-radius: 12px; background: var(--window); box-shadow: 0 24px 60px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.08); overflow: hidden; }
+  .mac-tabs { display: flex; gap: 4px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .mac-tabs button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); font-size: 12px; }
+  .mac-tabs button[aria-pressed="true"] { background: var(--fill); color: var(--ink); }
+  .mac-body { padding: 18px 22px 22px; min-height: 420px; }
+  .hero { text-align: center; margin-bottom: 18px; }
+  .hero h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  .hero p { margin: 2px 0 0; color: var(--muted); }
+  .section-title { margin: 16px 2px 8px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+  .group { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  .row { position: relative; display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 7px 12px; }
+  .row + .row::before { content: ""; position: absolute; top: 0; right: 0; left: 12px; border-top: 1px solid var(--line); }
+  .row.nested { padding-left: 52px; }
+  .row.nested::before { left: 52px !important; }
+  .row-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .row-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-sub { color: var(--muted); font-size: 12px; }
+  .actions { display: flex; gap: 6px; flex: none; align-items: center; }
+  .btn { flex: none; padding: 5px 12px; border: 0; border-radius: 7px; background: var(--accent); color: var(--accent-text); font-size: 12.5px; font-weight: 600; }
+  .btn:hover { background: var(--accent-hover); }
+  .btn.quiet { background: var(--fill); color: var(--ink); }
+  .btn.quiet:hover { background: color-mix(in oklab, var(--fill) 80%, var(--ink) 8%); }
+  .state { color: var(--muted); font-size: 12.5px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 14px); gap: 2px; flex: none; }
+  .grid span { width: 14px; height: 14px; border-radius: 3px; }
+  .av { display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 600; flex: none; }
+
+  /* Mac group chat */
+  .chat { display: flex; flex-direction: column; gap: 10px; }
+  .chat-title { font-weight: 600; font-size: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .msg { display: flex; gap: 8px; align-items: flex-end; }
+  .bubble { background: var(--bubble); border-radius: 14px; padding: 7px 11px; max-width: 70%; }
+  .notice { align-self: center; color: var(--muted); font-size: 11px; text-align: center; max-width: 34rem; }
+  .notice b { color: var(--ink); font-weight: 500; }
+  .mention { color: var(--accent); }
+  .jr-card { align-self: center; display: flex; flex-direction: column; gap: 8px; width: 300px; padding: 10px 12px; border-radius: 14px; background: var(--bubble); border: 1px solid var(--line); }
+  .jr-head { display: flex; gap: 8px; align-items: center; }
+  .jr-title { font-size: 12.5px; font-weight: 600; }
+  .jr-meta { font-size: 11px; color: var(--muted); }
+  .jr-actions { display: flex; justify-content: flex-end; gap: 6px; }
+  .pc-btn { font-size: 11px; font-weight: 500; padding: 4px 9px; border-radius: 8px; border: 1px solid var(--line); background: transparent; }
+  .pc-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .jr-state { font-size: 10.5px; font-weight: 500; color: var(--muted); text-align: right; }
+  .jr-state.ok { color: var(--ok); }
+
+  /* iPhone */
+  .phone { width: 340px; height: 690px; border-radius: 44px; padding: 12px; background: #111; box-shadow: 0 24px 60px rgba(0,0,0,.25); }
+  .screen { height: 100%; border-radius: 34px; overflow: hidden; background: var(--ios-bg); display: flex; flex-direction: column; font-size: 15px; }
+  .ios-nav { display: flex; align-items: center; justify-content: space-between; padding: 44px 16px 8px; }
+  .ios-nav { gap: 8px; }
+  .ios-nav button { border: 0; background: none; color: var(--accent); font-size: 15px; white-space: nowrap; }
+  .ios-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-weight: 600; font-size: 16px; }
+  .ios-scroll { flex: 1; overflow: auto; padding: 4px 16px 20px; }
+  .ios-sec { margin: 18px 4px 6px; color: var(--ios-muted); font-size: 13px; }
+  .ios-card { background: var(--ios-card); border-radius: 12px; overflow: hidden; }
+  .ios-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 14px; }
+  .ios-row + .ios-row::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; border-top: 0.5px solid var(--ios-line); }
+  .ios-row.request { flex-wrap: wrap; row-gap: 8px; }
+  .ios-row.request .actions { width: 100%; justify-content: flex-end; }
+  .ios-row .row-title { font-weight: 400; }
+  .ios-row .row-sub { font-size: 13px; color: var(--ios-muted); }
+  .cap { border: 0; border-radius: 999px; padding: 5px 12px; font-size: 14px; font-weight: 600; background: var(--accent); color: #fff; }
+  .cap.bordered { background: color-mix(in oklab, var(--accent) 14%, transparent); color: var(--accent); }
+  .cap.gray { background: color-mix(in oklab, var(--ink) 9%, transparent); color: var(--ink); font-weight: 500; }
+  .ios-chat { flex: 1; overflow: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 10px; }
+  .ios-chat .bubble { font-size: 15px; background: var(--ios-card); }
+  .ios-chat .notice { font-size: 12px; }
+  .ios-chat .jr-card { width: 260px; background: var(--ios-card); border: 0; }
+  .ios-chat .jr-title { font-size: 15px; }
+  .ios-chat .jr-meta { font-size: 13px; }
+  .ios-chat .pc-btn { font-size: 14px; padding: 6px 12px; border-radius: 999px; }
+  .ios-chat .jr-state { font-size: 13px; }
+  .note { max-width: 900px; margin: 0 auto 40px; padding: 0 16px; color: var(--muted); font-size: 12.5px; }
+  .note li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <span><label>Viewer</label><span class="seg" id="viewer"></span></span>
+  <span><label>Who approves</label><span class="seg" id="approver"></span></span>
+  <button class="reset" id="reset">Reset</button>
+</div>
+<div class="stage">
+  <div>
+    <p class="caption">Mac</p>
+    <div class="mac"><div class="mac-tabs" id="macTabs"></div><div class="mac-body" id="mac"></div></div>
+  </div>
+  <div>
+    <p class="caption">iPhone</p>
+    <div class="phone"><div class="screen" id="phone"></div></div>
+  </div>
+</div>
+<div class="note">
+  <ul>
+    <li>Chen is in the room but not in the group: <b>Ask to join</b> sends one request. The row then shows <b>Requested</b> with <b>Cancel</b>. Cancel withdraws it; the card in the group then reads Withdrawn, and Chen can ask again.</li>
+    <li>Approvers see the request twice: as a card in the group, and under the group row in the room. Approve adds Chen exactly like accepting an invitation, then System posts the usual joined line.</li>
+    <li>Declined: the row goes back to view-only for Chen, with no button. One request per group per room, so no re-asking after a decline.</li>
+    <li>Only while the room is open. A closed room shows groups view-only, as today.</li>
+    <li>Synthetic people. No network calls.</li>
+  </ul>
+</div>
+<script>
+  const people = {
+    alex: { name: 'Alex Rivera', initials: 'AR', color: '#8a6a4f' },
+    bea: { name: 'Bea Okafor', initials: 'BO', color: '#7f93b5' },
+    chen: { name: 'Chen Li', initials: 'CL', color: '#5f9b84' },
+  };
+  const initial = () => ({ viewer: 'chen', approver: 'owner', macView: 'room', status: 'none', decidedBy: null });
+  let s = initial();
+
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const av = (p, size) => `<span class="av" style="width:${size}px;height:${size}px;background:${p.color};font-size:${Math.round(size * 0.38)}px">${p.initials}</span>`;
+  const grid = (ids) => `<span class="grid">${[0, 1, 2, 3].map((i) => `<span style="background:${ids[i] ? people[ids[i]].color : 'var(--fill)'}"></span>`).join('')}</span>`;
+
+  function members() { return s.status === 'approved' ? ['alex', 'bea', 'chen'] : ['alex', 'bea']; }
+  function inGroup(who) { return members().includes(who); }
+  function canDecide(who) { return who !== 'chen' && inGroup(who) && (s.approver === 'any' || who === 'alex'); }
+
+  function seg(id, key, options) {
+    const el = document.getElementById(id);
+    el.innerHTML = options.map(([value, label]) => `<button aria-pressed="${s[key] === value}" data-k="${key}" data-v="${value}">${label}</button>`).join('');
+  }
+
+  function groupLine() { return `From Developer tools and CI · ${members().length} members`; }
+
+  /* The group row's trailing control, for the viewer. */
+  function trailing(ios) {
+    const v = s.viewer;
+    if (inGroup(v)) return ios ? `<button class="cap bordered" data-act="open">Open</button>` : `<button class="btn" data-act="open">Open</button>`;
+    if (s.status === 'pending') {
+      return ios
+        ? `<button class="cap gray" data-act="cancel">Requested</button>`
+        : `<span class="actions"><span class="state">Requested</span><button class="btn quiet" data-act="cancel">Cancel</button></span>`;
+    }
+    if (s.status === 'declined') return '';
+    return ios ? `<button class="cap bordered" data-act="ask">Ask to join</button>` : `<button class="btn" data-act="ask">Ask to join</button>`;
+  }
+
+  function requestRow(ios) {
+    if (s.status !== 'pending' || !canDecide(s.viewer)) return '';
+    const c = people.chen;
+    if (ios) {
+      return `<div class="ios-row request">${av(c, 30)}<span class="row-text"><span class="row-title">${c.name} asked to join</span></span>
+        <span class="actions"><button class="cap gray" data-act="decline">Decline</button><button class="cap" data-act="approve">Approve</button></span></div>`;
+    }
+    return `<div class="row nested">${av(c, 26)}<span class="row-text"><span class="row-title">${c.name} asked to join</span></span>
+      <span class="actions"><button class="btn quiet" data-act="decline">Decline</button><button class="btn" data-act="approve">Approve</button></span></div>`;
+  }
+
+  function card(ios) {
+    if (s.status === 'none') return '';
+    const c = people.chen;
+    let foot;
+    if (s.status === 'pending') {
+      foot = canDecide(s.viewer)
+        ? `<div class="jr-actions"><button class="pc-btn" data-act="decline">Decline</button><button class="pc-btn primary" data-act="approve">Approve</button></div>`
+        : `<div class="jr-state">Waiting for ${s.approver === 'owner' ? 'Alex' : 'a member'}</div>`;
+    } else if (s.status === 'approved') {
+      foot = `<div class="jr-state ok">Approved by ${people[s.decidedBy].name.split(' ')[0]}</div>`;
+    } else if (s.status === 'declined') {
+      foot = `<div class="jr-state">Declined</div>`;
+    } else {
+      foot = `<div class="jr-state">Withdrawn</div>`;
+    }
+    return `<div class="jr-card"><div class="jr-head">${av(c, ios ? 30 : 24)}<div><div class="jr-title">${c.name} asked to join</div><div class="jr-meta">From Build night</div></div></div>${foot}</div>`;
+  }
+
+  /* Chen sees the group chat only after joining; the card itself is shown to group members. */
+  function chatLines(ios) {
+    const a = people.alex, b = people.bea;
+    const lines = [
+      `<div class="notice">System introduced <span class="mention">@Alex Rivera</span> and <span class="mention">@Bea Okafor</span>: both working on CI for agent tools.</div>`,
+      `<div class="msg">${av(b, ios ? 26 : 22)}<div class="bubble">Let's compare our runner setups this afternoon.</div></div>`,
+    ];
+    const c = card(ios);
+    if (c) lines.push(c);
+    if (s.status === 'approved') lines.push(`<div class="notice"><span class="mention">@Chen Li</span> joined. Working on build caching; can help with GitHub Actions.</div>`);
+    return lines.join('');
+  }
+
+  function renderMac() {
+    const tabs = document.getElementById('macTabs');
+    const canChat = inGroup(s.viewer);
+    if (!canChat && s.macView === 'chat') s.macView = 'room';
+    tabs.innerHTML = `<button aria-pressed="${s.macView === 'room'}" data-k="macView" data-v="room">Room</button>`
+      + (canChat ? `<button aria-pressed="${s.macView === 'chat'}" data-k="macView" data-v="chat">Developer tools and CI</button>` : '');
+    const el = document.getElementById('mac');
+    if (s.macView === 'chat') {
+      el.innerHTML = `<div class="chat"><div class="chat-title">Developer tools and CI</div>${chatLines(false)}</div>`;
+      return;
+    }
+    el.innerHTML = `<div class="hero"><h1>Build night</h1><p>3 people · 4 shared topics</p></div>
+      <div class="section-title">Groups</div>
+      <div class="group">
+        <div class="row">${grid(members())}<span class="row-text"><span class="row-title">Developer tools and CI</span><span class="row-sub">${groupLine()}</span></span>${trailing(false)}</div>
+        ${requestRow(false)}
+      </div>`;
+  }
+
+  let phoneView = 'room';
+  function renderPhone() {
+    const el = document.getElementById('phone');
+    if (!inGroup(s.viewer)) phoneView = 'room';
+    if (phoneView === 'chat') {
+      el.innerHTML = `<div class="ios-nav"><button data-phone="room">‹ Room</button><span class="ios-title">Developer tools and CI</span><span style="width:52px"></span></div>
+        <div class="ios-chat">${chatLines(true)}</div>`;
+      return;
+    }
+    el.innerHTML = `<div class="ios-nav"><button>‹ Back</button><span class="ios-title">Build night</span><span style="width:52px"></span></div>
+      <div class="ios-scroll">
+        <div class="ios-sec">Groups</div>
+        <div class="ios-card">
+          <div class="ios-row">${grid(members())}<span class="row-text"><span class="row-title">Developer tools and CI</span><span class="row-sub">${groupLine()}</span></span>${trailing(true)}</div>
+          ${requestRow(true)}
+        </div>
+      </div>`;
+  }
+
+  function render() {
+    seg('viewer', 'viewer', [['chen', 'Chen · in room'], ['alex', 'Alex · owner'], ['bea', 'Bea · member']]);
+    seg('approver', 'approver', [['owner', 'Owner'], ['any', 'Any member']]);
+    renderMac();
+    renderPhone();
+  }
+
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.dataset.k) { s[t.dataset.k] = t.dataset.v; render(); return; }
+    if (t.dataset.phone) { phoneView = t.dataset.phone; render(); return; }
+    switch (t.dataset.act) {
+      case 'ask': s.status = 'pending'; break;
+      case 'cancel': s.status = 'cancelled'; break;
+      case 'approve': s.status = 'approved'; s.decidedBy = s.viewer; break;
+      case 'decline': s.status = 'declined'; s.decidedBy = s.viewer; break;
+      case 'open':
+        if (t.closest('#phone')) phoneView = 'chat'; else s.macView = 'chat';
+        break;
+      default: return;
+    }
+    render();
+  });
+  document.getElementById('reset').addEventListener('click', () => { s = initial(); phoneView = 'room'; render(); });
+  render();
+</script>
+</body>
+</html>
