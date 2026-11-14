@@ -162,7 +162,26 @@ async fn cloud_subsession_spawn_is_idempotent_fenced_and_keeps_results_out_of_pa
             ))
             .await
             .unwrap();
-        assert_eq!(read_json(lease).await["run"]["subsessionId"], id);
+        let lease = read_json(lease).await;
+        assert_eq!(lease["run"]["subsessionId"], id);
+        // A child of a group run may save a document in that group; a child
+        // of a direct conversation has no document tool to be told about.
+        let child_tools: Vec<&str> = lease["run"]["connectorTools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect();
+        assert_eq!(child_tools.contains(&"create_document"), group, "{lease}");
+        assert!(!child_tools.contains(&"edit_document"), "{lease}");
+        let child_prompt: (String,) = sqlx_core::query_as::query_as(
+            "SELECT system_prompt FROM cloud_agent_fallback_runs WHERE run_id=$1",
+        )
+        .bind(&child)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(child_prompt.0.contains("create_document"), group);
         let context=router.clone().oneshot(runner_post(&format!("/v1/cloud/agent-runs/{child}/context"),json!({"runnerId":"child-executor","tool":"read_session","arguments":{"sessionId":session_id,"mode":"index"}}))).await.unwrap();
         assert_eq!(context.status(), StatusCode::OK);
         let progress=router.clone().oneshot(runner_post(&format!("/v1/cloud/agent-runs/{child}/subsession-progress"),json!({"runnerId":"child-executor","toolCallId":"search-one","toolName":"web_search"}))).await.unwrap();

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invitation Requests</title>
+<style>
+  :root {
+    --ground: #e9e8e4;
+    --window: #ffffff;
+    --sidebar: #f4f4f3;
+    --card: #f2f2f1;
+    --fill: #e8e8e6;
+    --hover: #ebebea;
+    --selected: #e2e2e0;
+    --line: #e1e1df;
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --accent: #2f6bd9;
+    --accent-text: #ffffff;
+    --danger: #c9372c;
+    --ios-bg: #f2f2f7;
+    --ios-card: #ffffff;
+    --ios-line: #e5e5ea;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    --ground: #121214; --window: #1c1c1e; --sidebar: #232325; --card: #2a2a2c; --fill: #333336;
+    --hover: #2c2c2e; --selected: #38383b; --line: #3a3a3c; --ink: #f2f2f2; --muted: #9b9ba1;
+    --accent: #5b8cf0; --accent-text: #ffffff; --danger: #ff6b5e;
+    --ios-bg: #000000; --ios-card: #1c1c1e; --ios-line: #38383a;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 13px/1.4 var(--sans); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus { outline: none; }
+  button:focus-visible { outline: 2px solid color-mix(in oklab, var(--ink) 28%, transparent); outline-offset: 2px; }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: center; padding: 16px; }
+  .bar label { color: var(--muted); font-size: 12px; margin-right: 6px; }
+  .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: color-mix(in oklab, var(--ink) 8%, transparent); }
+  .seg button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; font-size: 12px; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--window); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.14); }
+
+  .stage { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; align-items: flex-start; padding: 0 16px 40px; }
+  .caption { color: var(--muted); font-size: 12px; margin: 0 0 8px 4px; }
+
+  /* Mac window: sidebar list column + main pane. */
+  .mac { display: flex; width: min(900px, 100%); height: 560px; border-radius: 12px; overflow: hidden; background: var(--window); box-shadow: 0 24px 60px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.08); }
+  .side { flex: none; background: var(--sidebar); border-right: 1px solid var(--line); padding: 44px 8px 8px; overflow: auto; }
+  .main { flex: 1; min-width: 0; overflow: auto; }
+  .sec { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 4px; color: var(--muted); font-size: 11.5px; font-weight: 600; }
+  .row { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; border-radius: 10px; cursor: default; }
+  .row.clickable { cursor: pointer; }
+  .row.clickable:hover { background: var(--hover); }
+  .row.selected, .row.selected:hover { background: var(--selected); }
+  .av { display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 600; flex: none; overflow: hidden; }
+  .text { flex: 1; min-width: 0; }
+  .t1, .t2 { display: block; }
+  .t1 { font-size: 12px; font-weight: 600; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t2 { margin-top: 1px; font-size: 10.5px; line-height: 15px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill { flex: none; height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-text); font-size: 11.5px; font-weight: 600; }
+  .pill.quiet { background: transparent; color: var(--muted); font-weight: 500; padding: 0 6px; }
+  .pill.quiet:hover { color: var(--ink); }
+  .actions-line { display: flex; gap: 6px; margin-top: 6px; }
+  .ibtn { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 50%; background: var(--fill); color: var(--muted); }
+  .ibtn.join { background: var(--accent); color: var(--accent-text); }
+  .ibtn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .contact .t1 { font-weight: 500; }
+  /* Rows A and C let the group name wrap to a second line instead of cutting it off. */
+  .row.wrap .t2 { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .detail > .grid, .ios-scroll > .grid { margin: 0 auto; }
+
+  /* Detail (Contacts main pane): the same centered profile header and tiles a contact uses. */
+  .detail { max-width: 440px; margin: 0 auto; padding: 56px 24px 32px; text-align: center; }
+  .detail h1 { margin: 12px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .detail .line { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .groupcard { display: flex; align-items: center; gap: 12px; margin-top: 22px; padding: 12px 14px; border-radius: 12px; background: var(--card); text-align: left; }
+  .groupcard .name { font-size: 13.5px; font-weight: 600; }
+  .groupcard .meta { color: var(--muted); font-size: 12px; }
+  .stack { display: inline-flex; margin-left: auto; }
+  .stack .av { box-shadow: 0 0 0 2px var(--card); margin-left: -6px; }
+  .stack .av:first-child { margin-left: 0; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; flex: none; border-radius: 9px; overflow: hidden; }
+  .grid span { display: block; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+  .tile { height: 40px; border: 0; border-radius: 10px; background: var(--card); color: var(--ink); font-size: 13px; font-weight: 600; }
+  .tile.join { background: var(--accent); color: var(--accent-text); }
+  .tile:hover { filter: brightness(0.97); }
+  .people { margin-top: 18px; text-align: left; }
+  .people .sec { padding: 0 2px 6px; }
+  .plist { border-radius: 12px; background: var(--card); overflow: hidden; }
+  .prow { position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+  .prow + .prow::before { content: ""; position: absolute; top: 0; left: 50px; right: 0; border-top: 1px solid var(--line); }
+  .prow .t1 { font-weight: 500; font-size: 13px; }
+  .done { margin-top: 18px; color: var(--muted); font-size: 13px; }
+  .empty { height: 100%; display: grid; place-items: center; color: var(--muted); }
+
+  /* iPhone */
+  .phone { width: 340px; height: 690px; border-radius: 44px; padding: 12px; background: #111; box-shadow: 0 24px 60px rgba(0,0,0,.25); }
+  .screen { height: 100%; border-radius: 34px; overflow: hidden; background: var(--ios-bg); display: flex; flex-direction: column; font-size: 15px; }
+  .ios-nav { display: flex; align-items: center; gap: 8px; padding: 46px 16px 6px; }
+  .ios-nav button { border: 0; background: none; color: var(--accent); font-size: 16px; white-space: nowrap; }
+  .ios-scroll { flex: 1; overflow: auto; padding: 8px 16px 24px; text-align: center; }
+  .ios-scroll h1 { margin: 12px 0 0; font-size: 22px; font-weight: 600; }
+  .ios-scroll .line { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
+  .ios-scroll .groupcard { background: var(--ios-card); }
+  .ios-scroll .groupcard .name { font-size: 16px; }
+  .ios-scroll .groupcard .meta { font-size: 14px; }
+  .ios-scroll .stack .av { box-shadow: 0 0 0 2px var(--ios-card); }
+  .ios-scroll .tile { height: 48px; border-radius: 12px; background: var(--ios-card); font-size: 16px; }
+  .ios-scroll .tile.join { background: var(--accent); }
+  .ios-scroll .plist { background: var(--ios-card); }
+  .ios-scroll .prow .t1 { font-size: 16px; }
+  .ios-scroll .people .sec { font-size: 13px; font-weight: 400; }
+  .note { max-width: 900px; margin: 0 auto 40px; padding: 0 16px; color: var(--muted); font-size: 12.5px; }
+  .note li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <span><label>Theme</label><span class="seg" data-key="theme"></span></span>
+  <span><label>Row</label><span class="seg" data-key="row"></span></span>
+  <span><label>Detail</label><span class="seg" data-key="detail"></span></span>
+  <span><label>Invited</label><span class="seg" data-key="source"></span></span>
+  <span><label>Sidebar</label><span class="seg" data-key="width"></span></span>
+</div>
+<div class="stage">
+  <div>
+    <p class="caption">Mac · Contacts</p>
+    <div class="mac"><div class="side" id="side"></div><div class="main" id="main"></div></div>
+  </div>
+  <div>
+    <p class="caption">iPhone · Contacts › invitation</p>
+    <div class="phone"><div class="screen" id="phone"></div></div>
+  </div>
+</div>
+<div class="note">
+  <ul>
+    <li>Row A: text gets the full width; Decline and Join sit on their own line under it.</li>
+    <li>Row B: the same two lines with small icon buttons (decline, join) at the end.</li>
+    <li>Row C: no buttons in the list; a dot marks it as waiting, and the detail answers it.</li>
+    <li>Detail 1 leads with who invited you; Detail 2 leads with the group. Both show only the inviter, how, the group and its members, and Join or Decline.</li>
+    <li>Synthetic people. No network calls.</li>
+  </ul>
+</div>
+<script>
+  const options = {
+    theme: [['light', 'Light'], ['dark', 'Dark']],
+    row: [['a', 'A · actions below'], ['b', 'B · icons'], ['c', 'C · no buttons']],
+    detail: [['inviter', '1 · Inviter first'], ['group', '2 · Group first']],
+    source: [['room', 'From a room'], ['link', 'With a link']],
+    width: [['220', '220'], ['260', '260']],
+  };
+  const s = { theme: 'light', row: 'a', detail: 'inviter', source: 'room', width: '220', selected: true, answer: null, iosOpen: true };
+
+  const people = {
+    alex: { name: 'Alex Rivera', initials: 'AR', color: '#8a6a4f' },
+    bea: { name: 'Bea Okafor', initials: 'BO', color: '#7f93b5' },
+    sam: { name: 'Sam Park', initials: 'SP', color: '#9a7fb5' },
+    priya: { name: 'Priya Shah', initials: 'PS', color: '#c08a5a' },
+    noor: { name: 'Noor Haddad', initials: 'NH', color: '#5f9b84' },
+  };
+  const group = { name: 'Infrastructure and CI', members: ['alex', 'bea', 'sam'] };
+
+  const av = (id, size) => { const p = people[id]; return `<span class="av" style="width:${size}px;height:${size}px;background:${p.color};font-size:${Math.round(size * 0.36)}px">${p.initials}</span>`; };
+  const grid = (ids, size) => `<span class="grid" style="width:${size}px;height:${size}px">${[0, 1, 2, 3].map((i) => `<span style="background:${ids[i] ? people[ids[i]].color : 'var(--fill)'}"></span>`).join('')}</span>`;
+  const how = () => (s.source === 'room' ? 'Invited you from Build night' : 'Invited you with a link');
+  const icon = (d) => `<svg viewBox="0 0 16 16"><path d="${d}"/></svg>`;
+
+  function bar() {
+    document.querySelectorAll('.seg').forEach((el) => {
+      const key = el.dataset.key;
+      el.innerHTML = options[key].map(([v, l]) => `<button data-k="${key}" data-v="${v}" aria-pressed="${s[key] === v}">${l}</button>`).join('');
+    });
+  }
+
+  function inviteRow() {
+    if (s.answer) return '';
+    const sel = s.selected ? ' selected' : '';
+    const text = `<span class="text"><span class="t1">${people.alex.name}</span><span class="t2">Invited you to ${group.name}</span>`;
+    if (s.row === 'a') {
+      return `<div class="row wrap clickable${sel}" data-open style="align-items:flex-start;padding-top:6px;padding-bottom:7px">${av('alex', 36)}${text}
+        <span class="actions-line"><button class="pill" data-answer="joined">Join</button><button class="pill quiet" data-answer="declined">Decline</button></span></span></div>`;
+    }
+    if (s.row === 'b') {
+      return `<div class="row clickable${sel}" data-open>${av('alex', 36)}${text}</span>
+        <button class="ibtn" data-answer="declined" aria-label="Decline">${icon('M4 4l8 8M12 4l-8 8')}</button>
+        <button class="ibtn join" data-answer="joined" aria-label="Join">${icon('M3.5 8.5l3 3 6-7')}</button></div>`;
+    }
+    return `<div class="row wrap clickable${sel}" data-open>${av('alex', 36)}${text}</span><span class="dot" aria-label="Waiting"></span></div>`;
+  }
+
+  function renderSide() {
+    const side = document.getElementById('side');
+    side.style.width = `${s.width}px`;
+    const contacts = ['priya', 'noor', 'bea'].map((id) => `<div class="row contact clickable">${av(id, 36)}<span class="text"><span class="t1">${people[id].name}</span></span></div>`).join('');
+    const invite = inviteRow();
+    side.innerHTML = (invite ? `<div class="sec"><span>Requests</span><span>1</span></div>${invite}` : '')
+      + `<div class="sec"><span>Contacts</span></div>${contacts}`;
+  }
+
+  function detailBody(ios) {
+    const members = group.members;
+    const stack = `<span class="stack">${members.map((id) => av(id, ios ? 26 : 22)).join('')}</span>`;
+    const answered = s.answer === 'joined' ? `<div class="done">You joined ${group.name}.</div>`
+      : s.answer === 'declined' ? `<div class="done">Declined</div>` : '';
+    const tiles = s.answer ? answered
+      : `<div class="tiles"><button class="tile" data-answer="declined">Decline</button><button class="tile join" data-answer="joined">Join</button></div>`;
+    const plist = `<div class="people"><div class="sec"><span>Members</span></div><div class="plist">${members.map((id) => `<div class="prow">${av(id, ios ? 32 : 28)}<span class="text"><span class="t1">${people[id].name}</span></span></div>`).join('')}</div></div>`;
+    if (s.detail === 'inviter') {
+      return `${av('alex', ios ? 84 : 72)}
+        <h1>${people.alex.name}</h1>
+        <p class="line">${how()}</p>
+        <div class="groupcard">${grid(members, ios ? 44 : 40)}<span class="text"><span class="name">${group.name}</span><br><span class="meta">${members.length} members</span></span>${stack}</div>
+        ${tiles}`;
+    }
+    return `${grid(members, ios ? 84 : 72)}
+      <h1>${group.name}</h1>
+      <p class="line">${people.alex.name} · ${s.source === 'room' ? 'from Build night' : 'with a link'}</p>
+      ${tiles}
+      ${plist}`;
+  }
+
+  function renderMain() {
+    const main = document.getElementById('main');
+    main.innerHTML = s.selected && (s.answer || true) ? `<div class="detail">${detailBody(false)}</div>` : '<div class="empty">Select a contact</div>';
+    if (!s.selected) main.innerHTML = '<div class="empty"></div>';
+  }
+
+  function renderPhone() {
+    const phone = document.getElementById('phone');
+    phone.innerHTML = `<div class="ios-nav"><button>‹ Contacts</button></div><div class="ios-scroll">${detailBody(true)}</div>`;
+  }
+
+  function render() {
+    document.documentElement.dataset.theme = s.theme;
+    bar();
+    renderSide();
+    renderMain();
+    renderPhone();
+  }
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b && b.dataset.k) { s[b.dataset.k] = b.dataset.v; s.answer = null; render(); return; }
+    if (b && b.dataset.answer) { e.stopPropagation(); s.answer = b.dataset.answer; s.selected = true; render(); return; }
+    if (e.target.closest('[data-open]')) { s.selected = true; render(); }
+  });
+  render();
+</script>
+</body>
+</html>

@@ -13,6 +13,9 @@ use super::agents_create_fixture::*;
 use super::agents_fixture::*;
 use super::db_fixture::*;
 
+#[path = "agents_create_background_db.rs"]
+mod background;
+
 #[tokio::test]
 async fn cloud_completion_attaches_the_document_to_the_agents_reply() {
     let Some(f) = fixture().await else { return };

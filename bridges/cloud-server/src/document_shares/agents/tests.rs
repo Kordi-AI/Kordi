@@ -16,6 +16,7 @@ use crate::connectors::models::{ConnectorToolGroup, RunTrigger};
 use crate::document_shares::model::AgentRunStatus;
 use crate::document_shares::render::markdown_blocks;
 
+mod background_gate_tests;
 mod operations_tests;
 
 fn candidate(agent_id: &str, owner: &str, owner_name: &str, name: &str) -> AgentCandidate {
@@ -264,6 +265,7 @@ fn gate() -> ToolGate {
         session_has_document: false,
         group_session: false,
         owner_request: true,
+        background_session: false,
     }
 }
 

@@ -1,4 +1,5 @@
 import { isChatNavigation } from '@/features/chat/chatNavigation';
+import { useRoomInvitations } from '@/features/commonGround/roomInvitations';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import { Archive, ChevronLeft } from 'lucide-react';
@@ -151,7 +152,9 @@ export function WorkspaceSidebar({
     collaborationSyncStatus,
     contactUnread,
   } = chatModel;
-  const pendingContactRequestCount = Math.max(0, contactRequestCount);
+  const roomInvitations = useRoomInvitations();
+  // Room group invitations wait in Contacts › Requests too.
+  const pendingContactRequestCount = Math.max(0, contactRequestCount) + roomInvitations.invitations.length;
   const supportContact = displayedContacts.find((contact) => contact.systemContact && contact.supportTicketEnabled);
 
   const [sessionContextMenu, setSessionContextMenu] =
