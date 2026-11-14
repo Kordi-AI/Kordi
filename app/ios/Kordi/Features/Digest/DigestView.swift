@@ -259,7 +259,7 @@ struct DigestView: View {
                 Button { selectedSheet = .calendarSettings } label: { Label("Calendar settings", systemImage: "gearshape") }
                 Button { selectedSheet = .imports } label: { Label("Import ICS", systemImage: "square.and.arrow.down") }
             }.font(.subheadline).buttonStyle(.plain).foregroundStyle(.secondary)
-            if !remindersAllowed { Text("Events are saved, but notifications are off. Enable them in Settings to receive reminders.").font(.caption).foregroundStyle(.secondary) }
+            if !remindersAllowed { reminderPermissionLine }
             HStack {
                 Text(month.formatted(.dateTime.month(.wide).year())).font(.title3.weight(.semibold))
                 Spacer(minLength: 4)
@@ -412,7 +412,10 @@ struct DigestView: View {
                 await DigestCalendarService.clearReminders()
                 await notifications.refreshAuthorizationState(registerIfAllowed: true)
                 remindersAllowed = notifications.authorizationState.canRegisterForRemoteNotifications
-            } else { remindersAllowed = try await DigestCalendarService.syncReminders(accountId: accountId, events: nextEvents, isCurrentAccount: { model.account?.accountId == accountId }) }
+            } else {
+                remindersAllowed = try await DigestCalendarService.syncReminders(accountId: accountId, events: nextEvents, isCurrentAccount: { model.account?.accountId == accountId })
+                if !remindersAllowed { await notifications.refreshAuthorizationState() }
+            }
         } catch { if shouldRecordLoadError(error, accountId: accountId, revision: revision) { calendarLoadError = error.localizedDescription } }
     }
     private func shouldRecordLoadError(_ error: Error, accountId: String, revision: Int) -> Bool {
@@ -420,6 +423,20 @@ struct DigestView: View {
             && revision == loadRevision && model.account?.accountId == accountId
     }
     private func refresh() async { guard model.requireAIConsent() else { return }; isRefreshing = true; defer { isRefreshing = false }; await perform { try await model.refreshRollingDigest() }; if let id = model.account?.accountId { await load(accountId: id) } }
-    private func requestReminders() async { if remoteReminders { await notifications.requestAuthorization(); remindersAllowed = notifications.authorizationState.canRegisterForRemoteNotifications; return }; guard let id = model.account?.accountId else { return }; await perform { remindersAllowed = try await DigestCalendarService.syncReminders(accountId: id, events: events, requestPermission: true, isCurrentAccount: { model.account?.accountId == id }) } }
+    /// Allow asks iOS only from this tap; once iOS has an answer, only Settings can change it.
+    private var reminderPermissionLine: some View {
+        HStack(spacing: 8) {
+            Text("Notifications are off.")
+            if notifications.authorizationState == .notDetermined {
+                Button("Allow") { Task { await requestReminders() } }
+            } else {
+                Button("Open Settings") { notifications.openSystemSettings() }
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(Color.orange)
+        .accessibilityElement(children: .combine)
+    }
+    private func requestReminders() async { if remoteReminders { await notifications.requestAuthorization(); remindersAllowed = notifications.authorizationState.canRegisterForRemoteNotifications; return }; guard let id = model.account?.accountId else { return }; await perform { remindersAllowed = try await DigestCalendarService.syncReminders(accountId: id, events: events, requestPermission: true, isCurrentAccount: { model.account?.accountId == id }) }; await notifications.refreshAuthorizationState() }
     private func perform(_ operation: () async throws -> Void) async { do { try await operation(); error = nil } catch { model.noteIfAIConsentRequired(error); self.error = model.userFacing(error, fallback: error.localizedDescription) } }
 }

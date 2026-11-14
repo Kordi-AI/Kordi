@@ -22,6 +22,8 @@ mod ownership_facts;
 mod ownership_store;
 mod post;
 mod prompt;
+mod reply_slot;
+pub mod requests;
 mod retry;
 pub mod store;
 mod triggers;
@@ -34,6 +36,7 @@ pub use agent::bootstrap_system_agent;
 pub(crate) use config::test_config;
 pub use config::{
     PendingSystemAgentConfig, SystemAgentConfig, SystemAgentConfigError, SystemAgentProviderAuth,
+    DEFAULT_SYSTEM_AGENT_NAME,
 };
 pub use store::RUN_PREFIX;
 pub use worker::spawn;

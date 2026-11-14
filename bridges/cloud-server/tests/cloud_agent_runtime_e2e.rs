@@ -427,6 +427,8 @@ mod execution_ownership;
 mod follow_up_subsessions;
 #[path = "cloud_agent_runtime_e2e/group_document_tools.rs"]
 mod group_document_tools;
+#[path = "cloud_agent_runtime_e2e/group_member_default_agent.rs"]
+mod group_member_default_agent;
 #[path = "cloud_agent_runtime_e2e/group_owner_admission.rs"]
 mod group_owner_admission;
 #[path = "cloud_agent_runtime_e2e/group_target_admission.rs"]

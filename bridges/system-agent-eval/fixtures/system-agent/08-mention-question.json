@@ -1,7 +1,7 @@
 {
   "kind": "systemAgent",
   "id": "mention-question",
-  "description": "A member asks the System agent about a confirmed plan by @mention.",
+  "description": "A member asks the Facilitator about a confirmed plan by @mention.",
   "title": "Dinner crew",
   "members": [
     {"key": "maya", "name": "Maya Chen"},
@@ -15,7 +15,7 @@
   "turns": [
     {
       "messages": [
-        {"from": "jordan", "text": "@System what time is dinner on {{d+3:weekday}} again?", "minutesAgo": 2, "mentions": ["system"]}
+        {"from": "jordan", "text": "@Facilitator what time is dinner on {{d+3:weekday}} again?", "minutesAgo": 2, "mentions": ["system"]}
       ],
       "expect": {
         "reply": "message",

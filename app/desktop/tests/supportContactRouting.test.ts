@@ -23,20 +23,20 @@ function supportConversation(): Conversation {
   return {
     id: 'cloud:conversation:acct_kordi_support:agent:session:session%3Adirect-system-agent%3Aacct_me%3Acloud_agent_kordi_support',
     canonicalSessionId: 'session:direct-system-agent:acct_me:cloud_agent_kordi_support',
-    name: 'Kordi Support',
+    name: 'KordiSpot',
     type: 'person',
     subtitle: 'Ask questions or suggest improvements',
     unread: 0,
     collaborationSources: ['Cloud'],
     trust: 'Cloud',
     directness: 'Person chat',
-    participants: ['Me', 'Kordi Support'],
+    participants: ['Me', 'KordiSpot'],
     messages: [],
     supportTicketEnabled: true,
     collaborationTarget: {
       hostId: 'cloud',
       nodeId: 'acct_kordi_support',
-      displayName: 'Kordi Support',
+      displayName: 'KordiSpot',
       ownerName: 'Kordi',
       runtime: 'kordi-desktop',
       humanId: 'acct_kordi_support',
@@ -58,7 +58,7 @@ function supportConversationWithRealOwner(): Conversation {
   };
 }
 
-test('canonical participant identity keeps Kordi Support as a flat Contact row', () => {
+test('canonical participant identity keeps KordiSpot as a flat Contact row', () => {
   const [normalized] = normalizeSupportContactConversationCollection([{
     ...supportConversation(),
     id: 'cloud:conversation:opaque:agent',
@@ -69,13 +69,13 @@ test('canonical participant identity keeps Kordi Support as a flat Contact row',
     collaborationTarget: undefined,
     canonicalParticipants: [
       { id: 'human:me', name: 'Me', kind: 'human', role: 'self', source: 'local' },
-      { id: 'agent:cloud_agent_kordi_support', name: 'Kordi Support', kind: 'agent', role: 'delegate', source: 'cloud' },
+      { id: 'agent:cloud_agent_kordi_support', name: 'KordiSpot', kind: 'agent', role: 'delegate', source: 'cloud' },
     ],
   }]);
   const spaces = buildParticipantSpaces([normalized!]);
 
   assert.equal(normalized?.type, 'person');
-  assert.deepEqual(filterParticipantSpaces(spaces, '', 'contact').map((space) => space.title), ['Kordi Support']);
+  assert.deepEqual(filterParticipantSpaces(spaces, '', 'contact').map((space) => space.title), ['KordiSpot']);
   assert.deepEqual(filterParticipantSpaces(spaces, '', 'agent'), []);
 });
 
@@ -88,7 +88,7 @@ test('legacy unscoped support selection resolves to the named support session', 
   );
 
   assert.equal(selected.id, conversation.id);
-  assert.equal(selected.name, 'Kordi Support');
+  assert.equal(selected.name, 'KordiSpot');
 });
 
 test('legacy support selection follows the locked agent when the server uses a real owner account', () => {
@@ -111,7 +111,7 @@ test('legacy support history uses the hydrated system contact owner before a Clo
     messages: [{
       id: 'support-history',
       role: 'person' as const,
-      sender: 'Kordi Support',
+      sender: 'KordiSpot',
       senderType: 'human' as const,
       text: 'How can I help?',
       time: '20:40',
@@ -122,7 +122,7 @@ test('legacy support history uses the hydrated system contact owner before a Clo
     nativeChatPlaceholder: legacy,
   }), [{
       id: 'cloud-contact:cloud-system:kordi-support',
-      name: 'Kordi Support',
+      name: 'KordiSpot',
       initials: 'KS',
       classType: 'other-users',
       entityType: 'user',
@@ -139,7 +139,7 @@ test('legacy support history uses the hydrated system contact owner before a Clo
       systemContact: true,
       supportTicketEnabled: true,
       targetCloudAgentId: 'cloud_agent_kordi_support',
-      targetCloudAgentName: 'Kordi Support',
+      targetCloudAgentName: 'KordiSpot',
       targetCloudAgentOwnerAccountId: 'acct_real_support_owner',
       targetCloudAgentOwnerName: 'Kordi',
     }]);
@@ -152,7 +152,7 @@ test('legacy support history uses the hydrated system contact owner before a Clo
     activeTarget: selected.collaborationTarget,
   }), {
     targetCloudAgentId: 'cloud_agent_kordi_support',
-    targetCloudAgentName: 'Kordi Support',
+    targetCloudAgentName: 'KordiSpot',
     targetCloudAgentOwnerAccountId: 'acct_real_support_owner',
     targetCloudAgentOwnerName: 'Kordi',
   });
@@ -165,7 +165,7 @@ test('a new scoped Support selection reuses a legacy message-backed Support thre
     messages: [{
       id: 'support-history',
       role: 'person' as const,
-      sender: 'Kordi Support',
+      sender: 'KordiSpot',
       senderType: 'human' as const,
       text: 'How can I help?',
       time: '20:40',
@@ -189,7 +189,7 @@ test('duplicate Support collapse keeps history and the hydrated real-owner route
     messages: [{
       id: 'support-history',
       role: 'person' as const,
-      sender: 'Kordi Support',
+      sender: 'KordiSpot',
       senderType: 'human' as const,
       text: 'How can I help?',
       time: '20:40',
@@ -223,12 +223,12 @@ test('legacy support selection resolves canonical hydration through the scoped c
       canonicalSessionId,
       hostId: 'cloud',
       peerNodeId: 'acct_real_support_owner',
-      peerDisplayName: 'Kordi Support',
+      peerDisplayName: 'KordiSpot',
       peerOwnerName: 'Kordi',
       peerRuntime: 'kordi-desktop',
       projectId: null,
       projectName: null,
-      title: 'Kordi Support',
+      title: 'KordiSpot',
       subtitle: '',
       unreadCount: 0,
       updatedAtMs: 1,
@@ -248,7 +248,7 @@ test('legacy support selection resolves canonical hydration through the scoped c
         remoteHumanName: 'Kordi',
         remoteHumanNodeId: 'acct_real_support_owner',
         remoteAgentId: 'cloud_agent_kordi_support',
-        remoteAgentName: 'Kordi Support',
+        remoteAgentName: 'KordiSpot',
         remoteAgentNodeId: 'acct_real_support_owner',
         remoteAgentRuntime: 'kordi-desktop',
       },
@@ -265,7 +265,7 @@ test('legacy pending support selection preserves its product identity and direct
     'cloud:conversation:acct_kordi_support:agent',
   );
 
-  assert.equal(conversation?.name, 'Kordi Support');
+  assert.equal(conversation?.name, 'KordiSpot');
   assert.equal(conversation?.subtitle, 'Ask questions or suggest improvements');
   assert.equal(conversation?.type, 'person');
   assert.equal(conversation?.directness, 'Person chat');
@@ -280,7 +280,7 @@ test('legacy pending support selection preserves its product identity and direct
     activeTarget: conversation?.collaborationTarget,
   }), {
     targetCloudAgentId: 'cloud_agent_kordi_support',
-    targetCloudAgentName: 'Kordi Support',
+    targetCloudAgentName: 'KordiSpot',
     targetCloudAgentOwnerAccountId: 'acct_kordi_support',
     targetCloudAgentOwnerName: 'Kordi',
   });
@@ -291,7 +291,7 @@ test('scoped pending support selection recovers the support target from its sess
     'cloud:conversation:acct_support_owner:agent:session:session%3Adirect-system-agent%3Aacct_me%3Acloud_agent_kordi_support',
   );
 
-  assert.equal(conversation?.name, 'Kordi Support');
+  assert.equal(conversation?.name, 'KordiSpot');
   assert.equal(conversation?.supportTicketEnabled, true);
   assert.equal(conversation?.collaborationTarget?.nodeId, 'acct_support_owner');
   assert.equal(conversation?.collaborationTarget?.agentId, 'cloud_agent_kordi_support');
@@ -307,7 +307,7 @@ test('locked support routing survives a partially hydrated person-style target',
       hostId: 'cloud',
       nodeId: 'acct_real_support_owner',
       humanId: 'acct_real_support_owner',
-      displayName: 'Kordi Support',
+      displayName: 'KordiSpot',
       ownerName: 'Kordi',
       runtime: 'person',
       agentId: null,
@@ -316,7 +316,7 @@ test('locked support routing survives a partially hydrated person-style target',
 
   assert.deepEqual(lockedTarget, {
     agentId: 'cloud_agent_kordi_support',
-    name: 'Kordi Support',
+    name: 'KordiSpot',
     ownerAccountId: 'acct_real_support_owner',
     ownerName: 'Kordi',
   });
@@ -327,7 +327,7 @@ test('locked support routing survives a partially hydrated person-style target',
     lockedTarget,
   }), {
     targetCloudAgentId: 'cloud_agent_kordi_support',
-    targetCloudAgentName: 'Kordi Support',
+    targetCloudAgentName: 'KordiSpot',
     targetCloudAgentOwnerAccountId: 'acct_real_support_owner',
     targetCloudAgentOwnerName: 'Kordi',
   });
@@ -353,7 +353,7 @@ test('locked support routing prefers the hydrated server owner over a legacy pla
       hostId: 'cloud',
       nodeId: 'acct_real_support_owner',
       humanId: 'acct_real_support_owner',
-      displayName: 'Kordi Support',
+      displayName: 'KordiSpot',
       ownerName: 'Kordi',
       runtime: 'person',
       agentId: null,
@@ -378,7 +378,7 @@ test('locked support routing skips blank hydrated owner fields', () => {
       hostId: 'cloud',
       nodeId: 'acct_real_support_owner',
       humanId: '   ',
-      displayName: 'Kordi Support',
+      displayName: 'KordiSpot',
       ownerName: 'Kordi',
       runtime: 'person',
       agentId: null,
@@ -409,7 +409,7 @@ test('recent Support activity survives a longer legacy conversation in the sideb
     ...supportConversation(),
     _updatedAtMs: 100,
     messages: Array.from({ length: 4 }, (_, index) => ({
-      id: `old-${index}`, role: 'person' as const, sender: 'Kordi Support',
+      id: `old-${index}`, role: 'person' as const, sender: 'KordiSpot',
       text: `Historical answer ${index}`, time: '10:00', timestampMs: 90 + index,
     })),
   };
@@ -420,7 +420,7 @@ test('recent Support activity survives a longer legacy conversation in the sideb
     subtitle: 'Support is temporarily unavailable.',
     messages: [
       { id: 'new-question', role: 'user' as const, text: 'Are you there?', time: '12:00', timestampMs: 299 },
-      { id: 'new-failure', role: 'person' as const, sender: 'Kordi Support', text: 'Support is temporarily unavailable.', time: '12:00', timestampMs: 300 },
+      { id: 'new-failure', role: 'person' as const, sender: 'KordiSpot', text: 'Support is temporarily unavailable.', time: '12:00', timestampMs: 300 },
     ],
   };
   const [collapsed] = normalizeSupportContactConversationCollection([legacy, recent]);
@@ -433,5 +433,5 @@ test('recent Support activity survives a longer legacy conversation in the sideb
   ]);
   const spaces = buildParticipantSpaces([collapsed!, { ...recent, id: 'other-contact', name: 'Other', supportTicketEnabled: false,
     canonicalSessionId: 'other-contact', collaborationTarget: undefined, participants: ['Me', 'Other'], _updatedAtMs: 200 }]);
-  assert.equal(spaces[0]?.title, 'Kordi Support');
+  assert.equal(spaces[0]?.title, 'KordiSpot');
 });

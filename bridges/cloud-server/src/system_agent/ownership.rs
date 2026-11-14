@@ -141,6 +141,9 @@ pub(super) struct MessageFact {
     pub human: bool,
     /// The agent this message mentions, replies to, quotes, or asked to run.
     pub addressed_owner: Option<Owner>,
+    /// The message asks the System agent itself ("@Facilitator …"). It is
+    /// never another agent's task, even while that agent is working.
+    pub addresses_system_agent: bool,
 }
 
 /// One person-agent run in the conversation's session.
@@ -250,7 +253,10 @@ pub(super) fn assess(
             last_agent = Some((message, agent));
             continue;
         }
-        if message.sequence <= seen.max(stepped_in_through) || !message.human {
+        if message.sequence <= seen.max(stepped_in_through)
+            || !message.human
+            || message.addresses_system_agent
+        {
             continue;
         }
         let answers_agent = last_agent.filter(|(asked, agent)| {

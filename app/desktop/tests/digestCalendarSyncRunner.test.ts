@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import { contentFingerprint, type SyncBaseline } from '../src/features/digest/calendarSync';
-import { CALENDAR_SYNC_DEBOUNCE_MS, CalendarPermissionError, calendarSyncStoreFor, scheduleCalendarSync, syncDeviceCalendarOnce, type CalendarSyncDeps } from '../src/features/digest/calendarSyncRunner';
+import { CALENDAR_SYNC_DEBOUNCE_MS, CALENDAR_SYNC_INTERVAL_MS, CalendarPermissionError, calendarSyncStoreFor, requestCalendarAccess, scheduleCalendarSync, syncDeviceCalendarOnce, type CalendarSyncDeps, type CalendarSyncStatus } from '../src/features/digest/calendarSyncRunner';
 import { CALENDAR_SYNC_PREFERENCES_EVENT, readCalendarSyncBaseline, readCalendarSyncPreferences, writeCalendarSyncBaseline, writeCalendarSyncPreferences } from '../src/features/digest/calendarSyncPreferences';
 import type { CalendarEvent, CalendarSyncResult, DeviceCalendarAccess, DeviceCalendarEvent } from '../src/features/digest/types';
 
@@ -47,7 +47,7 @@ function fakeDeps(options: { permission?: DeviceCalendarAccess[]; device?: Devic
 
 test('one pass writes device changes first, records identities server-side, and settles the baseline', async () => {
   const { deps, recorded, baseline } = fakeDeps({ permission: ['notDetermined', 'granted'], device: [deviceEvent()], server: [kordiEvent] });
-  const result = await syncDeviceCalendarOnce('viewer', deps);
+  const result = await syncDeviceCalendarOnce('viewer', deps, undefined, { request: true });
   assert.deepEqual(recorded.access, [false, true], 'permission is requested only while undetermined');
   assert.deepEqual(recorded.reads, [['work', 'holidays']]);
   assert.deepEqual(recorded.writes, [{ id: 'digest-1', deviceId: undefined, calendarId: 'work' }]);
@@ -86,6 +86,13 @@ test('a second pass with nothing changed makes no writes, a device deletion clea
   const remainingBaseline = removedInKordi.baseline();
   assert.equal(remainingBaseline['device:a']?.serverId, 'calendar-a');
   assert.equal(remainingBaseline['device:a']?.suppressed, true);
+});
+
+test('a pass without an explicit request never asks macOS for access', async () => {
+  const { deps, recorded } = fakeDeps({ permission: ['notDetermined', 'granted'] });
+  await assert.rejects(() => syncDeviceCalendarOnce('viewer', deps), (error: unknown) => error instanceof CalendarPermissionError && error.permission === 'notDetermined');
+  assert.deepEqual(recorded.access, [false]);
+  assert.deepEqual(recorded.reads, []);
 });
 
 test('denied permission stops the pass before any read', async () => {
@@ -128,7 +135,7 @@ test('the scheduler syncs on start, on device changes and on preference changes 
   try {
     assert.equal(store.getSnapshot().phase, 'idle');
     t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS);
-    await Promise.resolve(); await Promise.resolve();
+    await new Promise(resolve => setImmediate(resolve));
     assert.equal(store.getSnapshot().phase, 'syncing');
     await new Promise(resolve => setImmediate(resolve));
     assert.ok(onChange, 'the native observer was attached');
@@ -311,4 +318,95 @@ test('first read failure still exposes calendars and permission in settings', as
     assert.equal(status.permission, 'granted');
     assert.deepEqual(status.calendars.map(calendar => calendar.id), ['work', 'holidays']);
   } finally { stop(); cleanup(); }
+});
+
+const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve)); };
+/** Every status the line would render, with consecutive repeats of one phase collapsed. */
+function recordPhases(accountId: string) {
+  const store = calendarSyncStoreFor(accountId);
+  const seen: CalendarSyncStatus[] = [];
+  const unsubscribe = store.subscribe(() => seen.push(store.getSnapshot()));
+  return { seen, phases: () => seen.map(status => status.phase).filter((phase, index, all) => phase !== all[index - 1]), unsubscribe, store };
+}
+/** A permission that the test changes, and a record of every access call and observer start. */
+function controlledAccess(deps: CalendarSyncDeps, initial: DeviceCalendarAccess, onRequest?: () => DeviceCalendarAccess) {
+  let current = initial;
+  const calls: boolean[] = [];
+  const observer = { starts: 0, stops: 0, onChange: null as (() => void) | null };
+  deps.access = async request => { calls.push(request); if (request && onRequest) current = onRequest(); return current; };
+  deps.watch = async onChange => { observer.starts++; observer.onChange = onChange; return () => { observer.stops++; }; };
+  return { calls, observer, set: (next: DeviceCalendarAccess) => { current = next; } };
+}
+
+test('automatic runs never ask macOS, never flash the line, and ignore device changes while access is off', async t => {
+  const { dom, cleanup } = environment();
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const { deps, recorded } = fakeDeps();
+  const access = controlledAccess(deps, 'notDetermined');
+  const record = recordPhases('undetermined');
+  const stop = scheduleCalendarSync('undetermined', deps);
+  try {
+    t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush();
+    assert.equal(record.store.getSnapshot().phase, 'permission');
+    assert.equal(record.store.getSnapshot().canRequest, true, 'the line offers an in-app Allow');
+    // Timer, focus, preference and server-change runs only read the status.
+    t.mock.timers.tick(CALENDAR_SYNC_INTERVAL_MS); t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush();
+    window.dispatchEvent(new dom.window.Event('focus')); t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush();
+    window.dispatchEvent(new dom.window.Event('focus')); t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush();
+    window.dispatchEvent(new dom.window.CustomEvent(CALENDAR_SYNC_PREFERENCES_EVENT, { detail: { accountId: 'undetermined' } })); t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush();
+    assert.equal(access.calls.length, 5, 'each automatic run read the status once');
+    assert.ok(access.calls.every(request => request === false), 'no automatic run asked for access');
+    assert.equal(access.observer.starts, 0, 'the device observer is not started without access');
+    assert.deepEqual(record.phases(), ['permission'], 'the line never showed "Syncing"');
+    assert.equal(record.seen.length, 1, 'unchanged checks do not notify the line');
+    assert.deepEqual(recorded.reads, []);
+  } finally { record.unsubscribe(); stop(); cleanup(); }
+});
+
+test('a request macOS cannot show backs off to System Settings instead of asking again', async t => {
+  const { cleanup } = environment();
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const { deps } = fakeDeps();
+  // A process macOS will not prompt for: the request returns and the status stays undetermined.
+  const access = controlledAccess(deps, 'notDetermined');
+  const record = recordPhases('cannot-ask');
+  const stop = scheduleCalendarSync('cannot-ask', deps);
+  try {
+    t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush();
+    requestCalendarAccess('cannot-ask'); await flush();
+    assert.deepEqual(access.calls, [false, false, true], 'the person\'s action asked once');
+    assert.equal(record.store.getSnapshot().phase, 'permission');
+    assert.equal(record.store.getSnapshot().canRequest, false, 'the line now points to System Settings');
+    for (let i = 0; i < 3; i++) { t.mock.timers.tick(CALENDAR_SYNC_INTERVAL_MS); t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush(); }
+    assert.deepEqual(access.calls.slice(3), [false, false, false], 'later runs only read the status');
+    assert.deepEqual(record.phases(), ['permission']);
+  } finally { record.unsubscribe(); stop(); cleanup(); }
+});
+
+test('granting access from the line syncs, starts the observer, and later passes keep the synced line', async t => {
+  const { cleanup } = environment();
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const { deps, recorded } = fakeDeps({ device: [deviceEvent()] });
+  const access = controlledAccess(deps, 'notDetermined', () => 'granted');
+  const record = recordPhases('grants');
+  const stop = scheduleCalendarSync('grants', deps);
+  try {
+    t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush();
+    requestCalendarAccess('grants'); await flush();
+    assert.equal(record.store.getSnapshot().phase, 'synced');
+    assert.equal(access.observer.starts, 1);
+    assert.equal(recorded.reads.length, 1);
+    access.observer.onChange!(); t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush();
+    t.mock.timers.tick(CALENDAR_SYNC_INTERVAL_MS); t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush();
+    assert.equal(recorded.reads.length, 3, 'device changes and the timer still sync');
+    assert.deepEqual(record.phases(), ['permission', 'syncing', 'synced'], 'background passes do not flash "Syncing"');
+    assert.equal(access.observer.starts, 1, 'the observer starts once');
+    // Revoking access stops forwarding device changes until access returns.
+    access.set('denied');
+    t.mock.timers.tick(CALENDAR_SYNC_INTERVAL_MS); t.mock.timers.tick(CALENDAR_SYNC_DEBOUNCE_MS); await flush();
+    assert.equal(record.store.getSnapshot().phase, 'permission');
+    assert.equal(record.store.getSnapshot().canRequest, false);
+    assert.equal(access.observer.stops, 1);
+    assert.equal(access.calls.filter(Boolean).length, 1, 'only the person\'s action asked');
+  } finally { record.unsubscribe(); stop(); cleanup(); }
 });

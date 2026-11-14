@@ -72,6 +72,10 @@ pub struct SharedCloudAgentSummary {
     pub avatar_url: Option<String>,
     pub avatar: AvatarDescriptor,
     pub updated_at: String,
+    /// The owner's default Kordi agent (`cloud-agent:<owner>`), listed for
+    /// a group co-member who may mention it; absent for Factory agents.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_default_agent: bool,
 }
 
 #[derive(Debug, Deserialize)]

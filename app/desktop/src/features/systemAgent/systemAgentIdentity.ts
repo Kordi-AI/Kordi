@@ -18,13 +18,23 @@ export function isSystemAgentAccountId(accountId: string | null | undefined): bo
 
 export const KORDI_FACILITATOR_NAME = 'Facilitator';
 
+/** The @ menu row and mention for the Facilitator. The server answers a mention whose target
+ * names its account, so the mention never routes to a cloud agent's owner. */
+export const KORDI_FACILITATOR_MENTION_HOST_ID = 'facilitator';
+export const KORDI_FACILITATOR_MENTION_TARGET_ID = `agent:cloud-agent:${KORDI_SYSTEM_AGENT_ACCOUNT_ID}`;
+
+export function isFacilitatorMentionOption(option: { sourceHostId?: string | null } | null | undefined): boolean {
+  return option?.sourceHostId === KORDI_FACILITATOR_MENTION_HOST_ID;
+}
+
 export function isFacilitatorHandoffRequestId(id: string | null | undefined): boolean {
   return id?.startsWith('facilitator-handoff:') ?? false;
 }
 
-/** Server notices such as introductions and joins show as System with the front-facing Kordi bird. */
+/** Server notices such as introductions and joins show as the Facilitator, with the
+ * front-facing Kordi bird, so they read as the same Facilitator as the agent. */
 export const KORDI_SYSTEM_NOTICE_KIND = 'system-notice';
-export const KORDI_SYSTEM_NAME = 'System';
+export const KORDI_SYSTEM_NAME = KORDI_FACILITATOR_NAME;
 export const KORDI_SYSTEM_AVATAR_URL = publicAssetPath('kordi-system-avatar.jpg');
 
 export function isSystemAvatarUrl(url: string | null | undefined): boolean {
