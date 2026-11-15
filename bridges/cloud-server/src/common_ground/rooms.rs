@@ -450,7 +450,7 @@ pub(super) async fn notify_members(
 ) -> sqlx_core::Result<()> {
     let members: Vec<(String,)> = query_as(
         "SELECT account_id FROM cloud_common_ground_room_members
-         WHERE room_id = $1 AND left_at IS NULL",
+         WHERE room_id = $1 AND left_at IS NULL ORDER BY account_id",
     )
     .bind(room_id)
     .fetch_all(&mut **tx)

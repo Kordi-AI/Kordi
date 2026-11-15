@@ -53,6 +53,7 @@ mod room_preview_tests;
 mod rooms_create_tests;
 mod rooms_list_tests;
 mod run_attempts_tests;
+mod run_conflict_tests;
 mod sharing_off_profile_tests;
 mod sharing_off_tests;
 mod sharing_support;

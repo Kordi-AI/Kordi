@@ -31,11 +31,15 @@ pub(super) const THEME_REFRESH: Duration = Duration::from_secs(120);
 
 /// A run blocks another of its kind while it is open (up to an hour, so a
 /// run that was lost does not block forever), and for two minutes after it
-/// failed, so a failing provider is not called on every refresh. In a busy
-/// room a run can wait in the queue for many minutes; queueing it again
-/// while it waits only doubles the work.
+/// failed, so a failing provider is not called on every refresh. A run the
+/// provider only rate-limited (`common_ground_rate_limited` from the
+/// runner) blocks for 20 seconds: the provider is busy, not broken. In a
+/// busy room a run can wait in the queue for many minutes; queueing it
+/// again while it waits only doubles the work.
 const BLOCKING_RUN_SQL: &str = "created_at > now() - interval '60 minutes'
-    AND (finished_at IS NULL OR (error_code IS NOT NULL AND finished_at > now() - interval '2 minutes'))";
+    AND (finished_at IS NULL OR (error_code IS NOT NULL AND finished_at > now() - CASE
+        WHEN error_code = 'common_ground_rate_limited' THEN interval '20 seconds'
+        ELSE interval '2 minutes' END))";
 
 /// Stored results for `viewer`, keyed by the other profile, that are still
 /// valid for both current cards.

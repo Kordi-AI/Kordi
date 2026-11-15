@@ -74,6 +74,44 @@ async fn an_empty_reply_fails_the_run() {
         .contains(&"fail:cg_card_empty:common_ground_run_failed".to_string()));
 }
 
+/// A provider that always fails with this error text.
+struct FailingProvider(&'static str);
+
+#[async_trait]
+impl CloudModelProvider for FailingProvider {
+    async fn next_response(
+        &self,
+        _: &OpenAiProviderConfig,
+        _: &[Value],
+        _: &[Value],
+    ) -> Result<ModelProviderResponse, ModelLoopError> {
+        Err(ModelLoopError::Provider(self.0.into()))
+    }
+}
+
+#[tokio::test]
+async fn a_rate_limited_run_fails_with_its_own_code() {
+    for (error, code) in [
+        ("HTTP 429: Too Many Requests", "common_ground_rate_limited"),
+        (
+            "Rate limit reached for requests",
+            "common_ground_rate_limited",
+        ),
+        ("HTTP 401: invalid key", "common_ground_run_failed"),
+    ] {
+        let client = FakeClient::with_run(card_run("cg_match_limited"));
+        legacy_fixture_run(&client, &FailingProvider(error), temp_sandbox())
+            .await
+            .unwrap();
+        let expected = format!("fail:cg_match_limited:{code}");
+        assert!(
+            client.calls().contains(&expected),
+            "{error}: {:?}",
+            client.calls()
+        );
+    }
+}
+
 #[test]
 fn omp_common_ground_runs_send_medium_effort_for_a_default_route() {
     use crate::common_ground::omp_thinking;

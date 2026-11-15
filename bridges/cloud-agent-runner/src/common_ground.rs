@@ -20,6 +20,8 @@ const MATCH_RUN_PREFIX: &str = "cg_match_";
 /// Leaves room to wait out a few provider rate limits; the heartbeat keeps
 /// the lease alive meanwhile.
 const TIMEOUT_SECONDS: u64 = 300;
+/// The failure code for a run the provider kept rate limiting.
+pub(crate) const RATE_LIMITED: &str = "common_ground_rate_limited";
 /// OMP attempts end this long before the step's own timeout.
 const OMP_TIMEOUT_MARGIN: Duration = Duration::from_secs(10);
 /// OMP surfaces a rate limit only after its own short retries, so a busy
@@ -115,19 +117,30 @@ where
     }
 }
 
-/// The wait before retrying an OMP failure, or `None` when it is not a rate limit.
-fn rate_limit_wait(error: &RuntimeError, retries: u32) -> Option<Duration> {
+/// Wording providers use for a rate limit.
+const RATE_LIMIT_WORDING: [&str; 3] = ["rate limit", "rate-limit", "too many requests"];
+
+/// Whether an OMP failure is the provider's rate limit.
+fn is_rate_limit(error: &RuntimeError) -> bool {
     let reason = match error {
         RuntimeError::Provider { reason, .. } => reason.to_ascii_lowercase(),
         _ => String::new(),
     };
-    let rate_limited = error.diagnostic_code() == "provider_http_429"
-        || ["rate limit", "rate-limit", "too many requests"]
+    error.diagnostic_code() == "provider_http_429"
+        || RATE_LIMIT_WORDING
             .iter()
-            .any(|wording| reason.contains(wording));
-    if !rate_limited {
+            .any(|wording| reason.contains(wording))
+}
+
+/// The wait before retrying an OMP failure, or `None` when it is not a rate limit.
+fn rate_limit_wait(error: &RuntimeError, retries: u32) -> Option<Duration> {
+    if !is_rate_limit(error) {
         return None;
     }
+    let reason = match error {
+        RuntimeError::Provider { reason, .. } => reason.to_ascii_lowercase(),
+        _ => String::new(),
+    };
     let wait = named_delay(&reason)
         .unwrap_or_else(|| DEFAULT_RATE_LIMIT_WAIT.saturating_mul(2u32.saturating_pow(retries)));
     Some(wait.min(MAX_RATE_LIMIT_WAIT))
@@ -178,6 +191,44 @@ where
     C: CloudAgentRunClient + Sync,
     P: CloudModelProvider + Sync,
 {
+    generate_run(client, provider, engine, run)
+        .await
+        .map_err(|failed| failed.detail)
+}
+
+/// Why a completion failed: the detail (which may quote the provider), and
+/// whether the provider was still rate limiting once retries ran out.
+pub(crate) struct Failed {
+    detail: String,
+    rate_limited: bool,
+}
+
+impl From<String> for Failed {
+    fn from(detail: String) -> Self {
+        Self {
+            detail,
+            rate_limited: false,
+        }
+    }
+}
+
+impl From<&str> for Failed {
+    fn from(detail: &str) -> Self {
+        detail.to_string().into()
+    }
+}
+
+/// [`generate`], telling a provider rate limit apart from other failures.
+pub(crate) async fn generate_run<C, P>(
+    client: &C,
+    provider: &P,
+    engine: CloudModelEngine,
+    run: &CloudAgentRun,
+) -> Result<String, Failed>
+where
+    C: CloudAgentRunClient + Sync,
+    P: CloudModelProvider + Sync,
+{
     let material = client
         .fetch_provider_auth(&run.run_id)
         .await
@@ -202,7 +253,10 @@ where
                 async move { crate::omp_job::run(job, &NoTools, &|_| async { Ok(()) }).await }
             })
             .await
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| Failed {
+                rate_limited: is_rate_limit(&error),
+                detail: error.to_string(),
+            })?;
             // One turn with no tools: the last reply's usage is the run's.
             if let Some(usage) = &result.usage {
                 crate::usage_meter::record_omp_message(
@@ -221,7 +275,18 @@ where
                 Ok(ModelProviderResponse::ToolCalls(_)) => {
                     return Err("unexpected tool call".into());
                 }
-                Err(error) => return Err(error.to_string()),
+                Err(error) => {
+                    let detail = error.to_string();
+                    let lower = detail.to_ascii_lowercase();
+                    let rate_limited = lower.contains("429")
+                        || RATE_LIMIT_WORDING
+                            .iter()
+                            .any(|wording| lower.contains(wording));
+                    return Err(Failed {
+                        detail,
+                        rate_limited,
+                    });
+                }
             }
         }
     };
@@ -243,7 +308,7 @@ where
     P: CloudModelProvider + Sync,
 {
     let run_id = run.run_id.clone();
-    let generation = generate(client, provider, engine, &run);
+    let generation = generate_run(client, provider, engine, &run);
     tokio::pin!(generation);
     let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(40));
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -263,15 +328,18 @@ where
             client.complete_run(&run.run_id, &text).await?;
             Ok(RunnerStepOutcome::Completed { run_id })
         }
-        Err(detail) => {
+        Err(failed) => {
             // The detail can quote provider errors, so only its length is logged.
-            tracing::warn!(run_id = %run.run_id, detail_len = detail.len(), "common ground run failed");
+            let detail_len = failed.detail.len();
+            tracing::warn!(run_id = %run.run_id, detail_len, rate_limited = failed.rate_limited, "common ground run failed");
+            // The server holds the next run back only briefly after a rate limit.
+            let code = if failed.rate_limited {
+                RATE_LIMITED
+            } else {
+                "common_ground_run_failed"
+            };
             client
-                .fail_run(
-                    &run.run_id,
-                    "common_ground_run_failed",
-                    "Common ground run failed.",
-                )
+                .fail_run(&run.run_id, code, "Common ground run failed.")
                 .await?;
             Ok(RunnerStepOutcome::FailedProviderError { run_id })
         }
