@@ -178,6 +178,47 @@ test('owner admission failures become terminal UI state instead of an endless pr
   } finally { __setSessionBackendForTests(null); }
 });
 
+test("a refused lease for another person's request ends quietly: the server's reply shows and the Mac never retries", async () => {
+  __setSessionBackendForTests({ load: async () => ({ accountId: 'owner', token: 'fixture-token', expiresAt: '2099-01-01' }), save: async () => {}, clear: async () => {} });
+  try {
+    await withDom(async root => {
+      const message = request(peer);
+      let turns: Record<string, DesktopChatTurnSnapshot> = {};
+      const claims: unknown[] = [];
+      const warnings: string[] = [];
+      let syncs = 0;
+      const processed = new Set<string>();
+      // The server answers Access "Only me" and "Use my agent" off alike.
+      const client = { desktopAgentExecution: async (_token: string, action: string, body: unknown) => {
+        assert.equal(action, 'claim');
+        claims.push(body);
+        throw new CloudAuthError('agent_not_available', "This agent isn't available.", 403);
+      } } as unknown as CloudAuthClient;
+      const args: Parameters<typeof useCloudDirectAgentExecution>[0] = {
+        account: owner, client, cloudAgentDefinitionsById: {}, cloudLookupContacts: [],
+        cloudMessageIndex: buildCloudMessageIndex(owner.accountId, { peer: [message] }),
+        initialMessagesSettled: true, runtimeReady: true, processedRequestIdsRef: { current: processed }, turnIdsByRequestIdRef: { current: new Map() },
+        activityRef: { current: { tasksBySessionId: {}, artifactsBySessionId: {} } },
+        setLocalTurns: update => { turns = typeof update === 'function' ? update(turns) : update; },
+        setActivity: noop, mergeMessage: noop, syncMessages: async () => { syncs++; },
+        reportWarning: (warning) => { warnings.push(warning); },
+      };
+      function Harness({ revision }: { revision: number }) { useCloudDirectAgentExecution({ ...args, cloudAgentDefinitionsById: revision ? {} : args.cloudAgentDefinitionsById }); return null; }
+      await act(async () => { root.render(<Harness revision={0} />); });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      assert.equal(claims.length, 1, 'the Mac asked the server once');
+      assert.deepEqual(turns, {}, 'no local turn stands in for the server reply');
+      assert.deepEqual(warnings, [], 'a refusal is expected, not a warning');
+      assert.equal(syncs, 1, 'the server reply is fetched at once');
+      assert.ok(processed.has(message.messageId));
+      // A later render never claims the refused request again.
+      await act(async () => { root.render(<Harness revision={1} />); });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      assert.equal(claims.length, 1);
+    });
+  } finally { __setSessionBackendForTests(null); }
+});
+
 test('rapid drafts appear immediately while a slow first delivery stays ordered and duplicate submits are ignored', async () => {
   await withDom(async root => {
     const pending: Array<{ text: string; resolve: (message: CloudMessage) => void; reject: (error: Error) => void }> = [];

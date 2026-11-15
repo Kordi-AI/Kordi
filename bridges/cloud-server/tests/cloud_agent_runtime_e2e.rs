@@ -445,6 +445,8 @@ mod omp_state;
 mod proactive_mac_first;
 #[path = "cloud_agent_runtime_e2e/provider_auth.rs"]
 mod provider_auth;
+#[path = "cloud_agent_runtime_e2e/refused_direct_request.rs"]
+mod refused_direct_request;
 #[path = "cloud_agent_runtime_e2e/runner.rs"]
 mod runner;
 #[path = "cloud_agent_runtime_e2e/sandboxes.rs"]

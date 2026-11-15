@@ -119,8 +119,8 @@ async fn claim_request(
     }
     // A restricted requester gets the one generic refusal on every route, so
     // the Mac drops the request without answering in the conversation. The
-    // server ends a person's group mention with the same final reply as the
-    // Cloud path, so the requester never waits on a run no one starts.
+    // server ends a person's group mention or direct request with the same
+    // final reply as the Cloud path, so no one waits on a run no one starts.
     match runs::requester_may_use_owner_agents(state.db_pool(), &input.run).await {
         Ok(true) => {}
         Ok(false) => {
