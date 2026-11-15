@@ -17,7 +17,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.locator('body[data-visual-ready="true"]')).toBeVisible();
     const info = panel(page);
     await expect(info.getByText('Group name', { exact: true })).toHaveCount(0);
-    await expect(info.getByRole('button', { name: 'Close group' })).toHaveCount(0);
+    await expect(info.getByRole('button', { name: 'Close group', exact: true })).toHaveCount(0);
     await expect(info.getByRole('button', { name: 'Leave group' })).toHaveCount(0);
     await expect(info.getByRole('button', { name: 'Video chat', exact: true })).toBeVisible();
 
@@ -60,7 +60,7 @@ for (const theme of ['light', 'dark'] as const) {
     // Manage: a second level with Back, a title, a divider and Close group.
     await info.locator('.app-group-profile-actions').getByRole('button', { name: 'Manage' }).click();
     await expect(info.getByRole('button', { name: 'Back' })).toBeFocused();
-    const dissolve = info.getByRole('button', { name: 'Close group' });
+    const dissolve = info.getByRole('button', { name: 'Close group', exact: true });
     await expect(dissolve).toBeVisible();
     await settle(page);
     await info.screenshot({ path: testInfo.outputPath(`group-info-manage-${theme}.png`) });
@@ -69,7 +69,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(info.locator('.app-group-profile-actions').getByRole('button', { name: 'Manage' })).toBeFocused();
 
     await info.locator('.app-group-profile-actions').getByRole('button', { name: 'Manage' }).click();
-    await info.getByRole('button', { name: 'Close group' }).click();
+    await info.getByRole('button', { name: 'Close group', exact: true }).click();
     const confirm = page.getByRole('dialog', { name: 'Close Product Team?' });
     await expect(confirm).toBeVisible();
     await expect(confirm.getByText('Everyone keeps the history. No one can send messages.')).toBeVisible();
@@ -78,8 +78,8 @@ for (const theme of ['light', 'dark'] as const) {
     await page.screenshot({ path: testInfo.outputPath(`group-info-dissolve-confirm-${theme}.png`) });
     await page.keyboard.press('Escape');
     await expect(confirm).toHaveCount(0);
-    await expect(info.getByRole('button', { name: 'Close group' })).toBeVisible();
-    await info.getByRole('button', { name: 'Close group' }).click();
+    await expect(info.getByRole('button', { name: 'Close group', exact: true })).toBeVisible();
+    await info.getByRole('button', { name: 'Close group', exact: true }).click();
     await page.getByRole('dialog', { name: 'Close Product Team?' }).getByRole('button', { name: 'Close group', exact: true }).click();
     await expect(page.locator('body[data-dissolved="true"]')).toHaveCount(1);
   });
@@ -91,7 +91,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(info.locator('.app-group-profile-actions').getByRole('button', { name: 'Manage' })).toHaveCount(0);
     await expect(info.getByRole('button', { name: /^Rename / })).toHaveCount(0);
     await expect(info.getByRole('button', { name: 'Leave group' })).toHaveCount(0);
-    await expect(info.getByRole('button', { name: 'Close group' })).toHaveCount(0);
+    await expect(info.getByRole('button', { name: 'Close group', exact: true })).toHaveCount(0);
     await settle(page);
     await info.screenshot({ path: testInfo.outputPath(`group-info-main-member-${theme}.png`) });
 

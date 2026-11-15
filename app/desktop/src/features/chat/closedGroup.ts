@@ -104,17 +104,6 @@ export function closedGroupScope(state: CanonicalSessionState | null, sessionId:
   };
 }
 
-/** After a send the server refused as closed, shows the session closed here at once. */
-export function closeSessionAfterGroupSendFailure(
-  error: unknown,
-  sessionId: string,
-  setState: (update: (current: CanonicalSessionState | null) => CanonicalSessionState | null) => void,
-): void {
-  if (!isGroupClosedError(error) || !sessionId.trim()) return;
-  const closedAt = new Date().toISOString();
-  setState((current) => canonicalStateWithClosedSessions(current, [sessionId], closedAt));
-}
-
 /** Whether a write failed because the server says the conversation is closed. */
 export function isGroupClosedError(error: unknown): boolean {
   if (error instanceof CloudAuthError) return error.serverCode === GROUP_CLOSED_ERROR_CODE;

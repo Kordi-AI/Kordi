@@ -63,7 +63,7 @@ isCollaborationGroupSession,
 shouldUseCollaborationConversationRouting,
 } from './collaborationRouting';
 import {
-collaborationSendFailureDetail,
+collaborationSendFailureDetail,markGroupSendFailed,
 createCloudCollaborationClientMessageId,
 failedCanonicalGroupMessageRequest,
 shouldAppendOptimisticCollaborationMessage,
@@ -106,7 +106,6 @@ import type {
 UseChatMessageActionsArgs
 } from './types';
 import { agentVoiceSend, queuedMessageWithAgentTranscript, startAgentVoiceTranscription } from './voiceAgentTranscription';
-import { closeSessionAfterGroupSendFailure } from '@/features/chat/closedGroup';
 
 export {
 canonicalNoProviderFailedAgentMessageRequest,
@@ -653,8 +652,7 @@ export function useChatMessageActions({
       } catch (error) {
         const failureDetail = collaborationSendFailureDetail(error, 'Unable to send group message');
         setDesktopChatError(failureDetail);
-        closeSessionAfterGroupSendFailure(error, canonicalSessionId, setCanonicalSessionState);
-        setCanonicalSessionState((current) => markOptimisticCanonicalMessageFailed(
+        setCanonicalSessionState((current) => markGroupSendFailed(error,
           current,
           canonicalSessionId,
           preparedCanonicalMessage?.messageId ?? null,
@@ -935,8 +933,7 @@ export function useChatMessageActions({
           });
         } catch (error) {
           const failureDetail = collaborationSendFailureDetail(error, 'Unable to retry group message');
-          closeSessionAfterGroupSendFailure(error, activeConvCanonicalSessionId, setCanonicalSessionState);
-          setCanonicalSessionState((current) => markOptimisticCanonicalMessageFailed(
+          setCanonicalSessionState((current) => markGroupSendFailed(error,
             current,
             activeConvCanonicalSessionId,
             retryMessageId,
@@ -1098,8 +1095,7 @@ export function useChatMessageActions({
       } catch (error) {
         const failureDetail = collaborationSendFailureDetail(error, 'Unable to send group mention');
         setDesktopChatError(failureDetail);
-        closeSessionAfterGroupSendFailure(error, activeConvCanonicalSessionId, setCanonicalSessionState);
-        setCanonicalSessionState((current) => markOptimisticCanonicalMessageFailed(
+        setCanonicalSessionState((current) => markGroupSendFailed(error,
           current,
           activeConvCanonicalSessionId,
           preparedCanonicalMessage?.messageId ?? null,
@@ -1175,8 +1171,7 @@ export function useChatMessageActions({
       } catch (error) {
         const failureDetail = collaborationSendFailureDetail(error, 'Unable to send group message');
         setDesktopChatError(failureDetail);
-        closeSessionAfterGroupSendFailure(error, activeConvCanonicalSessionId, setCanonicalSessionState);
-        setCanonicalSessionState((current) => markOptimisticCanonicalMessageFailed(
+        setCanonicalSessionState((current) => markGroupSendFailed(error,
           current,
           activeConvCanonicalSessionId,
           preparedCanonicalMessage?.messageId ?? null,

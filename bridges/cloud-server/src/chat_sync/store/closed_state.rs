@@ -107,6 +107,24 @@ pub async fn session_conversation_closed(
     Ok(closed.is_some_and(|(closed,)| closed))
 }
 
+/// Whether the conversation `conversation_id` was closed, read through any
+/// executor (a pool, a connection or an open transaction).
+pub async fn conversation_closed_with<'e, E>(
+    executor: E,
+    conversation_id: Uuid,
+) -> Result<bool, sqlx_core::Error>
+where
+    E: sqlx_core::executor::Executor<'e, Database = Postgres>,
+{
+    let closed: Option<(bool,)> = query_as(
+        "SELECT closed_at IS NOT NULL FROM cloud_chat_conversations WHERE conversation_id = $1",
+    )
+    .bind(conversation_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(closed.is_some_and(|(closed,)| closed))
+}
+
 /// Whether the conversation `conversation_id` was closed.
 pub async fn conversation_is_closed(
     pool: &PgPool,

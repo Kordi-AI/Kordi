@@ -20,18 +20,9 @@ import type {
 } from '@/kordi-app/types';
 import {
   archiveDesktopChatSession,
-  deleteDesktopChatSessionForever,
   renameCanonicalSession,
   renameDesktopChatSession,
-  updateCanonicalSessionMetadata,
 } from '@/lib/desktop';
-import {
-  canonicalStateWithClosedSessions,
-  closedGroupScope,
-  metadataWithClosedAt,
-} from '@/features/chat/closedGroup';
-import { defaultCloudAuthClient } from '@/features/cloud/authClient';
-import { loadSession } from '@/features/cloud/session';
 
 import {
   activeGroupAdminIds,
@@ -44,6 +35,7 @@ import {
 } from './useKordiAppModelHelpers';
 import { appendCanonicalRenameNotice } from './canonicalRenameNotice';
 import { isDesktopRuntimeSessionId } from './desktopRuntimeSessionMembership';
+import { useClosedGroupSessionActions } from './useClosedGroupSessionActions';
 
 export function useKordiChatSessionActions({
   conversations = [],
@@ -292,35 +284,16 @@ export function useKordiChatSessionActions({
     setDesktopState,
   ]);
 
-  // Removes chats from this device only, for good: the server already let go of them.
-  const dropSessionsLocally = useCallback(async (sessionIds: string[]) => {
-    for (const sessionId of sessionIds) {
-      optimisticallyRemoveSession(sessionId);
-      await deleteDesktopChatSessionForever(sessionId).catch(() => undefined);
-    }
-    await refreshCanonicalState();
-  }, [optimisticallyRemoveSession, refreshCanonicalState]);
+  const { leaveClosedGroup, dissolveGroup, dissolveChannel } = useClosedGroupSessionActions({
+    canonicalState, setCanonicalState, refreshCanonicalState, optimisticallyRemoveSession, setDesktopError,
+  });
 
   const deleteSession = useCallback(async (sessionId: string) => {
     const trimmedSessionId = sessionId.trim();
     if ((!isNativeShell && !isBrowserAppRuntime()) || !trimmedSessionId) return;
 
-    // Delete chat on a closed group leaves it, which is how it leaves the list.
-    // A closed channel of an open group is hidden like any other chat below.
-    const closedScope = closedGroupScope(canonicalState, trimmedSessionId);
-    if (closedScope.groupClosed) {
-      try {
-        setDesktopError(null);
-        const login = await loadSession();
-        if (!login?.token) throw new Error('Sign in to Kordi first.');
-        await defaultCloudAuthClient().leaveGroup(login.token, closedScope.groupSpaceId);
-        await dropSessionsLocally(closedScope.groupSessionIds);
-      } catch (error) {
-        setDesktopError(error instanceof Error ? error.message : 'Unable to remove chat');
-        throw error;
-      }
-      return;
-    }
+    // A closed group is left; a closed channel of an open group is deleted below.
+    if (await leaveClosedGroup(trimmedSessionId)) return;
 
     try {
       setDesktopError(null);
@@ -378,7 +351,7 @@ export function useKordiChatSessionActions({
     canonicalState,
     deleteCloudSession,
     desktopActiveSessionId,
-    dropSessionsLocally,
+    leaveClosedGroup,
     fallbackChatSessionId,
     isNativeShell,
     optimisticallyRemoveSession,
@@ -479,40 +452,6 @@ export function useKordiChatSessionActions({
       archived ? 'Unable to archive group' : 'Unable to restore group',
     );
   }, [isNativeShell, refreshCanonicalState, runChatListAction, setCloudGroupSpaceArchived]);
-
-  // Closing keeps the group (or channel) for everyone, the closer included.
-  // The server tells every member's devices; this device marks it closed right away.
-  const markSessionsClosed = useCallback(async (sessionIds: string[]) => {
-    const closedAt = new Date().toISOString();
-    setCanonicalState((current) => canonicalStateWithClosedSessions(current, sessionIds, closedAt));
-    const requestedByIdentityId = canonicalState?.profile.humanIdentityId?.trim() || null;
-    for (const sessionId of sessionIds) {
-      const session = canonicalState?.sessions.find((candidate) => candidate.id === sessionId);
-      if (!session) continue;
-      await updateCanonicalSessionMetadata({
-        sessionId,
-        requestedByIdentityId,
-        metadata: metadataWithClosedAt(session.metadata, closedAt),
-      }).catch(() => undefined);
-    }
-    await refreshCanonicalState();
-    // The server's own update follows; keep the row closed until it lands.
-    setCanonicalState((current) => canonicalStateWithClosedSessions(current, sessionIds, closedAt));
-  }, [canonicalState, refreshCanonicalState, setCanonicalState]);
-
-  const dissolveGroup = useCallback(async (groupSpaceId: string, sessionIds: string[]) => {
-    const login = await loadSession();
-    if (!login?.token) throw new Error('Sign in to Kordi first.');
-    await defaultCloudAuthClient().dissolveGroup(login.token, groupSpaceId);
-    await markSessionsClosed(sessionIds);
-  }, [markSessionsClosed]);
-
-  const dissolveChannel = useCallback(async (groupSpaceId: string, sessionId: string) => {
-    const login = await loadSession();
-    if (!login?.token) throw new Error('Sign in to Kordi first.');
-    await defaultCloudAuthClient().dissolveGroupChannel(login.token, groupSpaceId, sessionId);
-    await markSessionsClosed([sessionId]);
-  }, [markSessionsClosed]);
 
   return {
     dissolveGroup,

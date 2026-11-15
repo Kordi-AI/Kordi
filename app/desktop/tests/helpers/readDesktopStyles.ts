@@ -18,6 +18,7 @@ const SHELL_STYLE_FILES = [
   '../../src/styles/shell-live-answer.css',
   '../../src/styles/shell-diff.css',
   '../../src/styles/shell-sidebar.css',
+  '../../src/styles/closed-group.css',
   '../../src/styles/shell-native-sidebar.css',
   '../../src/styles/shell-titlebar.css',
   '../../src/styles/shell-companion.css',

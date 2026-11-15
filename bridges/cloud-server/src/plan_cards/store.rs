@@ -282,15 +282,9 @@ async fn propose_inner(
         .execute(&mut *tx)
         .await?;
     require_active_member(&mut *tx, args.conversation_id, acting_account_id).await?;
-    let (closed,): (bool,) = query_as(
-        "SELECT closed_at IS NOT NULL FROM cloud_chat_conversations WHERE conversation_id = $1",
-    )
-    .bind(args.conversation_id)
-    .fetch_one(&mut *tx)
-    .await?;
-    if closed {
+    if crate::chat_sync::store::conversation_closed_with(&mut *tx, args.conversation_id).await? {
         return Err(PlanCardStoreError::InvalidTransition(
-            "This group was closed.".to_string(),
+            "This group was closed.".into(),
         ));
     }
     // Only the conversation's own members can be on its card: a plan writes to

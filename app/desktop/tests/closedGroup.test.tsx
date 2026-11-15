@@ -7,7 +7,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   canonicalStateWithClosedSessions,
-  closeSessionAfterGroupSendFailure,
   closedGroupScope,
   GROUP_CLOSED_SEND_FAILURE,
   isClosedConversation,
@@ -15,7 +14,10 @@ import {
   isGroupClosedError,
   metadataWithClosedAt,
 } from '../src/features/chat/closedGroup';
-import { collaborationSendFailureDetail } from '../src/features/chat/messageActions/collaborationSendLifecycle';
+import {
+  collaborationSendFailureDetail,
+  markGroupSendFailed,
+} from '../src/features/chat/messageActions/collaborationSendLifecycle';
 import { buildParticipantSpaces } from '../src/features/chat/participantSpaces';
 import { cloudGroupCatalogRow } from '../src/features/cloud/cloudGroupCatalog';
 import { cloudGroupCatalogRowNeedsApply } from '../src/features/cloud/cloudGroupCatalogSync';
@@ -26,6 +28,7 @@ import { cloudGroupHistoryReplayPreservesSessionShell } from '../src/features/cl
 import type { ChatSyncConversation } from '../src/features/cloud/chatSyncTypes';
 import type { CanonicalSessionState } from '../src/kordi-app/types';
 import { ClosedConversationBar } from '../src/pages/ClosedConversationBar';
+import { closedConversationComposer } from '../src/pages/closedConversationComposer';
 import { GroupContextMenu } from '../src/pages/SessionActionOverlays';
 import { WorkspaceSidebar } from '../src/pages/WorkspaceSidebar';
 import { readDesktopShellCss } from './helpers/readDesktopStyles';
@@ -197,7 +200,7 @@ test('the closed footer replaces the composer with one line and Delete chat', ()
   assert.match(css, /\.app-closed-conversation-delete:focus-visible\s*{[^}]*outline:\s*none;/s, 'neutral focus, no ring');
 
   const workspace = readFileSync(new URL('../src/pages/chatsPage.mainWorkspace.tsx', import.meta.url), 'utf8');
-  assert.match(workspace, /composer: isEmptySelection \? null : activeClosed \? \(\s*<ClosedConversationBar/);
+  assert.match(workspace, /composer: isEmptySelection \? null : closedConversationComposer\(activeConv, session\) \?\? \(/);
 });
 
 test('a group_closed send failure stops retrying, says the group was closed, and marks it closed', () => {
@@ -214,21 +217,31 @@ test('a group_closed send failure stops retrying, says the group was closed, and
   assert.deepEqual(entry.pendingRecipientIds, []);
   assert.deepEqual(entry.exhaustedRecipientIds, ['acct_b'], 'one refusal is enough');
 
-  let state: CanonicalSessionState | null = canonicalState([{ id: 'session:group:root' }]);
-  const setState = (update: (current: CanonicalSessionState | null) => CanonicalSessionState | null) => {
-    state = update(state);
-  };
-  closeSessionAfterGroupSendFailure(new Error('offline'), 'session:group:root', setState);
-  assert.equal(isClosedConversation(state?.sessions[0]), false);
-  closeSessionAfterGroupSendFailure(error, 'session:group:root', setState);
-  assert.equal(isClosedConversation(state?.sessions[0]), true);
+  const state: CanonicalSessionState | null = canonicalState([{ id: 'session:group:root' }]);
+  const offline = markGroupSendFailed(new Error('offline'), state, 'session:group:root', 'message-1', 'offline');
+  assert.equal(isClosedConversation(offline?.sessions[0]), false);
+  const closed = markGroupSendFailed(error, state, 'session:group:root', 'message-1', GROUP_CLOSED_SEND_FAILURE);
+  assert.equal(isClosedConversation(closed?.sessions[0]), true);
 });
 
 test('closing keeps the group for the closer, and Delete chat on a closed group leaves it', () => {
-  const source = readFileSync(new URL('../src/app/useKordiChatSessionActions.ts', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../src/app/useClosedGroupSessionActions.ts', import.meta.url), 'utf8');
   const dissolve = source.slice(source.indexOf('const dissolveGroup'), source.indexOf('return {', source.indexOf('const dissolveGroup')));
   assert.match(dissolve, /await markSessionsClosed\(sessionIds\);/);
   assert.match(dissolve, /await markSessionsClosed\(\[sessionId\]\);/);
-  assert.doesNotMatch(dissolve, /dropSessionsLocally|optimisticallyRemoveSession|deleteDesktopChatSessionForever/);
-  assert.match(source, /if \(closedScope\.groupClosed\) \{[\s\S]*?leaveGroup\(login\.token, closedScope\.groupSpaceId\);[\s\S]*?dropSessionsLocally\(closedScope\.groupSessionIds\);/);
+  assert.doesNotMatch(dissolve, /optimisticallyRemoveSession|deleteDesktopChatSessionForever/);
+  assert.match(source, /if \(!scope\.groupClosed\) return false;[\s\S]*?leaveGroup\(await signedInToken\(\), scope\.groupSpaceId\);[\s\S]*?deleteDesktopChatSessionForever\(groupSessionId\)/);
+  const actions = readFileSync(new URL('../src/app/useKordiChatSessionActions.ts', import.meta.url), 'utf8');
+  assert.match(actions, /if \(await leaveClosedGroup\(trimmedSessionId\)\) return;/);
+});
+
+test('the composer slot holds the closed bar only for a closed chat', () => {
+  const session = { participantSpaces: [] };
+  assert.equal(closedConversationComposer({ id: 'session:group:open', name: 'Open', metadata: {} }, session), null);
+  const bar = closedConversationComposer(
+    { id: 'session:group:root', name: 'Root', metadata: { groupClosedAt: '2026-11-13T20:27:27Z' } },
+    session,
+  );
+  assert.ok(bar);
+  assert.match(renderToStaticMarkup(bar), /This group was closed/);
 });

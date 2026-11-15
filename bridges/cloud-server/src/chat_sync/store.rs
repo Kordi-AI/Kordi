@@ -234,7 +234,8 @@ pub use attachment_actions::{delete_attachment, message_for_viewer, set_attachme
 mod channels;
 mod closed_state;
 pub use closed_state::{
-    conversation_is_closed, group_space_closed, session_conversation_closed, GROUP_CLOSED_CODE,
+    conversation_closed_with, conversation_is_closed, group_space_closed,
+    session_conversation_closed, GROUP_CLOSED_CODE,
 };
 #[allow(unused_imports)]
 pub(crate) use closed_state::{group_closed_error, require_open};
