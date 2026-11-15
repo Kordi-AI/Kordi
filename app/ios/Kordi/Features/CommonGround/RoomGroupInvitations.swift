@@ -1,11 +1,21 @@
 import Foundation
 
-/// A pending invitation to a group started in a Grounding room, listed
-/// outside the room so it can be answered from Contacts.
+/// A pending invitation to a group, listed outside Grounding so it can be
+/// answered from Contacts: either sent to a room's members when its group
+/// started, or sent to one person by a group admin they share Grounding with.
 struct RoomGroupInvitation: Decodable, Hashable, Identifiable {
+    enum Kind: String, Hashable {
+        /// Sent to everyone in a room; answered through the room.
+        case room
+        /// Sent to one person; answered through `group-invitations`.
+        case group
+    }
+
+    let kind: Kind
     let invitationRef: String
-    /// The room's code.
-    let code: String
+    /// The room's code; nil for a person invitation.
+    let code: String?
+    /// The room the invitation came from; empty when there is none.
     let roomName: String
     let groupSpaceId: String
     let conversationId: String?
@@ -31,16 +41,22 @@ struct RoomGroupInvitation: Decodable, Hashable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case invitationRef, code, roomName, groupSpaceId, conversationId, name, from, createdAt, members, memberCount
+        case kind, invitationRef, code, roomName, groupSpaceId, conversationId, name, from, createdAt, members, memberCount
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        // Servers before person invitations send no kind: those are room invitations.
+        let rawKind = ((try? c.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? Kind.room.rawValue
+        guard let kind = Kind(rawValue: rawKind) else {
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "Unknown invitation kind")
+        }
+        self.kind = kind
         invitationRef = try c.decode(String.self, forKey: .invitationRef)
-        code = try c.decode(String.self, forKey: .code)
+        code = ((try? c.decodeIfPresent(String.self, forKey: .code)) ?? nil)?.nonEmpty
         groupSpaceId = try c.decode(String.self, forKey: .groupSpaceId)
         from = try c.decode(CommonGroundPerson.self, forKey: .from)
-        guard !invitationRef.isEmpty, !code.isEmpty, !groupSpaceId.isEmpty else {
+        guard !invitationRef.isEmpty, !groupSpaceId.isEmpty, kind == .group || code != nil else {
             throw DecodingError.dataCorruptedError(forKey: .invitationRef, in: c, debugDescription: "Missing identifiers")
         }
         roomName = ((try? c.decodeIfPresent(String.self, forKey: .roomName)) ?? nil) ?? ""
@@ -87,7 +103,29 @@ private struct RoomGroupInvitationList: Decodable {
                 break
             }
         }
-        invitations = decoded
+        invitations = RoomGroupInvitation.deduplicated(decoded)
+    }
+}
+
+extension RoomGroupInvitation {
+    /// One row per group: a room invitation wins over a person invitation
+    /// to the same group, and repeated refs are dropped.
+    static func deduplicated(_ invitations: [RoomGroupInvitation]) -> [RoomGroupInvitation] {
+        let roomGroups = Set(invitations.filter { $0.kind == .room }.map(\.groupSpaceId))
+        var seenRefs = Set<String>()
+        var seenPersonGroups = Set<String>()
+        return invitations.filter { invitation in
+            guard seenRefs.insert(invitation.invitationRef).inserted else { return false }
+            guard invitation.kind == .group else { return true }
+            return !roomGroups.contains(invitation.groupSpaceId) && seenPersonGroups.insert(invitation.groupSpaceId).inserted
+        }
+    }
+
+    /// The detail's second line: who invited you, and from which room.
+    var fromLine: String {
+        let room = roomName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let room = room.nonEmpty { return "\(from.displayName) · from \(room)" }
+        return kind == .group ? "\(from.displayName) · from Grounding" : from.displayName
     }
 }
 
@@ -125,6 +163,28 @@ extension CloudAPIClient {
             return
         }
     }
+
+    /// Joins through the route that matches the invitation's kind.
+    func joinRoomGroupInvitation(token: String, invitation: RoomGroupInvitation) async throws -> CommonGroundJoinedGroup {
+        if invitation.kind == .room, let code = invitation.code {
+            return try await joinCommonGroundInvitation(token: token, code: code, invitationRef: invitation.invitationRef)
+        }
+        return try await joinCommonGroundGroupInvitation(token: token, invitationRef: invitation.invitationRef)
+    }
+
+    /// Declines through the route that matches the invitation's kind. A 404
+    /// means the invitation is already gone, which counts as declined.
+    func declineRoomGroupInvitation(token: String, invitation: RoomGroupInvitation) async throws {
+        if invitation.kind == .room, let code = invitation.code {
+            try await declineRoomGroupInvitation(token: token, code: code, invitationRef: invitation.invitationRef)
+            return
+        }
+        do {
+            try await declineCommonGroundGroupInvitation(token: token, invitationRef: invitation.invitationRef)
+        } catch let error as CloudAPIError where error.statusCode == 404 {
+            return
+        }
+    }
 }
 
 extension AppModel {
@@ -148,10 +208,14 @@ extension AppModel {
         if roomGroupInvitations != next { roomGroupInvitations = next }
     }
 
-    /// A `common_ground.room.updated` hint: one refetch after a short pause,
-    /// whether or not Grounding is on screen.
+    /// A `common_ground.room.updated` or `common_ground.invitations.updated`
+    /// hint: one refetch after a short pause, whether or not Grounding is on
+    /// screen.
     func scheduleRoomGroupInvitationRefresh(for hint: CommonGroundSyncHint) {
-        guard case .room = hint else { return }
+        switch hint {
+        case .room, .invitations: break
+        case .matches: return
+        }
         roomInvitationRefreshTask?.cancel()
         roomInvitationRefreshTask = Task { [weak self] in
             try? await Task.sleep(for: Self.roomInvitationHintDelay)
@@ -170,7 +234,7 @@ extension AppModel {
         guard let context = try? digestContext() else { return .failure(RoomGroupInvitationError(message: "Could not join the group.")) }
         let (api, token, _) = context
         do {
-            let joined = try await api.joinCommonGroundInvitation(token: token, code: invitation.code, invitationRef: invitation.invitationRef)
+            let joined = try await api.joinRoomGroupInvitation(token: token, invitation: invitation)
             forgetRoomGroupInvitation(invitation)
             await refreshRoomGroupInvitations()
             return .success(joined)
@@ -188,7 +252,7 @@ extension AppModel {
         guard let context = try? digestContext() else { return RoomGroupInvitationError(message: "Could not decline the invitation.") }
         let (api, token, _) = context
         do {
-            try await api.declineRoomGroupInvitation(token: token, code: invitation.code, invitationRef: invitation.invitationRef)
+            try await api.declineRoomGroupInvitation(token: token, invitation: invitation)
             forgetRoomGroupInvitation(invitation)
             await refreshRoomGroupInvitations()
             return nil
@@ -202,7 +266,8 @@ extension AppModel {
     private func forgetRoomGroupInvitation(_ invitation: RoomGroupInvitation) {
         answeredRoomInvitationRefs.insert(invitation.invitationRef)
         roomGroupInvitations.removeAll { $0.invitationRef == invitation.invitationRef }
-        NotificationCenter.default.post(name: .kordiCommonGroundHint, object: CommonGroundSyncHint.room(code: invitation.code))
+        guard let code = invitation.code else { return }
+        NotificationCenter.default.post(name: .kordiCommonGroundHint, object: CommonGroundSyncHint.room(code: code))
     }
 }
 

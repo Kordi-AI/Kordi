@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invite People to Groups</title>
+<style>
+  :root {
+    --ground: #e9e8e4;
+    --window: #ffffff;
+    --sidebar: #f4f4f3;
+    --card: #f2f2f1;
+    --fill: #e8e8e6;
+    --hover: #ebebea;
+    --selected: #e2e2e0;
+    --line: #e1e1df;
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --accent: #2f6bd9;
+    --accent-text: #ffffff;
+    --scrim: rgba(0,0,0,.18);
+    --ios-bg: #f2f2f7;
+    --ios-card: #ffffff;
+    --ios-line: #e5e5ea;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #121214; --window: #1c1c1e; --sidebar: #232325; --card: #2a2a2c; --fill: #333336;
+      --hover: #2c2c2e; --selected: #38383b; --line: #3a3a3c; --ink: #f2f2f2; --muted: #9b9ba1;
+      --accent: #5b8cf0; --scrim: rgba(0,0,0,.45);
+      --ios-bg: #000000; --ios-card: #1c1c1e; --ios-line: #38383a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #121214; --window: #1c1c1e; --sidebar: #232325; --card: #2a2a2c; --fill: #333336;
+    --hover: #2c2c2e; --selected: #38383b; --line: #3a3a3c; --ink: #f2f2f2; --muted: #9b9ba1;
+    --accent: #5b8cf0; --scrim: rgba(0,0,0,.45);
+    --ios-bg: #000000; --ios-card: #1c1c1e; --ios-line: #38383a;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 13px/1.4 var(--sans); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  /* No blue focus rings: a neutral outline only. */
+  button:focus, input:focus { outline: none; }
+  button:focus-visible { outline: 2px solid color-mix(in oklab, var(--ink) 28%, transparent); outline-offset: 2px; }
+
+  .bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; justify-content: center; padding: 14px 16px; background: color-mix(in oklab, var(--ground) 92%, transparent); backdrop-filter: blur(8px); }
+  .bar label { color: var(--muted); font-size: 12px; margin-right: 6px; }
+  .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: color-mix(in oklab, var(--ink) 8%, transparent); }
+  .seg button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; font-size: 12px; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--window); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.14); }
+  .reset { border: 0; background: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+
+  h2 { max-width: 1260px; margin: 28px auto 4px; padding: 0 16px; font-size: 15px; font-weight: 600; }
+  .sub { max-width: 1260px; margin: 0 auto 14px; padding: 0 16px; color: var(--muted); font-size: 12.5px; }
+  .stage { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; align-items: flex-start; padding: 0 16px 24px; }
+  .caption { color: var(--muted); font-size: 12px; margin: 0 0 8px 4px; }
+
+  /* Shared bits */
+  .av { display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 600; flex: none; overflow: hidden; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; flex: none; border-radius: 9px; overflow: hidden; }
+  .grid span { display: block; }
+  .text { flex: 1; min-width: 0; text-align: left; }
+  .t1, .t2 { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t1 { font-size: 12px; font-weight: 600; line-height: 16px; }
+  .t2 { margin-top: 1px; font-size: 10.5px; line-height: 15px; color: var(--muted); }
+  .check { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid color-mix(in oklab, var(--ink) 22%, transparent); }
+  .check.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .check svg, .ibtn svg, .tile svg, .mi svg { stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .check svg { width: 11px; height: 11px; stroke-width: 2.6; }
+  .state { flex: none; color: var(--muted); font-size: 11px; }
+  .btn { height: 30px; padding: 0 14px; border: 0; border-radius: 9px; background: var(--accent); color: var(--accent-text); font-size: 12px; font-weight: 600; }
+  .btn.quiet { background: transparent; color: var(--ink); font-weight: 500; }
+  .btn[disabled] { opacity: .45; cursor: default; }
+  .sec { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 4px; color: var(--muted); font-size: 11.5px; font-weight: 600; }
+
+  /* Mac window */
+  .stage > div:first-child { flex: 1 1 620px; max-width: 860px; }
+  .mac { position: relative; display: flex; width: 100%; height: 560px; border-radius: 12px; overflow: hidden; background: var(--window); box-shadow: 0 24px 60px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.08); }
+  .side { flex: none; width: 220px; background: var(--sidebar); border-right: 1px solid var(--line); padding: 44px 8px 8px; overflow: auto; }
+  .main { position: relative; flex: 1; min-width: 0; overflow: auto; }
+  .row { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; border-radius: 10px; }
+  .row.clickable { cursor: pointer; }
+  .row.clickable:hover { background: var(--hover); }
+  .row.selected, .row.selected:hover { background: var(--selected); }
+  .ibtn { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 50%; background: var(--fill); color: var(--muted); }
+  .ibtn.join { background: var(--accent); color: var(--accent-text); }
+  .ibtn svg { width: 13px; height: 13px; stroke-width: 2.2; }
+
+  /* Person page (Grounding) */
+  .person { max-width: 420px; margin: 0 auto; padding: 18px 24px 28px; text-align: center; }
+  .back { display: block; border: 0; background: none; color: var(--muted); font-size: 12.5px; padding: 0; margin-bottom: 6px; text-align: left; }
+  .pair { display: inline-flex; }
+  .pair .av { box-shadow: 0 0 0 3px var(--window); }
+  .pair .av + .av { margin-left: -12px; }
+  .badge { position: relative; display: inline-block; margin-top: -10px; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--accent); color: #fff; box-shadow: 0 0 0 2px var(--window); }
+  .person h1 { margin: 10px 0 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  .handle { color: var(--muted); font: 12px ui-monospace, "SF Mono", Menlo, monospace; opacity: .8; }
+  .headline { color: var(--muted); font-size: 13px; }
+  .tiles { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin-top: 22px; }
+  .tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 58px; border: 0; border-radius: 12px; background: var(--card); font-size: 11.5px; font-weight: 500; }
+  .tile.primary { color: var(--accent); }
+  .tile[disabled] { opacity: .45; cursor: default; }
+  .tile svg { width: 20px; height: 20px; stroke-width: 1.8; }
+  .tile.open { background: var(--selected); }
+  .hint { margin-top: 8px; color: var(--muted); font-size: 11.5px; }
+  .seg2 { display: inline-flex; margin-top: 20px; padding: 2px; border-radius: 8px; background: var(--card); }
+  .seg2 span { padding: 4px 14px; border-radius: 6px; font-size: 12px; color: var(--muted); }
+  .seg2 span:first-child { background: var(--window); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+  .lines { margin-top: 12px; border-radius: 12px; background: var(--card); text-align: left; }
+  .lines div { padding: 9px 12px; font-size: 12px; }
+  .lines div + div { border-top: 1px solid var(--line); }
+  .lines b { display: block; font-weight: 600; }
+  .lines span { color: var(--muted); font-size: 11px; }
+  .toast { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); padding: 7px 12px; border-radius: 999px; background: var(--ink); color: var(--window); font-size: 12px; white-space: nowrap; }
+
+  /* Group picker: dialog (A) or menu under the tile (B). */
+  .scrim { position: absolute; inset: 0; background: var(--scrim); display: grid; place-items: center; }
+  .dialog { width: 320px; padding: 16px; border-radius: 14px; background: var(--window); box-shadow: 0 18px 50px rgba(0,0,0,.25); text-align: left; }
+  .dialog h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+  .glist { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto; }
+  .grow { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border: 0; border-radius: 10px; background: none; text-align: left; }
+  .grow:hover { background: var(--hover); }
+  .grow.on { background: var(--selected); }
+  .grow[disabled] { cursor: default; background: none; }
+  .grow[disabled] .t1 { color: var(--muted); }
+  .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+  .menu { position: absolute; z-index: 3; top: 64px; width: 260px; padding: 6px; border-radius: 12px; background: var(--window); border: 1px solid var(--line); box-shadow: 0 12px 34px rgba(0,0,0,.18); text-align: left; }
+  .menu .grow { padding: 5px 8px; }
+
+  /* Group info panel (Mac): the right-side Group Info, on its Add people view. */
+  .chat { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .chat-head { height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--line); font-weight: 600; font-size: 13px; }
+  .chat-body { flex: 1; padding: 16px; color: var(--muted); font-size: 12px; }
+  .bubble { max-width: 70%; margin-bottom: 8px; padding: 7px 10px; border-radius: 12px; background: var(--card); color: var(--ink); }
+  .info { flex: none; width: 300px; border-left: 1px solid var(--line); background: var(--window); padding: 10px; overflow: auto; }
+  .info h3 { flex: 1; margin: 0; font-size: 12px; font-weight: 600; }
+  .info-head { display: flex; align-items: center; gap: 8px; padding: 4px; }
+  .close { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 8px; background: none; color: var(--muted); }
+  .tabs { display: flex; margin: 8px 0; padding: 2px; border-radius: 9px; background: var(--card); }
+  .tabs button { flex: 1; border: 0; background: none; padding: 5px 4px; border-radius: 7px; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  .tabs button[aria-pressed="true"] { background: var(--window); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+  .search { width: 100%; height: 32px; margin: 4px 0 6px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); font-size: 11.5px; }
+  .search:focus { border-color: color-mix(in oklab, var(--ink) 28%, transparent); }
+  .prow { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 10px; background: none; text-align: left; font-size: 11px; }
+  .prow:hover { background: var(--hover); }
+  .prow.on { background: var(--selected); }
+  .prow[disabled] { cursor: default; background: none; }
+  .prow .t1 { font-size: 11px; font-weight: 500; }
+  .prow .t2 { font-size: 9.5px; }
+  .info .sec { padding: 8px 8px 3px; font-size: 10.5px; }
+  .wide { width: 100%; height: 34px; margin-top: 8px; border-radius: 11px; font-size: 11px; }
+
+  /* Contacts detail (invitee), detail 2 from #2540. */
+  .detail { max-width: 440px; margin: 0 auto; padding: 56px 24px 32px; text-align: center; }
+  .detail h1 { margin: 12px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .detail .line { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .dtiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+  .dtile { height: 40px; border: 0; border-radius: 10px; background: var(--card); font-size: 13px; font-weight: 600; }
+  .dtile.join { background: var(--accent); color: var(--accent-text); }
+  .people { margin-top: 18px; text-align: left; }
+  .people .sec { padding: 0 2px 6px; }
+  .plist { border-radius: 12px; background: var(--card); overflow: hidden; }
+  .mrow { position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+  .mrow + .mrow::before { content: ""; position: absolute; top: 0; left: 50px; right: 0; border-top: 1px solid var(--line); }
+  .mrow .t1 { font-weight: 500; font-size: 13px; }
+  .done { margin-top: 18px; color: var(--muted); font-size: 13px; }
+
+  /* iPhone */
+  .phone { position: relative; width: 340px; height: 690px; border-radius: 44px; padding: 12px; background: #111; box-shadow: 0 24px 60px rgba(0,0,0,.25); }
+  .screen { position: relative; height: 100%; border-radius: 34px; overflow: hidden; background: var(--ios-bg); display: flex; flex-direction: column; font-size: 15px; }
+  .ios-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 46px 16px 6px; }
+  .ios-nav button { border: 0; background: none; color: var(--accent); font-size: 16px; white-space: nowrap; }
+  .ios-nav b { font-size: 16px; font-weight: 600; }
+  .ios-scroll { flex: 1; overflow: auto; padding: 8px 16px 24px; text-align: center; }
+  .ios-scroll .pair .av { box-shadow: 0 0 0 3px var(--ios-bg); }
+  .ios-scroll .badge { box-shadow: 0 0 0 2px var(--ios-bg); }
+  .ios-scroll h1 { margin: 10px 0 0; font-size: 22px; font-weight: 600; }
+  .ios-scroll .headline, .ios-scroll .line { font-size: 15px; color: var(--muted); }
+  .ios-tiles { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin-top: 18px; }
+  .ios-tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px 8px; border: 0; border-radius: 14px; background: var(--ios-card); color: var(--accent); font-size: 12px; }
+  .ios-tile[disabled] { color: var(--muted); opacity: .6; }
+  .ios-tile svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .ios-group { margin-top: 14px; border-radius: 12px; background: var(--ios-card); overflow: hidden; text-align: left; }
+  .ios-group > div { padding: 11px 14px; font-size: 14px; }
+  .ios-group > div + div { border-top: 1px solid var(--ios-line); }
+  .ios-group span { display: block; color: var(--muted); font-size: 12.5px; }
+  .ios-sec { margin: 18px 4px 6px; color: var(--muted); font-size: 13px; text-align: left; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 70px; display: flex; flex-direction: column; border-radius: 14px 14px 0 0; background: var(--ios-bg); box-shadow: 0 -8px 30px rgba(0,0,0,.18); }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; }
+  .sheet-head b { font-size: 16px; font-weight: 600; }
+  .round { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--ios-card); color: var(--ink); font-size: 15px; }
+  .round.go { background: var(--accent); color: #fff; }
+  .round[disabled] { opacity: .4; }
+  .sheet-body { flex: 1; overflow: auto; padding: 0 16px 20px; }
+  .ios-list { border-radius: 12px; background: var(--ios-card); overflow: hidden; }
+  .irow { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 14px; border: 0; background: none; text-align: left; }
+  .irow + .irow::before { content: ""; position: absolute; top: 0; left: 58px; right: 0; border-top: 1px solid var(--ios-line); }
+  .irow .t1 { font-size: 15px; font-weight: 400; line-height: 20px; }
+  .irow .t2 { font-size: 12.5px; }
+  .irow .check { width: 22px; height: 22px; }
+  .irow[disabled] { cursor: default; }
+  .irow[disabled] .t1 { color: var(--muted); }
+  .ios-search { width: 100%; height: 36px; margin: 2px 0 10px; padding: 0 12px; border: 0; border-radius: 10px; background: color-mix(in oklab, var(--ink) 8%, transparent); color: var(--ink); font-size: 15px; }
+  .ios-seg { display: flex; margin: 0 0 10px; padding: 2px; border-radius: 9px; background: color-mix(in oklab, var(--ink) 8%, transparent); }
+  .ios-seg button { flex: 1; border: 0; background: none; padding: 6px; border-radius: 7px; font-size: 13px; color: var(--muted); }
+  .ios-seg button[aria-pressed="true"] { background: var(--ios-card); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+  .ios-scroll .dtile { height: 48px; border-radius: 12px; background: var(--ios-card); font-size: 16px; }
+  .ios-scroll .dtile.join { background: var(--accent); }
+  .ios-scroll .plist { background: var(--ios-card); }
+  .ios-scroll .mrow .t1 { font-size: 16px; }
+  .ios-scroll .people .sec { font-size: 13px; font-weight: 400; }
+  .ios-scroll .done { font-size: 15px; }
+
+  .note { max-width: 1000px; margin: 8px auto 40px; padding: 0 16px; color: var(--muted); font-size: 12.5px; }
+  .note li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <span><label>Theme</label><span class="seg" data-key="theme"></span></span>
+  <span><label>Group picker</label><span class="seg" data-key="picker"></span></span>
+  <span><label>Add people</label><span class="seg" data-key="addLayout"></span></span>
+  <span><label>Invited</label><span class="seg" data-key="source"></span></span>
+  <button class="reset" data-reset>Reset</button>
+</div>
+
+<h2>1 · Invite to group from a person's Grounding page</h2>
+<p class="sub">Alex opens Chen from the Build night room. Chen is not a contact. Click Invite.</p>
+<div class="stage">
+  <div><p class="caption">Mac · Grounding › person</p><div class="mac" id="mac-person"></div></div>
+  <div><p class="caption">iPhone · Grounding › person</p><div class="phone"><div class="screen" id="ios-person"></div></div></div>
+</div>
+
+<h2>2 · Group › Add people with people from Grounding</h2>
+<p class="sub">Alex adds people to Infrastructure and CI. Contacts are added right away, as today; Grounding people get an invitation.</p>
+<div class="stage">
+  <div><p class="caption">Mac · Group info › Add people</p><div class="mac" id="mac-add"></div></div>
+  <div><p class="caption">iPhone · Group › Add members</p><div class="phone"><div class="screen" id="ios-add"></div></div></div>
+</div>
+
+<h2>3 · Chen sees the invitation in Contacts › Requests</h2>
+<p class="sub">Row B and detail 2 from the approved room invitation design. Chen joins only after Join.</p>
+<div class="stage">
+  <div><p class="caption">Mac · Contacts</p><div class="mac" id="mac-invitee"></div></div>
+  <div><p class="caption">iPhone · Contacts › invitation</p><div class="phone"><div class="screen" id="ios-invitee"></div></div></div>
+</div>
+
+<div class="note">
+  <ul>
+    <li>Group picker A opens a small dialog with Invite; B is a menu under the tile and one click sends.</li>
+    <li>Add people A keeps one list: Contacts, then From Grounding. B adds a Grounding tab next to Existing contacts and Invite with a link.</li>
+    <li>Grounding people: people in my open and recent rooms, and my matches. Current members, people with a pending invitation (shown as Invited) and blocked people are left out.</li>
+    <li>Contacts keep today's behaviour and are added straight away. On a contact's Grounding page the picker says Add instead of Invite.</li>
+    <li>Only group members can invite. Declining is quiet: the inviter is not told. If the inviter leaves the group, their pending invitations are withdrawn.</li>
+    <li>Synthetic people. No network calls.</li>
+  </ul>
+</div>
+
+<script>
+  const options = {
+    theme: [['light', 'Light'], ['dark', 'Dark']],
+    picker: [['dialog', 'A · Dialog'], ['menu', 'B · Menu']],
+    addLayout: [['list', 'A · One list'], ['tab', 'B · Grounding tab']],
+    source: [['room', 'From a room'], ['match', 'From a match']],
+  };
+  const initial = () => ({
+    theme: document.documentElement.dataset.theme || 'light', picker: 'dialog', addLayout: 'list', source: 'room',
+    pickerOpen: false, pickedGroup: null, invitedGroups: [], toast: '',
+    iosSheet: false, iosPicked: null,
+    addTab: 'contacts', addPicked: ['dana', 'chen'], iosAddTab: 'contacts', iosAddPicked: ['chen'],
+    answer: null, selected: true,
+  });
+  let s = initial();
+
+  const people = {
+    alex: { name: 'Alex Rivera', initials: 'AR', color: '#8a6a4f' },
+    bea: { name: 'Bea Okafor', initials: 'BO', color: '#7f93b5' },
+    chen: { name: 'Chen Wei', initials: 'CW', color: '#5f9b84', handle: 'chenwei' },
+    sam: { name: 'Sam Park', initials: 'SP', color: '#9a7fb5' },
+    priya: { name: 'Priya Shah', initials: 'PS', color: '#c08a5a' },
+    dana: { name: 'Dana Kim', initials: 'DK', color: '#b5737f' },
+    noor: { name: 'Noor Haddad', initials: 'NH', color: '#6f8f4f' },
+    lee: { name: 'Lee Moreau', initials: 'LM', color: '#5a7fb0' },
+    ines: { name: 'Inès Faure', initials: 'IF', color: '#a2894a' },
+  };
+  const groups = [
+    { id: 'infra', name: 'Infrastructure and CI', members: ['alex', 'bea', 'sam'] },
+    { id: 'hack', name: 'Hackathon team', members: ['alex', 'bea'] },
+    { id: 'reading', name: 'Reading group', members: ['alex', 'priya', 'noor', 'sam'] },
+    { id: 'night', name: 'Build night planning', members: ['alex', 'chen', 'bea'] },
+  ];
+  const contacts = ['dana', 'priya', 'noor'];
+  const grounding = [
+    { id: 'chen', where: 'Build night' },
+    { id: 'lee', where: 'Build night' },
+    { id: 'ines', where: 'Match' },
+    { id: 'sam', where: 'Build night', member: true },
+  ];
+
+  const av = (id, size) => { const p = people[id]; return `<span class="av" style="width:${size}px;height:${size}px;background:${p.color};font-size:${Math.round(size * 0.36)}px">${p.initials}</span>`; };
+  const grid = (ids, size) => `<span class="grid" style="width:${size}px;height:${size}px">${[0, 1, 2, 3].map((i) => `<span style="background:${ids[i] ? people[ids[i]].color : 'var(--fill)'}"></span>`).join('')}</span>`;
+  const svg = (d, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24">${d}</svg>`;
+  const I = {
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    x: '<path d="M6 6l12 12M18 6L6 18"/>',
+    userPlus: '<circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7M19 8v6M16 11h6"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18M12 14v4M10 16h4"/>',
+    chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+    group: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14c2.2.8 3.5 3 3.5 6"/>',
+  };
+  const fromLine = () => (s.source === 'room' ? 'from Build night' : 'from Grounding');
+
+  function bar() {
+    document.querySelectorAll('.seg').forEach((el) => {
+      const key = el.dataset.key;
+      el.innerHTML = options[key].map(([v, l]) => `<button data-k="${key}" data-v="${v}" aria-pressed="${s[key] === v}">${l}</button>`).join('');
+    });
+  }
+
+  /* ---------- 1. Person page ---------- */
+  function groupState(g) {
+    if (g.members.includes('chen')) return 'Member';
+    if (s.invitedGroups.includes(g.id)) return 'Invited';
+    return '';
+  }
+  function groupRows(selectable) {
+    return groups.map((g) => {
+      const st = groupState(g);
+      const on = selectable && s.pickedGroup === g.id;
+      const tail = st ? `<span class="state">${st}</span>` : selectable ? `<span class="check ${on ? 'on' : ''}">${on ? svg(I.check) : ''}</span>` : '';
+      return `<button class="grow ${on ? 'on' : ''}" data-group="${g.id}" ${st ? 'disabled' : ''}>${grid(g.members, 30)}<span class="text"><span class="t1">${g.name}</span><span class="t2">${g.members.length} members</span></span>${tail}</button>`;
+    }).join('');
+  }
+  function personHero(ios) {
+    return `<span class="pair">${av('alex', ios ? 72 : 64)}${av('chen', ios ? 72 : 64)}</span><br>
+      <span class="badge">82%</span>
+      <h1>Chen Wei</h1>
+      <div class="handle">@chenwei</div>
+      <div class="headline">Both building local-first sync this weekend</div>`;
+  }
+  function renderMacPerson() {
+    const el = document.getElementById('mac-person');
+    const picker = !s.pickerOpen ? '' : s.picker === 'dialog'
+      ? `<div class="scrim" data-close-picker><div class="dialog" data-stop>
+          <h3>Invite Chen to a group</h3>
+          <div class="glist">${groupRows(true)}</div>
+          <div class="actions"><button class="btn quiet" data-close-picker>Cancel</button><button class="btn" data-send ${s.pickedGroup ? '' : 'disabled'}>Invite</button></div>
+        </div></div>`
+      : `<div class="menu" style="right:0" data-stop><div class="glist">${groupRows(false)}</div></div>`;
+    el.innerHTML = `
+      <div class="side">
+        <div class="sec"><span>Build night</span></div>
+        ${['chen', 'lee', 'sam'].map((id) => `<div class="row clickable ${id === 'chen' ? 'selected' : ''}">${av(id, 30)}<span class="text"><span class="t1">${people[id].name}</span><span class="t2">${id === 'chen' ? '82%' : id === 'lee' ? '74%' : '61%'}</span></span></div>`).join('')}
+      </div>
+      <div class="main"><div class="person">
+        <button class="back">‹ Build night</button>
+        ${personHero(false)}
+        <div class="tiles">
+          <button class="tile primary">${svg(I.userPlus)}Add</button>
+          <button class="tile" disabled>${svg(I.cal)}Meet</button>
+          <button class="tile" disabled>${svg(I.chat)}Chat</button>
+          <button class="tile ${s.pickerOpen ? 'open' : ''}" data-open-picker>${svg(I.group)}Invite</button>
+          ${s.picker === 'menu' ? picker : ''}
+        </div>
+        <div class="hint">Add each other to meet or chat</div>
+        <div class="seg2"><span>Shared</span><span>Trade</span></div>
+        <div class="lines"><div><b>Local-first sync</b><span>Both prototyping CRDT storage</span></div><div><b>Rust</b><span>Chen ships a Tauri app; you run its CI</span></div></div>
+      </div>
+      ${s.toast ? `<div class="toast">${s.toast}</div>` : ''}
+      </div>
+      ${s.picker === 'dialog' ? picker : ''}`;
+  }
+  function renderIosPerson() {
+    const el = document.getElementById('ios-person');
+    const sheet = !s.iosSheet ? '' : `<div class="sheet" data-stop>
+      <div class="sheet-head"><button class="round" data-ios-close aria-label="Cancel">${svg(I.x, '').replace('<svg', '<svg width="14" height="14" style="stroke:currentColor;fill:none;stroke-width:2.2"')}</button><b>Invite to group</b>
+        <button class="round go" data-ios-send ${s.iosPicked ? '' : 'disabled'} aria-label="Invite">${svg(I.check).replace('<svg', '<svg width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:2.6"')}</button></div>
+      <div class="sheet-body"><div class="ios-list">${groups.map((g) => {
+        const st = groupState(g); const on = s.iosPicked === g.id;
+        return `<button class="irow" data-ios-group="${g.id}" ${st ? 'disabled' : ''}>${grid(g.members, 36)}<span class="text"><span class="t1">${g.name}</span><span class="t2">${g.members.length} members</span></span>${st ? `<span class="state" style="font-size:13px">${st}</span>` : `<span class="check ${on ? 'on' : ''}">${on ? svg(I.check) : ''}</span>`}</button>`;
+      }).join('')}</div></div></div>`;
+    el.innerHTML = `<div class="ios-nav"><button>‹ Build night</button><span></span></div>
+      <div class="ios-scroll">${personHero(true)}
+        <div class="ios-tiles">
+          <button class="ios-tile">${svg(I.userPlus)}Add</button>
+          <button class="ios-tile" disabled>${svg(I.chat)}Message</button>
+          <button class="ios-tile" disabled>${svg(I.cal)}Meet</button>
+          <button class="ios-tile" data-ios-open>${svg(I.group)}Invite</button>
+        </div>
+        <div class="ios-group"><div>Local-first sync<span>Both prototyping CRDT storage</span></div><div>Rust<span>Chen ships a Tauri app; you run its CI</span></div></div>
+      </div>${sheet}`;
+  }
+
+  /* ---------- 2. Add people ---------- */
+  const groundingAvailable = () => grounding.filter((p) => !p.member);
+  function pickRow(id, sub, picked, attr) {
+    const on = picked.includes(id);
+    return `<button class="prow ${on ? 'on' : ''}" ${attr}="${id}">${av(id, 28)}<span class="text"><span class="t1">${people[id].name}</span>${sub ? `<span class="t2">${sub}</span>` : ''}</span><span class="check ${on ? 'on' : ''}">${on ? svg(I.check) : ''}</span></button>`;
+  }
+  function addButtonLabel(picked) {
+    const add = picked.filter((id) => contacts.includes(id)).length;
+    const inv = picked.length - add;
+    if (!picked.length) return 'Select people to add';
+    const parts = [];
+    if (add) parts.push(`Add ${add}`);
+    if (inv) parts.push(`${add ? 'invite' : 'Invite'} ${inv}`);
+    return parts.join(', ');
+  }
+  function renderMacAdd() {
+    const el = document.getElementById('mac-add');
+    const tabs = s.addLayout === 'tab'
+      ? `<div class="tabs"><button data-add-tab="contacts" aria-pressed="${s.addTab === 'contacts'}">Existing contacts</button><button data-add-tab="grounding" aria-pressed="${s.addTab === 'grounding'}">Grounding</button><button data-add-tab="link" aria-pressed="${s.addTab === 'link'}">Link</button></div>`
+      : `<div class="tabs"><button data-add-tab="contacts" aria-pressed="${s.addTab !== 'link'}">People</button><button data-add-tab="link" aria-pressed="${s.addTab === 'link'}">Invite with a link</button></div>`;
+    const contactRows = contacts.map((id) => pickRow(id, id === 'dana' ? 'online' : '', s.addPicked, 'data-add')).join('');
+    const groundRows = groundingAvailable().map((p) => pickRow(p.id, p.where, s.addPicked, 'data-add')).join('');
+    let body;
+    if (s.addTab === 'link') body = `<div class="lines" style="margin-top:6px"><div><b>kordi.ai/g/7Hq2-infra</b><span>Expires in 7 days</span></div></div><button class="btn wide">Copy link</button>`;
+    else if (s.addLayout === 'tab' && s.addTab === 'grounding') body = `<input class="search" placeholder="Search Grounding">${groundRows}<button class="btn wide" ${s.addPicked.some((id) => !contacts.includes(id)) ? '' : 'disabled'}>${addButtonLabel(s.addPicked.filter((id) => !contacts.includes(id)))}</button>`;
+    else if (s.addLayout === 'tab') body = `<input class="search" placeholder="Search contacts">${contactRows}<button class="btn wide" ${s.addPicked.some((id) => contacts.includes(id)) ? '' : 'disabled'}>${addButtonLabel(s.addPicked.filter((id) => contacts.includes(id)))}</button>`;
+    else body = `<input class="search" placeholder="Search people"><div class="sec"><span>Contacts</span></div>${contactRows}<div class="sec"><span>From Grounding</span></div>${groundRows}<button class="btn wide" ${s.addPicked.length ? '' : 'disabled'}>${addButtonLabel(s.addPicked)}</button>`;
+    el.innerHTML = `
+      <div class="side">
+        <div class="sec"><span>Chats</span></div>
+        ${groups.slice(0, 3).map((g, i) => `<div class="row clickable ${i === 0 ? 'selected' : ''}">${grid(g.members, 30)}<span class="text"><span class="t1">${g.name}</span><span class="t2">${i === 0 ? 'Bea: the runner is back' : 'Sam: see you Thursday'}</span></span></div>`).join('')}
+      </div>
+      <div class="chat"><div class="chat-head">${grid(groups[0].members, 22)} Infrastructure and CI</div>
+        <div class="chat-body"><div class="bubble">The runner is back</div><div class="bubble">Nice. I'll rerun the visual job</div></div></div>
+      <div class="info">
+        <div class="info-head"><button class="close" aria-label="Back to group members">‹</button><h3>Add people</h3>${s.addPicked.length && s.addTab !== 'link' ? `<span class="state">${s.addPicked.length} selected</span>` : ''}</div>
+        ${tabs}${body}
+      </div>`;
+  }
+  function renderIosAdd() {
+    const el = document.getElementById('ios-add');
+    const picked = s.iosAddPicked;
+    const irow = (id, sub) => { const on = picked.includes(id); return `<button class="irow" data-ios-add="${id}">${av(id, 34)}<span class="text"><span class="t1">${people[id].name}</span>${sub ? `<span class="t2">${sub}</span>` : ''}</span><span class="check ${on ? 'on' : ''}">${on ? svg(I.check) : ''}</span></button>`; };
+    const contactList = `<div class="ios-list">${contacts.map((id) => irow(id, '')).join('')}</div>`;
+    const groundList = `<div class="ios-list">${groundingAvailable().map((p) => irow(p.id, p.where)).join('')}</div>`;
+    let body;
+    if (s.addLayout === 'tab') {
+      body = `<div class="ios-seg"><button data-ios-add-tab="contacts" aria-pressed="${s.iosAddTab === 'contacts'}">Contacts</button><button data-ios-add-tab="grounding" aria-pressed="${s.iosAddTab === 'grounding'}">Grounding</button></div>
+        ${s.iosAddTab === 'grounding' ? groundList : contactList}`;
+    } else {
+      body = `<div class="ios-sec" style="margin-top:0">Contacts</div>${contactList}<div class="ios-sec">From Grounding</div>${groundList}`;
+    }
+    el.innerHTML = `<div class="ios-nav"><button>‹</button></div>
+      <div class="sheet" style="top:56px">
+        <div class="sheet-head"><button class="round" aria-label="Cancel">✕</button><b>Add members</b><button class="round go" ${picked.length ? '' : 'disabled'} aria-label="${addButtonLabel(picked)}">✓</button></div>
+        <div class="sheet-body"><input class="ios-search" placeholder="Search people">${body}</div>
+      </div>`;
+  }
+
+  /* ---------- 3. Invitee ---------- */
+  const g0 = groups[0];
+  function inviteeDetail(ios) {
+    const tiles = s.answer === 'joined' ? `<div class="done">You joined ${g0.name}.</div>`
+      : s.answer === 'declined' ? '<div class="done">Declined</div>'
+      : '<div class="dtiles"><button class="dtile" data-answer="declined">Decline</button><button class="dtile join" data-answer="joined">Join</button></div>';
+    const members = `<div class="people"><div class="sec"><span>Members</span></div><div class="plist">${g0.members.map((id) => `<div class="mrow">${av(id, ios ? 32 : 28)}<span class="text"><span class="t1">${people[id].name}</span></span></div>`).join('')}</div></div>`;
+    return `${grid(g0.members, ios ? 84 : 72)}<h1>${g0.name}</h1><p class="line">${people.alex.name} · ${fromLine()}</p>${tiles}${members}`;
+  }
+  function renderMacInvitee() {
+    const el = document.getElementById('mac-invitee');
+    const row = s.answer ? '' : `<div class="sec"><span>Requests</span><span>1</span></div>
+      <div class="row clickable ${s.selected ? 'selected' : ''}" data-select>${av('alex', 36)}<span class="text"><span class="t1">${people.alex.name}</span><span class="t2">Invited you to ${g0.name}</span></span>
+        <button class="ibtn" data-answer="declined" aria-label="Decline">${svg(I.x)}</button><button class="ibtn join" data-answer="joined" aria-label="Join">${svg(I.check)}</button></div>`;
+    el.innerHTML = `<div class="side">${row}<div class="sec"><span>Contacts</span></div>
+      ${['priya', 'noor', 'bea'].map((id) => `<div class="row clickable">${av(id, 36)}<span class="text"><span class="t1" style="font-weight:500">${people[id].name}</span></span></div>`).join('')}</div>
+      <div class="main"><div class="detail">${inviteeDetail(false)}</div></div>`;
+  }
+  function renderIosInvitee() {
+    document.getElementById('ios-invitee').innerHTML = `<div class="ios-nav"><button>‹ Contacts</button><span></span></div><div class="ios-scroll">${inviteeDetail(true)}</div>`;
+  }
+
+  function render() {
+    document.documentElement.dataset.theme = s.theme;
+    bar();
+    renderMacPerson(); renderIosPerson(); renderMacAdd(); renderIosAdd(); renderMacInvitee(); renderIosInvitee();
+  }
+
+  function sendInvite(groupId) {
+    const g = groups.find((item) => item.id === groupId);
+    s.invitedGroups = [...s.invitedGroups, groupId];
+    s.pickerOpen = false; s.pickedGroup = null; s.iosSheet = false; s.iosPicked = null;
+    s.toast = `Invited Chen to ${g.name}`;
+    render();
+    setTimeout(() => { s.toast = ''; render(); }, 1800);
+  }
+
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    const b = t.closest('button');
+    if (b && b.dataset.k) { s[b.dataset.k] = b.dataset.v; s.pickerOpen = false; s.addTab = 'contacts'; s.iosAddTab = 'contacts'; render(); return; }
+    if (t.closest('[data-reset]')) { s = initial(); render(); return; }
+    if (t.closest('[data-open-picker]')) { s.pickerOpen = !s.pickerOpen; s.pickedGroup = null; render(); return; }
+    if (b && b.dataset.group && !b.disabled) {
+      if (s.picker === 'menu') { sendInvite(b.dataset.group); return; }
+      s.pickedGroup = b.dataset.group; render(); return;
+    }
+    if (t.closest('[data-send]')) { if (s.pickedGroup) sendInvite(s.pickedGroup); return; }
+    if (t.closest('[data-close-picker]') && !t.closest('[data-stop]') || (b && b.hasAttribute('data-close-picker'))) { s.pickerOpen = false; render(); return; }
+    if (t.closest('[data-ios-open]')) { s.iosSheet = true; s.iosPicked = null; render(); return; }
+    if (t.closest('[data-ios-close]')) { s.iosSheet = false; render(); return; }
+    if (b && b.dataset.iosGroup && !b.disabled) { s.iosPicked = b.dataset.iosGroup; render(); return; }
+    if (t.closest('[data-ios-send]')) { if (s.iosPicked) sendInvite(s.iosPicked); return; }
+    if (b && b.dataset.addTab) { s.addTab = b.dataset.addTab; render(); return; }
+    if (b && b.dataset.add) { const id = b.dataset.add; s.addPicked = s.addPicked.includes(id) ? s.addPicked.filter((x) => x !== id) : [...s.addPicked, id]; render(); return; }
+    if (b && b.dataset.iosAddTab) { s.iosAddTab = b.dataset.iosAddTab; render(); return; }
+    if (b && b.dataset.iosAdd) { const id = b.dataset.iosAdd; s.iosAddPicked = s.iosAddPicked.includes(id) ? s.iosAddPicked.filter((x) => x !== id) : [...s.iosAddPicked, id]; render(); return; }
+    if (b && b.dataset.answer) { e.stopPropagation(); s.answer = b.dataset.answer; render(); return; }
+    if (t.closest('[data-select]')) { s.selected = true; render(); return; }
+    if (s.pickerOpen && s.picker === 'menu' && !t.closest('[data-stop]')) { s.pickerOpen = false; render(); }
+  });
+  render();
+</script>
+</body>
+</html>

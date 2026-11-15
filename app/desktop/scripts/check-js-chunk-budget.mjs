@@ -110,9 +110,13 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // Together, the room group join requests above (16 kB) and these come to 5.979 MB.
 // Background session stop reasons (the reason labels, the not-synced state and the sync retry policy)
 // and refreshing a session row when a continue starts add 3.4 kB, so it moves to 5.983 MB.
+// Inviting Grounding people into groups (the person-page group picker, Add people's From Grounding
+// section and person invitations in Contacts › Requests, 9.7 kB) and sending a joiner's first group
+// message at once (under 1 kB) bring it to 5.994 MB.
 // Session trace export (the Export menu row, complete history collection for every chat kind and
-// the JSON Lines serializer) adds 11.7 kB, so it moves to 5.985 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_985_000;
+// the JSON Lines serializer) adds 11.7 kB, most of it inside the remaining allowance, so it moves
+// to 5.996 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_996_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -164,8 +168,11 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The web app carries the same Facilitator @ menu and mention code, 1.5 kB, so it moves to 5.989 MB.
 // Together, the room group join requests above (17 kB) and these come to 6.006 MB there.
 // The same stop reasons and session row refresh add up to 4 kB there, so it moves to 6.010 MB.
-// The same session trace export adds 11.8 kB there, so it moves to 6.012 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_012_000;
+// Inviting Grounding people into groups (9.7 kB) and sending a joiner's first group message at once
+// (under 1 kB) bring it to 6.021 MB there.
+// The same session trace export adds 11.8 kB there, most of it inside the remaining allowance, so
+// it moves to 6.022 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_022_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
@@ -271,8 +278,10 @@ try {
       throw new Error(`Help must load on demand, but ${chunk.name} imports it eagerly.`);
     }
   }
-  if (distBytes - atlasBytes - editorBytes - codeViewerBytes - helpBytes - licenseBytes > applicationBudget) {
+  const applicationBytes = distBytes - atlasBytes - editorBytes - codeViewerBytes - helpBytes - licenseBytes;
+  if (applicationBytes > applicationBudget) {
     console.error(`Application bundle budget exceeded. Maximum allowed size is ${formatKb(applicationBudget)}.`);
+    console.error(`- application: ${formatKb(applicationBytes)}`);
     console.error(`- dist: ${formatKb(distBytes)}`);
     process.exit(1);
   }

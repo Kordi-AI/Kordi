@@ -266,7 +266,10 @@ pub(super) async fn create_conversation_with_options(
             let stored_members = super::service_members::without_service_members(
                 active_member_ids(transaction, conversation_id).await?,
             );
-            if stored_members != members {
+            // A member opening a group they are already in gets it as it is: their list
+            // may not yet show people who joined or left on the server, and only the
+            // members route changes who is in a group.
+            if stored_kind != "group" && stored_members != members {
                 return Err(StoreError::IdempotencyKeyReused);
             }
             let conversation = load_conversation(transaction, conversation_id, account_id).await?;

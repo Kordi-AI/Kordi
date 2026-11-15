@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// A pending invitation to a group started in a Grounding room, answered
-/// from Contacts › Requests.
+/// A pending group invitation from a Grounding room or from someone you share
+/// Grounding with, answered from Contacts › Requests.
 struct ContactsRoomInvitationRow: View {
     @Environment(\.kordiChatTheme) private var chatTheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize

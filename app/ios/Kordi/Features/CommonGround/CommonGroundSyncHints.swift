@@ -2,7 +2,8 @@ import Foundation
 
 extension Notification.Name {
     /// Posted on the main actor for the account sync hints
-    /// `common_ground.room.updated` and `common_ground.matches.updated`.
+    /// `common_ground.room.updated`, `common_ground.matches.updated` and
+    /// `common_ground.invitations.updated`.
     /// The object is a `CommonGroundSyncHint`.
     static let kordiCommonGroundHint = Notification.Name("kordi.commonGround.hint")
 }
@@ -15,8 +16,12 @@ enum CommonGroundSyncHint: Equatable, Sendable {
     case room(code: String)
     /// A match for this account finished or failed.
     case matches
+    /// A group invitation to this account arrived or was answered elsewhere.
+    case invitations
 
-    static let eventTypes: Set<String> = ["common_ground.room.updated", "common_ground.matches.updated"]
+    static let eventTypes: Set<String> = [
+        "common_ground.room.updated", "common_ground.matches.updated", "common_ground.invitations.updated",
+    ]
 
     /// True once any Grounding hint reached the app since launch: the stream
     /// is known to work, so screens poll less often.
@@ -29,6 +34,8 @@ enum CommonGroundSyncHint: Equatable, Sendable {
             self = .room(code: code)
         case "common_ground.matches.updated":
             self = .matches
+        case "common_ground.invitations.updated":
+            self = .invitations
         default:
             return nil
         }
