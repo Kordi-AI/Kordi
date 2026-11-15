@@ -4,6 +4,7 @@ import {
   type CgScreen, type CgState, type CommonGroundStore,
 } from './store';
 import * as autoOps from './storeAutoRebuild';
+import { refreshGalleryItem } from './storeGallery';
 import * as hintOps from './storeHints';
 import type { CgRoomSummary } from './types';
 
@@ -36,6 +37,8 @@ export async function refreshScreen(store: CommonGroundStore, screen: CgScreen):
   try {
     switch (screen.name) {
       case 'home': await store.loadHome(); return true;
+      // A Gallery item handles its own errors: a removed item goes back to the room.
+      case 'galleryItem': return await refreshGalleryItem(store, screen);
       case 'results': {
         // The room comes along, so people who just joined show before their match is in.
         const room = store.client.room(screen.code).catch(() => null);

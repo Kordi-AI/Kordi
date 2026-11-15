@@ -4,6 +4,7 @@ import { HelpGroundingDemo } from './HelpGroundingDemo';
 import { consumeHelpGroundingScreen, OPEN_GROUNDING_EVENT } from '@/features/onboarding/helpNavigation';
 import { BuildScreen } from './BuildScreen';
 import { CardScreen } from './CardScreen';
+import { GalleryItemScreen } from './GalleryItemScreen';
 import { HomeScreen } from './HomeScreen';
 import type { CgHost } from './host';
 import { MatchScreen } from './MatchScreen';
@@ -79,6 +80,8 @@ function CommonGroundPageBody({ store, host }: { store: CommonGroundStore; host:
     body = <ResultsScreen code={screen.code} {...props} />;
   } else if (screen.name === 'match') {
     body = <MatchScreen accountId={screen.accountId} profileId={screen.profileId} {...props} />;
+  } else if (screen.name === 'galleryItem') {
+    body = <GalleryItemScreen code={screen.code} itemId={screen.itemId} {...props} />;
   } else {
     body = <PersonScreen accountId={screen.accountId} profileId={screen.profileId} {...props} />;
   }

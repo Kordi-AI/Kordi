@@ -5,7 +5,7 @@ import { requestParticipantSpaceExpansion } from '@/features/chat/participantSpa
 import { collaborationAgentForChatStart } from '@/features/chat/chatCreateFlows';
 import { isCollaborationSelfContactId } from '@/features/collaboration/legacyBridgeCompatibility';
 import { CLOUD_HOST_SENTINEL } from '@/features/cloud/useCloudContacts';
-import { cloudDirectPersonSessionId } from '@/features/collaboration/conversationIds';
+import { cloudCollaborationConversationId, cloudDirectPersonSessionId } from '@/features/collaboration/conversationIds';
 import type { Contact } from '@/kordi-app/types';
 import { renameDesktopAgent, setDesktopSkillLibraryEnabled, type DesktopChatMessageRoute } from '@/lib/desktop';
 
@@ -98,7 +98,7 @@ export function assembleMainContentSlot(args: MainContentShellArgs) {
           requestParticipantSpaceExpansion(space.id);
           void args.handleSelectChatSession(sessionId);
         },
-        onMessageContact: (contact) => {
+        onMessageContact: (contact, options) => {
           if (isCollaborationSelfContactId(contact.id) || contact.classType === 'my-agents') {
             void openLocalAgentChat();
             return;
@@ -121,6 +121,11 @@ export function assembleMainContentSlot(args: MainContentShellArgs) {
               contact.owner,
               contactTargetsAgent ? contact.sourceRuntime : 'person',
             );
+            // Message from a Grounding Gallery item opens the chat with "About …" in its composer,
+            // unless something unsent is already there.
+            if (options?.draft && !contactTargetsAgent) {
+              args.setChatComposerTextForSession(cloudCollaborationConversationId(contact.sourceParticipantId, 'person'), options.draft, { onlyIfEmpty: true });
+            }
             return;
           }
 
