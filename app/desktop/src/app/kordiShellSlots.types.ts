@@ -266,7 +266,6 @@ export type AssembleKordiShellSlotsArgs = KordiShellComposerRouteArgs & KordiShe
   composerControlsRef: MutableRefObject<HTMLDivElement | null>;
   activeRuntimeSessionId?: string;
   activeRuntimeContextStatus?: DesktopChatState['activeSession']['contextWindowStatus'];
-  activeRuntimeCacheText?: string | null;
   composerSelectionProject: ComposerSelection;
   composerSelectionChat: ComposerSelection;
   openComposerSelector: ComposerSelectorState;
@@ -507,7 +506,6 @@ export type MainContentShellArgs = Pick<AssembleKordiShellSlotsArgs,
   | 'composerControlsRef'
   | 'activeRuntimeSessionId'
   | 'activeRuntimeContextStatus'
-  | 'activeRuntimeCacheText'
   | 'composerSelectionProject'
   | 'openComposerSelector'
   | 'toggleComposerSelector'

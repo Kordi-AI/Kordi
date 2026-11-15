@@ -251,7 +251,6 @@ export function useKordiShellArgs(groups: KordiShellCompositionArgs): KordiShell
         composerControlsRef: args.composerControlsRef,
         activeRuntimeSessionId: args.activeRuntimeSessionId,
         activeRuntimeContextStatus: args.activeRuntimeContextStatus,
-        activeRuntimeCacheText: args.activeRuntimeCacheText,
         composerSelectionProject: args.composerSelectionProject,
         openComposerSelector: args.openComposerSelector,
         toggleComposerSelector: args.toggleComposerSelector,
