@@ -3,6 +3,8 @@ import SwiftUI
 private enum CommonGroundRoomTab: String, CaseIterable, Identifiable {
     case people = "People"
     case topics = "Topics"
+    /// Only when the server has the room gallery.
+    case gallery = "Gallery"
     var id: Self { self }
 }
 
@@ -52,13 +54,18 @@ struct CommonGroundResultsView: View {
                 invitationsSection
                 groupsSection
                 Picker("Room content", selection: $tab) {
-                    ForEach(CommonGroundRoomTab.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(model.galleryEnabled ? CommonGroundRoomTab.allCases : [.people, .topics]) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                CommonGroundSection {
-                    switch tab {
-                    case .people: peopleRows
-                    case .topics: topicRows(topics)
+                if tab == .gallery, model.galleryEnabled {
+                    CommonGroundGalleryTab(code: code, roomTitle: model.roomTitle(code), roomTopics: topics.map(\.label),
+                                           closed: closed, path: $path)
+                } else {
+                    CommonGroundSection {
+                        switch tab {
+                        case .people, .gallery: peopleRows
+                        case .topics: topicRows(topics)
+                        }
                     }
                 }
                 if closed {
@@ -74,8 +81,21 @@ struct CommonGroundResultsView: View {
             guard scenePhase == .active else { return }
             await model.followRoomResults(code)
         }
+        .task(id: scenePhase) {
+            // An older server answers with no route, which keeps the segment hidden.
+            guard scenePhase == .active else { return }
+            await model.loadGallery(code)
+        }
+        .onChange(of: tab) { _, tab in
+            guard tab == .gallery else { return }
+            Task { await model.loadGallery(code, quiet: model.gallery.lists[code] != nil) }
+        }
+        .onChange(of: model.galleryEnabled) { _, enabled in
+            if !enabled, tab == .gallery { tab = .people }
+        }
         .refreshable {
             if await model.refreshRoom(code) { await model.loadResults(code, quiet: true) }
+            await model.loadGallery(code)
         }
         .sheet(item: $draft) { draft in
             CommonGroundStartGroupSheet(

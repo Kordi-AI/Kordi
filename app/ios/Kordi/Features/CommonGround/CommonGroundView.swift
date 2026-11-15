@@ -69,6 +69,8 @@ enum CommonGroundRoute: Hashable {
     /// Nearby people, and one person seen through Nearby.
     case nearby
     case nearbyPerson(String)
+    /// An artifact in a room's gallery: room code and item id.
+    case galleryItem(String, String)
 }
 
 private struct CommonGroundOpenConversationKey: EnvironmentKey {
@@ -118,6 +120,7 @@ struct CommonGroundView: View {
                     case .person(let id, let paired): CommonGroundPersonView(personID: id, paired: paired, path: $path)
                     case .nearby: CommonGroundNearbyView(path: $path)
                     case .nearbyPerson(let id): CommonGroundNearbyPersonView(personID: id)
+                    case .galleryItem(let code, let itemId): CommonGroundGalleryItemScreen(code: code, itemId: itemId)
                     }
                 }
         }

@@ -55,11 +55,12 @@ export function CgAvatarGrid({ people, size }: { people: AvatarPerson[]; size: n
   );
 }
 
-export function CgBack({ onBack }: { onBack: () => void }) {
+/** Back, or the name of the screen it returns to (a Gallery item shows the room's name). */
+export function CgBack({ onBack, label = 'Back' }: { onBack: () => void; label?: string }) {
   return (
     <button type="button" className="cg-back" onClick={onBack}>
       <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-      Back
+      {label}
     </button>
   );
 }

@@ -245,7 +245,7 @@ export type AssembleKordiShellSlotsArgs = KordiShellComposerRouteArgs & KordiShe
   updateChatComposerDraft: (value: string, target: HTMLTextAreaElement | HTMLDivElement) => void;
   setProjectComposerText: (value: string) => void;
   setChatComposerText: (value: string) => void;
-  setChatComposerTextForSession: (sessionId: string, value: string) => void;
+  setChatComposerTextForSession: (sessionId: string, value: string, options?: { onlyIfEmpty?: boolean }) => void;
   activeChatQuote: ComposerQuoteState | null;
   onClearChatQuote: () => void;
   onReplyMessage: (message: Message, destination: 'conversation' | 'thread') => void;

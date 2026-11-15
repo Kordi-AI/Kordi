@@ -65,6 +65,9 @@ final class CommonGroundModel: ObservableObject {
     @Published var profileMemories: [CloudProfileMemory] = []
     /// Nearby settings, people and requests, set in CommonGroundModel+Nearby.swift.
     @Published var nearby = CommonGroundNearbyState()
+    /// Room galleries, set in CommonGroundModel+Gallery.swift.
+    @Published var gallery = CommonGroundGalleryState()
+    let galleryRuntime = CommonGroundGalleryRuntime()
     /// The viewer's profile to see each person through, from Recent or a room.
     var viewerProfiles: [String: String] = [:]
     /// The last code looked up; an answer for any other code is stale.
@@ -153,7 +156,7 @@ final class CommonGroundModel: ObservableObject {
             let seconds = Double(error.retryAfterSeconds ?? 60)
             return "Try again in \(max(1, Int((seconds / 60).rounded(.up)))) min."
         }
-        return messages[error.code] ?? nearbyMessages[error.code] ?? error.message
+        return messages[error.code] ?? nearbyMessages[error.code] ?? galleryMessages[error.code] ?? error.message
     }
 
     func report(_ error: Error) {
@@ -442,6 +445,7 @@ final class CommonGroundModel: ObservableObject {
         withAnimation(.snappy) { roomList?.removeAll { $0.code == code } }
         rooms[code] = nil
         results[code] = nil
+        gallery.lists[code] = nil
     }
 
     @discardableResult

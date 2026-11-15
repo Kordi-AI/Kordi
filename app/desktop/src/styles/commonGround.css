@@ -255,3 +255,136 @@ button.cg-tag-text { cursor: pointer; }
 .cg-sharing { display: flex; justify-content: center; gap: 8px; margin-top: 6px; color: var(--utility-muted-text); font-size: 12.5px; }
 .cg-link { padding: 0; border: 0; background: none; color: var(--app-accent); font: inherit; font-weight: 500; cursor: pointer; }
 .cg-link:hover { text-decoration: underline; }
+
+/* Room Gallery: type tiles, the card grid, the Share dialog and the item screen with comments. */
+.cg-type {
+  --cg-type: var(--utility-muted-text);
+  display: inline-grid; flex: none; place-items: center; width: 34px; height: 34px; border-radius: 8px;
+  background: color-mix(in oklab, var(--cg-type) 15%, transparent); color: var(--cg-type); font-size: 9.5px; font-weight: 700; line-height: 1;
+}
+.cg-type.is-markdown { --cg-type: oklch(60% 0.14 250); }
+.cg-type.is-html { --cg-type: oklch(66% 0.16 50); }
+.cg-type.is-code { --cg-type: var(--cg-violet, oklch(62% 0.12 285)); }
+.cg-type.is-table { --cg-type: oklch(62% 0.14 155); }
+.cg-type.is-pdf { --cg-type: oklch(60% 0.18 25); }
+.cg-type.is-image { --cg-type: oklch(64% 0.11 190); }
+.cg-type.is-large { width: 40px; height: 40px; border-radius: 10px; font-size: 11px; }
+.cg-gallery-picks .cg-type { width: 30px; height: 30px; font-size: 8.5px; }
+
+.cg-gallery { margin-top: 14px; }
+.cg-gallery-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.cg-gallery-chips { display: flex; flex: 1; gap: 6px; min-width: 0; padding: 1px; overflow-x: auto; scrollbar-width: none; }
+.cg-gallery-chip {
+  display: inline-flex; flex: none; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 0; border-radius: 999px;
+  background: var(--cg-fill); color: var(--utility-muted-text); font: inherit; font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: pointer;
+}
+.cg-gallery-chip:hover { color: var(--utility-foreground); }
+.cg-gallery-chip[aria-pressed='true'] { background: var(--utility-foreground); color: var(--app-main-bg); }
+.cg-gallery-chip-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; background: var(--cg-tone); }
+.cg-gallery-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 36px 0 28px; }
+
+/* Cards keep one size; a narrower column fits fewer per row instead of re-scaling thumbnails. */
+.cg-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, 162px); justify-content: space-between; gap: 16px 14px; }
+.cg-gallery-card { position: relative; min-width: 0; }
+.cg-gallery-card-open {
+  display: flex; flex-direction: column; width: 100%; min-width: 0; padding: 0; border: 0; background: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.cg-gallery-thumb {
+  --artifact-card-backdrop: var(--app-control-bg);
+  --artifact-card-paper: #fff;
+  --artifact-card-ink: #1f2328;
+  --artifact-card-muted-ink: #5d636b;
+  --artifact-card-border: color-mix(in srgb, var(--utility-foreground) 9%, transparent);
+  position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 10px;
+  background: var(--artifact-card-backdrop); box-shadow: 0 0 0 1px var(--artifact-card-border); transition: box-shadow .15s ease, transform .15s ease;
+}
+.theme-dark .cg-gallery-thumb { --artifact-card-paper: #202227; --artifact-card-ink: #e7e8eb; --artifact-card-muted-ink: #a2a6ad; }
+.cg-gallery-card-open:hover .cg-gallery-thumb {
+  box-shadow: 0 4px 14px rgb(0 0 0 / 9%), 0 0 0 1px color-mix(in srgb, var(--utility-foreground) 16%, transparent); transform: translateY(-1px);
+}
+@media (prefers-reduced-motion: reduce) { .cg-gallery-thumb { transition: none; } .cg-gallery-card-open:hover .cg-gallery-thumb { transform: none; } }
+.cg-gallery-thumb > .cg-type.is-chip {
+  position: absolute; z-index: 1; left: 8px; bottom: 8px; width: auto; height: 18px; padding: 0 6px; border-radius: 6px; font-size: 9px;
+  background: linear-gradient(color-mix(in oklab, var(--cg-type) 15%, transparent), color-mix(in oklab, var(--cg-type) 15%, transparent)), var(--artifact-card-paper);
+  box-shadow: 0 0 0 2px var(--artifact-card-backdrop);
+}
+.cg-gallery-thumb > .cg-type.is-large { width: 46px; height: 46px; border-radius: 12px; font-size: 11.5px; }
+.cg-gallery-card-title { margin-top: 8px; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.cg-gallery-card-meta { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--utility-muted-text); font-size: 12px; }
+.cg-gallery-card-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cg-gallery-count { display: inline-flex; flex: none; align-items: center; gap: 3px; margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* More on my own cards, the item header and comment rows. */
+.cg-gallery-more { position: absolute; z-index: 3; top: 6px; right: 6px; opacity: 0; transition: opacity .12s ease; }
+.cg-gallery-card:hover .cg-gallery-more, .cg-gallery-card:focus-within .cg-gallery-more,
+.cg-gallery-comment:hover .cg-gallery-more, .cg-gallery-comment:focus-within .cg-gallery-more, .cg-gallery-more.is-open { opacity: 1; }
+.cg-gallery-more-button {
+  display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  background: color-mix(in oklab, var(--app-main-bg) 88%, transparent); color: var(--utility-foreground); box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+}
+.cg-gallery-more.is-inline { position: relative; top: auto; right: auto; flex: none; }
+.cg-gallery-byline .cg-gallery-more { opacity: 1; }
+.cg-gallery-more.is-inline .cg-gallery-more-button { width: 28px; height: 28px; border-radius: 7px; background: transparent; color: var(--utility-muted-text); box-shadow: none; }
+.cg-gallery-more.is-inline .cg-gallery-more-button:hover, .cg-gallery-more.is-inline.is-open .cg-gallery-more-button { background: var(--cg-fill); color: var(--utility-foreground); }
+.cg-gallery-menu.app-dense-menu { position: absolute; z-index: 20; top: calc(100% + 4px); right: 0; width: 180px; }
+
+/* Share dialog: search, the pick list, and the topic picker. */
+.cg-gallery-search {
+  display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px; border: 1px solid var(--cg-line); border-radius: 8px;
+  background: var(--cg-fill); color: var(--utility-muted-text);
+}
+.cg-gallery-search:focus-within { border-color: var(--app-focus-border); }
+.cg-gallery-search input { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: var(--utility-foreground); font: inherit; outline: none; box-shadow: none; }
+.cg-gallery-picks { max-height: 300px; }
+.cg-gallery-topic { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 2px; }
+.cg-gallery-select {
+  max-width: 230px; height: 26px; padding: 0 6px; border: 1px solid var(--cg-line); border-radius: 7px;
+  background: var(--cg-card); color: var(--utility-foreground); font: inherit; font-size: 12.5px;
+}
+
+/* Item screen: title, a plain sharer line, the file read-only, then comments. */
+.cg-gallery-item-title { margin: 8px 0 6px; font-size: 18px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.cg-gallery-byline { display: flex; align-items: center; gap: 8px; min-height: 30px; margin: 0 0 14px; font-size: 13px; }
+.cg-gallery-byline-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.cg-gallery-byline-topic { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--utility-muted-text); }
+.cg-gallery-byline-topic::before { content: "\00b7"; margin-right: 8px; }
+.cg-gallery-byline .cg-row-actions { align-items: center; margin-left: auto; }
+.cg-gallery-icon-button {
+  display: grid; flex: none; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px;
+  background: var(--cg-fill); color: var(--utility-foreground); cursor: pointer;
+}
+.cg-gallery-icon-button:hover { background: color-mix(in oklab, var(--utility-foreground) 12%, transparent); }
+.cg-gallery-doc { margin-top: 14px; overflow: hidden; border: 1px solid var(--cg-line); border-radius: 10px; }
+.cg-gallery-doc.is-paper { padding: 22px 28px 24px; background: var(--app-main-bg); }
+.cg-gallery-markdown { font-size: 13px; line-height: 1.6; }
+.cg-gallery-doc.is-viewer { display: flex; flex-direction: column; background: var(--viewer-surface, var(--app-main-bg)); color: var(--utility-foreground); }
+.cg-gallery-doc.is-image { height: 420px; }
+.cg-gallery-doc.is-pdf { height: 560px; }
+.cg-gallery-web { display: block; width: 100%; height: 480px; border: 0; background: #fff; }
+.cg-gallery-doc-state { margin-top: 14px; padding: 28px 0; text-align: center; }
+.cg-gallery-comment { position: relative; display: flex; gap: 10px; padding: 10px 12px; }
+.cg-gallery-comment + .cg-gallery-comment::before { content: ""; position: absolute; top: 0; right: 0; left: 48px; border-top: 1px solid var(--cg-line); }
+.cg-gallery-comment .cg-avatar { margin-top: 1px; }
+.cg-gallery-comment .cg-gallery-more { align-self: flex-start; margin: -3px -4px 0 0; }
+.cg-gallery-comments .cg-group { overflow: visible; }
+.cg-gallery-comment-text { flex: 1; min-width: 0; }
+.cg-gallery-comment-head { display: flex; align-items: baseline; gap: 6px; }
+.cg-gallery-comment-name { font-size: 12.5px; font-weight: 600; }
+.cg-gallery-comment-time { color: var(--utility-muted-text); font-size: 11.5px; }
+.cg-gallery-comment-body { margin-top: 1px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.cg-gallery-comment-form {
+  display: flex; align-items: flex-end; gap: 8px; margin-top: 10px; padding: 4px 4px 4px 12px;
+  border: 1px solid var(--cg-line); border-radius: 10px; background: var(--cg-card);
+}
+.cg-gallery-comment-form:focus-within { border-color: var(--app-focus-border); }
+.cg-gallery-comment-form textarea {
+  flex: 1; min-width: 0; max-height: 120px; padding: 5px 0; border: 0; background: transparent; color: var(--utility-foreground);
+  font: inherit; line-height: 18px; resize: none; outline: none; box-shadow: none;
+}
+.cg-gallery-comment-form textarea::placeholder { color: var(--utility-muted-text); }
+.cg-gallery-send {
+  display: grid; flex: none; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%;
+  background: var(--app-button-primary-bg); color: var(--app-button-primary-text); cursor: pointer;
+}
+.cg-gallery-send:disabled { opacity: 0.35; cursor: default; }

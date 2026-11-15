@@ -4,11 +4,13 @@ import { cloudApiBaseUrl } from '@/features/cloud/cloudApiEnvironment';
 import { CLOUD_SESSION_CHANGED_EVENT, CLOUD_SESSION_SIGNED_OUT_EVENT } from '@/features/cloud/session';
 import { subscribeCardHints } from './cardHints';
 import { createCommonGroundClient } from './client';
+import { subscribeGalleryHints } from './galleryHints';
 import { COMMON_GROUND_PAIR_LINK_EVENT, takePendingPairLink } from './pairLink';
 import { localProfileMemory } from './profiles';
 import { subscribeRoomHints } from './roomHints';
 import { CommonGroundStore } from './store';
 import { requestCardRefresh } from './storeAutoRebuild';
+import { receiveGalleryHints } from './storeGallery';
 import { clearRoomHints, receiveRoomHints } from './storeHints';
 import { redeemPairLink } from './storePairing';
 import { startCommonGroundPolling } from './polling';
@@ -39,8 +41,9 @@ export function commonGroundStoreFor(accountId: string, profiles = false): Commo
 /**
  * Store state, with polling while mounted and the window is visible, a refetch when it becomes
  * visible again, a refetch of the cards when a card build lands (`common_ground.card.updated`),
- * and a refresh of the open room's Results, match page or Rooms list when a room or match changes
- * (`common_ground.room.updated`, `common_ground.matches.updated`).
+ * a refresh of the open room's Results, match page or Rooms list when a room or match changes
+ * (`common_ground.room.updated`, `common_ground.matches.updated`), and of a room's Gallery and
+ * its open item when someone shares or comments (`common_ground.gallery.updated`).
  */
 export function useCommonGround(store: CommonGroundStore) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
@@ -50,12 +53,14 @@ export function useCommonGround(store: CommonGroundStore) {
     if (store.top().name !== 'home') void store.loadScreen();
     const stopHints = subscribeCardHints(() => { void requestCardRefresh(store); });
     const stopRoomHints = subscribeRoomHints((hints) => { void receiveRoomHints(store, hints, () => document.hidden); });
+    const stopGalleryHints = subscribeGalleryHints((hints) => { void receiveGalleryHints(store, hints); });
     const stopPolling = startCommonGroundPolling(() => store.poll(), {
       win: window, doc: document, schedule: setTimeout, cancel: clearTimeout,
     });
     return () => {
       stopHints();
       stopRoomHints();
+      stopGalleryHints();
       clearRoomHints(store);
       stopPolling();
     };

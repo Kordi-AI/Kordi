@@ -11,7 +11,7 @@ use std::sync::Arc;
 use axum::{
     extract::{ConnectInfo, Path, State},
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    response::Response,
     Extension, Json,
 };
 use serde::Deserialize;
@@ -21,17 +21,19 @@ use sqlx_postgres::{PgPool, Postgres};
 use uuid::Uuid;
 
 mod create;
+mod leave;
 mod limits;
 mod preview;
 mod switch;
 mod view;
 
 pub(super) use create::create;
+pub(super) use leave::{leave, leave_profile};
 pub(super) use preview::preview;
 
 pub(super) use switch::switch_profile;
 use view::view_response;
-pub(super) use view::{list, read};
+pub(super) use view::{list, member_people, read};
 
 use super::profiles::{self, Profile};
 use super::{card, db_error, err, ROOM_OPEN_SQL};
@@ -333,51 +335,6 @@ pub(super) async fn my_room(
         .bind(account)
         .fetch_optional(pool)
         .await
-}
-
-/// `POST /v1/cloud/common-ground/rooms/:code/leave`: leaves an open room,
-/// or removes a closed one from your rooms.
-pub(super) async fn leave(
-    State(state): State<Arc<ServerState>>,
-    Extension(session): Extension<CloudSession>,
-    Path(code): Path<String>,
-) -> Response {
-    let pool = state.db_pool();
-    let account = session.account_id.as_str();
-    let room_id = match my_room(pool, &code, account).await {
-        Ok(Some((room_id, _))) => room_id,
-        Ok(None) => return room_not_found(),
-        Err(error) => return db_error(error),
-    };
-    let result = query(
-        "UPDATE cloud_common_ground_room_members SET left_at = now()
-         WHERE room_id = $1 AND account_id = $2 AND left_at IS NULL",
-    )
-    .bind(room_id)
-    .bind(account)
-    .execute(pool)
-    .await;
-    if let Err(error) = result {
-        return db_error(error);
-    }
-    announce(pool, room_id).await;
-    StatusCode::NO_CONTENT.into_response()
-}
-
-/// Leaves every room where `profile_id` is the shared profile and returns
-/// them, for announcing.
-pub(super) async fn leave_profile(
-    tx: &mut Transaction<'_, Postgres>,
-    profile_id: &str,
-) -> sqlx_core::Result<Vec<Uuid>> {
-    let rows: Vec<(Uuid,)> = query_as(
-        "UPDATE cloud_common_ground_room_members SET left_at = now()
-         WHERE profile_id = $1 AND left_at IS NULL RETURNING room_id",
-    )
-    .bind(profile_id)
-    .fetch_all(&mut **tx)
-    .await?;
-    Ok(rows.into_iter().map(|(room_id,)| room_id).collect())
 }
 
 /// Tells everyone still in the room that its members changed. Best effort:
