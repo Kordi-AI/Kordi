@@ -98,6 +98,8 @@ struct CommonGroundPeopleRows: View {
         let person: CommonGroundPerson
         let subtitle: String
         var score: Int? = nil
+        /// Still being matched: a ring in place of the score.
+        var matching = false
         var selectable = true
         /// One row per person and the profile they share.
         var id: String { person.accountId + "|" + (person.profile?.profileId ?? "") }
@@ -131,7 +133,9 @@ struct CommonGroundPeopleRows: View {
                 }
             }
             Spacer(minLength: 8)
-            if let score = entry.score {
+            if entry.matching {
+                CommonGroundMatchingRing()
+            } else if let score = entry.score {
                 Text("\(score)%")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -146,6 +150,30 @@ struct CommonGroundPeopleRows: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, minHeight: SessionDetailMetrics.rowMinHeight, alignment: .leading)
         .contentShape(Rectangle())
+    }
+}
+
+/// A small neutral ring that turns while a person is still being matched.
+struct CommonGroundMatchingRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var turning = false
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1.8)
+            Circle()
+                .trim(from: 0, to: 0.25)
+                .stroke(Color.secondary, style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+                .rotationEffect(.degrees(turning ? 360 : 0))
+                .animation(
+                    reduceMotion ? nil : .linear(duration: 0.9).repeatForever(autoreverses: false),
+                    value: turning
+                )
+        }
+        .frame(width: 16, height: 16)
+        .onAppear { turning = true }
+        .accessibilityElement()
+        .accessibilityLabel("Matching")
     }
 }
 

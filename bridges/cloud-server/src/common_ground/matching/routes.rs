@@ -281,9 +281,10 @@ pub(in crate::common_ground) async fn results(
             None => None,
         })
         .collect();
+    // Model results first, then the estimates, each best first.
     ranked.sort_by(|a, b| {
-        b.1.score
-            .cmp(&a.1.score)
+        a.2.cmp(&b.2)
+            .then(b.1.score.cmp(&a.1.score))
             .then(a.0.name.cmp(&b.0.name))
             .then(a.0.profile_id.cmp(&b.0.profile_id))
     });

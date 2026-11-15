@@ -147,6 +147,16 @@ async fn everyone_shows_at_once_and_the_model_details_the_best_few() {
     assert_eq!(estimated(&body), 2, "the model replaced the best five");
     assert_eq!(body["people"][0]["person"]["accountId"], json!(people[1].0));
     assert!(body["people"][0].get("estimated").is_none());
+    let order: Vec<bool> = body["people"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["estimated"] == json!(true))
+        .collect();
+    assert!(
+        order.windows(2).all(|pair| pair[0] <= pair[1]),
+        "model results come before estimates: {order:?}"
+    );
     let rest: Vec<String> = body["people"]
         .as_array()
         .unwrap()
@@ -282,7 +292,7 @@ async fn themes_wait_while_people_join() {
     let (themes,): (i64,) = query_as(
         "SELECT COUNT(*) FROM cloud_common_ground_match_runs m
          JOIN cloud_common_ground_rooms r ON r.room_id = m.room_id
-         WHERE m.kind = 'room' AND r.code = $1 AND m.finished_at IS NULL",
+         WHERE m.kind = 'room' AND r.code = $1 AND r.closed_at IS NULL AND m.finished_at IS NULL",
     )
     .bind(&code)
     .fetch_one(&pool)
@@ -343,7 +353,7 @@ async fn polling_a_busy_room_waits_for_one_connection_at_a_time() {
     let (runs,): (i64,) = query_as(
         "SELECT COUNT(*) FROM cloud_common_ground_match_runs m
          JOIN cloud_common_ground_rooms r ON r.room_id = m.room_id
-         WHERE m.kind = 'match' AND r.code = $1",
+         WHERE m.kind = 'match' AND r.code = $1 AND r.closed_at IS NULL",
     )
     .bind(&code)
     .fetch_one(&setup)

@@ -45,7 +45,7 @@ test('results keep estimated people and mark only them', async () => {
   assert.equal('estimated' in people[2], false, 'only a literal true counts');
 });
 
-test('estimated people show as ordinary rows that open the match, with the progress line while matching', async () => {
+test('estimated people show as rows that open the match, with a ring in place of the score and no headline', async () => {
   const members = [person('acct_a'), person('acct_b')];
   const body = (status: string) => ({ status, topics: [], suggestion: null, people: [
     { person: members[0], score: 82, headline: 'Ready reasons' },
@@ -57,8 +57,11 @@ test('estimated people show as ordinary rows that open the match, with the progr
   await store.loadScreen({ name: 'results', code: '4821' });
   const markup = renderToStaticMarkup(createElement(ResultsScreen, { code: '4821', state: store.getSnapshot(), store, host }));
   assert.equal((markup.match(/class="cg-row is-button"/g) ?? []).length, 2, 'both people are listed, once each');
-  assert.match(markup, /Agent memory/);
-  assert.match(markup, /41/);
+  assert.match(markup, /Ready reasons/);
+  assert.match(markup, /82%/);
+  assert.doesNotMatch(markup, /Agent memory/, 'an estimated row has no headline');
+  assert.doesNotMatch(markup, /41%/, 'an estimated row has no score');
+  assert.equal((markup.match(/class="cg-matching"/g) ?? []).length, 1, 'one ring, on the estimated row');
   assert.match(markup, /cg-progress is-inline/);
   assert.doesNotMatch(markup, /[Ee]stimate/, 'no extra copy');
 

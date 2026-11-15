@@ -263,7 +263,14 @@ struct CommonGroundResultsView: View {
             CommonGroundRow(title: results?.isMatching == true ? "Matching" : "No matches yet")
         } else {
             CommonGroundPeopleRows(
-                entries: people.map { .init(person: $0.person, subtitle: $0.headline, score: $0.score) }
+                entries: people.map {
+                    .init(
+                        person: $0.person,
+                        subtitle: $0.estimated ? "" : $0.headline,
+                        score: $0.estimated ? nil : $0.score,
+                        matching: $0.estimated
+                    )
+                }
             ) { person in
                 model.view(person.accountId, through: model.sharedProfileID(inRoom: code))
                 path.append(.match(person.accountId))

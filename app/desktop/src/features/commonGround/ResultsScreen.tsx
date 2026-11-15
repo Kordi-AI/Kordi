@@ -4,7 +4,7 @@ import { Copy, LogOut } from 'lucide-react';
 import { DetailTile, DetailTiles } from '@/kordi-app/contacts/ContactDetailParts';
 import type { CgHost } from './host';
 import { groupLine, peopleCount, roomTitle, topicGroupDraft, type CgGroupDraft } from './format';
-import { CgAvatar, CgAvatarGrid, CgBack, CgButton, CgGroup, CgHero, CgNotice, CgProgress, CgRow, CgScore, CgSection, CgSegmented, CgTopicDot } from './parts';
+import { CgAvatar, CgAvatarGrid, CgBack, CgButton, CgGroup, CgHero, CgMatching, CgNotice, CgProgress, CgRow, CgScore, CgSection, CgSegmented, CgTopicDot } from './parts';
 import { personTitle } from './profiles';
 import { RoomSharing } from './ShareProfileDialog';
 import { StartGroupDialog } from './StartGroupDialog';
@@ -172,8 +172,8 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
                   key={entry.person.accountId}
                   lead={<CgAvatar person={entry.person} size={36} />}
                   title={personTitle(entry.person)}
-                  sub={entry.headline}
-                  trailing={<CgScore score={entry.score} />}
+                  sub={entry.estimated ? undefined : entry.headline}
+                  trailing={entry.estimated ? <CgMatching /> : <CgScore score={entry.score} />}
                   onClick={() => store.open({ name: 'match', accountId: entry.person.accountId, profileId })}
                 />
               ))}
