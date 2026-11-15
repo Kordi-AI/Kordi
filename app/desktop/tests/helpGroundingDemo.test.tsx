@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 
 import { act, createElement } from 'react';
 
@@ -57,6 +57,7 @@ async function onStep(withCard: boolean, run: (root: HTMLElement, store: CommonG
 }
 
 const target = (root: ParentNode, name: string) => root.querySelector(`[data-help-target="${name}"]`);
+const selectedTab = (root: ParentNode) => root.querySelector('[role="tab"][aria-selected="true"]')?.textContent;
 
 for (const withCard of [true, false]) {
   test(`the tour room is always an example room and never moves the account's page (${withCard ? 'with' : 'without'} a card)`, async () => {
@@ -74,8 +75,34 @@ for (const withCard of [true, false]) {
       await go({ target: 'grounding-room-topics', groundingScreen: 'room' });
       const topics = target(root, 'grounding-room-people');
       assert.equal(topics?.querySelectorAll('button[aria-label^="Start a group for"]').length, 3, 'Topics shows Start on each shared topic');
+      const logged = mock.method(globalThis.console, 'error', () => undefined);
+      try {
+        await go({ target: 'grounding-room-gallery', groundingScreen: 'room' });
+        assert.equal(selectedTab(root), 'Gallery', 'the Gallery step opens the Gallery tab');
+        const grid = target(root, 'grounding-room-gallery');
+        assert.equal(grid?.querySelectorAll('[data-cg-gallery-item]').length, 4, 'the example Gallery keeps its items after it loads');
+        for (const title of ['Screen reader design notes', 'Demo script', 'Model latency by device', 'Usability study tasks']) assert.match(grid?.textContent ?? '', new RegExp(title));
+        await go({ target: 'grounding-room-gallery-share', groundingScreen: 'room' });
+        const share = target(root, 'grounding-room-gallery-share');
+        assert.equal(share?.textContent, 'Share');
+        assert.ok(share?.closest('fieldset[disabled]'), 'Share stays an example control');
+        assert.equal(selectedTab(root), 'Gallery');
+        assert.equal(root.querySelector('[role="alert"]'), null, 'the example Gallery shows no error');
+        // Going back opens each step's own list again.
+        await go({ target: 'grounding-room-gallery', groundingScreen: 'room' });
+        assert.equal(selectedTab(root), 'Gallery');
+        await go({ target: 'grounding-room-topics', groundingScreen: 'room' });
+        assert.equal(selectedTab(root), 'Topics');
+        assert.equal(target(root, 'grounding-room-gallery'), null);
+        await go({ target: 'grounding-room-people', groundingScreen: 'room' });
+        assert.equal(selectedTab(root), 'People');
+      } finally {
+        logged.mock.restore();
+      }
+      assert.deepEqual(logged.mock.calls.map((call) => call.arguments), [], 'the example Gallery logs no errors');
       assert.deepEqual(store.getSnapshot().stack, [{ name: 'home' }], 'the account page never opens a room screen');
-      assert.deepEqual(calls.filter((call) => call.method !== 'GET'), [], 'nothing is written to the account');
+      assert.deepEqual(store.getSnapshot().gallery, { lists: {}, candidates: {}, items: {}, tabs: {} }, 'the account store never holds the example Gallery');
+      assert.deepEqual(calls.filter((call) => call.method !== 'GET' || call.url.includes('/gallery')), [], 'nothing is written to the account');
       await go({ target: 'help' });
       assert.equal(root.querySelector('[data-help-demo]'), null, 'the example leaves with the tour step');
     });

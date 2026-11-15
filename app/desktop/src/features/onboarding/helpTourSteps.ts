@@ -63,8 +63,10 @@ const meetSteps: readonly HelpTourStep[] = [
   { target: 'grounding-room-people', groundingScreen: 'room', title: 'See who is in the room', body: 'Everyone in the room is listed with a match score. Click a person to see what you have in common. Add each other as contacts to start a chat.' },
   { target: 'grounding-room-topics', groundingScreen: 'room', title: 'Find people by topic', body: 'Switch to Topics to see what the room shares. Click Start on a topic to start a group with the people who share it.' },
 ];
-// Ways to take your work out of Kordi or show it to others.
+// Ways to take your work out of Kordi or show it to others. The Gallery steps stay in the example room.
 const shareSteps: readonly HelpTourStep[] = [
+  { target: 'grounding-room-gallery', groundingScreen: 'room', title: 'Browse the room Gallery', body: 'Gallery shows what people in the room shared. Open an item to read it, comment, or contact the person who shared it.' },
+  { target: 'grounding-room-gallery-share', groundingScreen: 'room', title: 'Share your own artifacts', body: 'Click Share to pick documents and files from your Kordi chats. Only people in this room can open them.' },
   { target: 'chat-export', page: 'chats', title: 'Export a session', body: 'Right-click a chat here or in Agent Chats and choose Export. Kordi saves the whole session, including agent steps, as one file.',
     browserBody: 'Right-click a chat here or in Agent Chats and choose Export. The whole session, including agent steps, downloads as one file.' },
 ];

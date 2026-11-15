@@ -10,7 +10,7 @@ import { HomeScreen } from './HomeScreen';
 import { ResultsScreen } from './ResultsScreen';
 import { WalletShell } from './WalletShell';
 import type { CgHost } from './host';
-import type { CgPerson, CgResults, CgRoom } from './types';
+import type { CgGalleryItem, CgGalleryList, CgPerson, CgResults, CgRoom, CgRoomTab } from './types';
 
 const profile = { profileId: 'tour-example', kind: 'work' as const, name: 'Example card', focus: 'Designing useful apps', position: 0, hasCard: true, sharing: false, builtAt: null, topicCount: 4, design: null, icon: null,
   sources: { memory: false, connectors: [], device: [], agents: false, documents: ['tour-document'], links: '', notes: 'I design accessible apps. I enjoy hiking, can help with interface design, and would like feedback on a new app.' } };
@@ -22,6 +22,7 @@ const ROOM = '2468';
 const person = (name: string): CgPerson => ({ accountId: `tour-${name.split(' ')[0].toLowerCase()}`, name, avatarUrl: null });
 const [sam, noor, leo, ana, kenji] = ['Sam Rivera', 'Noor Haddad', 'Leo Martins', 'Ana Kowalski', 'Kenji Mori'].map(person);
 const accessible = { label: 'Accessible interfaces', people: [self, sam, noor, ana] };
+const prototypes = { label: 'Hackathon prototypes', people: [self, noor, leo, kenji] };
 const room: CgRoom = { roomId: 'tour-room', code: ROOM, name: 'Hackathon room · Example', openedByYou: false, expiresAt: '2099-01-01T00:00:00Z', open: true, kind: 'work', profileId: profile.profileId, members: [sam, noor, leo, ana, kenji] };
 const results: CgResults = { status: 'ready', profileId: profile.profileId, suggestion: accessible, groups: [],
   people: [
@@ -31,13 +32,33 @@ const results: CgResults = { status: 'ready', profileId: profile.profileId, sugg
     { person: ana, score: 57, headline: 'Studies how people learn new interfaces' },
     { person: kenji, score: 42, headline: 'Plans weekend hikes and outdoor apps' },
   ],
-  topics: [accessible, { label: 'Hackathon prototypes', people: [self, noor, leo, kenji] }, { label: 'Hiking', people: [self, kenji, sam] }] };
+  topics: [accessible, prototypes, { label: 'Hiking', people: [self, kenji, sam] }] };
+// What the room shared to its Gallery; text previews draw the cards, so no file is ever read.
+const shared = (n: number, sharer: CgPerson, title: string, fileName: string, contentType: string, topic: string | null, commentCount: number, preview: string): CgGalleryItem => (
+  { itemId: `tour-item-${n}`, attachmentId: `tour-file-${n}`, title, fileName, contentType, sizeBytes: preview.length, topic, preview, person: sharer, mine: false, commentCount, createdAt: '2026-01-01T00:00:00Z' });
+const gallery: CgGalleryList = { canShare: true, items: [
+  shared(1, sam, 'Screen reader design notes', 'design-notes.md', 'text/markdown', accessible.label, 2, '# Screen reader design notes\n\n- Label every control\n- Keep focus order the same as reading order\n- Announce changes after a save'),
+  shared(2, noor, 'Demo script', 'demo-script.md', 'text/markdown', prototypes.label, 1, '# Demo script\n\n1. Open the app\n2. Build a card\n3. Join the room\n4. Finish in three minutes'),
+  shared(3, leo, 'Model latency by device', 'latency.csv', 'text/csv', prototypes.label, 0, 'Device,Model,Latency\nLaptop,Small,120 ms\nPhone,Small,340 ms\nLaptop,Medium,410 ms'),
+  shared(4, ana, 'Usability study tasks', 'study-tasks.json', 'application/json', null, 0, '{\n  "tasks": ["Find settings", "Add a contact", "Share a card"]\n}'),
+] };
+const ROOM_TABS: Record<string, CgRoomTab> = { 'grounding-room-topics': 'topics', 'grounding-room-gallery': 'gallery', 'grounding-room-gallery-share': 'gallery' };
 
 /** A disposable, disconnected store: example controls can never write to the account. */
 function exampleStore() {
-  const client = createCommonGroundClient({ token: () => Promise.resolve('tour-example'), fetchImpl: () => (input, init) => { const url = input instanceof Request ? input.url : String(input); if ((!init?.method || init.method === 'GET') && url.includes('/documents')) return Promise.resolve(new Response(JSON.stringify({ documents: [{ attachmentId: 'tour-document', title: 'App design notes · Example', updatedAt: '2026-01-01T00:00:00Z', sizeBytes: 240 }] }), { status: 200 })); return Promise.reject(new Error('Example only. Close the tour to use your own cards.')); } });
+  const json = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+  // Reads answer with the example; everything else fails, so nothing reaches the account.
+  const client = createCommonGroundClient({ token: () => Promise.resolve('tour-example'), fetchImpl: () => (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const read = !init?.method || init.method === 'GET';
+    if (read && url.includes('/documents')) return json({ documents: [{ attachmentId: 'tour-document', title: 'App design notes · Example', updatedAt: '2026-01-01T00:00:00Z', sizeBytes: 240 }] });
+    if (read && url.endsWith(`/rooms/${ROOM}/gallery`)) return json(gallery);
+    return Promise.reject(new Error('Example only. Close the tour to use your own cards.'));
+  } });
   const store = new CommonGroundStore(client, { profiles: true });
-  store.set({ loaded: true, owner, profiles: [profile], profileId: profile.profileId, rooms: { [ROOM]: room }, results: { [ROOM]: results } });
+  const { support, gallery: empty } = store.getSnapshot();
+  store.set({ loaded: true, owner, profiles: [profile], profileId: profile.profileId, rooms: { [ROOM]: room }, results: { [ROOM]: results },
+    support: { ...support, gallery: true }, gallery: { ...empty, lists: { [ROOM]: gallery } } });
   return store;
 }
 // In-memory sources so the example Build screen shows every group; nothing reaches the Mac or the network.
@@ -50,7 +71,8 @@ const host: CgHost = { self, profiles: true, sources: true, memoryAvailable: tru
 export function HelpGroundingDemo({ screen }: { screen: HelpGroundingScreen }) {
   const [store] = useState(exampleStore);
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  const tab = useHelpTourLocation()?.target === 'grounding-room-topics' ? 'topics' : 'people';
+  // Each room step opens its own list; the key remounts the room so going back opens it again.
+  const tab = ROOM_TABS[useHelpTourLocation()?.target ?? ''] ?? 'people';
   useEffect(() => { store.set({ stack: [screen === 'room' ? { name: 'results', code: ROOM } : { name: screen }] }); }, [screen, store]);
   const page = screen === 'build' || screen === 'room';
   return <section aria-label="Grounding example" className="cg-page is-wallet" data-help-grounding-card="built" data-help-grounding-social="ready" data-help-demo="grounding">

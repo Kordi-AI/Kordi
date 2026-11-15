@@ -15,7 +15,7 @@ export const TOUR_TARGETS = [
   'grounding-memory', 'grounding-documents', 'grounding-connectors', 'grounding-device', 'grounding-links', 'grounding-notes', 'grounding-build',
   'grounding-topics', 'grounding-sharing',
   'grounding-pair', 'grounding-room', 'grounding-room-people', 'grounding-room-topics',
-  'chat-export',
+  'grounding-room-gallery', 'grounding-room-gallery-share', 'chat-export',
   'help',
 ] as const;
 /** The Help menu's "Create and share cards" and "Meet people with Grounding" parts. */

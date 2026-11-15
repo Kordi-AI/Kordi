@@ -16,9 +16,9 @@ function memoryStorage(): Storage {
 
 test('the workspace tour covers setup, cards, social, conversations, Factory, Digest, and access', () => {
   assert.equal(helpTourSteps.length, HELP_TOUR_STEP_COUNT);
-  assert.equal(HELP_TOUR_STEP_COUNT, 28);
+  assert.equal(HELP_TOUR_STEP_COUNT, 30);
   for (const steps of Object.values(helpTours)) assert.ok(steps.length <= HELP_TOUR_STEP_COUNT);
-  for (const target of ['settings-auth', 'grounding-topics', 'grounding-sharing', 'grounding-pair', 'grounding-room', 'grounding-room-people', 'grounding-room-topics', 'nav-contacts', 'nav-chats', 'nav-agent-chats', 'nav-agents', 'memory-import-run', 'memory-review', 'nav-digest', 'chat-export', 'help']) assert.ok(helpTourSteps.some((step) => step.target === target));
+  for (const target of ['settings-auth', 'grounding-topics', 'grounding-sharing', 'grounding-pair', 'grounding-room', 'grounding-room-people', 'grounding-room-topics', 'grounding-room-gallery', 'grounding-room-gallery-share', 'nav-contacts', 'nav-chats', 'nav-agent-chats', 'nav-agents', 'memory-import-run', 'memory-review', 'nav-digest', 'chat-export', 'help']) assert.ok(helpTourSteps.some((step) => step.target === target));
   assert.equal(new Set(helpTourSteps.map((step) => step.target)).size, helpTourSteps.length, 'each control is explained once');
   const sections = [...new Set(helpTourSteps.map((step) => step.section))];
   assert.deepEqual(sections, ['Tabs', 'Set up', 'Import memory', 'Cards', 'Build a card', 'Review and share', 'Meet people', 'Share your work', 'Help']);
@@ -47,6 +47,11 @@ test('the tour walks the rail first, imports memory before Grounding, and builds
   for (const target of ['grounding-pair', 'grounding-room', 'grounding-room-people', 'grounding-room-topics']) assert.ok(index(target) > index('grounding-sharing'), target);
   assert.deepEqual(['grounding-room-people', 'grounding-room-topics'].map((target) => helpTourSteps[index(target)].groundingScreen), ['room', 'room']);
   assert.ok(index('chat-export') > index('grounding-room-people') && index('chat-export') > index('grounding-room-topics'));
+  // The Gallery opens "Share your work" in the same example room, right after its Topics step.
+  const gallery = ['grounding-room-gallery', 'grounding-room-gallery-share'];
+  assert.deepEqual(helpTourSteps.slice(index('grounding-room-topics') + 1, index('chat-export')).map((step) => step.target), gallery);
+  assert.deepEqual(gallery.map((target) => [helpTourSteps[index(target)].groundingScreen, helpTourSteps[index(target)].section]), [['room', 'Share your work'], ['room', 'Share your work']]);
+  assert.equal(helpTourSteps.find((step) => step.section === 'Share your work')?.target, 'grounding-room-gallery');
   assert.equal(index('chat-export'), index('help') - 1);
   assert.equal(helpTourSteps[index('chat-export')].page, 'chats');
   assert.equal(helpTourSteps[helpTourSteps.length - 1].target, 'help');

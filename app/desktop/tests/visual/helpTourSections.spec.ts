@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { CARD_TARGETS, MEET_TARGETS, TOUR_TARGETS } from './helpTourTargets';
+import { CARD_TARGETS, MEET_TARGETS, openSection, TOUR_TARGETS } from './helpTourTargets';
 
 // The walkthrough's order and its jumps, on the real feature pages and the offline workspace preview.
 test.beforeEach(async ({ page }) => {
@@ -113,9 +113,33 @@ test('the whole tour clicks through the offline preview without a blank wait', a
     await expect(card).toHaveAttribute('data-positioned', 'true', { timeout: 4000 });
     if (target.startsWith('grounding-room-')) await expect(page.locator('[data-help-demo="grounding"]')).toContainText('Example data');
     if (target === 'grounding-room-topics') await expect(page.getByRole('button', { name: 'Start a group for Accessible interfaces' })).toBeDisabled();
+    if (target.startsWith('grounding-room-gallery')) {
+      await expect(page.getByRole('tab', { name: 'Gallery', selected: true })).toBeVisible();
+      await expect(page.locator('[data-help-target="grounding-room-gallery"] [data-cg-gallery-item]')).toHaveCount(4);
+      await expect(page.getByText('Share your work · Step', { exact: false })).toBeVisible();
+    }
+    if (target === 'grounding-room-gallery-share') await expect(page.locator('[data-help-target="grounding-room-gallery-share"]')).toBeDisabled();
     if (target === 'chat-export') await expect(page.getByRole('dialog', { name: 'Export a session' })).toBeVisible();
     await page.getByRole('button', { name: index === TOUR_TARGETS.length - 1 ? 'Finish tour' : 'Next', exact: true }).click();
   }
   await expect(page.locator('.help-tour-layer')).toHaveCount(0);
   await expect(page.locator('[data-help-demo]')).toHaveCount(0);
+});
+
+test('Share your work opens the example room on Gallery, and going back reopens Topics and People', async ({ page }) => {
+  await page.goto('/tests/visual/helpHub.html?theme=light');
+  await page.getByRole('button', { name: 'Help & setup', exact: true }).click();
+  await page.getByRole('button', { name: 'Show me around' }).click();
+  await openSection(page, 'Share your work');
+  const steps = [
+    ['grounding-room-gallery', 'Gallery', 'Next'], ['grounding-room-gallery-share', 'Gallery', 'Previous step'],
+    ['grounding-room-gallery', 'Gallery', 'Previous step'], ['grounding-room-topics', 'Topics', 'Previous step'], ['grounding-room-people', 'People', null],
+  ] as const;
+  for (const [index, [target, tab, then]] of steps.entries()) {
+    await expect(page.locator('.help-tour-spotlight')).toHaveAttribute('data-target', target);
+    await expect(page.locator('.help-tour-card')).toHaveAttribute('data-positioned', 'true');
+    await expect(page.getByRole('tab', { name: tab, selected: true })).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`share-${index}-${target}.png`) });
+    if (then) await page.getByRole('button', { name: then, exact: true }).click();
+  }
 });
