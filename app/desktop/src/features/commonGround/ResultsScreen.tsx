@@ -103,8 +103,9 @@ function GroupsSection({ code, results, state, store, host, closed }: { code: st
   );
 }
 
-export function ResultsScreen({ code, state, store, host }: { code: string; state: CgState; store: CommonGroundStore; host: CgHost }) {
-  const [tab, setTab] = useState<'people' | 'topics'>('people');
+/** `initialTab` lets the help tour open the Topics list. */
+export function ResultsScreen({ code, state, store, host, initialTab = 'people' }: { code: string; state: CgState; store: CommonGroundStore; host: CgHost; initialTab?: 'people' | 'topics' }) {
+  const [tab, setTab] = useState<'people' | 'topics'>(initialTab);
   const [starting, setStarting] = useState<CgGroupDraft | null>(null);
   const [copied, setCopied] = useState(false);
   const results = state.results[code];
@@ -161,8 +162,8 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
           </CgGroup>
         </CgSection>
       ) : null}
-      <CgSegmented value={tab} onChange={setTab} label="Results" options={[['people', 'People'], ['topics', 'Topics']]} />
-      {matchingEmpty || waiting ? null : <CgSection>
+      <CgSegmented value={tab} onChange={setTab} label="Results" options={[['people', 'People'], ['topics', 'Topics']]} helpTarget="grounding-room-topics" />
+      {matchingEmpty || waiting ? null : <CgSection helpTarget="grounding-room-people">
         <CgGroup>
           {tab === 'people'
             ? <>

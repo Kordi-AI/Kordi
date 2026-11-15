@@ -86,6 +86,7 @@ export function BuildScreen({ state, store, host }: { state: CgState; store: Com
   ) : null;
   const memoryRow = host.memoryAvailable ? (
     <CgRow
+      helpTarget="grounding-memory"
       lead={<CgIcon tone="violet"><Brain className="h-4 w-4" /></CgIcon>}
       title="Memory"
       trailing={<SettingsSwitch label="Memory" enabled={picks.memory} onChange={(memory) => set({ memory })} />}
@@ -117,7 +118,7 @@ export function BuildScreen({ state, store, host }: { state: CgState; store: Com
       </DeviceRows>
       <CgSection title="Links">
         <CgGroup>
-          <textarea className="cg-textarea" value={picks.links} onChange={(event) => set({ links: event.target.value })} placeholder="Homepage; ORCID; papers" aria-label="Links" />
+          <textarea data-help-target="grounding-links" className="cg-textarea" value={picks.links} onChange={(event) => set({ links: event.target.value })} placeholder="Homepage; ORCID; papers" aria-label="Links" />
         </CgGroup>
         <CgUnreadLinks links={unreadLinks} signIn={signIn} onUseNotes={useNotes} />
       </CgSection>

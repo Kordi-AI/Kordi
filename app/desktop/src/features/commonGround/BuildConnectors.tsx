@@ -26,7 +26,7 @@ export function ConnectorsSection({ access, connectors, picked, onPick }: {
   if (!access) return null;
   const { states, watch } = connectors;
   return (
-    <CgSection title="Connected accounts">
+    <CgSection title="Connected accounts" helpTarget="grounding-connectors">
       <CgGroup>
         {CONNECTORS_LINK_PROVIDER_IDS.map((id) => {
           const { name } = connectorDefinition(id);

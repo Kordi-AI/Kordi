@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { helpTourSteps, helpTours } from '../src/features/onboarding/helpTourSteps';
+import { helpTourAvailable, helpTourEntry, helpTourStepAvailable, helpTourStepBody, helpTourSteps, helpTours } from '../src/features/onboarding/helpTourSteps';
+import { navItems } from '../src/kordi-app/data/navigation';
 import { HELP_TOUR_STEP_COUNT } from '../src/features/onboarding/helpProgress';
 import { helpTourGeometry, helpTourRing } from '../src/features/onboarding/helpTourGeometry';
 import { helpProgressKey, readHelpProgress, saveHelpProgress, markHelpWelcome } from '../src/features/onboarding/helpProgress';
@@ -15,10 +16,52 @@ function memoryStorage(): Storage {
 
 test('the workspace tour covers setup, cards, social, conversations, Factory, Digest, and access', () => {
   assert.equal(helpTourSteps.length, HELP_TOUR_STEP_COUNT);
+  assert.equal(HELP_TOUR_STEP_COUNT, 28);
   for (const steps of Object.values(helpTours)) assert.ok(steps.length <= HELP_TOUR_STEP_COUNT);
-  for (const target of ['settings-auth', 'grounding-topics', 'grounding-sharing', 'grounding-pair', 'grounding-room', 'nav-contacts', 'nav-chats', 'nav-agents', 'memory-import-run', 'memory-review', 'nav-digest', 'help']) assert.ok(helpTourSteps.some((step) => step.target === target));
+  for (const target of ['settings-auth', 'grounding-topics', 'grounding-sharing', 'grounding-pair', 'grounding-room', 'grounding-room-people', 'grounding-room-topics', 'nav-contacts', 'nav-chats', 'nav-agent-chats', 'nav-agents', 'memory-import-run', 'memory-review', 'nav-digest', 'chat-export', 'help']) assert.ok(helpTourSteps.some((step) => step.target === target));
+  assert.equal(new Set(helpTourSteps.map((step) => step.target)).size, helpTourSteps.length, 'each control is explained once');
   const sections = [...new Set(helpTourSteps.map((step) => step.section))];
+  assert.deepEqual(sections, ['Tabs', 'Set up', 'Import memory', 'Cards', 'Build a card', 'Review and share', 'Meet people', 'Share your work', 'Help']);
   for (const section of sections) assert.ok(helpTourSteps.filter((step) => step.section === section).length <= 7);
+  // Each section is one contiguous run, so the walkthrough never returns to a section it left.
+  for (const section of sections) {
+    const indices = helpTourSteps.flatMap((step, index) => step.section === section ? [index] : []);
+    assert.equal(indices[indices.length - 1] - indices[0], indices.length - 1, section);
+  }
+});
+
+test('the tour walks the rail first, imports memory before Grounding, and builds a card source by source', () => {
+  const index = (target: string) => helpTourSteps.findIndex((step) => step.target === target);
+  assert.deepEqual(helpTourSteps.slice(0, 5).map((step) => step.target), navItems.map((item) => `nav-${item.id}`));
+  assert.deepEqual(helpTourSteps.slice(0, 5).map((step) => step.page), navItems.map((item) => item.id));
+  const lastImport = Math.max(...helpTourSteps.flatMap((step, at) => step.settings === 'memory' ? [at] : []));
+  const firstGrounding = helpTourSteps.findIndex((step) => step.target.startsWith('grounding'));
+  assert.ok(lastImport < firstGrounding, 'memory import comes before any Grounding step');
+  assert.ok(index('settings-auth') < index('settings-memory'));
+  assert.ok(helpTourSteps[index('memory-review')].body.endsWith('Next, use them to build your card.'));
+  const build = helpTourSteps.flatMap((step, at) => step.groundingScreen === 'build' ? [at] : []);
+  assert.equal(build[build.length - 1] - build[0], build.length - 1, 'the Build steps are contiguous');
+  assert.deepEqual(build.map((at) => helpTourSteps[at].target), ['grounding-memory', 'grounding-documents', 'grounding-connectors', 'grounding-device', 'grounding-links', 'grounding-notes', 'grounding-build']);
+  assert.deepEqual(helpTourSteps.filter((step) => step.optional).map((step) => step.target), ['grounding-memory', 'grounding-connectors', 'grounding-device']);
+  assert.equal(helpTourSteps[index('grounding-device')].desktopOnly, true);
+  for (const target of ['grounding-pair', 'grounding-room', 'grounding-room-people', 'grounding-room-topics']) assert.ok(index(target) > index('grounding-sharing'), target);
+  assert.deepEqual(['grounding-room-people', 'grounding-room-topics'].map((target) => helpTourSteps[index(target)].groundingScreen), ['room', 'room']);
+  assert.ok(index('chat-export') > index('grounding-room-people') && index('chat-export') > index('grounding-room-topics'));
+  assert.equal(index('chat-export'), index('help') - 1);
+  assert.equal(helpTourSteps[index('chat-export')].page, 'chats');
+  assert.equal(helpTourSteps[helpTourSteps.length - 1].target, 'help');
+});
+
+test('Help jumps start where each part of the walkthrough starts and the parts stay in order', () => {
+  assert.deepEqual(helpTourEntry, { workspace: 'nav-contacts', imports: 'settings-memory', cards: 'grounding', grounding: 'grounding-pair' });
+  for (const [id, target] of Object.entries(helpTourEntry) as Array<[keyof typeof helpTours, string]>) {
+    assert.equal(helpTours[id][0].target, target, id);
+    assert.ok(helpTours.workspace.some((step) => step.target === target), id);
+  }
+  assert.equal(helpTours.workspace, helpTourSteps);
+  assert.equal(helpTourAvailable('imports', true), true);
+  assert.equal(helpTours.cards.filter((step) => helpTourStepAvailable(step, true)).length, helpTours.cards.length - 1, 'the browser app skips the Mac sources');
+  assert.equal(helpTourStepBody(helpTourSteps.find((step) => step.target === 'chat-export')!, true), 'Right-click a chat here or in Agent Chats and choose Export. The whole session, including agent steps, downloads as one file.');
 });
 
 test('progress is isolated by account and environment and tolerates damaged or unavailable storage', () => {
@@ -70,6 +113,8 @@ test('Grounding navigation survives mounting and cannot cross into another accou
     requestHelpGrounding('first-user', 'card');
     assert.equal(consumeHelpGroundingScreen('second-user'), null);
     assert.equal(consumeHelpGroundingScreen('first-user'), null);
+    requestHelpGrounding('first-user', 'room');
+    assert.equal(consumeHelpGroundingScreen('first-user'), 'room');
   } finally { Object.assign(globalThis, { window: previous }); }
 });
 

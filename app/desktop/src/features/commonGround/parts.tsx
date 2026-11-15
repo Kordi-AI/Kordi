@@ -75,9 +75,9 @@ export function CgHero({ avatar, title, line, children }: { avatar: ReactNode; t
   );
 }
 
-export function CgSection({ title, children, className }: { title?: ReactNode; children: ReactNode; className?: string }) {
+export function CgSection({ title, children, className, helpTarget }: { title?: ReactNode; children: ReactNode; className?: string; helpTarget?: string }) {
   return (
-    <section className={cn('cg-section', className)}>
+    <section className={cn('cg-section', className)} data-help-target={helpTarget}>
       {title ? <h2 className="cg-section-title">{title}</h2> : null}
       {children}
     </section>
@@ -132,14 +132,15 @@ export function CgPrimary({ children, onClick, disabled }: { children: ReactNode
   return <button type="button" className="cg-primary" onClick={onClick} disabled={disabled}>{children}</button>;
 }
 
-export function CgSegmented<T extends string>({ value, options, onChange, label }: {
+export function CgSegmented<T extends string>({ value, options, onChange, label, helpTarget }: {
   value: T;
   options: Array<[T, string]>;
   onChange: (value: T) => void;
   label: string;
+  helpTarget?: string;
 }) {
   return (
-    <div className="cg-seg" role="tablist" aria-label={label}>
+    <div className="cg-seg" role="tablist" aria-label={label} data-help-target={helpTarget}>
       {options.map(([key, text]) => (
         <button key={key} type="button" role="tab" aria-selected={value === key} className={cn(value === key && 'is-on')} onClick={() => onChange(key)}>
           {text}

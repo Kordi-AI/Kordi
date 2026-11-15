@@ -95,7 +95,7 @@ export function DeviceRows({ host, titles, setTitles, blocked: parentBlocked, se
   const rows = device ? DEVICE_SOURCES.filter(({ id }) => status?.[id] !== 'unavailable') : [];
   if (!rows.length && !children) return null;
   return (
-    <CgSection title="On this Mac">
+    <CgSection title="On this Mac" helpTarget="grounding-device">
       <CgGroup>
         {rows.map(({ id, name, tone, Icon }) => {
           const value = status?.[id];

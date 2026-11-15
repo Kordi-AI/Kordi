@@ -50,6 +50,8 @@ export function HelpWorkspacePreview({ theme }: { theme: 'dark' | 'light' }) {
   const [draft, setDraft] = useState('');
   const sidebarAccount: WorkspaceSidebarAccount = {
     cloudAccount: account, cloudAccountDialogTab: tab, setCloudAccountDialogTab: setTab,
+    // Memory shows in settings; signed out of the preview, it keeps its defaults on this page.
+    cloudMemoryVersion: 3,
     onUpdateCloudProfile: resolved,
     cloudSettings: {
       settingsSections, activeSettingsSectionId: section, setActiveSettingsSectionId: setSection,
@@ -72,7 +74,7 @@ export function HelpWorkspacePreview({ theme }: { theme: 'dark' | 'light' }) {
         leadingListItems={<CommonGroundContactsRow selected={Boolean(tour?.groundingScreen)} onSelect={noop} />}
         leadingDetail={tour?.groundingScreen ? <CommonGroundPage store={groundingStore} host={groundingHost} /> : undefined}
       /> : <>
-        {(activeNav === 'chats' || activeNav === 'agent-chats') ? <aside className="app-side-shell" style={{ width: 260, padding: 12 }}><ChatSidebarChrome chatChannel={activeNav === 'chats' ? 'contact' : 'agent'} chatSearch={search} setChatSearch={setSearch} collaborationSyncAriaLabel={null} collaborationSyncStatus="idle" onOpenCreate={noop} />{people.map((item) => <div className="app-contact-row" key={item.id} style={{ padding: '16px 8px', fontSize: 13 }}>{item.name}</div>)}</aside> : null}
+        {(activeNav === 'chats' || activeNav === 'agent-chats') ? <aside className="app-side-shell" style={{ width: 260, padding: 12 }}><ChatSidebarChrome chatChannel={activeNav === 'chats' ? 'contact' : 'agent'} chatSearch={search} setChatSearch={setSearch} collaborationSyncAriaLabel={null} collaborationSyncStatus="idle" onOpenCreate={noop} />{people.map((item, index) => <div className="app-contact-row" key={item.id} data-help-target={activeNav === 'chats' && index === 0 ? 'chat-export' : undefined} style={{ padding: '16px 8px', fontSize: 13 }}>{item.name}</div>)}</aside> : null}
         <section style={{ flex: 1, padding: 28, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <h1 style={{ fontSize: 20, fontWeight: 600 }}>{navItems.find((item) => item.id === activeNav)?.label}</h1>
           <p style={{ fontSize: 13, opacity: .6 }}>Offline preview · Sample workspace</p>

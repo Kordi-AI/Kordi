@@ -73,10 +73,10 @@ export default function HelpMenu({ progressKey, settingsAvailable, supportAvaila
       <button onClick={() => onStartTour('workspace')}><Play size={16} /><span>{progress.completed ? 'Replay tour' : progress.step > 0 ? 'Resume tour' : 'Show me around'}</span><ArrowRight size={14} /></button>
       <div className="app-dense-menu-divider" />
       <p className="help-menu-section-label">Jump to a tour section</p>
-      <button disabled={(capabilities.capabilities?.commonGroundVersion ?? 0) < 1} onClick={() => onStartTour('grounding')}><span>Meet people with Grounding</span><ArrowRight size={14} /></button>
-      <button disabled={(capabilities.capabilities?.commonGroundVersion ?? 0) < 1} onClick={() => onStartTour('cards')}><span>Create and share cards</span><ArrowRight size={14} /></button>
-      {(capabilities.capabilities?.commonGroundVersion ?? 0) < 1 ? <p className="help-menu-note">{capabilities.status === 'loading' ? 'Checking Grounding availability…' : capabilities.status === 'failed' ? 'Could not check Grounding availability. Close help and try again.' : 'Grounding and cards are not enabled in this workspace yet.'}</p> : null}
       {helpTourAvailable('imports', isBrowserAppRuntime()) && (!isBrowserAppRuntime() || memoryVersionFromCapabilities(capabilities.capabilities) !== null) ? <button disabled={!settingsAvailable} onClick={() => onStartTour('imports')}><span>Import memory</span><ArrowRight size={14} /></button> : null}
+      <button disabled={(capabilities.capabilities?.commonGroundVersion ?? 0) < 1} onClick={() => onStartTour('cards')}><span>Create and share cards</span><ArrowRight size={14} /></button>
+      <button disabled={(capabilities.capabilities?.commonGroundVersion ?? 0) < 1} onClick={() => onStartTour('grounding')}><span>Meet people with Grounding</span><ArrowRight size={14} /></button>
+      {(capabilities.capabilities?.commonGroundVersion ?? 0) < 1 ? <p className="help-menu-note">{capabilities.status === 'loading' ? 'Checking Grounding availability…' : capabilities.status === 'failed' ? 'Could not check Grounding availability. Close help and try again.' : 'Grounding and cards are not enabled in this workspace yet.'}</p> : null}
       <div className="app-dense-menu-divider" />
       <button onClick={() => setView('permissions')}><ShieldCheck size={16} /><span>Permissions & access</span><ArrowRight size={14} /></button>
       <div className="app-dense-menu-divider" />

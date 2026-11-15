@@ -1,7 +1,7 @@
 import { resolvePreferenceStorage, readPreferenceStorageItem, writePreferenceStorageItem } from '@/features/cloud/preferenceStorage';
 
 export type HelpProgress = { step: number; completed: boolean; welcome: boolean };
-export const HELP_TOUR_STEP_COUNT = 19;
+export const HELP_TOUR_STEP_COUNT = 28;
 const emptyProgress = (): HelpProgress => ({ step: 0, completed: false, welcome: false });
 
 export function helpProgressKey(accountId: string, environment: string) {
