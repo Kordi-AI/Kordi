@@ -3,7 +3,7 @@ import { applyChatSyncLocalBatch, loadChatSyncConversations } from '@/lib/deskto
 import type { SessionHydrationState } from '@/features/canonical/canonicalStore';
 import type { CanonicalMessagePage, CanonicalSessionMessage, Message } from '@/kordi-app/types';
 import type { CloudAuthClient, CloudMessage } from './authClient';
-import { cloudMessageAttachmentToMessageAttachment } from './cloudAttachments';
+import { cloudGroupHistoryMessage } from './cloudGroupHistoryMessage';
 import { cloudMessageDeletions } from './cloudMessageDeletions';
 import { cloudMessageMetadataOnly } from './cloudMessageCache';
 import { parseCloudGroupControl, type CloudGroupControlEnvelope } from './cloudGroupMessages';
@@ -171,7 +171,6 @@ export function useBrowserGroupHistory({
     if (!data || (open && revision !== viewRevision.current)) return null;
     const row = data.rows.find(({ snapshot }) => pinMatches(snapshot, data.response.anchorMessageId ?? messageId));
     if (!row?.envelope.message) return null;
-    const message = row.envelope.message;
     if (open) {
       const page = groupPage(data.response);
       const throughSequence = Math.max(...data.response.messages.map(snapshot => snapshot.conversation_sequence));
@@ -180,17 +179,7 @@ export function useBrowserGroupHistory({
         latest: previous?.scope === scope ? previous.latest : undefined, error: null,
       }));
     }
-    return {
-      id: messageId,
-      entryId: message.id,
-      reactionTargetMessageId: row.snapshot.id,
-      role: message.senderAccountId === accountId ? 'user' : 'person',
-      sender: message.senderDisplayName ?? row.envelope.actor.displayName,
-      text: message.text,
-      time: '',
-      timestampMs: message.createdAtMs,
-      attachments: row.wire.attachments?.map(cloudMessageAttachmentToMessageAttachment),
-    } satisfies Message;
+    return cloudGroupHistoryMessage(row, accountId, messageId);
   }, [accountId, fetchPage, scope]);
   const actions = useMemo<BrowserGroupHistoryActions | undefined>(() => sessionId
     ? { sessionId, error, retry, page, returnToLatest, loadPin: ready ? loadPin : undefined }

@@ -332,6 +332,7 @@ pub fn run() {
             chat::attachments::desktop_chat_read_attachment,
             chat::attachments::desktop_chat_download_attachment,
             chat::attachments::save_as::desktop_save_attachment_as,
+            chat::attachments::save_as::desktop_save_text_file_as,
             chat::attachments::cloud_upload::desktop_cloud_attachment_upload,
             chat::attachments::cloud_upload::desktop_cloud_attachment_cancel,
             chat::artifacts::desktop_chat_artifact_bytes,

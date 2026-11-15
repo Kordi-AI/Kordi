@@ -38,7 +38,7 @@ function ChannelPreview() {
     {menuOpen ? <SessionContextMenu
       target={{ sessionId: 'session:group:qa', sessionName: '# QA', x: 80, y: 60, dissolvableChannel: { groupSpaceId: 'session:group:launch' } }}
       onClose={() => setMenuOpen(false)} onRename={() => {}} onArchive={() => {}} onRestore={() => {}}
-      onSetPinned={() => {}} onSetMuted={() => {}} onSetUnread={() => {}} onDelete={() => {}}
+      onSetPinned={() => {}} onSetMuted={() => {}} onSetUnread={() => {}} onExport={() => {}} onDelete={() => {}}
       onDissolveChannel={setTarget}
     /> : null}
     {target ? <DissolveDialog scope="channel" name="QA" anchorRect={target.anchorRect}

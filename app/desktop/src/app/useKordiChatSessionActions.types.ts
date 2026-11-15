@@ -2,10 +2,12 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { CloudAccount } from '@/features/cloud/authClient';
 import type { SendCloudGroupControlInput } from '@/features/cloud/cloudGroupControl.types';
 import type { ComposerDraftState } from '@/features/chat/composerDrafts';
-import type { CanonicalSessionState, DesktopChatState, Conversation } from '@/kordi-app/types';
+import type { CanonicalSessionState, Contact, DesktopChatState, Conversation } from '@/kordi-app/types';
 
 export type UseKordiChatSessionActionsArgs = {
   conversations?: readonly Conversation[];
+  /** Cloud contacts, used to read a direct chat's server history for export. */
+  contacts?: readonly Contact[];
   account: CloudAccount | null;
   activeConversationId: string;
   canonicalState: CanonicalSessionState | null;

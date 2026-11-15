@@ -20,6 +20,13 @@ export function browserAttachmentBlob(path: string): Blob {
   return value.blob;
 }
 
+function downloadBrowserUrl(href: string, name: string) {
+  const anchor = document.createElement('a');
+  anchor.href = href;
+  anchor.download = name;
+  document.body.appendChild(anchor); anchor.click(); anchor.remove();
+}
+
 export function clearBrowserAttachments() {
   for (const path of attachments.keys()) URL.revokeObjectURL(path);
   attachments.clear(); cloudPaths.clear(); streams.clear();
@@ -40,11 +47,17 @@ export async function runBrowserAttachmentCommand(command: string, args: Record<
     case 'desktop_chat_download_attachment': {
       const path = String(args.path);
       browserAttachmentBlob(path);
-      const anchor = document.createElement('a');
-      anchor.href = path;
-      anchor.download = (typeof args.name === 'string' && args.name) || attachments.get(path)?.name || 'attachment.bin';
-      document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      downloadBrowserUrl(path, (typeof args.name === 'string' && args.name) || attachments.get(path)?.name || 'attachment.bin');
       return path;
+    }
+    case 'desktop_save_text_file_as': {
+      const name = (typeof args.name === 'string' && args.name.replace(/[\\/\u0000-\u001f]/g, '_')) || 'export.txt';
+      const type = name.endsWith('.jsonl') ? 'application/x-ndjson' : 'text/plain';
+      const url = URL.createObjectURL(new Blob([typeof args.contents === 'string' ? args.contents : ''], { type }));
+      downloadBrowserUrl(url, name);
+      // The download reads the blob after the click returns.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return name;
     }
     case 'desktop_chat_discard_attachment': {
       const path = String(args.path);

@@ -31,6 +31,7 @@ const menuActions = {
   onSetPinned: () => {},
   onSetMuted: () => {},
   onSetUnread: () => {},
+  onExport: () => {},
   onDelete: () => {},
 };
 
@@ -54,7 +55,25 @@ test('SessionContextMenu exposes unread, pin, mute, archive, and reversible dele
   assert.match(markup, /Delete chat/);
   // Help menu rows: every action is one dense row on the shared surface.
   assert.match(markup, /app-transient-surface app-dense-menu/);
-  assert.equal((markup.match(/class="app-dense-menu-row[ "]/g) ?? []).length, 6);
+  assert.equal((markup.match(/class="app-dense-menu-row[ "]/g) ?? []).length, 7);
+});
+
+test('SessionContextMenu places Export after Archive and before the Delete divider', () => {
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { innerWidth: 1024, innerHeight: 768 },
+  });
+  for (const archived of [false, true]) {
+    const markup = renderToStaticMarkup(createElement(SessionContextMenu, {
+      target: { sessionId: 'session:group:alex-maya', sessionName: 'Alex and Maya', x: 120, y: 120, archived },
+      ...menuActions,
+    }));
+    const archive = markup.indexOf(`data-session-context-action="${archived ? 'restore' : 'archive'}"`);
+    const exportRow = markup.indexOf('data-session-context-action="export"');
+    const divider = markup.indexOf('app-dense-menu-divider');
+    assert.ok(archive >= 0 && archive < exportRow && exportRow < divider);
+    assert.match(markup, /data-session-context-action="export" class="app-dense-menu-row"><svg[^>]*lucide-download[^>]*>[\s\S]*?<\/svg>Export<\/button>/);
+  }
 });
 
 test('GroupContextMenu exposes whole-group chat actions', () => {

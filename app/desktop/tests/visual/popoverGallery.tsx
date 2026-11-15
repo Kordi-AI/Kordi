@@ -90,7 +90,7 @@ function Fixture() {
 
     <Slot name="session" label="Chat actions" style={{ left: 300, top: 16 }}>
       <SessionContextMenu target={{ sessionId: 's1', sessionName: 'Launch plan', x: 300, y: 40, canRename: true, canChooseProject: true }}
-        onClose={noop} onRename={noop} onArchive={noop} onRestore={noop} onSetPinned={noop} onSetMuted={noop} onSetUnread={noop} onDelete={noop} />
+        onClose={noop} onRename={noop} onArchive={noop} onRestore={noop} onSetPinned={noop} onSetMuted={noop} onSetUnread={noop} onExport={noop} onDelete={noop} />
     </Slot>
     <Slot name="group" label="Group actions" style={{ left: 560, top: 16 }}>
       <GroupContextMenu target={{ groupSpaceId: 'g1', groupName: 'Design review', sessionIds: ['s2'], x: 560, y: 40 }}
@@ -98,7 +98,7 @@ function Fixture() {
     </Slot>
     <Slot name="personal" label="Personal agent chat" style={{ left: 820, top: 16 }}>
       <PersonalAgentSessionMenu target={{ sessionId: 's3', sessionName: 'Kordi', x: 820, y: 40, personalAgent: { agentId: 'a1' } }}
-        onClose={noop} onSetMuted={noop} onSetUnread={noop} />
+        onClose={noop} onSetMuted={noop} onSetUnread={noop} onExport={noop} />
     </Slot>
     <Slot name="attachment" label="Image actions" style={{ left: 1080, top: 16 }}>
       <AttachmentContextMenu state={{ attachment: image, x: 1080, y: 40 }} onClose={noop} />

@@ -113,6 +113,7 @@ export function WorkspaceSidebar({
     onSetChatGroupAdmin,
     onArchiveChatSession,
     onRestoreChatSession,
+    onExportChatSession,
     onSetChatSessionPinned,
     onSetChatSessionMuted,
     onSetChatSessionUnread,
@@ -356,6 +357,7 @@ export function WorkspaceSidebar({
           onClose={() => setSessionContextMenu(null)}
           onSetMuted={(sessionId, muted) => { void onSetChatSessionMuted(sessionId, muted); }}
           onSetUnread={(sessionId, unread) => { void onSetChatSessionUnread(sessionId, unread); }}
+          onExport={(target) => { void onExportChatSession(target); }}
         />
       ) : sessionContextMenu ? (
         <SessionContextMenu
@@ -364,6 +366,7 @@ export function WorkspaceSidebar({
           onRename={setRenameSessionTarget}
           onArchive={(sessionId) => { void onArchiveChatSession(sessionId); }}
           onRestore={(sessionId) => { void onRestoreChatSession(sessionId); }}
+          onExport={(target) => { void onExportChatSession(target); }}
           onSetPinned={(sessionId, pinned) => { void onSetChatSessionPinned(sessionId, pinned); }}
           onSetMuted={(sessionId, muted) => { void onSetChatSessionMuted(sessionId, muted); }}
           onSetUnread={(sessionId, unread) => { void onSetChatSessionUnread(sessionId, unread); }}
