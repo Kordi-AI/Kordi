@@ -20,6 +20,8 @@ use model_choice::{default_thinking_for_model, snapshot_model};
 mod endpoint;
 mod model_choice;
 mod payload_headers;
+mod retry_policy;
+pub use retry_policy::ProviderRetryPolicy;
 #[cfg(test)]
 mod pool_headers_tests;
 
@@ -49,38 +51,6 @@ pub struct OpenAiProviderConfig {
     /// gateway's attribution headers.
     pub headers: BTreeMap<String, String>,
     pub retry: ProviderRetryPolicy,
-}
-
-/// How long a provider request keeps retrying. `max_retries` counts every
-/// attempt, as `kordi_provider::retry::with_retry` does, and a server delay
-/// above `max_retry_delay_ms` fails at once.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ProviderRetryPolicy {
-    pub max_retries: u32,
-    pub retry_base_delay_ms: u64,
-    pub max_retry_delay_ms: u64,
-}
-
-impl ProviderRetryPolicy {
-    /// A person is waiting on a chat reply, so a long rate limit fails fast.
-    pub const INTERACTIVE: Self = Self {
-        max_retries: 2,
-        retry_base_delay_ms: 250,
-        max_retry_delay_ms: 2_000,
-    };
-    /// Background work such as Common ground runs waits out a gateway's
-    /// rate limit (`Retry-After` of about 30 s under load) instead of failing.
-    pub const BACKGROUND: Self = Self {
-        max_retries: 4,
-        retry_base_delay_ms: 2_000,
-        max_retry_delay_ms: 60_000,
-    };
-}
-
-impl Default for ProviderRetryPolicy {
-    fn default() -> Self {
-        Self::INTERACTIVE
-    }
 }
 
 impl OpenAiProviderConfig {
@@ -263,7 +233,15 @@ impl OpenAiProviderConfig {
                 .map(|(name, value)| (name.clone(), value.clone()))
                 .collect::<HashMap<_, _>>(),
             cancel: CancellationToken::new(),
-            retry_callback: None,
+            retry_callback: self.retry.report_rate_limits.then(|| {
+                let report: kordi_provider::RetryCallback = std::sync::Arc::new(|event| {
+                    crate::grounding_throttle::report_retry(
+                        crate::grounding_throttle::controller(),
+                        &event,
+                    );
+                });
+                report
+            }),
             max_retries: self.retry.max_retries,
             retry_base_delay_ms: self.retry.retry_base_delay_ms,
             max_retry_delay_ms: self.retry.max_retry_delay_ms,

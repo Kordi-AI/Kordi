@@ -78,11 +78,17 @@ fn chat_runs_keep_short_retries_and_background_runs_wait_out_rate_limits() {
         (2, 2_000)
     );
 
+    assert!(options.retry_callback.is_none());
+
     config.retry = super::ProviderRetryPolicy::BACKGROUND;
     let options = config.request_options();
     assert_eq!(
         (options.max_retries, options.max_retry_delay_ms),
         (4, 60_000)
+    );
+    assert!(
+        options.retry_callback.is_some(),
+        "background retries report rate limits to the Grounding limit"
     );
 }
 

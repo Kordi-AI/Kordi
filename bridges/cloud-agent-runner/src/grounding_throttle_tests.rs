@@ -82,3 +82,48 @@ async fn a_raised_limit_wakes_a_waiting_call() {
     waiter.await.unwrap();
     drop(held);
 }
+
+#[test]
+fn provider_errors_are_classified_without_their_text() {
+    let paid = "provider error: unexpected status 402 Payment Required: A positive credit balance is required, url: https://gateway.example/v1/chat/completions";
+    assert_eq!(failure_kind(paid), "provider_http_402");
+    assert!(!is_rate_limit_text(paid));
+    let limited = "provider error: unexpected status 429 Too Many Requests: slow down, url: https://gateway.example/v1/chat/completions";
+    assert_eq!(failure_kind(limited), "provider_http_429");
+    assert!(is_rate_limit_text(limited));
+    assert!(is_rate_limit_text("Rate limit reached for gpt-5-mini"));
+    assert_eq!(
+        failure_kind("provider error: provider request timed out, url: https://gateway.example"),
+        "timeout"
+    );
+    assert_eq!(
+        failure_kind("the model finished without a reply"),
+        "empty_reply"
+    );
+    assert_eq!(failure_kind("something odd"), "other");
+    // A request id or token count is not a status.
+    assert!(!is_rate_limit_text(
+        "request req_4290 failed after 1429 tokens"
+    ));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_provider_retry_for_a_rate_limit_lowers_the_limit_at_once() {
+    let controller = Controller::new(16);
+    let retry = |message: &str| kordi_provider::ProviderRetryEvent::Start {
+        attempt: 1,
+        max_attempts: 4,
+        delay_ms: 30_000,
+        error_message: message.into(),
+    };
+    report_retry(
+        &controller,
+        &retry("unexpected status 503 Service Unavailable: busy"),
+    );
+    assert_eq!(controller.limit(), 16, "only rate limits count");
+    report_retry(
+        &controller,
+        &retry("unexpected status 429 Too Many Requests: slow down"),
+    );
+    assert_eq!(controller.limit(), 8);
+}

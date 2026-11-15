@@ -16,6 +16,57 @@ use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::time::Instant;
 
+/// Wording providers use for a rate limit, besides status 429.
+const RATE_LIMIT_WORDING: [&str; 3] = ["rate limit", "rate-limit", "too many requests"];
+
+/// Whether a provider error's text is a rate limit.
+pub(crate) fn is_rate_limit_text(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    text.contains("status 429")
+        || text.contains("http 429")
+        || text.contains("http_429")
+        || RATE_LIMIT_WORDING
+            .iter()
+            .any(|wording| text.contains(wording))
+}
+
+/// A short, safe description of a failed Grounding completion for the
+/// logs: the provider's HTTP status or transport failure, never its text.
+pub(crate) fn failure_kind(text: &str) -> String {
+    let lower = text.to_ascii_lowercase();
+    let status = lower
+        .split("status ")
+        .nth(1)
+        .and_then(|rest| rest.get(..3))
+        .filter(|code| code.bytes().all(|b| b.is_ascii_digit()));
+    if let Some(code) = status {
+        return format!("provider_http_{code}");
+    }
+    if let Some(code) = lower
+        .split("provider_http_")
+        .nth(1)
+        .and_then(|rest| rest.get(..3))
+        .filter(|code| code.bytes().all(|b| b.is_ascii_digit()))
+    {
+        return format!("provider_http_{code}");
+    }
+    let kinds = [
+        ("rate limit", "provider_rate_limited"),
+        ("too many requests", "provider_rate_limited"),
+        ("timed out", "timeout"),
+        ("could not connect", "provider_connect"),
+        ("response stream failed", "provider_stream"),
+        ("provider request failed", "provider_request"),
+        ("without a reply", "empty_reply"),
+        ("tool call", "tool_call"),
+    ];
+    kinds
+        .iter()
+        .find(|(wording, _)| lower.contains(wording))
+        .map_or("other", |(_, kind)| kind)
+        .to_string()
+}
+
 /// The limit never drops below this, so the provider is always being tried.
 pub(crate) const MIN_LIMIT: usize = 2;
 /// Successful calls in a row that raise the limit by one.
@@ -126,8 +177,15 @@ impl Controller {
             return;
         }
         let floor = MIN_LIMIT.min(state.max);
+        let before = state.limit;
         state.limit = (state.limit / 2).max(floor);
         state.last_cut = Some(now);
+        tracing::info!(
+            before,
+            limit = state.limit,
+            in_flight = state.in_flight,
+            "grounding calls rate-limited; limit lowered"
+        );
     }
 
     /// A call finished without a rate limit.
@@ -139,11 +197,22 @@ impl Controller {
             if grow {
                 state.limit += 1;
                 state.successes = 0;
+                tracing::info!(limit = state.limit, "grounding call limit raised");
             }
             grow
         };
         if grew {
             self.freed.notify_waiters();
+        }
+    }
+}
+
+/// The provider client's retry callback for Grounding calls: an attempt it
+/// is about to retry for a rate limit lowers the limit at once.
+pub(crate) fn report_retry(controller: &Controller, event: &kordi_provider::ProviderRetryEvent) {
+    if let kordi_provider::ProviderRetryEvent::Start { error_message, .. } = event {
+        if is_rate_limit_text(error_message) {
+            controller.rate_limited();
         }
     }
 }

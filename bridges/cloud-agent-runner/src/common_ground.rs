@@ -138,19 +138,13 @@ where
     }
 }
 
-/// Wording providers use for a rate limit.
-const RATE_LIMIT_WORDING: [&str; 3] = ["rate limit", "rate-limit", "too many requests"];
-
 /// Whether an OMP failure is the provider's rate limit.
 fn is_rate_limit(error: &RuntimeError) -> bool {
     let reason = match error {
-        RuntimeError::Provider { reason, .. } => reason.to_ascii_lowercase(),
-        _ => String::new(),
+        RuntimeError::Provider { reason, .. } => reason.as_str(),
+        _ => "",
     };
-    error.diagnostic_code() == "provider_http_429"
-        || RATE_LIMIT_WORDING
-            .iter()
-            .any(|wording| reason.contains(wording))
+    error.diagnostic_code() == "provider_http_429" || grounding_throttle::is_rate_limit_text(reason)
 }
 
 /// The wait before retrying an OMP failure, or `None` when it is not a rate limit.
@@ -217,18 +211,22 @@ where
         .map_err(|failed| failed.detail)
 }
 
-/// Why a completion failed: the detail (which may quote the provider), and
-/// whether the provider was still rate limiting once retries ran out.
+/// Why a completion failed: the detail (which may quote the provider), a
+/// safe kind for the logs, and whether the provider was still rate limiting
+/// once retries ran out.
 pub(crate) struct Failed {
     detail: String,
+    kind: String,
     rate_limited: bool,
 }
 
 impl From<String> for Failed {
     fn from(detail: String) -> Self {
+        let rate_limited = grounding_throttle::is_rate_limit_text(&detail);
         Self {
+            kind: grounding_throttle::failure_kind(&detail),
             detail,
-            rate_limited: false,
+            rate_limited,
         }
     }
 }
@@ -276,6 +274,7 @@ where
             .await
             .map_err(|error| Failed {
                 rate_limited: is_rate_limit(&error),
+                kind: error.diagnostic_code().to_string(),
                 detail: error.to_string(),
             })?;
             // One turn with no tools: the last reply's usage is the run's.
@@ -303,20 +302,15 @@ where
                 Ok(ModelProviderResponse::ToolCalls(_)) => {
                     return Err("unexpected tool call".into());
                 }
+                // Rate limits the provider client retried were reported to
+                // the limit as they happened (`report_rate_limits`); this
+                // is the last attempt's.
                 Err(error) => {
-                    let detail = error.to_string();
-                    let lower = detail.to_ascii_lowercase();
-                    let rate_limited = lower.contains("429")
-                        || RATE_LIMIT_WORDING
-                            .iter()
-                            .any(|wording| lower.contains(wording));
-                    if rate_limited {
+                    let failed = Failed::from(error.to_string());
+                    if failed.rate_limited {
                         throttle.rate_limited();
                     }
-                    return Err(Failed {
-                        detail,
-                        rate_limited,
-                    });
+                    return Err(failed);
                 }
             }
         }
@@ -361,8 +355,13 @@ where
         }
         Err(failed) => {
             // The detail can quote provider errors, so only its length is logged.
-            let detail_len = failed.detail.len();
-            tracing::warn!(run_id = %run.run_id, detail_len, rate_limited = failed.rate_limited, "common ground run failed");
+            tracing::warn!(
+                run_id = %run.run_id,
+                kind = %failed.kind,
+                detail_len = failed.detail.len(),
+                rate_limited = failed.rate_limited,
+                "common ground run failed"
+            );
             // The server holds the next run back only briefly after a rate limit.
             let code = if failed.rate_limited {
                 RATE_LIMITED
