@@ -21,7 +21,7 @@ test('Personal agent entry, its agent rows, and its page states', async ({ page 
   const recentsTop = (await page.getByRole('button', { name: 'Recents' }).boundingBox())!.y;
   expect((await rows.nth(2).boundingBox())!.y).toBeLessThan(recentsTop);
   await rows.nth(1).click({ button: 'right' });
-  await expect(page.locator('[data-session-context-action]')).toHaveText(['Mark as read', 'Mute']);
+  await expect(page.locator('[data-session-context-action]')).toHaveText(['Mark as read', 'Mute', 'Export']);
   await page.locator('[data-session-context-action="read"]').click();
   await expect(page.locator('[data-session-context-action]')).toHaveCount(0);
   await entry.click();
@@ -46,5 +46,5 @@ test('Personal agent entry, its agent rows, and its page states', async ({ page 
   const row = page.locator('[data-personal-agent-row^="cloud-agent:"]');
   await expect(row).toHaveAttribute('aria-current', 'true');
   await row.click({ button: 'right' });
-  await expect(page.locator('[data-session-context-action]')).toHaveText(['Mark as unread', 'Mute']);
+  await expect(page.locator('[data-session-context-action]')).toHaveText(['Mark as unread', 'Mute', 'Export']);
 });

@@ -361,7 +361,7 @@ test('a personal agent row offers only read state and mute, from the list or, be
           host.querySelector(`[data-personal-agent-row="cloud-agent:${ACCOUNT}"]`)!
             .dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 80 }));
         });
-        assert.deepEqual([...document.querySelectorAll('[data-session-context-action]')].map((item) => item.textContent?.trim()), ['Mark as read', 'Mute']);
+        assert.deepEqual([...document.querySelectorAll('[data-session-context-action]')].map((item) => item.textContent?.trim()), ['Mark as read', 'Mute', 'Export']);
       });
     } finally {
       setPersonalAgentEntries([]);

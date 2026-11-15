@@ -36,9 +36,11 @@ import {
 import { appendCanonicalRenameNotice } from './canonicalRenameNotice';
 import { isDesktopRuntimeSessionId } from './desktopRuntimeSessionMembership';
 import { useClosedGroupSessionActions } from './useClosedGroupSessionActions';
+import { useKordiSessionTraceExport } from './useKordiSessionTraceExport';
 
 export function useKordiChatSessionActions({
   conversations = [],
+  contacts = [],
   account,
   activeConversationId,
   canonicalState,
@@ -453,6 +455,10 @@ export function useKordiChatSessionActions({
     );
   }, [isNativeShell, refreshCanonicalState, runChatListAction, setCloudGroupSpaceArchived]);
 
+  const exportSession = useKordiSessionTraceExport({
+    account, canonicalState, conversations, contacts, desktopState, isNativeShell, setDesktopError,
+  });
+
   return {
     dissolveGroup,
     dissolveChannel,
@@ -467,5 +473,6 @@ export function useKordiChatSessionActions({
     setGroupMuted,
     setGroupArchived,
     deleteSession,
+    exportSession,
   };
 }

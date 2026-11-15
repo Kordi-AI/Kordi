@@ -1,4 +1,5 @@
 import type { ParticipantSpaceViewModel } from '@/kordi-app/types';
+import type { SessionActionTarget } from '@/pages/SessionActionOverlays';
 
 export type ChatListShellArgs = {
   archivedParticipantSpaces: ParticipantSpaceViewModel[];
@@ -25,4 +26,6 @@ export type ChatListShellArgs = {
   /** Group owners and admins: dissolve a whole group, or one channel other than its first. */
   handleDissolveChatGroup: (groupSpaceId: string, sessionIds: string[]) => Promise<void>;
   handleDissolveChatChannel: (groupSpaceId: string, sessionId: string) => Promise<void>;
+  /** Saves the session's complete trace as one JSON Lines file. */
+  handleExportChatSession: (target: SessionActionTarget) => Promise<void>;
 };

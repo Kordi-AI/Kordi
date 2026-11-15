@@ -173,6 +173,7 @@ export function baseSidebarProps(overrides: Record<string, unknown> = {}) {
     onDeleteChatSession: () => {},
     onArchiveChatSession: () => {},
     onRestoreChatSession: () => {},
+    onExportChatSession: () => {},
     onSetChatSessionPinned: () => {},
     onSetChatSessionMuted: () => {},
     onSetChatSessionUnread: () => {},
