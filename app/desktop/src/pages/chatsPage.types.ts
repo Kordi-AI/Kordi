@@ -173,7 +173,6 @@ export type ChatsPageRuntime = {
   resolveChatRuntimeRoute?: (sessionId?: string | null) => import('@/lib/desktop').DesktopChatMessageRoute | null;
   composerControlsRef: RefObject<HTMLDivElement | null>;
   activeRuntimeContextStatus?: DesktopChatContextWindowStatus | null;
-  activeRuntimeCacheText?: string | null;
   composerSelection: { mode: string; model: string; thinking: string };
   openComposerSelector: {
     scope: 'chat' | 'project';

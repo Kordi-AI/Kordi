@@ -91,7 +91,6 @@ type ProjectsPageProps = {
   composerControlsRef: RefObject<HTMLDivElement | null>;
   activeRuntimeSessionId?: string;
   activeRuntimeContextStatus?: DesktopChatContextWindowStatus | null;
-  activeRuntimeCacheText?: string | null;
   composerSelection: { mode: string; model: string; thinking: string };
   openComposerSelector: { scope: 'chat' | 'project'; type: 'mode' | 'auth' | 'provider' | 'model' | 'thinking' } | null;
   toggleComposerSelector: (scope: 'chat' | 'project', type: 'mode' | 'auth' | 'provider' | 'model' | 'thinking') => void;
@@ -147,7 +146,6 @@ export function ProjectsPage({
   composerControlsRef,
   activeRuntimeSessionId,
   activeRuntimeContextStatus,
-  activeRuntimeCacheText,
   composerSelection,
   openComposerSelector,
   toggleComposerSelector,
@@ -462,10 +460,7 @@ export function ProjectsPage({
             </div>
             <div className="flex min-w-0 shrink-0 items-center gap-3 overflow-visible">
               {isNativeShell && activeRuntimeSessionId === activeProjectSession.id ? (
-                <ComposerRuntimeStatus
-                  contextStatus={activeRuntimeContextStatus}
-                  cacheText={activeRuntimeCacheText}
-                />
+                <ComposerRuntimeStatus contextStatus={activeRuntimeContextStatus} />
               ) : null}
               <ComposerModelControls
                 scope="project"
