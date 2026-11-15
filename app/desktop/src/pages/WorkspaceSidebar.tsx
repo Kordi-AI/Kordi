@@ -386,6 +386,7 @@ export function WorkspaceSidebar({
           onRestore={(groupSpaceId, sessionIds) => {
             void onSetChatGroupArchived(groupSpaceId, sessionIds, false);
           }}
+          onDelete={setRemoveSessionTarget}
         />
       ) : null}
       {channelCreateSpace ? (

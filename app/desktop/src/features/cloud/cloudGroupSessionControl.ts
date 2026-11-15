@@ -76,6 +76,8 @@ export type ApplyCloudGroupSessionControlInput = {
   catalogGroupAvatar?: CloudGroupControlEnvelope['groupAvatar'];
   /** `grounding` marks a group started from a Grounding room. */
   catalogGroupOrigin?: string | null;
+  /** When the server closed this conversation; absent while it is open. */
+  catalogGroupClosedAt?: string | null;
   runtime: CloudGroupSessionRuntime;
   canonical: CloudGroupCanonicalRuntime;
   stateOps: CloudGroupSessionStateOps;
@@ -104,6 +106,7 @@ export async function applyCloudGroupSessionControl({
   catalogGroupTitle,
   catalogGroupAvatar,
   catalogGroupOrigin,
+  catalogGroupClosedAt,
   runtime,
   canonical,
   stateOps,
@@ -197,7 +200,8 @@ export async function applyCloudGroupSessionControl({
   if (cloudGroupHistoryReplayPreservesSessionShell(
     historyReplay,
     Boolean(envelopeSession),
-    Boolean(normalizedCatalogGroupTitle) || Boolean(catalogGroupAvatar) || Boolean(catalogGroupOrigin),
+    Boolean(normalizedCatalogGroupTitle) || Boolean(catalogGroupAvatar) || Boolean(catalogGroupOrigin)
+      || Boolean(catalogGroupClosedAt?.trim()),
     envelope.kind,
   )) {
     const actorIdentityId = identityIdByAccount.get(envelope.actor.accountId)
@@ -239,7 +243,9 @@ export async function applyCloudGroupSessionControl({
   const groupRootSession = canonicalState.sessions.find((session) => session.id === groupSpaceId) ?? null;
   const envelopeSessionMetadata = stateOps.objectContent(envelopeSession?.metadata);
   const groupRootMetadata = stateOps.objectContent(groupRootSession?.metadata);
+  // A channel can be closed while its group stays open, so the closed time is per session.
   const inheritedGroupRootMetadata = groupMetadataWithoutSessionTitleOwnership(groupRootMetadata);
+  delete inheritedGroupRootMetadata.groupClosedAt;
   const storedCreatorIdentityId = stateOps.cleanText(
     typeof envelopeSessionMetadata.groupCreatorIdentityId === 'string'
       ? envelopeSessionMetadata.groupCreatorIdentityId
@@ -324,6 +330,8 @@ export async function applyCloudGroupSessionControl({
     ...envelopeSessionMetadata,
     groupAvatar: catalogGroupAvatar ?? sharedGroupAvatar([groupRootMetadata.groupAvatar, envelopeSessionMetadata.groupAvatar, envelope.groupAvatar]),
     ...(catalogGroupOrigin === 'grounding' ? { groupOrigin: 'grounding' } : {}),
+    ...(catalogGroupClosedAt?.trim() && typeof envelopeSessionMetadata.groupClosedAt !== 'string'
+      ? { groupClosedAt: catalogGroupClosedAt.trim() } : {}),
     schemaVersion: 1,
     kind: 'chat-group',
     customName: groupTitleResolution.title || null,

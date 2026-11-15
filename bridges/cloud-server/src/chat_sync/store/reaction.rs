@@ -47,6 +47,7 @@ pub async fn set_reaction(
     let reaction = normalized_reaction(reaction)?;
     let mut transaction = pool.begin().await?;
     require_active_member(&mut transaction, conversation_id, account_id).await?;
+    super::closed_state::require_open(&mut transaction, conversation_id).await?;
     // Removing one's own reaction stays possible after a block.
     if active {
         crate::safety::blocks::refuse_blocked_direct(&mut transaction, conversation_id, account_id)

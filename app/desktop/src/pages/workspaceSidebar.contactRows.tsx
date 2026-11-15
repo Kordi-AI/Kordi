@@ -1,6 +1,7 @@
 import { BellOff, ChevronDown, MoreHorizontal, Paperclip, Pin, Plus } from 'lucide-react';
 
 import { attachmentPreviewUrl } from '@/features/chat/attachmentMediaGallery';
+import { isClosedConversation, isClosedParticipantSpace } from '@/features/chat/closedGroup';
 import { isBlankParticipantSpaceSession } from '@/features/chat/participantSpaces';
 import { cn } from '@/lib/utils';
 import type { ChatSidebarRow } from '@/pages/sidebar/chatSidebarRows';
@@ -55,12 +56,14 @@ function ParticipantSpaceSessionRow({
     activeConvId === session.id || activeConvId === session.canonicalSessionId;
   const sessionRowTimeLabel =
     session.updatedAtLabel ?? conversation.updatedAtLabel ?? '--:--';
-  const sessionPreview =
-    participantSpaceSessionPreviewText(session.preview) || 'No messages yet';
+  const closed = isClosedConversation(conversation);
+  const sessionPreview = closed
+    ? 'Closed'
+    : participantSpaceSessionPreviewText(session.preview) || 'No messages yet';
   const sessionRowTitle = participantSpaceSessionRowTitle(session.title);
   const sessionIdLabel = participantSpaceSessionIdLabel(session);
   const preferenceSessionId = participantSpaceSessionPreferenceId(session);
-  const rowUnreadCount = session.unread;
+  const rowUnreadCount = closed ? 0 : session.unread;
 
   return (
     <button
@@ -71,6 +74,7 @@ function ParticipantSpaceSessionRow({
       data-session-preview-line={sessionPreview}
       data-session-id-label={sessionIdLabel}
       data-session-updated-at={sessionRowTimeLabel}
+      data-closed={closed ? 'true' : undefined}
       onClick={() => actions.onSelectChatSession(session.id)}
       onContextMenu={(event) => {
         const target = sessionContextMenuTargetForConversation(
@@ -78,7 +82,7 @@ function ParticipantSpaceSessionRow({
           event.clientX,
           event.clientY,
           {
-            canRename: participantSpaceCanRenameSessions(space),
+            canRename: !closed && participantSpaceCanRenameSessions(space),
             archived: model.showArchived,
             pinned: model.pinnedSessionIds.has(preferenceSessionId),
             muted: model.mutedSessionIds.has(preferenceSessionId),
@@ -86,14 +90,19 @@ function ParticipantSpaceSessionRow({
           },
         );
         if (!target) return;
-        const dissolvableChannel = dissolvableChannelTarget(space, session);
+        const dissolvableChannel = closed ? null : dissolvableChannelTarget(space, session);
         event.preventDefault();
         event.stopPropagation();
-        actions.onOpenSessionContextMenu(dissolvableChannel ? { ...target, dissolvableChannel } : target);
+        actions.onOpenSessionContextMenu({
+          ...target,
+          ...(dissolvableChannel ? { dissolvableChannel } : {}),
+          ...(closed && isClosedParticipantSpace(space) ? { closedGroup: true } : {}),
+        });
       }}
       className={cn(
         'app-session-row app-participant-space-session-row w-full px-2.5 py-1 text-left text-white',
         isActive && 'app-session-row-active',
+        closed && 'app-session-row-closed',
       )}
     >
       <div className="app-participant-space-session-main min-w-0">
@@ -112,21 +121,21 @@ function ParticipantSpaceSessionRow({
           className={cn(
             'app-participant-space-session-preview mt-px truncate text-[10.5px] leading-[1.05rem]',
             isActive ? 'text-slate-300' : 'text-slate-500',
-            session.statusIndicator?.live
+            !closed && session.statusIndicator?.live
               && 'app-participant-space-session-preview-live',
           )}
         >
-          <SidebarPreviewText text={sessionPreview} conversations={[conversation]} />
+          {closed ? sessionPreview : <SidebarPreviewText text={sessionPreview} conversations={[conversation]} />}
         </div>
       </div>
       <div className="app-participant-space-session-side">
         <SidebarSessionMetaColumn
           timeLabel={sessionRowTimeLabel}
-          threadAttention={conversation.threadAttention}
+          threadAttention={closed ? undefined : conversation.threadAttention}
           unreadCount={rowUnreadCount}
           unreadMentionCount={rowUnreadCount > 0 ? conversation.unreadMentions : 0}
           unreadScope="participant-session"
-          indicator={session.statusIndicator}
+          indicator={closed ? undefined : session.statusIndicator}
           active={isActive}
           muted={model.mutedSessionIds.has(preferenceSessionId)}
         />
@@ -161,10 +170,13 @@ function ParticipantSpaceRow({
   const isAutoExpanded = isExpanded && isActiveSpace && !isSelectedSpace;
   const rowTimeLabel =
     space.updatedAtLabel ?? latestSession?.updatedAtLabel ?? '--:--';
-  const spaceUnreadCount =
-    model.unreadByParticipantSpaceIdWithForkDescendants.get(space.id)
-    ?? space.unread;
-  const spaceUnreadMentionCount = space.sessions.reduce(
+  // A closed group stays listed, dimmed, with no unread state and no new chats.
+  const closed = isClosedParticipantSpace(space);
+  const spaceUnreadCount = closed
+    ? 0
+    : model.unreadByParticipantSpaceIdWithForkDescendants.get(space.id)
+      ?? space.unread;
+  const spaceUnreadMentionCount = closed ? 0 : space.sessions.reduce(
     (sum, session) => sum + (session.unread > 0 ? session.conversation.unreadMentions ?? 0 : 0),
     0,
   );
@@ -174,7 +186,7 @@ function ParticipantSpaceRow({
   const groupIsMuted = space.kind === 'group'
     && space.sessions.length > 0
     && space.sessions.every((session) => model.mutedSessionIds.has(participantSpaceSessionPreferenceId(session)));
-  const previewAttachment = participantSpacePreviewAttachment(space);
+  const previewAttachment = closed ? null : participantSpacePreviewAttachment(space);
   const previewThumbnailUrl = previewAttachment?.kind === 'image'
     ? attachmentPreviewUrl(previewAttachment.attachment)
     : null;
@@ -232,6 +244,13 @@ function ParticipantSpaceRow({
                 archived: model.showArchived,
                 pinned: groupIsPinned,
                 muted: groupIsMuted,
+                ...(closed ? {
+                  closed: true,
+                  deleteSessionId: participantSpaceSessionPreferenceId(
+                    space.sessions.find((session) => participantSpaceSessionPreferenceId(session) === groupSpaceId)
+                      ?? latestSession,
+                  ),
+                } : {}),
               });
               return;
             }
@@ -251,7 +270,11 @@ function ParticipantSpaceRow({
             event.stopPropagation();
             actions.onOpenSessionContextMenu(target);
           }}
-          className="app-session-row app-participant-space-row-button w-full min-w-0 text-left text-white"
+          data-closed={closed ? 'true' : undefined}
+          className={cn(
+            'app-session-row app-participant-space-row-button w-full min-w-0 text-left text-white',
+            closed && 'app-session-row-closed',
+          )}
         >
           <ParticipantSpaceAvatarStack space={space} />
           <div className="min-w-0">
@@ -289,10 +312,12 @@ function ParticipantSpaceRow({
                 <Paperclip className="h-3 w-3 shrink-0" aria-hidden="true" />
               ) : null}
               <span className="min-w-0 truncate">
-                <SidebarPreviewText
-                  text={space.preview || `${participantSpaceKindText(space)} space`}
-                  conversations={space.sessions.map((entry) => entry.conversation)}
-                />
+                {closed ? 'Closed' : (
+                  <SidebarPreviewText
+                    text={space.preview || `${participantSpaceKindText(space)} space`}
+                    conversations={space.sessions.map((entry) => entry.conversation)}
+                  />
+                )}
               </span>
             </div>
           </div>
@@ -330,7 +355,7 @@ function ParticipantSpaceRow({
                   aria-hidden="true"
                 />
               )}
-              <button
+              {closed ? null : <button
                 type="button"
                 data-participant-space-context-create="true"
                 data-disabled-reason={hasBlankSession ? 'blank-session' : undefined}
@@ -353,7 +378,7 @@ function ParticipantSpaceRow({
                 }}
               >
                 <Plus className="h-3.5 w-3.5" />
-              </button>
+              </button>}
               <button
                 type="button"
                 data-participant-space-toggle-button="true"
@@ -378,11 +403,11 @@ function ParticipantSpaceRow({
           <div className="app-participant-space-row-meta">
             <SidebarSessionMetaColumn
               timeLabel={rowTimeLabel}
-              threadAttention={isExpanded?undefined:space.sessions.find(item=>item.conversation.threadAttention?.thread_count)?.conversation.threadAttention}
+              threadAttention={isExpanded || closed ? undefined : space.sessions.find(item=>item.conversation.threadAttention?.thread_count)?.conversation.threadAttention}
               unreadCount={isExpanded ? 0 : spaceUnreadCount}
               unreadMentionCount={isExpanded ? 0 : spaceUnreadMentionCount}
               unreadScope="participant-space"
-              indicator={isExpanded ? undefined : latestSession?.statusIndicator}
+              indicator={isExpanded || closed ? undefined : latestSession?.statusIndicator}
               active={isDirectHuman && isPrimarySessionActive}
               reserveStatusSpace={false}
               muted={groupIsMuted || Boolean(isDirectHuman && latestSession && model.mutedSessionIds.has(participantSpaceSessionPreferenceId(latestSession)))}

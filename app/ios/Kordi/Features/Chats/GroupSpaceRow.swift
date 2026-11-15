@@ -10,6 +10,8 @@ struct GroupSpaceRow: View {
     var mutedSessionIds: Set<String> = []
     var isPinned = false
     var isMuted = false
+    /// A closed group: dimmed, "Closed" as the preview, no unread badge.
+    var isClosed = false
 
     var body: some View {
         HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 11) {
@@ -17,6 +19,7 @@ struct GroupSpaceRow: View {
                 participants: space.participants,
                 size: dynamicTypeSize.isAccessibilitySize ? 52 : 44, imageSource: space.avatarSource
             )
+            .opacity(isClosed ? ClosedChatRowStyle.opacity : 1)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -26,12 +29,20 @@ struct GroupSpaceRow: View {
                         .layoutPriority(1)
                     ChatListStateIndicators(isPinned: isPinned, isMuted: isMuted)
                 }
+                .opacity(isClosed ? ClosedChatRowStyle.opacity : 1)
 
-                BlobEmojiPreviewText(text: DocumentTitles.shared.previewText(space.lastMessage, attachment: space.lastAttachment))
-                    .loadsPreviewDocumentTitle(space.lastAttachment)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                if isClosed {
+                    Text(ClosedChatRowStyle.preview)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .opacity(ClosedChatRowStyle.opacity)
+                } else {
+                    BlobEmojiPreviewText(text: DocumentTitles.shared.previewText(space.lastMessage, attachment: space.lastAttachment))
+                        .loadsPreviewDocumentTitle(space.lastAttachment)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                }
 
                 if dynamicTypeSize.isAccessibilitySize {
                     Text(detailText)
@@ -47,12 +58,12 @@ struct GroupSpaceRow: View {
                 Text(chatListTimestamp(space.lastActivityAt))
                     .font(.caption)
                     .foregroundStyle(
-                        unmutedUnreadCount > 0 || unmutedMentionCount > 0
+                        !isClosed && (unmutedUnreadCount > 0 || unmutedMentionCount > 0)
                             ? chatTheme.accent
                             : .secondary
                     )
                 HStack(spacing: 5) {
-                    if !isExpanded {
+                    if !isExpanded && !isClosed {
                         if let conversation = space.sessions.first(where: { ($0.threadAttention?.threadCount ?? 0) > 0 }) {
                             Button { model.openUnreadThread(in: conversation) } label: {
                                 Image(systemName: "bubble.left.and.bubble.right").foregroundStyle(chatTheme.accent).frame(minWidth: 44, minHeight: 44)
@@ -79,7 +90,7 @@ struct GroupSpaceRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
-            space.accessibilitySummary
+            (isClosed ? "\(space.displayName), closed" : space.accessibilitySummary)
                 + ChatListStateIndicators.accessibilitySuffix(isPinned: isPinned, isMuted: isMuted)
         )
         .accessibilityHint(isExpanded ? "Collapse sessions" : "Expand sessions")
@@ -135,6 +146,7 @@ struct GroupSessionRow: View {
     let session: ConversationSummary
     var isPinned = false
     var isMuted = false
+    var isClosed = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -150,12 +162,20 @@ struct GroupSessionRow: View {
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                     ChatListStateIndicators(isPinned: isPinned, isMuted: isMuted)
                 }
+                .opacity(isClosed ? ClosedChatRowStyle.opacity : 1)
 
-                BlobEmojiPreviewText(text: DocumentTitles.shared.previewText(session.lastMessage, attachment: session.lastAttachment).nonEmpty ?? "No messages yet")
-                    .loadsPreviewDocumentTitle(session.lastAttachment)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                if isClosed {
+                    Text(ClosedChatRowStyle.preview)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .opacity(ClosedChatRowStyle.opacity)
+                } else {
+                    BlobEmojiPreviewText(text: DocumentTitles.shared.previewText(session.lastMessage, attachment: session.lastAttachment).nonEmpty ?? "No messages yet")
+                        .loadsPreviewDocumentTitle(session.lastAttachment)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                }
             }
 
             Spacer(minLength: 8)
@@ -163,8 +183,8 @@ struct GroupSessionRow: View {
             VStack(alignment: .trailing, spacing: 4) {
                 Text(chatListTimestamp(session.lastActivityAt))
                     .font(.caption)
-                    .foregroundStyle(session.hasUnreadAttention && !isMuted ? chatTheme.accent : .secondary)
-                if session.hasUnreadAttention {
+                    .foregroundStyle(session.hasUnreadAttention && !isMuted && !isClosed ? chatTheme.accent : .secondary)
+                if session.hasUnreadAttention && !isClosed {
                     ConversationAttentionBadge(
                         unreadCount: session.unreadCount,
                         mentionCount: session.unreadMentionCount,
@@ -178,7 +198,7 @@ struct GroupSessionRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            session.accessibilitySummary
+            (isClosed ? "\(sessionTitle), closed" : session.accessibilitySummary)
                 + ChatListStateIndicators.accessibilitySuffix(isPinned: isPinned, isMuted: isMuted)
         )
     }
@@ -188,6 +208,11 @@ struct GroupSessionRow: View {
         if title.isEmpty { return "# Untitled session" }
         return title.hasPrefix("#") ? title : "# \(title)"
     }
+}
+
+enum ClosedChatRowStyle {
+    static let opacity = 0.55
+    static let preview = "Closed"
 }
 
 enum GroupChannelDisclosureMotion {

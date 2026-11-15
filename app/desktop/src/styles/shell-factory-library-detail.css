@@ -1,0 +1,258 @@
+/* Factory Library detail body: Overview and file tabs, rendered or source files,
+ * and the loading and empty states. Installed and community skills share it. */
+
+/* Tabs: Overview, then one tab per file */
+
+.app-factory-detail-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 14px 0 16px;
+  border-bottom: 1px solid color-mix(in oklab, var(--app-divider) 68%, transparent);
+}
+
+.app-factory-detail-tab-list {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 18px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.app-factory-detail-tab-list button {
+  position: relative;
+  flex: 0 0 auto;
+  height: 36px;
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--utility-muted-text);
+  font-size: var(--agent-studio-type-secondary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-factory-detail-tab-list button:hover,
+.app-factory-detail-tab-list button.is-active {
+  color: var(--utility-foreground);
+}
+
+.app-factory-detail-tab-list button.is-active::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--utility-foreground);
+  content: '';
+}
+
+.app-factory-doc-mode {
+  display: inline-grid;
+  flex: 0 0 auto;
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid color-mix(in oklab, var(--app-control-border) 62%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--app-control-bg) 34%, transparent);
+}
+
+.app-factory-doc-mode button {
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: 6px;
+  color: var(--utility-muted-text);
+  font-size: var(--agent-studio-type-caption);
+  font-weight: 600;
+}
+
+.app-factory-doc-mode button:hover {
+  color: var(--utility-foreground);
+}
+
+.app-factory-doc-mode button.is-active {
+  background: color-mix(in oklab, var(--app-control-active) 72%, transparent);
+  color: var(--utility-foreground);
+}
+
+/* Body */
+
+.app-factory-detail-body {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* Reserve the scrollbar on the right only, so the content lines up with the tabs
+ * when scroll bars are always shown. */
+.app-factory-file-view.app-scroll-area {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.app-factory-file-view.is-source {
+  display: flex;
+  flex-direction: column;
+  background: var(--app-code-bg);
+}
+
+.app-factory-file-view.is-source pre {
+  flex: 1 0 auto;
+  margin: 0;
+  padding: 16px 18px 28px;
+  color: var(--utility-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.65;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app-factory-markdown {
+  max-width: 760px;
+  padding: 18px 16px 40px;
+  font-size: var(--agent-studio-type-body);
+  line-height: 1.65;
+}
+
+.app-factory-front-matter {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--app-card-bg) 70%, transparent);
+  font-size: var(--agent-studio-type-secondary);
+}
+
+.app-factory-front-matter > div {
+  display: grid;
+  grid-template-columns: minmax(64px, auto) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.app-factory-front-matter dt {
+  color: var(--utility-muted-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.app-factory-front-matter dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-factory-overview {
+  max-width: 720px;
+  padding: 20px 16px 40px;
+}
+
+.app-factory-overview section + section {
+  margin-top: 22px;
+}
+
+.app-factory-overview h3,
+.app-factory-overview p,
+.app-factory-overview dl,
+.app-factory-overview dd {
+  margin: 0;
+}
+
+.app-factory-overview h3 {
+  margin-bottom: 8px;
+  font-size: var(--agent-studio-type-body);
+  font-weight: 600;
+}
+
+.app-factory-overview p {
+  color: color-mix(in oklab, var(--utility-foreground) 88%, var(--utility-muted-text));
+  font-size: var(--agent-studio-type-body);
+  line-height: 1.65;
+}
+
+.app-factory-overview dl {
+  display: grid;
+  gap: 10px;
+}
+
+.app-factory-overview dl > div {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.7fr) minmax(0, 1.3fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.app-factory-overview dt {
+  color: var(--utility-muted-text);
+  font-size: var(--agent-studio-type-caption);
+  line-height: 18px;
+}
+
+.app-factory-overview dd {
+  min-width: 0;
+  font-size: var(--agent-studio-type-secondary);
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.app-factory-security-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--agent-studio-danger) 8%, transparent);
+  color: var(--agent-studio-danger);
+  font-size: var(--agent-studio-type-secondary);
+  line-height: 1.5;
+}
+
+.app-factory-security-notice svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+/* Loading and empty states */
+
+.app-skill-library-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--utility-muted-text);
+  font-size: var(--agent-studio-type-secondary);
+}
+
+.app-skill-library-state {
+  display: grid;
+  flex: 1 1 0;
+  min-height: 220px;
+  place-content: center;
+  justify-items: center;
+  gap: 7px;
+  padding: 24px;
+  color: var(--utility-muted-text);
+  text-align: center;
+}
+
+.app-skill-library-state strong {
+  color: var(--utility-foreground);
+  font-size: var(--agent-studio-type-body);
+}
+
+.app-skill-library-state span {
+  max-width: 420px;
+  font-size: var(--agent-studio-type-secondary);
+  line-height: 1.5;
+}

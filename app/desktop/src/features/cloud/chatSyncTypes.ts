@@ -35,6 +35,8 @@ export type ChatSyncConversation = {
   group_avatar?: import('@/features/chat/groupAvatar').GroupAvatarSnapshot | null;
   /** `grounding` for a group started from a Grounding room. */
   origin?: 'grounding' | null;
+  /** Set once an owner or admin closed this conversation: history stays readable, writes fail. */
+  closed?: { closed_at: string; closed_by_account_id?: string | null } | null;
   /** Set on an owned agent's personal session (`kind: 'ai'`), naming that agent. */
   personal_agent?: { agent_id: string } | null;
   /** The owning team organization; absent for personal conversations and on older servers. */
