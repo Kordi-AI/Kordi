@@ -1,8 +1,10 @@
 //! Follow-through from a result screen into real Kordi objects: a contact
 //! request (Add), the direct chat (Chat), a plan card in that chat (Meet),
 //! a group started from a room (Start group), joining one (Join) and asking
-//! to join one (Ask to join).
+//! to join one (Ask to join), and inviting Grounding people into the
+//! viewer's groups.
 
+mod group_invites;
 mod groups;
 mod invitations;
 mod join;
@@ -11,6 +13,9 @@ mod people;
 mod relationship;
 mod room_view;
 
+pub(super) use group_invites::{
+    decline_group_invitation, group_people, invite_to_group, join_group_invitation, person_groups,
+};
 pub(super) use groups::start_group;
 pub(super) use invitations::{decline as decline_invitation, pending as pending_invitations};
 pub(super) use join::join;

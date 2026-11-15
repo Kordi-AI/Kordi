@@ -1416,6 +1416,9 @@ actor CloudAPIClient {
             sessionId: sessionId,
             kind: kind,
             memberAccountIds: members,
+            // A membership control adds the people it lists. A message changes nothing: its
+            // list is this device's view, which can miss someone who just joined on the server.
+            addsMembers: groupEnvelope.map { $0.kind != "group-message" } ?? false,
             sharedTitle: sharedTitle
         )
         let response: ChatMessageResponse = try await send(
@@ -2444,11 +2447,15 @@ actor CloudAPIClient {
         _ = try await ensureChatConversation(token: token, sessionId: sessionID, kind: "ai", memberAccountIds: [accountID])
     }
 
+    /// The conversation for `sessionId`, created when this device has none. An existing group
+    /// keeps its members unless `addsMembers` asks to add the listed people, which only owners
+    /// and admins may do: nobody is removed here, since a device's list can lag the server.
     private func ensureChatConversation(
         token: String,
         sessionId: String,
         kind: String,
         memberAccountIds: [String],
+        addsMembers: Bool = false,
         sharedTitle: String? = nil
     ) async throws -> CloudChatConversation {
         let accountId = try requireActiveAccountId()
@@ -2459,21 +2466,25 @@ actor CloudAPIClient {
             memberAccountIds.compactMap(\.nonEmpty).filter { !KordiSystemIdentity.isServiceAccount($0) }
         ).union([accountId])
         if var cached = chatConversationsBySessionId[sessionId] {
-            if cached.kind == "group" {
+            let role = cached.members.first {
+                $0.accountId == accountId && $0.membershipState == "active"
+            }?.role
+            if cached.kind == "group", addsMembers, role == "owner" || role == "admin" {
                 let activeMembers = Set(cached.members.filter {
                     $0.membershipState == "active" && !KordiSystemIdentity.isServiceAccount($0.accountId)
                 }.map(\.accountId))
-                if activeMembers != desiredMembers {
+                let missing = desiredMembers.subtracting(activeMembers)
+                if !missing.isEmpty {
                     let response: ChatConversationResponse = try await send(
                         path: "/v2/chat/conversations/\(escapedPath(cached.id))/members",
                         method: "PUT",
                         token: token,
                         body: ChatUpdateMembersRequest(
                             clientOperationId: operationUUID(
-                                "members:\(cached.id):\(desiredMembers.sorted().joined(separator: ":"))"
+                                "members:\(cached.id):\(missing.sorted().joined(separator: ":"))"
                             ),
-                            memberAccountIds: desiredMembers.filter { $0 != accountId }.sorted(),
-                            replace: true
+                            memberAccountIds: missing.sorted(),
+                            replace: false
                         ),
                         fallback: "Could not synchronize group membership."
                     )

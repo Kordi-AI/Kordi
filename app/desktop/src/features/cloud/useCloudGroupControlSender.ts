@@ -25,13 +25,13 @@ import {
   encodeCloudGroupControl,
   firstCloudGroupSendFailure,
   fulfilledCloudGroupSends,
-  parseCloudGroupControl,
 } from './cloudGroupMessages';
 import {
   type CloudGroupOutboxEntry,
 } from './cloudGroupOutbox';
 import {
   cloudGroupOutboxAttachmentSources,
+  cloudGroupOutboxMessageOptions,
   prepareCloudGroupOutboxEntryAttachments,
 } from './cloudGroupOutboxAttachments';
 import {
@@ -282,10 +282,6 @@ export function useCloudGroupControlSender({
             }),
           });
           const ready = await preparedEntry;
-          const readyMessage = parseCloudGroupControl(ready.envelope)?.message;
-          const readyVoiceMessage = readyMessage?.voiceMessage?.mediaId
-            ? { ...readyMessage.voiceMessage, mediaId: readyMessage.voiceMessage.mediaId }
-            : null;
           const sentMessage = await client.sendMessage(
             session.token,
             recipientId,
@@ -295,8 +291,7 @@ export function useCloudGroupControlSender({
               attachments: ready.attachments,
               clientCreatedAt: ready.clientCreatedAt,
               clientMessageId,
-              messageKind: readyMessage?.messageKind,
-              voiceMessage: readyVoiceMessage,
+              ...cloudGroupOutboxMessageOptions(ready.envelope),
               conversationKind: 'group',
               memberAccountIds: targetAccountIds,
             },

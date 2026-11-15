@@ -129,6 +129,14 @@ pub(super) const JOIN_REQUEST_LIMIT: AccountActionLimit = AccountActionLimit {
     window: Duration::from_secs(60 * 60),
 };
 
+/// Requests that invite Grounding people into a group, per account. Only a
+/// request that would create at least one invitation is charged.
+pub(super) const GROUP_INVITE_LIMIT: AccountActionLimit = AccountActionLimit {
+    action: "common-ground-group-invite",
+    limit: 20,
+    window: Duration::from_secs(60 * 60),
+};
+
 /// Common ground needs the Kordi-operated credential for card builds.
 pub fn available(state: &ServerState) -> bool {
     state.system_agent().is_some()
@@ -277,6 +285,26 @@ pub fn routes(state: Arc<ServerState>, rate_limiter: Arc<CloudRateLimiter>) -> R
         .route(
             "/v1/cloud/common-ground/invitations",
             get(actions::pending_invitations),
+        )
+        .route(
+            "/v1/cloud/common-ground/people/:account_id/groups",
+            get(actions::person_groups),
+        )
+        .route(
+            "/v1/cloud/common-ground/group-people",
+            get(actions::group_people),
+        )
+        .route(
+            "/v1/cloud/common-ground/group-invitations",
+            post(actions::invite_to_group),
+        )
+        .route(
+            "/v1/cloud/common-ground/group-invitations/:invitation_id/join",
+            post(actions::join_group_invitation),
+        )
+        .route(
+            "/v1/cloud/common-ground/group-invitations/:invitation_id/decline",
+            post(actions::decline_group_invitation),
         )
         .route(
             "/v1/cloud/common-ground/rooms/:code/join-requests",

@@ -1,6 +1,6 @@
 import { livePhotoAttachmentIds } from '@/features/chat/livePhotos';
 import type { CloudMessage, SendCloudMessageOptions } from './authClient';
-import { cloudMessageFromChatSync, cloudOperationUuid, groupMemberAccountIdsFromEnvelope, chatTextContent } from './chatSyncMapping';
+import { cloudMessageFromChatSync, cloudOperationUuid, groupEnvelopeMemberChanges, groupMemberAccountIdsFromEnvelope, chatTextContent } from './chatSyncMapping';
 import { ChatSyncState } from './chatSyncState';
 import type { ChatSyncMessage } from './chatSyncTypes';
 import { isRetryableCloudDeliveryError } from './cloudAuthError';
@@ -79,8 +79,12 @@ export class ChatSyncMessageDelivery {
       conversationKind,
       memberAccountIds: conversationMemberAccountIds,
     };
+    // A group's queued send names one stable peer: the first member in the envelope's own list,
+    // which every retry of the message repeats. The callers' recipient lists differ between the
+    // first try and an outbox retry, and a changed payload is refused by the durable queue.
     const durablePeerAccountId = conversationKind === 'group'
-      ? [...new Set(options.memberAccountIds ?? [])].map((value) => value.trim()).filter(Boolean).sort()[0]
+      ? [...new Set(conversationMemberAccountIds ?? [])].map((value) => value.trim())
+        .filter((value) => value && value !== accountId).sort()[0]
         ?? peerAccountId.trim()
       : peerAccountId.trim();
     const durable = Boolean(accountId) && !options.transient;
@@ -104,7 +108,7 @@ export class ChatSyncMessageDelivery {
         sharedTitle: options.sharedTitle,
         sourceGroupSpaceId: options.sourceGroupSpaceId,
         accountId,
-        replaceMembers: envelopeMemberAccountIds !== null,
+        memberChanges: conversationKind === 'group' ? groupEnvelopeMemberChanges(body) ?? undefined : undefined,
       });
       deliveryScope.assertCurrent();
       const response = await this.state.send<{ message: ChatSyncMessage }>(

@@ -190,6 +190,11 @@ button.cg-tag-text { cursor: pointer; }
 .cg-pick:hover { background: var(--cg-fill); }
 .cg-check { display: grid; place-items: center; width: 18px; height: 18px; margin-left: auto; border: 1px solid var(--cg-line); border-radius: 999px; }
 .cg-pick.is-on .cg-check { border-color: var(--app-accent); background: var(--app-accent); color: var(--app-button-primary-text); }
+.cg-pick:disabled { cursor: default; }
+.cg-pick:disabled:hover { background: none; }
+.cg-pick:disabled .cg-row-title { color: var(--utility-muted-text); }
+.cg-pick-state { flex: none; margin-left: auto; color: var(--utility-muted-text); font-size: 12px; }
+.cg-pick-empty { padding: 10px 2px; font-size: 13px; }
 
 /* Meet: laid out like the Digest event sheet (12px panel, labels above fields, 7px controls), with in-app pickers. */
 .cg-meet {
