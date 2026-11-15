@@ -342,14 +342,6 @@
       "count": 1
     }
   },
-  "src/kordi-app/agents/SkillLibraryView.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 4
-    }
-  },
   "src/kordi-app/agents/useAgentBuilderSession.ts": {
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -509,7 +501,7 @@
   },
   "src/lib/desktop.ts": {
     "@typescript-eslint/no-redundant-type-constituents": {
-      "count": 13
+      "count": 11
     }
   },
   "src/pages/ArtifactInspector.tsx": {

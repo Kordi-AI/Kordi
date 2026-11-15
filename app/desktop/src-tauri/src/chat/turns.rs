@@ -2,9 +2,12 @@ use std::sync::{Arc, Mutex};
 
 use kordi_cli::turn_runner::TurnEvent;
 
+use super::models::{DesktopSyncRefusal, DesktopTurnStopReason};
 use super::{DesktopChatManager, DesktopChatToolSnapshot, DesktopChatTurnSnapshot};
 
+mod lease;
 mod task_tools;
+pub(super) use lease::{record_stop_reason, renew_execution_lease};
 pub(super) use task_tools::{desktop_task_tools_from_messages, turn_snapshot_has_model_task_tools};
 
 pub(super) fn snapshot_turn(
@@ -123,11 +126,13 @@ pub async fn desktop_chat_active_turns(
 pub(super) async fn cancel_turn_by_id(
     manager: &DesktopChatManager,
     turn_id: &str,
+    reason: Option<DesktopTurnStopReason>,
 ) -> Result<DesktopChatTurnSnapshot, String> {
     let turns = manager.turns.lock().await;
     let turn = turns
         .get(turn_id)
         .ok_or_else(|| format!("Unknown chat turn: {turn_id}"))?;
+    record_stop_reason(&turn.snapshot, reason);
     turn.cancel.cancel();
     update_turn(&turn.snapshot, |state| {
         if state.status == "queued" {
@@ -143,70 +148,14 @@ pub(super) async fn cancel_turn_by_id(
     snapshot_turn(&turn.snapshot)
 }
 
-/// The longest a renderer-provided lease deadline may reach ahead. The renderer
-/// derives the deadline from the server's lease, so a slow server keeps a turn
-/// alive while its lease holds; this cap only bounds a malformed deadline.
-pub(super) const MAX_EXECUTION_LEASE_WINDOW_MS: i64 = 10 * 60 * 1_000;
-
-pub(super) async fn renew_execution_lease(
-    manager: &DesktopChatManager,
-    turn_id: &str,
-    deadline_ms: i64,
-) -> Result<(), String> {
-    let turn = manager
-        .turns
-        .lock()
-        .await
-        .get(turn_id)
-        .cloned()
-        .ok_or_else(|| "Unknown execution lease turn".to_string())?;
-    let remaining = deadline_ms.saturating_sub(super::now_millis());
-    if remaining <= 0 || turn.cancel.is_cancelled() {
-        turn.cancel.cancel();
-        return Err("Execution lease expired".into());
-    }
-    let mut deadline = turn
-        .execution_lease_deadline
-        .lock()
-        .map_err(|_| "Execution lease unavailable")?;
-    let start_watchdog = deadline.is_none();
-    *deadline = Some(
-        std::time::Instant::now()
-            + std::time::Duration::from_millis(remaining.min(MAX_EXECUTION_LEASE_WINDOW_MS) as u64),
-    );
-    drop(deadline);
-    if start_watchdog {
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                if turn.cancel.is_cancelled()
-                    || snapshot_turn(&turn.snapshot).is_ok_and(|s| s.completed)
-                {
-                    return;
-                }
-                let valid = turn
-                    .execution_lease_deadline
-                    .lock()
-                    .ok()
-                    .and_then(|deadline| *deadline)
-                    .is_some_and(|d| d > std::time::Instant::now());
-                if !valid {
-                    turn.cancel.cancel();
-                    return;
-                }
-            }
-        });
-    }
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn desktop_chat_renew_execution_lease(
     manager: tauri::State<'_, DesktopChatManager>,
     turn_id: String,
     deadline_ms: i64,
+    refusal: Option<DesktopSyncRefusal>,
 ) -> Result<(), String> {
-    renew_execution_lease(manager.inner(), &turn_id, deadline_ms).await
+    renew_execution_lease(manager.inner(), &turn_id, deadline_ms, refusal).await
 }
 
 pub(super) fn update_turn(

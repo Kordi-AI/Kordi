@@ -170,6 +170,14 @@ const ELIGIBLE: &str = concat!(
 /// session lock before it is leased.
 const LEASE_CANDIDATES: usize = 8;
 
+/// Lease order: oldest first, where a run with a head start counts as queued
+/// that many seconds earlier. A run someone is waiting on (Grounding's
+/// opened match) goes ahead of runs queued shortly before it, but never
+/// ahead of one that has waited longer than its head start. Every other run
+/// has none and keeps its place.
+const LEASE_ORDER: &str = "candidate.created_at::timestamptz \
+     - make_interval(secs => candidate.lease_head_start_seconds) ASC, candidate.run_id ASC";
+
 async fn lease_run(
     pool: &PgPool,
     runner_id: &str,
@@ -203,13 +211,27 @@ async fn lease_eligible(
     runner_id: &str,
     canary_run_id: Option<&str>,
 ) -> RunResult<Option<RunnerRunRow>> {
+    lease_eligible_among(pool, runner_id, canary_run_id, None).await
+}
+
+/// [`lease_eligible`], considering only `among` when it is given (tests
+/// that share a database with other tests' queued runs); the runner gives
+/// none.
+async fn lease_eligible_among(
+    pool: &PgPool,
+    runner_id: &str,
+    canary_run_id: Option<&str>,
+    among: Option<&[String]>,
+) -> RunResult<Option<RunnerRunRow>> {
     let candidates: Vec<(String, String)> = query_as(&format!(
         "SELECT candidate.run_id, candidate.session_id FROM cloud_agent_fallback_runs candidate \
-         {ELIGIBLE} ORDER BY candidate.created_at ASC LIMIT {LEASE_CANDIDATES}"
+         {ELIGIBLE} AND ($4::text[] IS NULL OR candidate.run_id = ANY($4)) \
+         ORDER BY {LEASE_ORDER} LIMIT {LEASE_CANDIDATES}"
     ))
     .bind(Utc::now().to_rfc3339())
     .bind(canary_run_id)
     .bind(crate::projects::PROJECT_DEVICE_ONLINE_SECONDS as f64)
+    .bind(among)
     .fetch_all(pool)
     .await?;
     for (run_id, session_id) in candidates {
@@ -248,6 +270,18 @@ async fn lease_eligible(
         }
     }
     Ok(None)
+}
+
+/// Leases the next run as [`lease_next_run`] would, among `run_ids` only,
+/// and returns its id.
+#[cfg(test)]
+pub async fn lease_next_run_among(
+    pool: &PgPool,
+    runner_id: &str,
+    run_ids: &[String],
+) -> RunResult<Option<String>> {
+    let row = lease_eligible_among(pool, runner_id, None, Some(run_ids)).await?;
+    Ok(row.map(|row| row.0))
 }
 
 pub async fn lease_canary_run(

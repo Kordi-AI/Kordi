@@ -72,6 +72,10 @@ pub struct ConversationSnapshot {
     /// personal one (docs/development/organizations.md).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub organization: Option<ConversationOrganization>,
+    /// When and by whom the group was closed; absent while it is open
+    /// (docs/development/group-closed-state.md).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed: Option<ConversationClosed>,
     pub forked_from_session_id: Option<String>,
     pub forked_from_message_id: Option<String>,
     pub latest_message_sequence: i64,
@@ -79,6 +83,15 @@ pub struct ConversationSnapshot {
     pub updated_at: DateTime<Utc>,
     pub members: Vec<MemberSnapshot>,
     pub preferences: ConversationPreferencesSnapshot,
+}
+
+/// A closed group conversation: members keep reading its history, and
+/// nothing new is written there.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ConversationClosed {
+    pub closed_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed_by_account_id: Option<String>,
 }
 
 /// A team organization as a conversation snapshot names it.

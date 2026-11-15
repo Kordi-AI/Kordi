@@ -14,10 +14,13 @@ struct CommonGroundPersonActionAvailability {
     var showsContactAction: Bool { showsActions && contactAction != .message }
     var contactActionEnabled: Bool { showsContactAction && contactAction != .requested && !busy }
     var communicationEnabled: Bool { contactAction == .message && !busy }
+    /// Invite to a group works for contacts and non-contacts alike.
+    var inviteEnabled: Bool { showsActions && !busy }
+    var columns: Int { showsContactAction ? 4 : 3 }
 }
 
-/// Add (or Requested, Accept), Message and Meet for one person, as glass
-/// tiles. Message and Meet stay disabled until both people are contacts.
+/// Add (or Requested, Accept), Message, Meet and Invite for one person, as
+/// glass tiles. Message and Meet stay disabled until both people are contacts.
 struct CommonGroundPersonActions: View {
     @Environment(\.kordiChatTheme) private var chatTheme
     @EnvironmentObject private var model: CommonGroundModel
@@ -25,6 +28,7 @@ struct CommonGroundPersonActions: View {
     @Environment(\.commonGroundOpenConversation) private var openConversation
     let person: CommonGroundPerson
     @State private var meets = false
+    @State private var invites = false
     /// The chat a sent proposal landed in, opened once the sheet closes.
     @State private var meetConversationId: String?
 
@@ -36,7 +40,7 @@ struct CommonGroundPersonActions: View {
     var body: some View {
         let state = availability
         if state.showsActions {
-            CommonGroundActions(columns: state.showsContactAction ? 3 : 2) {
+            CommonGroundActions(columns: state.columns) {
                 if state.showsContactAction {
                     actionButton(
                         title: state.contactAction.title,
@@ -54,8 +58,15 @@ struct CommonGroundPersonActions: View {
                     meets = true
                 }
                 .accessibilityHint(relationship?.contact == true ? "" : "Available after the contact request is accepted.")
+                actionButton(title: "Invite", symbol: "person.2", enabled: state.inviteEnabled) {
+                    invites = true
+                }
             }
             .frame(maxWidth: .infinity)
+            .sheet(isPresented: $invites) {
+                CommonGroundInviteToGroupSheet(person: person)
+                    .environmentObject(model)
+            }
             .sheet(isPresented: $meets, onDismiss: openMeetChat) {
                 CommonGroundMeetSheet(name: person.displayName) { input in
                     guard let response = await model.meet(person.accountId, input: input) else { return false }

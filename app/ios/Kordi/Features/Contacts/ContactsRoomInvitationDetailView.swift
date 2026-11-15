@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// A room group invitation opened from Contacts › Requests: the group, who
-/// invited you and from which room, its members, and Decline or Join.
+/// A group invitation opened from Contacts › Requests: the group, who
+/// invited you and from which room (or Grounding), its members, and Decline
+/// or Join.
 struct ContactsRoomInvitationDetailView: View {
     @Environment(\.kordiChatTheme) private var chatTheme
     @EnvironmentObject private var model: AppModel
@@ -12,10 +13,7 @@ struct ContactsRoomInvitationDetailView: View {
 
     private enum Action { case join, decline }
 
-    private var line: String {
-        let room = invitation.roomName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return room.isEmpty ? invitation.from.displayName : "\(invitation.from.displayName) · from \(room)"
-    }
+    private var line: String { invitation.fromLine }
 
     /// The collage keeps the server's order, creator first.
     private var participants: [CloudGroupParticipant] {

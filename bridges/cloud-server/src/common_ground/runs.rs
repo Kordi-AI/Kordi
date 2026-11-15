@@ -37,6 +37,13 @@ pub(super) struct NewRun<'a> {
     pub system_prompt: &'a str,
 }
 
+/// The lease head start of a run someone is waiting on: a match run queued
+/// because the viewer opened one person. The runner leases it as if it had
+/// been queued this much earlier, so it goes ahead of a large room's bulk
+/// runs but never ahead of a run that has waited longer than this
+/// (`cloud_agent_runtime::runs::leases`).
+pub(super) const OPENED_HEAD_START_SECONDS: i32 = 10 * 60;
+
 /// Queues a run in `tx` once the resource pool of its organization admits it,
 /// counted for the requester. Returns false, queueing nothing and leaving
 /// `tx` as it was, when the pool's daily limit is used up, the pool is
@@ -45,6 +52,25 @@ pub(super) async fn insert(
     tx: &mut Transaction<'_, Postgres>,
     service: &crate::system_agent::SystemAgentConfig,
     run: NewRun<'_>,
+) -> sqlx_core::Result<bool> {
+    insert_with_head_start(tx, service, run, 0).await
+}
+
+/// [`insert`] for a run someone is waiting on, leased with
+/// [`OPENED_HEAD_START_SECONDS`].
+pub(super) async fn insert_opened(
+    tx: &mut Transaction<'_, Postgres>,
+    service: &crate::system_agent::SystemAgentConfig,
+    run: NewRun<'_>,
+) -> sqlx_core::Result<bool> {
+    insert_with_head_start(tx, service, run, OPENED_HEAD_START_SECONDS).await
+}
+
+async fn insert_with_head_start(
+    tx: &mut Transaction<'_, Postgres>,
+    service: &crate::system_agent::SystemAgentConfig,
+    run: NewRun<'_>,
+    head_start_seconds: i32,
 ) -> sqlx_core::Result<bool> {
     // A member who declined AI gets no Grounding run (`crate::ai_consent`).
     if crate::ai_consent::is_declined(&mut **tx, run.requester).await? {
@@ -92,8 +118,9 @@ pub(super) async fn insert(
         "INSERT INTO cloud_agent_fallback_runs (
              run_id, idempotency_key, request_message_id, session_id, owner_account_id,
              requester_account_id, status, prompt, system_prompt, runtime_route_json,
-             created_at, updated_at, run_trigger, connector_audience, organization_id
-         ) VALUES ($1, $1, $1, $2, $3, $4, 'queued', $5, $6, $7, $8, $8, 'background', 'owner_private', $9)",
+             created_at, updated_at, run_trigger, connector_audience, organization_id,
+             lease_head_start_seconds
+         ) VALUES ($1, $1, $1, $2, $3, $4, 'queued', $5, $6, $7, $8, $8, 'background', 'owner_private', $9, $10)",
     )
     .bind(run.run_id)
     .bind(format!("common-ground:{}", run.requester))
@@ -104,6 +131,7 @@ pub(super) async fn insert(
     .bind(pool.routing(Feature::Grounding))
     .bind(&now)
     .bind(organization_id.as_deref())
+    .bind(head_start_seconds)
     .execute(&mut **tx)
     .await?;
     // A pool worker pool's run waits for that pool's own worker.

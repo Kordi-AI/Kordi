@@ -7,9 +7,14 @@ struct GroupMemberInviteSheet: View {
     let space: GroupSpaceSummary
 
     @State private var selectedContactIDs = Set<String>()
+    /// People from Grounding picked to invite.
+    @State private var selectedGroundingIDs = Set<String>()
+    /// People from Grounding the group can invite; empty hides the section.
+    @State private var groundingCandidates: [CommonGroundGroupCandidate] = []
     @State private var isSaving = false
     @State private var searchText = ""
-    @State private var completedMemberCount: Int?
+    @State private var completion: GroupInviteCompletion?
+    @State private var groundingFailure: String?
 
     private var memberIDs: Set<String> {
         space.fullyJoinedParticipantAccountIds
@@ -44,17 +49,40 @@ struct GroupMemberInviteSheet: View {
             }
     }
 
+    /// Grounding people who are not members and not already listed as contacts.
+    private var eligibleGroundingCandidates: [CommonGroundGroupCandidate] {
+        let contactIDs = Set(eligibleContactItems.map(\.contact.accountId))
+        return groundingCandidates.filter {
+            !memberIDs.contains($0.id) && !contactIDs.contains($0.id)
+        }
+    }
+
+    private var filteredGroundingCandidates: [CommonGroundGroupCandidate] {
+        guard !searchText.isEmpty else { return eligibleGroundingCandidates }
+        return eligibleGroundingCandidates.filter {
+            $0.person.displayName.localizedCaseInsensitiveContains(searchText)
+                || $0.source?.localizedCaseInsensitiveContains(searchText) == true
+        }
+    }
+
     private var listRows: [GroupInviteListRow] {
-        contactSections.flatMap { section in
+        let contactRows: [GroupInviteListRow] = contactSections.flatMap { section in
             [.section(section.title)] + section.contacts.map(GroupInviteListRow.contact)
         }
+        let grounding = filteredGroundingCandidates
+        guard !grounding.isEmpty else { return contactRows }
+        return contactRows + [.section(GroupInviteListRow.groundingTitle)] + grounding.map(GroupInviteListRow.grounding)
+    }
+
+    private var selectedCount: Int {
+        selectedContactIDs.count + selectedGroundingIDs.count
     }
 
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
                 List {
-                    if contactSections.isEmpty {
+                    if listRows.isEmpty {
                         ContentUnavailableView(
                             searchText.isEmpty ? "No contacts to add" : "No contacts found",
                             systemImage: searchText.isEmpty ? "person.badge.plus" : "magnifyingglass",
@@ -71,7 +99,9 @@ struct GroupMemberInviteSheet: View {
                             GroupInviteListRowContent(
                                 row: row,
                                 selectedContactIDs: selectedContactIDs,
-                                onToggle: toggleContact
+                                selectedGroundingIDs: selectedGroundingIDs,
+                                onToggle: toggleContact,
+                                onToggleGrounding: toggleGroundingPerson
                             )
                             .listRowInsets(row.insets)
                             .listRowSeparator(row.showsSeparator ? .visible : .hidden, edges: .bottom)
@@ -98,7 +128,7 @@ struct GroupMemberInviteSheet: View {
             .searchable(
                 text: $searchText,
                 placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search contacts or Kordi IDs"
+                prompt: "Search people"
             )
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
@@ -124,20 +154,33 @@ struct GroupMemberInviteSheet: View {
                             Image(systemName: "checkmark")
                         }
                     }
-                    .disabled(selectedContactIDs.isEmpty || isSaving)
+                    .disabled(selectedCount == 0 || isSaving)
                     .accessibilityLabel(
-                        selectedContactIDs.isEmpty
+                        selectedCount == 0
                             ? "Add members"
-                            : "Add \(selectedContactIDs.count) members"
+                            : "Add \(selectedCount) members"
                     )
                 }
             }
         }
-        .disabled(completedMemberCount != nil)
+        .task {
+            // Only while the sheet is open; a failed or missing list hides the section.
+            groundingCandidates = await model.groundingGroupCandidates(for: space) ?? []
+        }
+        .alert(
+            "Could not invite",
+            isPresented: Binding(get: { groundingFailure != nil }, set: { if !$0 { groundingFailure = nil } }),
+            presenting: groundingFailure
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { message in
+            Text(message)
+        }
+        .disabled(completion != nil)
         .overlay {
-            if let completedMemberCount {
+            if let completion {
                 GroupInviteCompletionView(
-                    memberCount: completedMemberCount,
+                    completion: completion,
                     reduceMotion: reduceMotion
                 )
                 .transition(
@@ -149,13 +192,14 @@ struct GroupMemberInviteSheet: View {
         }
         .animation(
             reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.34, dampingFraction: 0.84),
-            value: completedMemberCount
+            value: completion
         )
         .sensoryFeedback(.selection, trigger: selectedContactIDs)
-        .sensoryFeedback(.success, trigger: completedMemberCount)
+        .sensoryFeedback(.selection, trigger: selectedGroundingIDs)
+        .sensoryFeedback(.success, trigger: completion)
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
-        .interactiveDismissDisabled(isSaving || completedMemberCount != nil)
+        .interactiveDismissDisabled(isSaving || completion != nil)
     }
 
     private func toggleContact(_ accountID: String) {
@@ -171,16 +215,43 @@ struct GroupMemberInviteSheet: View {
         }
     }
 
+    private func toggleGroundingPerson(_ accountID: String) {
+        let animation: Animation = reduceMotion
+            ? .easeOut(duration: 0.1)
+            : .snappy(duration: 0.2)
+        withAnimation(animation) {
+            if selectedGroundingIDs.contains(accountID) {
+                selectedGroundingIDs.remove(accountID)
+            } else {
+                selectedGroundingIDs.insert(accountID)
+            }
+        }
+    }
+
+    /// Adds the picked contacts, then invites the picked Grounding people.
     private func inviteSelectedContacts() {
         let contacts = eligibleContactItems
             .map(\.contact)
             .filter { selectedContactIDs.contains($0.accountId) }
-        guard !contacts.isEmpty else { return }
+        let groundingIDs = eligibleGroundingCandidates
+            .map(\.id)
+            .filter { selectedGroundingIDs.contains($0) }
+        guard !contacts.isEmpty || !groundingIDs.isEmpty else { return }
         isSaving = true
         Task {
-            let didInvite = await model.inviteContacts(contacts, to: space)
-            guard didInvite else {
+            if !contacts.isEmpty {
+                let didInvite = await model.inviteContacts(contacts, to: space)
+                guard didInvite else {
+                    isSaving = false
+                    return
+                }
+                selectedContactIDs.subtract(contacts.map(\.accountId))
+            }
+            if !groundingIDs.isEmpty, let failure = await model.inviteGroundingPeople(groundingIDs, to: space) {
                 isSaving = false
+                groundingFailure = failure
+                selectedGroundingIDs = []
+                groundingCandidates = await model.groundingGroupCandidates(for: space) ?? []
                 return
             }
 
@@ -190,7 +261,7 @@ struct GroupMemberInviteSheet: View {
                     : .spring(response: 0.34, dampingFraction: 0.84)
             ) {
                 isSaving = false
-                completedMemberCount = contacts.count
+                completion = GroupInviteCompletion(added: contacts.count, invited: groundingIDs.count)
             }
             try? await Task.sleep(for: reduceMotion ? .milliseconds(250) : .milliseconds(700))
             dismiss()
@@ -233,8 +304,11 @@ private struct GroupInviteContactSection: Identifiable {
 }
 
 private enum GroupInviteListRow: Identifiable {
+    static let groundingTitle = "From Grounding"
+
     case section(String)
     case contact(GroupInviteContactItem)
+    case grounding(CommonGroundGroupCandidate)
 
     var id: String {
         switch self {
@@ -242,21 +316,39 @@ private enum GroupInviteListRow: Identifiable {
             "section:\(title)"
         case let .contact(item):
             "contact:\(item.id)"
+        case let .grounding(candidate):
+            "grounding:\(candidate.id)"
         }
     }
 
     var insets: EdgeInsets {
         switch self {
+        case let .section(title) where title == Self.groundingTitle:
+            EdgeInsets(top: 18, leading: 16, bottom: 2, trailing: 28)
         case .section:
             EdgeInsets(top: 7, leading: 16, bottom: 2, trailing: 28)
-        case .contact:
+        case .contact, .grounding:
             EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 28)
         }
     }
 
     var showsSeparator: Bool {
-        if case .contact = self { return true }
-        return false
+        if case .section = self { return false }
+        return true
+    }
+}
+
+/// What the sheet did: contacts added directly and people invited.
+private struct GroupInviteCompletion: Equatable {
+    let added: Int
+    let invited: Int
+
+    var title: String {
+        switch (added, invited) {
+        case (_, 0): added == 1 ? "Member added" : "\(added) members added"
+        case (0, _): invited == 1 ? "Invitation sent" : "\(invited) invitations sent"
+        default: "\(added) added, \(invited) invited"
+        }
     }
 }
 
@@ -264,7 +356,9 @@ private struct GroupInviteListRowContent: View {
     @Environment(\.kordiChatTheme) private var chatTheme
     let row: GroupInviteListRow
     let selectedContactIDs: Set<String>
+    let selectedGroundingIDs: Set<String>
     let onToggle: (String) -> Void
+    let onToggleGrounding: (String) -> Void
 
     var body: some View {
         Group {
@@ -277,8 +371,57 @@ private struct GroupInviteListRowContent: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             case let .contact(item):
                 contactButton(item.contact)
+            case let .grounding(candidate):
+                groundingButton(candidate)
             }
         }
+    }
+
+    private func groundingButton(_ candidate: CommonGroundGroupCandidate) -> some View {
+        let person = candidate.person
+        let isSelected = !candidate.invited && selectedGroundingIDs.contains(person.accountId)
+        return Button {
+            onToggleGrounding(person.accountId)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? chatTheme.accent : Color.secondary)
+                    .contentTransition(.symbolEffect(.replace))
+                    .opacity(candidate.invited ? 0 : 1)
+                IdentityAvatar(
+                    name: person.displayName,
+                    imageSource: person.avatarUrl.nonEmpty,
+                    kind: .person,
+                    size: 38,
+                    seed: person.accountId
+                )
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(person.displayName)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(candidate.invited ? Color.secondary : Color.primary)
+                        .lineLimit(1)
+                    Text(candidate.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                if candidate.invited {
+                    Text("Invited")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(candidate.invited)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(person.displayName), \(candidate.detail)")
+        .accessibilityValue(candidate.invited ? "Invited" : isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private func contactButton(_ contact: CloudContact) -> some View {
@@ -324,7 +467,7 @@ private struct GroupInviteListRowContent: View {
 
 private struct GroupInviteCompletionView: View {
     @Environment(\.kordiChatTheme) private var chatTheme
-    let memberCount: Int
+    let completion: GroupInviteCompletion
     let reduceMotion: Bool
 
     @State private var isSettled = false
@@ -344,18 +487,20 @@ private struct GroupInviteCompletionView: View {
                     .scaleEffect(reduceMotion || isSettled ? 1 : 0.78)
                     .opacity(reduceMotion || isSettled ? 1 : 0.25)
 
-                Text(memberCount == 1 ? "Member added" : "\(memberCount) members added")
+                Text(completion.title)
                     .font(.title3.weight(.semibold))
 
-                Text("The group is ready for everyone.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if completion.invited == 0 {
+                    Text("The group is ready for everyone.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
             .multilineTextAlignment(.center)
             .padding(24)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(memberCount == 1 ? "Member added" : "\(memberCount) members added")
+        .accessibilityLabel(completion.title)
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {

@@ -46,4 +46,20 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "common ground room join requests",
         "0202_common_ground_room_join_requests.sql"
     ),
+    migration!(
+        203,
+        "cloud run lease head start",
+        "0203_cloud_run_lease_head_start.sql"
+    ),
+    migration!(204, "group closed state", "0204_group_closed_state.sql"),
+    migration!(
+        205,
+        "subsession stop reasons",
+        "0205_subsession_stop_reasons.sql"
+    ),
+    migration!(
+        206,
+        "common ground group invitations",
+        "0206_common_ground_group_invitations.sql"
+    ),
 ];

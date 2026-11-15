@@ -17,10 +17,13 @@
  * members, matching, themes or a member's card changed) and
  * `common_ground.matches.updated` (a match for this account finished or
  * failed) refresh the open Grounding room, match page or Rooms list
- * (`features/commonGround/roomHints`).
+ * (`features/commonGround/roomHints`). `common_ground.invitations.updated` (a
+ * person invited this account to a group, or it answered one elsewhere)
+ * refreshes Contacts › Requests (`features/commonGround/roomInvitations`).
  */
 export const ACCOUNT_HINT_EVENT_TYPES: ReadonlySet<string> = new Set([
   'common_ground.card.updated',
+  'common_ground.invitations.updated',
   'common_ground.matches.updated',
   'common_ground.nearby.alert',
   'common_ground.nearby.updated',

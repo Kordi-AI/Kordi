@@ -25,6 +25,7 @@ pub(super) async fn list(
             'agentDisplayName',CASE WHEN s.agent_id='cloud-agent:'||s.owner_account_id AND COALESCE(p.display_name,'Kordi') IN ('Kordi','My Kordi') THEN a.display_name||'''s Kordi' ELSE COALESCE(d.name,p.display_name,'Kordi') END,
             'agentAvatarUrl',CASE WHEN s.agent_id='cloud-agent:'||s.owner_account_id THEN p.avatar_url ELSE d.avatar_url END,
             'title',s.title,'status',s.status,'executionBackend',s.execution_backend,
+            'stopReason',CASE WHEN s.status='stopped' THEN s.stop_reason || jsonb_strip_nulls(jsonb_build_object('byDisplayName',(SELECT stopper.display_name FROM cloud_accounts stopper WHERE stopper.account_id=s.stop_reason->>'accountId'))) END,
             'startedAtMs',(extract(epoch FROM s.execution_started_at)*1000)::bigint,
             'finishedAtMs',(extract(epoch FROM s.execution_finished_at)*1000)::bigint,
             'heartbeatAtMs',(extract(epoch FROM s.heartbeat_at)*1000)::bigint,

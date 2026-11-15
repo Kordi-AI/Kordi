@@ -560,39 +560,6 @@ export type DesktopSkillLibraryDetail = {
   skillMd: string;
 };
 
-export type DesktopCommunitySkillSummary = {
-  id: string;
-  provider: 'clawhub' | 'skills-sh' | string;
-  owner?: string | null;
-  slug: string;
-  name: string;
-  description: string;
-  version?: string | null;
-  downloads: number;
-  stars: number;
-  updatedAtMs?: number | null;
-  sourceUrl: string;
-  installed: boolean;
-};
-
-export type DesktopCommunitySkillFile = {
-  path: string;
-  size: number;
-  sha256?: string | null;
-  contentType?: string | null;
-  text?: string | null;
-};
-
-export type DesktopCommunitySkillDetail = {
-  skill: DesktopCommunitySkillSummary;
-  files: DesktopCommunitySkillFile[];
-  skillMd: string;
-  securityStatus: string;
-  securitySummary: string;
-  digest?: string | null;
-  reviewDigest: string;
-};
-
 export async function installDesktopAgentBuilderSkill(
   draftId: string,
   skillName: string,
@@ -630,39 +597,6 @@ export async function setDesktopSkillLibraryEnabled(name: string, enabled: boole
 
 export async function removeDesktopSkillLibraryEntry(skillId: string) {
   return invokeDesktop<DesktopSkillLibraryEntry[]>('desktop_skill_library_remove', { skillId });
-}
-
-export async function searchDesktopCommunitySkills(
-  provider: 'clawhub' | 'skills-sh',
-  query: string,
-) {
-  if (!isNativeDesktopShell()) return [] as DesktopCommunitySkillSummary[];
-  return invokeDesktop<DesktopCommunitySkillSummary[]>('desktop_skill_community_search', { provider, query });
-}
-
-export async function fetchDesktopCommunitySkillProviders() {
-  if (!isNativeDesktopShell()) return ['clawhub'] as Array<'clawhub' | 'skills-sh'>;
-  return invokeDesktop<Array<'clawhub' | 'skills-sh'>>('desktop_skill_community_providers');
-}
-
-export async function fetchDesktopCommunitySkillDetail(input: {
-  provider: 'clawhub' | 'skills-sh';
-  owner?: string | null;
-  slug: string;
-  version?: string | null;
-}) {
-  return invokeDesktop<DesktopCommunitySkillDetail>('desktop_skill_community_detail', input);
-}
-
-export async function installDesktopCommunitySkill(input: {
-  provider: 'clawhub' | 'skills-sh';
-  owner?: string | null;
-  slug: string;
-  version?: string | null;
-  scope: 'global' | 'project';
-  reviewedDigest: string;
-}) {
-  return invokeDesktop<DesktopSkillLibraryEntry>('desktop_skill_community_install', input);
 }
 
 export async function discardDesktopAgentBuilderDraft(draftId: string, expectedFingerprint: string) {
@@ -768,7 +702,6 @@ export async function setCanonicalSessionParticipantRole(request: SetCanonicalSe
 export async function markCanonicalSessionRead(request: MarkCanonicalSessionReadRequest) {
   return invokeDesktop<CanonicalReadCursorDelta | null>('desktop_canonical_mark_session_read', { request });
 }
-
 
 export async function fetchDesktopProjectSettings(projectRoot?: string) {
   if (!isNativeDesktopShell()) return null;
@@ -903,8 +836,8 @@ export async function startDesktopChatMessage(
   }));
 }
 
-export function renewDesktopChatExecutionLease(turnId: string, deadlineMs: number) {
-  return invokeDesktop<void>('desktop_chat_renew_execution_lease', { turnId, deadlineMs });
+export function renewDesktopChatExecutionLease(turnId: string, deadlineMs: number, refusal: import('@/features/chat/backgroundStopReason').SubsessionSyncRefusal | null = null) {
+  return invokeDesktop<void>('desktop_chat_renew_execution_lease', { turnId, deadlineMs, refusal });
 }
 
 export type DesktopShapeAgentRoute = {
@@ -926,8 +859,8 @@ export async function runDesktopChatSkillCommand(sessionId: string, text: string
   return invokeDesktop<string>('desktop_chat_run_skill_command', { sessionId, text });
 }
 
-export async function cancelDesktopChatTurn(turnId: string) {
-  return invokeDesktop<DesktopChatTurnSnapshot>('desktop_chat_cancel_turn', { turnId });
+export async function cancelDesktopChatTurn(turnId: string, reason: import('@/features/chat/backgroundStopReason').TurnStopReason | null = null) {
+  return invokeDesktop<DesktopChatTurnSnapshot>('desktop_chat_cancel_turn', { turnId, reason });
 }
 
 export async function fetchDesktopChatTurnState(turnId: string) {

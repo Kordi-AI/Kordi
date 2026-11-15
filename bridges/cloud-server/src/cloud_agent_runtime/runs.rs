@@ -61,6 +61,8 @@ pub(crate) use errors::{
 };
 pub use errors::{RunError, RunResult};
 pub use group_member_target::group_member_can_target_owner;
+#[cfg(test)]
+pub use leases::lease_next_run_among;
 pub use leases::{
     lease_canary_run, lease_next_run, mark_run_running, RunnerLeaseResponse, RunnerRunEnvelope,
     RunnerRunRequest, RunnerRunResponse,

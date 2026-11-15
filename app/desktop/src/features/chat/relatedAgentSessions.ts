@@ -19,6 +19,33 @@ export type RelatedAgentSession = {
 
 export type RelatedAgentSessionRunStatus = 'running' | 'done' | 'failed' | 'stopped';
 
+/**
+ * Which execution a background session row shows: the newest one, whether it
+ * is the turn this Mac tracks or the execution the cloud record describes (a
+ * follow-up the Mac does not track, or one in the cloud). A finished local
+ * turn never hides an execution that started after it.
+ */
+/** The cloud dates an execution by its first message, a moment after the turn starts. */
+const SAME_EXECUTION_MS = 500;
+
+export function backgroundSessionRowExecution(
+  localTurn: DesktopChatTurnSnapshot | null | undefined,
+  remote: { status: string; startedAtMs?: number | null } | null | undefined,
+): { status: RelatedAgentSessionRunStatus; localTurn: DesktopChatTurnSnapshot | null } | null {
+  const remoteStart = remote?.startedAtMs ?? null;
+  if (localTurn) {
+    const localStart = localTurn.startedAtMs ?? null;
+    const localEnd = localTurn.completed ? localTurn.completedAtMs ?? localStart : null;
+    const remoteIsNewer = remote != null && remoteStart != null && (
+      (localStart != null && remoteStart > localStart + SAME_EXECUTION_MS)
+      // A continue the Mac does not track started after this turn ended.
+      || (localEnd != null && remoteStart > localEnd)
+    );
+    if (!remoteIsNewer) return { status: runStatusFromTurn(localTurn), localTurn };
+  }
+  return remote ? { status: normalizedRelatedAgentSessionStatus(remote.status), localTurn: null } : null;
+}
+
 export function runStatusFromTurn(turn: DesktopChatTurnSnapshot): RelatedAgentSessionRunStatus {
   const status = turn.status.trim().toLowerCase();
   if (!turn.completed) return 'running';

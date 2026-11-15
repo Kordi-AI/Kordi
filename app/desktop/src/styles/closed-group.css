@@ -1,0 +1,40 @@
+/* Closed groups and channels (docs/development/group-closed-state.md). */
+
+/* A closed group or channel stays listed, dimmed; its time stays at full strength. */
+.app-workspace-sidebar .app-session-row-closed.app-participant-space-row-button > :first-child,
+.app-workspace-sidebar .app-session-row-closed .app-participant-space-row-title,
+.app-workspace-sidebar .app-session-row-closed .app-participant-space-row-preview,
+.app-workspace-sidebar .app-session-row-closed .app-participant-space-session-title,
+.app-workspace-sidebar .app-session-row-closed .app-participant-space-session-preview {
+  opacity: 0.55;
+}
+
+/* A closed group or channel: one line in place of the composer. */
+.app-closed-conversation-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  height: 46px;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--app-sidebar-selected-bg) 55%, transparent);
+  color: var(--app-sidebar-preview-text);
+  font-size: 12.5px;
+}
+
+.app-closed-conversation-delete {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 2px 4px;
+  color: var(--app-danger-text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.app-closed-conversation-delete:hover,
+.app-closed-conversation-delete:focus-visible {
+  outline: none;
+  background: color-mix(in oklab, var(--app-sidebar-selected-bg) 80%, transparent);
+}

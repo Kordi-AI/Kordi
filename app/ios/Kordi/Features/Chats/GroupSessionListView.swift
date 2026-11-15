@@ -48,7 +48,8 @@ struct GroupSessionListView: View {
         GroupSessionRow(
             session: session,
             isPinned: model.pinnedSessionIds.contains(session.sessionId),
-            isMuted: model.mutedSessionIds.contains(session.sessionId)
+            isMuted: model.mutedSessionIds.contains(session.sessionId),
+            isClosed: model.isConversationClosed(session)
         )
     }
 }

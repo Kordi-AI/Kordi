@@ -342,6 +342,25 @@ export function groupMemberAccountIdsFromEnvelope(body: string): string[] | null
   )))];
 }
 
+/** What a group envelope may change about who is in the group. A message changes nothing: its
+ * participant list is the sender's local view, which can lag people who joined on the server
+ * (an invitation answered in Requests). A membership control adds the people it lists and removes
+ * only the people it names as leaving. Null for a message and for a body that is not a group envelope. */
+export function groupEnvelopeMemberChanges(body: string): { removeAccountIds: string[] } | null {
+  const encoded = body.trim().startsWith('kordi-cloud-group:')
+    ? body.trim().slice('kordi-cloud-group:'.length)
+    : '';
+  if (!encoded) return null;
+  const envelope = decodeBase64UrlJson<{ kind?: unknown; memberLeaves?: Array<{ accountId?: unknown }> }>(encoded);
+  if (!envelope || envelope.kind === 'group-message') return null;
+  const leaves = Array.isArray(envelope.memberLeaves) ? envelope.memberLeaves : [];
+  return {
+    removeAccountIds: [...new Set(leaves.flatMap((leave) => (
+      typeof leave?.accountId === 'string' && leave.accountId.trim() ? [leave.accountId.trim()] : []
+    )))],
+  };
+}
+
 export function conversationPeer(
   conversation: ChatSyncConversation,
   viewerAccountId: string,

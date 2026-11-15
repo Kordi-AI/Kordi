@@ -56,6 +56,12 @@ pub struct BackgroundSessionSnapshot {
     pub parent_request_id: Option<String>,
     pub title: String,
     pub status: String,
+    /// Why the latest request was stopped, when this Mac recorded it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop_reason: Option<serde_json::Value>,
+    /// The latest request never reached an end in the stored transcript.
+    #[serde(skip)]
+    pub interrupted: bool,
     pub messages: Vec<BackgroundSessionMessage>,
 }
 
@@ -106,8 +112,18 @@ fn background_snapshot_from_store(
         bail!("Session is not a model-created subsession");
     }
     let messages = load_session_messages(conn, session_id)?;
-    let status =
-        crate::task_operator::inspect_persisted_background_session(conn, session_id)?.status;
+    let inspection = crate::task_operator::inspect_persisted_background_session(conn, session_id)?;
+    let interrupted = inspection.status == "failed"
+        && inspection
+            .summary
+            .as_deref()
+            .is_some_and(|summary| summary.starts_with(crate::task_operator::INTERRUPTED_SUMMARY));
+    let status = inspection.status;
+    let stop_reason = if status == "stopped" {
+        latest_stop_reason(conn, session_id)?
+    } else {
+        None
+    };
     Ok(BackgroundSessionSnapshot {
         can_resume: saved_runtime_profile_from_store(conn, session_id)?.is_some(),
         turn_id: None,
@@ -119,6 +135,8 @@ fn background_snapshot_from_store(
         parent_request_id: row.parent_session_message_id,
         title: row.name.unwrap_or_else(|| "Agent task".to_string()),
         status,
+        stop_reason,
+        interrupted,
         // Share visible conversation text, never system instructions, reasoning,
         // raw tool payloads, credentials, or machine-local artifact paths.
         messages: messages
@@ -329,6 +347,9 @@ fn root_request_from_store(conn: &rusqlite::Connection, request_id: &str) -> Res
     }
     Ok(current)
 }
+
+pub mod stop_reason;
+use stop_reason::latest_stop_reason;
 
 #[cfg(test)]
 mod root_request_tests;

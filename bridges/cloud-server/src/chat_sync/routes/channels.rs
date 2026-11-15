@@ -47,8 +47,9 @@ pub(super) async fn create(
     }
 }
 
-/// Dissolving a whole group, or one of its channels, is for group admins
-/// only. Any member may leave a group.
+/// Closing ("dissolving") a whole group, or one of its channels, is for
+/// group admins only (docs/development/group-closed-state.md). Any member
+/// may leave a group.
 pub(super) fn dissolve_routes() -> Router<Arc<ServerState>> {
     Router::new()
         .route(
@@ -105,7 +106,7 @@ pub(super) async fn dissolve_group(
     }
 }
 
-/// Dissolves one channel of a group, other than its first: an owner or admin only.
+/// Closes one channel of a group, other than its first: an owner or admin only.
 pub(super) async fn dissolve_channel(
     State(state): State<Arc<ServerState>>,
     Extension(session): Extension<CloudSession>,

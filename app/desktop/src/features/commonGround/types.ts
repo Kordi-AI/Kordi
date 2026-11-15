@@ -236,6 +236,21 @@ export type CgGroup = {
 export type CgJoinRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
 export type CgPendingJoinRequest = { requestId: string; person: CgPerson; createdAt: string };
 
+/** A group the viewer (owner or admin) can invite a person to; `state` is about that person. */
+export type CgInviteGroup = {
+  groupSpaceId: string;
+  conversationId: string | null;
+  name: string;
+  memberCount: number;
+  members: CgPerson[];
+  state: 'member' | 'invited' | null;
+};
+/** The person-page group picker: `contact` means a pick adds them right away instead of inviting. */
+export type CgPersonGroups = { contact: boolean; groups: CgInviteGroup[] };
+/** `reason` is member, invited, declined, unavailable or limit; newer servers may add others. */
+export type CgGroupInviteSkip = { accountId: string; reason: string };
+export type CgGroupInviteResult = { invited: CgPerson[]; added: CgPerson[]; skipped: CgGroupInviteSkip[] };
+
 export type CgInvitation = { invitationRef: string; groupSpaceId: string; name: string; from: CgPerson; createdAt: string };
 
 export type CgRoom = {

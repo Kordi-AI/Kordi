@@ -1,0 +1,263 @@
+/* Factory Library: the search filter menu in the rail and the item detail header
+ * with its actions. Installed and community skills share it. */
+
+/* Rail */
+
+.app-factory-rail-search {
+  position: relative;
+}
+
+.app-agent-studio-rail.is-in-sidebar .app-factory-rail-switch {
+  margin-bottom: 8px;
+}
+
+.app-factory-filter-menu,
+.app-factory-more-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.app-factory-filter-menu > summary,
+.app-factory-more-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.app-factory-filter-menu > summary::-webkit-details-marker,
+.app-factory-more-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-factory-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 6px 0 8px;
+  border-radius: 6px;
+  color: var(--utility-muted-text);
+  font-size: var(--agent-studio-type-caption);
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background var(--app-motion-fast) var(--app-motion-ease),
+    color var(--app-motion-fast) var(--app-motion-ease);
+}
+
+.app-factory-filter-trigger:hover,
+.app-factory-filter-menu[open] > .app-factory-filter-trigger {
+  background: var(--app-quiet-control-hover-bg);
+  color: var(--utility-foreground);
+}
+
+.app-factory-menu-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: -4px;
+  min-width: 200px;
+  padding: 4px;
+  border: 1px solid color-mix(in oklab, var(--app-divider) 82%, transparent);
+  border-radius: 11px;
+  background: color-mix(in oklab, var(--app-modal-bg) 97%, var(--utility-background));
+  box-shadow: var(--app-shadow-float);
+  backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.app-factory-menu-panel > button,
+.app-factory-menu-panel > .contents > button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto 14px;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 7px;
+  color: var(--utility-foreground);
+  font-size: var(--agent-studio-type-secondary);
+  text-align: left;
+}
+
+.app-factory-menu-panel > button:hover,
+.app-factory-menu-panel > .contents > button:hover {
+  background: color-mix(in oklab, var(--app-control-hover) 70%, transparent);
+}
+
+.app-factory-menu-panel button > svg:first-child {
+  justify-self: center;
+  color: var(--utility-muted-text);
+}
+
+.app-factory-menu-panel button small {
+  color: var(--utility-muted-text);
+  font-size: var(--agent-studio-type-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-factory-menu-label {
+  padding: 7px 9px 3px;
+  color: var(--utility-muted-text);
+  font-size: var(--agent-studio-type-caption);
+  font-weight: 600;
+}
+
+.app-factory-menu-panel hr {
+  margin: 4px 6px;
+  border: 0;
+  border-top: 1px solid color-mix(in oklab, var(--app-divider) 82%, transparent);
+}
+
+.app-factory-rail-label {
+  padding: 6px 10px 4px;
+  color: var(--utility-muted-text);
+  font-size: var(--agent-studio-type-caption);
+  font-weight: 600;
+}
+
+.app-agent-studio-agent-row.is-compact.is-disabled strong {
+  color: var(--utility-muted-text);
+  font-weight: 500;
+}
+
+.app-agent-studio-agent-row.is-community {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 44px;
+  margin: 0;
+  padding-block: 5px;
+  border: 0;
+}
+
+.app-agent-studio-agent-row.is-community strong {
+  font-size: var(--agent-studio-type-secondary);
+  font-weight: 600;
+}
+
+.app-factory-rail-installed {
+  color: var(--agent-studio-success);
+}
+
+/* Detail header */
+
+.app-factory-detail-header {
+  padding-left: 16px;
+}
+
+.app-factory-detail-actions {
+  gap: 6px;
+}
+
+.app-factory-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 4px;
+  color: var(--utility-muted-text);
+  font-size: var(--agent-studio-type-secondary);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-factory-enabled.is-disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.app-factory-switch {
+  position: relative;
+  width: 36px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--utility-foreground) 16%, transparent);
+  transition: background var(--app-motion-fast) var(--app-motion-ease);
+}
+
+.app-factory-switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  content: '';
+  transition: transform var(--app-motion-fast) var(--app-motion-ease);
+}
+
+.app-factory-switch[aria-checked='true'] {
+  background: #34c759;
+}
+
+.app-factory-switch[aria-checked='true']::after {
+  transform: translateX(14px);
+}
+
+.app-factory-action-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--app-divider);
+}
+
+.app-factory-icon-button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--utility-muted-text);
+}
+
+.app-factory-more-menu[open] > .app-factory-icon-button {
+  background: var(--app-quiet-control-hover-bg);
+  color: var(--utility-foreground);
+}
+
+.app-factory-more-panel {
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 180px;
+}
+
+.app-factory-more-panel button {
+  grid-template-columns: 16px minmax(0, 1fr);
+}
+
+.app-factory-more-panel button.is-danger,
+.app-factory-more-panel button.is-danger > svg:first-child {
+  color: var(--agent-studio-danger);
+}
+
+.app-factory-installed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in oklab, var(--app-divider) 70%, transparent);
+  border-radius: 999px;
+  color: var(--agent-studio-success);
+  font-size: var(--agent-studio-type-caption);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app-factory-confirm {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 8px 16px;
+  border-bottom: 1px solid color-mix(in oklab, var(--app-divider) 68%, transparent);
+  background: color-mix(in oklab, var(--agent-studio-danger) 6%, transparent);
+  font-size: var(--agent-studio-type-secondary);
+}
+
+.app-factory-confirm span {
+  flex: 1 1 auto;
+  min-width: 0;
+}

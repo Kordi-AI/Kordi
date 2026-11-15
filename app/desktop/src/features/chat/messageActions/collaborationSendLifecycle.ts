@@ -1,11 +1,18 @@
 import type {
   AppendCanonicalMessageRequest,
+  CanonicalSessionState,
   DesktopCollaborationState,
 } from '@/kordi-app/types';
 import { isRetryableCloudDeliveryError } from '@/features/cloud/cloudAuthError';
+import {
+  canonicalStateWithClosedSessions,
+  GROUP_CLOSED_SEND_FAILURE,
+  isGroupClosedError,
+} from '@/features/chat/closedGroup';
 
 import {
   failedPreparedCanonicalUserMessage,
+  markOptimisticCanonicalMessageFailed,
   markOptimisticCollaborationMessageFailed,
   type PreparedCanonicalUserMessage,
 } from './optimistic';
@@ -21,10 +28,27 @@ export function createCloudCollaborationClientMessageId(): string {
   });
 }
 
+/**
+ * Marks a group message failed. When the server refused it because the group
+ * was closed, the session shows closed at once too.
+ */
+export function markGroupSendFailed(
+  error: unknown,
+  current: CanonicalSessionState | null,
+  sessionId: string,
+  messageId: string | null | undefined,
+  detail?: string | null,
+): CanonicalSessionState | null {
+  const failed = markOptimisticCanonicalMessageFailed(current, sessionId, messageId, detail);
+  if (!isGroupClosedError(error) || !sessionId.trim()) return failed;
+  return canonicalStateWithClosedSessions(failed, [sessionId], new Date().toISOString());
+}
+
 export function collaborationSendFailureDetail(
   error: unknown,
   fallback = 'Unable to send collaboration message',
 ) {
+  if (isGroupClosedError(error)) return GROUP_CLOSED_SEND_FAILURE;
   return error instanceof Error ? error.message : fallback;
 }
 

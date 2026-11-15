@@ -30,6 +30,7 @@ import {
   type CloudGroupOutboxEntry,
 } from './cloudGroupOutbox';
 import {
+  cloudGroupOutboxMessageOptions,
   prepareCloudGroupOutboxEntryAttachments,
 } from './cloudGroupOutboxAttachments';
 import type {
@@ -189,6 +190,7 @@ export function useCloudGroupOutboxDelivery({
                 attachments: ready.attachments,
                 clientCreatedAt: ready.clientCreatedAt,
                 clientMessageId,
+                ...cloudGroupOutboxMessageOptions(ready.envelope),
                 conversationKind: 'group',
                 memberAccountIds,
               },

@@ -40,15 +40,21 @@ export class ChatSyncConversationClient {
     )];
     const cached = this.state.conversationBySessionId.get(sessionId);
     if (cached) {
-      if (cached.kind !== 'group') return cached;
+      if (cached.kind !== 'group' || !input.memberChanges) return cached;
+      // Only owners and admins change who is in a group, and the server refuses anyone else. A
+      // member's send must not wait on, or fail at, a membership change it cannot make.
+      const role = cached.members.find((member) => member.account_id === accountId && member.membership_state === 'active')?.role;
+      if (role !== 'owner' && role !== 'admin') return cached;
       const activeMembers = new Set(cached.members
         .filter((member) => member.membership_state === 'active' && !isBuiltInAccountId(member.account_id))
         .map((member) => member.account_id));
       const missing = memberAccountIds.filter((member) => !activeMembers.has(member));
-      const removed = input.replaceMembers
-        ? [...activeMembers].filter((member) => member !== accountId && !memberAccountIds.includes(member))
-        : [];
+      // Only the people the control names as leaving go: the sender's list may not yet show
+      // people who joined on the server.
+      const removed = input.memberChanges.removeAccountIds
+        .filter((member) => member !== accountId && activeMembers.has(member));
       if (missing.length === 0 && removed.length === 0) return cached;
+      const desired = [...new Set([...activeMembers, ...missing])].filter((member) => !removed.includes(member));
       const updated = await this.state.send<{ conversation: ChatSyncConversation }>(
         `/v2/chat/conversations/${encodeURIComponent(cached.id)}/members`,
         {
@@ -56,10 +62,10 @@ export class ChatSyncConversationClient {
           headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...deliveryScope.headers },
           body: JSON.stringify({
             client_operation_id: cloudOperationUuid(
-              `members:${cached.id}:${cached.version}:${[...memberAccountIds].sort().join(':')}`,
+              `members:${cached.id}:${cached.version}:${[...(removed.length > 0 ? desired : missing)].sort().join(':')}`,
             ),
-            member_account_ids: input.replaceMembers ? memberAccountIds : missing,
-            replace: input.replaceMembers === true,
+            member_account_ids: removed.length > 0 ? desired : missing,
+            replace: removed.length > 0,
           }),
         },
         'Could not synchronize group membership.',
@@ -114,14 +120,14 @@ export class ChatSyncConversationClient {
     return new ChatSyncMessageDelivery(this.state).sendMessage(token, peerAccountId, body, options);
   }
 
-  /** Dissolves a whole group, every channel in it. Group owners and admins only. */
+  /** Closes a whole group, every channel in it; members keep the history. Group owners and admins only. */
   async dissolveGroup(token: string, groupSpaceId: string): Promise<void> {
     const space = groupSpaceId.trim().replace(/^(group:)+/, '');
     if (!space) throw new Error('This group is unavailable.');
     await this.state.send<unknown>(
       `/v2/chat/group-spaces/${encodeURIComponent(space)}`,
       { method: 'DELETE', headers: { authorization: `Bearer ${token}` } },
-      'Could not dissolve the group.',
+      'Could not close the group.',
     );
     this.forgetGroupSpace(space);
   }
@@ -145,14 +151,14 @@ export class ChatSyncConversationClient {
     this.forgetGroupSpace(space);
   }
 
-  /** Dissolves one channel of a group other than its first. Group owners and admins only. */
+  /** Closes one channel of a group other than its first. Group owners and admins only. */
   async dissolveGroupChannel(token: string, groupSpaceId: string, channelSessionId: string): Promise<void> {
     const space = groupSpaceId.trim().replace(/^(group:)+/, '');
     const conversation = await this.mutationConversation(token, channelSessionId.trim());
     await this.state.send<unknown>(
       `/v2/chat/group-spaces/${encodeURIComponent(space)}/channels/${encodeURIComponent(conversation.id)}`,
       { method: 'DELETE', headers: { authorization: `Bearer ${token}` } },
-      'Could not dissolve the channel.',
+      'Could not close the channel.',
     );
     this.state.forgetSession(conversation.legacy_session_id ?? conversation.id);
   }

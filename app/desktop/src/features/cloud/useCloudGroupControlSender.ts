@@ -25,13 +25,13 @@ import {
   encodeCloudGroupControl,
   firstCloudGroupSendFailure,
   fulfilledCloudGroupSends,
-  parseCloudGroupControl,
 } from './cloudGroupMessages';
 import {
   type CloudGroupOutboxEntry,
 } from './cloudGroupOutbox';
 import {
   cloudGroupOutboxAttachmentSources,
+  cloudGroupOutboxMessageOptions,
   prepareCloudGroupOutboxEntryAttachments,
 } from './cloudGroupOutboxAttachments';
 import {
@@ -47,6 +47,7 @@ import type {
   CloudGroupControlCanonicalContext,
   CloudGroupControlTransport,
 } from './useCloudGroupControlSender.types';
+import { isGroupClosedError } from '@/features/chat/closedGroup';
 
 export type {
   SendCloudGroupControlInput,
@@ -265,6 +266,7 @@ export function useCloudGroupControlSender({
         return;
       }
       let sentAny = false;
+      const closed: { error: Error | null } = { error: null };
       const sentMessages: CloudMessage[] = [];
       let preparedEntry: Promise<CloudGroupOutboxEntry> | null = null;
       const outcome = await outbox.deliver(
@@ -280,10 +282,6 @@ export function useCloudGroupControlSender({
             }),
           });
           const ready = await preparedEntry;
-          const readyMessage = parseCloudGroupControl(ready.envelope)?.message;
-          const readyVoiceMessage = readyMessage?.voiceMessage?.mediaId
-            ? { ...readyMessage.voiceMessage, mediaId: readyMessage.voiceMessage.mediaId }
-            : null;
           const sentMessage = await client.sendMessage(
             session.token,
             recipientId,
@@ -293,12 +291,14 @@ export function useCloudGroupControlSender({
               attachments: ready.attachments,
               clientCreatedAt: ready.clientCreatedAt,
               clientMessageId,
-              messageKind: readyMessage?.messageKind,
-              voiceMessage: readyVoiceMessage,
+              ...cloudGroupOutboxMessageOptions(ready.envelope),
               conversationKind: 'group',
               memberAccountIds: targetAccountIds,
             },
-          );
+          ).catch((error: unknown) => {
+            if (isGroupClosedError(error) && error instanceof Error) closed.error = error;
+            throw error;
+          });
           recordFirstAck(
             ready.envelope,
             ready.attachments?.length ?? 0,
@@ -316,6 +316,11 @@ export function useCloudGroupControlSender({
             error,
           );
         });
+      }
+      // The group was closed: the outbox stopped trying, and the sender says why.
+      if (closed.error) {
+        void syncDiff().catch(() => {});
+        throw closed.error;
       }
       if (sentAny) {
         await finishPostSendWork(Promise.all([

@@ -410,7 +410,7 @@ test('opaque cursors are never parsed or ordered by the client', () => {
   assert.equal(cloudSyncCursorRequiresFallback('previous', '', false), true);
 });
 
-test('group control envelopes replace canonical membership and remove omitted recipients', async () => {
+test('a membership control from an admin removes the people it names as leaving', async () => {
   const removedMember = {
     account_id: 'acct_removed', role: 'member', membership_state: 'active', version: 1,
     last_delivered_sequence: 0, last_read_sequence: 0,
@@ -421,7 +421,7 @@ test('group control envelopes replace canonical membership and remove omitted re
     kind: 'group' as const,
     legacy_session_id: 'session:group:secure',
     preferences: { ...conversation.preferences, account_id: 'acct_b' },
-    members: [...conversation.members, removedMember],
+    members: [...conversation.members.map((member) => member.account_id === 'acct_b' ? { ...member, role: 'admin' } : member), removedMember],
   };
   const calls: Array<{ url: string; body: unknown }> = [];
   const client = new CloudAuthClient({
@@ -456,7 +456,9 @@ test('group control envelopes replace canonical membership and remove omitted re
   });
   await client.syncCloudEvents('token', '0');
   const envelope = `kordi-cloud-group:${Buffer.from(JSON.stringify({
+    kind: 'group-update',
     participants: [{ accountId: 'acct_a' }, { accountId: 'acct_b' }],
+    memberLeaves: [{ eventId: 'leave-1', accountId: 'acct_removed', createdAtMs: 1 }],
   })).toString('base64url')}`;
   await client.sendMessage('token', 'acct_a', envelope, {
     sessionId: group.legacy_session_id,
