@@ -547,6 +547,9 @@ struct CommonGroundResults: Decodable, Hashable {
     }
 
     var isMatching: Bool { status == "matching" }
+    /// Rows still to come: matching, or a row keeps the matching ring
+    /// between a room's background runs, whatever the status says.
+    var awaitsRows: Bool { isMatching || people.contains { $0.estimated } }
 }
 
 struct CommonGroundReason: Decodable, Hashable {

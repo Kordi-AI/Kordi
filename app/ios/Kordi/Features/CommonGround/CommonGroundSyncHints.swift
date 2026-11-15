@@ -134,11 +134,12 @@ extension CommonGroundModel {
     var matchingPollInterval: Duration { hintsArrived ? Self.hintedMatchPollInterval : Self.matchPollInterval }
 
     /// How long an open room's Results wait between looks: the matching
-    /// interval while matching, else the fallback for a missed hint. Until a
+    /// interval while rows are still to come, else the fallback for a
+    /// missed hint. Until a
     /// hint shows the stream works, every look is `matchPollInterval` apart.
     func resultsPollInterval(_ code: String) -> Duration {
         guard hintsArrived else { return Self.matchPollInterval }
-        return results[code]?.isMatching == true ? Self.hintedMatchPollInterval : Self.fallbackPollInterval
+        return results[code]?.awaitsRows == true ? Self.hintedMatchPollInterval : Self.fallbackPollInterval
     }
 
     /// Calls `refresh` now (or first after one wait), then each time

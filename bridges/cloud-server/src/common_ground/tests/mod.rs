@@ -51,6 +51,7 @@ mod rematch_support;
 mod rematch_tests;
 mod room_invitation_tests;
 mod room_preview_tests;
+mod room_status_tests;
 mod rooms_create_tests;
 mod rooms_list_tests;
 mod run_attempts_tests;

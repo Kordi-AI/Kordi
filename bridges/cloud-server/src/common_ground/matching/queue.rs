@@ -2,10 +2,13 @@
 //! they opened, and a room's remaining people, matched in the background
 //! so every estimated row gets a model result.
 
+use std::collections::HashSet;
+
 use sqlx_postgres::PgPool;
 use uuid::Uuid;
 
-use super::store::{queue_new_matches, Queued, MATCH_BATCH};
+use super::routes::status;
+use super::store::{queue_new_matches, Pending, Queued, MATCH_BATCH};
 use super::SharedCard;
 use crate::auth::rate_limit::CloudRateLimiter;
 
@@ -82,4 +85,27 @@ pub(super) async fn queue_room_tail(
         Ask::Tail,
     );
     Ok(queued.await?.0)
+}
+
+/// A room's `status` for the viewer. An open room is "matching" while
+/// anyone without a model result can still be matched: between background
+/// runs, and while one pauses after a failure, so a client never sees
+/// "ready" beside rows still to come. A failed run for the best few is
+/// "failed". People who declined AI (`excluded`, with the viewer when they
+/// did) keep their estimate and never hold the room at "matching".
+pub(super) fn room_status(
+    open: bool,
+    best: &[SharedCard],
+    rest: &[SharedCard],
+    excluded: &HashSet<String>,
+    viewer: &str,
+    pending: Option<Pending>,
+) -> &'static str {
+    let can_match = |card: &SharedCard| !excluded.contains(&card.account_id);
+    let to_come = open && !excluded.contains(viewer) && best.iter().chain(rest).any(can_match);
+    match pending {
+        Some(Pending::Failed) if best.iter().any(can_match) => "failed",
+        _ if to_come => "matching",
+        pending => status(pending),
+    }
 }

@@ -459,10 +459,10 @@ final class CommonGroundModel: ObservableObject {
         }
     }
 
-    /// Polls results while the server is still matching; a closed room's
+    /// Polls results while rows are still to come; a closed room's
     /// results are stored, so they are never polled.
     func waitForResults(_ code: String, every interval: Duration = matchPollInterval) async {
-        while results[code]?.isMatching == true, !isClosed(code), !Task.isCancelled {
+        while results[code]?.awaitsRows == true, !isClosed(code), !Task.isCancelled {
             try? await Task.sleep(for: interval)
             guard !Task.isCancelled else { return }
             await loadResults(code, quiet: true)

@@ -294,3 +294,31 @@ test('polling keeps today\'s pace until the first hint, then falls back to the s
   assert.equal(await store.poll(), MATCH_FALLBACK_POLL_MS);
   assert.equal(MATCH_FALLBACK_POLL_MS, 20_000);
 });
+
+test('ready Results keep polling while a row still shows the matching ring, and a match hint refreshes them', async () => {
+  const ringed = { ...results(['a', 'b']), people: [results(['a']).people[0], { ...results(['b']).people[0], estimated: true }] };
+  const { calls, client } = mockServer({
+    'GET rooms/4821': { status: 200, body: room('4821') },
+    'POST rooms/4821/results': [{ status: 200, body: ringed }, { status: 200, body: results(['a', 'b']) }],
+  });
+  const store = storeAt(client, { name: 'results', code: '4821' }, { results: { '4821': ringed }, rooms: { '4821': room('4821') } });
+  const requests = () => calls.filter((call) => call.url.endsWith('/rooms/4821/results')).length;
+  // The server said "ready" between background runs: the ring keeps the poll going.
+  assert.equal(await store.poll(), MATCH_POLL_MS);
+  assert.equal(requests(), 1);
+  await receiveRoomHints(store, matchHint);
+  assert.equal(requests(), 2);
+  assert.equal(store.getSnapshot().results['4821'].people.some((entry) => entry.estimated), false);
+  assert.equal(await store.poll(), null, 'every row is in');
+  assert.equal(requests(), 2);
+});
+
+test('a closed room never polls for rows that keep their estimate', async () => {
+  const ringed = { ...results(['b']), people: [{ ...results(['b']).people[0], estimated: true }] };
+  const { calls, client } = mockServer({ 'POST rooms/4821/results': { status: 200, body: ringed } });
+  const store = storeAt(client, { name: 'results', code: '4821' }, {
+    results: { '4821': ringed }, rooms: { '4821': room('4821', { open: false }) },
+  });
+  assert.equal(await store.poll(), null);
+  assert.equal(calls.filter((call) => call.url.endsWith('/rooms/4821/results')).length, 0);
+});

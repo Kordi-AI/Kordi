@@ -11,6 +11,8 @@ final class CommonGroundSyncHintTests: XCTestCase {
     private static let openRoom = #"{"code":"4821","open":true,"members":[]}"#
     private static let ready = #"{"status":"ready","people":[]}"#
     private static let matching = #"{"status":"matching","people":[]}"#
+    /// "ready" between a room's background runs, with a row still estimated.
+    private static let readyWithRing = #"{"status":"ready","people":[{"person":{"accountId":"acct_b","name":"Priya","avatarUrl":null},"score":20,"headline":"","estimated":true}]}"#
     private static let pendingMatch = #"{"status":"matching","person":{"accountId":"acct_b","name":"Priya","avatarUrl":null}}"#
     private static let readyMatch = #"{"status":"ready","person":{"accountId":"acct_b","name":"Priya","avatarUrl":null},"score":80}"#
 
@@ -153,6 +155,17 @@ final class CommonGroundSyncHintTests: XCTestCase {
         XCTAssertEqual(model.resultsPollInterval("4821"), .seconds(60))
         model.hintsArrived = false
         XCTAssertEqual(model.resultsPollInterval("4821"), CommonGroundModel.matchPollInterval, "Today's poll until hints arrive")
+    }
+
+    func testReadyResultsWithAnEstimatedRowKeepTheMatchingPace() async throws {
+        let model = stubbedModel(hintsArrived: true)
+        CommonGroundURLProtocol.stub("POST", Self.resultsPath, [(200, Self.readyWithRing), (200, Self.ready)])
+        await model.loadResults("4821", quiet: true)
+        XCTAssertEqual(model.results["4821"]?.awaitsRows, true)
+        XCTAssertEqual(model.resultsPollInterval("4821"), CommonGroundModel.hintedMatchPollInterval)
+        await model.loadResults("4821", quiet: true)
+        XCTAssertEqual(model.results["4821"]?.awaitsRows, false)
+        XCTAssertEqual(model.resultsPollInterval("4821"), CommonGroundModel.fallbackPollInterval)
     }
 
     func testMatchHintEndsAMatchWaitWithoutTheTimer() async throws {

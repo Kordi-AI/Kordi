@@ -34,7 +34,7 @@ pub(super) fn person(card: &SharedCard) -> Value {
     person
 }
 
-fn status(pending: Option<Pending>) -> &'static str {
+pub(super) fn status(pending: Option<Pending>) -> &'static str {
     match pending {
         None => "ready",
         Some(Pending::Running) => "matching",
@@ -47,10 +47,11 @@ fn status(pending: Option<Pending>) -> &'static str {
 /// suggested group. Everyone shows at once: a person without a model result
 /// yet is ranked by a quick estimate from topic words (`estimated: true`).
 /// The model writes reasons for your best few estimated matches
-/// ([`MATCH_BATCH`]) and for anyone you open (`match_detail`); `status` is
-/// "matching" while that run works. The last themes stay while new ones are
-/// found, and a room filling up runs themes at most every
-/// [`THEME_REFRESH`]. A closed room shows what was stored for it and never
+/// ([`MATCH_BATCH`]) and for anyone you open (`match_detail`), then for
+/// the rest in the background; `status` is "matching" until every person
+/// a run can match has a model result (`queue::room_status`). The last
+/// themes stay while new ones are found, and a room filling up runs themes
+/// at most every [`THEME_REFRESH`]. A closed room shows what was stored for it and never
 /// queues a run.
 pub(in crate::common_ground) async fn results(
     State(state): State<Arc<ServerState>>,
@@ -235,6 +236,9 @@ pub(in crate::common_ground) async fn results(
             Err(error) => return db_error(error),
         }
     }
+    // The tail follows once the best few are in, or when none of them can be
+    // matched (they declined AI).
+    let mut tail = open && !rest.is_empty();
     if open && !stale.is_empty() {
         let queued = store::queue_matches(
             pool,
@@ -247,12 +251,16 @@ pub(in crate::common_ground) async fn results(
         )
         .await;
         match queued {
-            Ok(Queued::Pending(state)) => pending = Some(state),
+            Ok(Queued::Pending(state)) => {
+                pending = Some(state);
+                tail = false;
+            }
             Ok(Queued::Skipped) => {}
             Ok(Queued::Limited(retry_after)) => return limited(retry_after),
             Err(error) => return db_error(error),
         }
-    } else if open && !rest.is_empty() {
+    }
+    if tail {
         let queued = queue::queue_room_tail(
             pool,
             system_agent.config(),
@@ -265,11 +273,12 @@ pub(in crate::common_ground) async fn results(
         .await;
         match queued {
             Ok(Queued::Pending(state)) => pending = Some(state),
-            Ok(Queued::Skipped) => {}
-            Ok(Queued::Limited(retry_after)) => return limited(retry_after),
+            // The rows still show as matching; a later look queues the run.
+            Ok(Queued::Skipped | Queued::Limited(_)) => {}
             Err(error) => return db_error(error),
         }
     }
+    let status = queue::room_status(open, &stale, &rest, &excluded, account, pending);
 
     // A model result replaces the estimate as soon as it is stored.
     // A closed room shows only what was stored for it.
@@ -322,7 +331,7 @@ pub(in crate::common_ground) async fn results(
     (
         StatusCode::OK,
         Json(json!({
-            "status": status(pending),
+            "status": status,
             "profileId": viewer.profile_id,
             "people": people,
             "topics": themes.iter().map(theme_view).collect::<Vec<_>>(),
