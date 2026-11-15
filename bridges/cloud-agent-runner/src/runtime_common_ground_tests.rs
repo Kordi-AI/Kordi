@@ -198,7 +198,8 @@ mod retry_and_effort {
         let start = Instant::now();
         let count = AtomicU32::new(0);
         let errors = std::sync::Mutex::new(errors.into_iter());
-        let result = retry_rate_limits(start + deadline, |left| {
+        let throttle = crate::grounding_throttle::Controller::new(4);
+        let result = retry_rate_limits(&throttle, start + deadline, |left| {
             count.fetch_add(1, Ordering::SeqCst);
             assert!(left <= deadline);
             let next = errors.lock().unwrap().next();

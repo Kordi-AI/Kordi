@@ -101,7 +101,10 @@ async fn main() -> Result<()> {
                     "cloud agent runner step task ended abnormally"
                 ),
             },
-            _ = poll.tick(), if workers.len() < concurrency => {
+            // While the provider throttles Grounding calls, queued runs wait
+            // on the server instead of being claimed here.
+            _ = poll.tick(), if workers.len() < concurrency
+                && !kordi_cloud_agent_runner::grounding_throttle::controller().is_full() => {
                 let execution = client.for_execution();
                 workers.spawn(async move { process_one_run(&execution).await });
             },

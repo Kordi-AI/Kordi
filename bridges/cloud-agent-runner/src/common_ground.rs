@@ -9,6 +9,7 @@ use serde_json::json;
 use tokio::time::Instant;
 
 use crate::client::{CloudAgentRun, CloudAgentRunClient, ProviderAuthMaterial, RunnerClientError};
+use crate::grounding_throttle::{self, Controller};
 use crate::model_loop::{
     CloudModelProvider, ModelLoopError, ModelProviderResponse, OpenAiProviderConfig,
     ProviderRetryPolicy,
@@ -84,9 +85,11 @@ pub(crate) fn run_auth(
     Ok(auth)
 }
 
-/// Runs `attempt` with the time left before `deadline`, and retries a
-/// provider rate limit after the delay the provider names or a growing default.
+/// Runs `attempt` with the time left before `deadline`, one call at a time
+/// within `throttle`'s limit, and retries a provider rate limit after the
+/// delay the provider names or a growing default.
 pub(crate) async fn retry_rate_limits<T, F, Fut>(
+    throttle: &Controller,
     deadline: Instant,
     mut attempt: F,
 ) -> Result<T, RuntimeError>
@@ -96,13 +99,20 @@ where
 {
     let mut retries = 0;
     loop {
-        let error = match attempt(deadline.saturating_duration_since(Instant::now())).await {
-            Ok(value) => return Ok(value),
+        let permit = throttle.acquire().await;
+        let outcome = attempt(deadline.saturating_duration_since(Instant::now())).await;
+        drop(permit);
+        let error = match outcome {
+            Ok(value) => {
+                throttle.succeeded();
+                return Ok(value);
+            }
             Err(error) => error,
         };
         let Some(wait) = rate_limit_wait(&error, retries) else {
             return Err(error);
         };
+        throttle.rate_limited();
         let left = deadline.saturating_duration_since(Instant::now());
         if retries >= RATE_LIMIT_RETRIES || left < wait + MIN_ATTEMPT_TIME {
             return Err(error);
@@ -238,7 +248,7 @@ where
         CloudModelEngine::Omp => {
             let deadline =
                 Instant::now() + Duration::from_secs(TIMEOUT_SECONDS) - OMP_TIMEOUT_MARGIN;
-            let result = retry_rate_limits(deadline, |left| {
+            let result = retry_rate_limits(grounding_throttle::controller(), deadline, |left| {
                 let job = crate::omp_job::Job {
                     run,
                     auth: &auth,
@@ -270,8 +280,15 @@ where
                 json!({ "role": "system", "content": run.system_prompt }),
                 json!({ "role": "user", "content": run.prompt }),
             ];
-            match provider.next_response(&auth, &messages, &[]).await {
-                Ok(ModelProviderResponse::FinalText(text)) => text,
+            let throttle = grounding_throttle::controller();
+            let permit = throttle.acquire().await;
+            let response = provider.next_response(&auth, &messages, &[]).await;
+            drop(permit);
+            match response {
+                Ok(ModelProviderResponse::FinalText(text)) => {
+                    throttle.succeeded();
+                    text
+                }
                 Ok(ModelProviderResponse::ToolCalls(_)) => {
                     return Err("unexpected tool call".into());
                 }
@@ -282,6 +299,9 @@ where
                         || RATE_LIMIT_WORDING
                             .iter()
                             .any(|wording| lower.contains(wording));
+                    if rate_limited {
+                        throttle.rate_limited();
+                    }
                     return Err(Failed {
                         detail,
                         rate_limited,
