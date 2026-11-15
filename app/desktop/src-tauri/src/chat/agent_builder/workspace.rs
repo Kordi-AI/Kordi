@@ -7,11 +7,12 @@ use std::path::{Component, Path, PathBuf};
 use super::models::{
     DesktopAgentBuilderAgentFile, DesktopAgentBuilderModelFile, DesktopAgentBuilderSkillFile,
 };
+use super::skill_seed::{ResolveSkill, SkillSeeder};
 use super::storage::{draft_container, resources_root, write_if_missing, write_json};
 use super::validation::workspace_fingerprint;
 use super::{
-    DesktopAgentBuilderDraft, DesktopAgentBuilderSeed, DesktopAgentBuilderSkillSeed,
-    AGENT_CREATOR_SKILL, AGENT_FILE, MAX_SKILLS, PROMPT_FILE, SKILL_CREATOR_SKILL,
+    DesktopAgentBuilderDraft, DesktopAgentBuilderSeed, AGENT_CREATOR_SKILL, AGENT_FILE, MAX_SKILLS,
+    PROMPT_FILE, SKILL_CREATOR_SKILL,
 };
 
 pub(super) fn clean_slug(value: &str) -> String {
@@ -69,19 +70,31 @@ pub(super) fn is_skill_bundle_file_path(path: &Path) -> bool {
     !slug.is_empty() && clean_slug(slug) == slug
 }
 
-fn default_skill_content(skill: &DesktopAgentBuilderSkillSeed, slug: &str) -> String {
-    let description = normalized_skill_description(&skill.description, slug);
+fn default_skill_content(name: &str, description: &str, slug: &str) -> String {
+    let description = normalized_skill_description(description, slug);
     let escaped_description = description
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace(['\r', '\n'], " ");
     format!(
         "---\nname: {slug}\ndescription: \"{escaped_description}\"\n---\n\n# {}\n\nFollow the user's request using this focused capability. Ask for clarification when required, preserve user data, and report concrete results.\n",
-        skill.name.trim()
+        name.trim()
     )
 }
 
-fn normalized_skill_description(description: &str, slug: &str) -> String {
+/// Whether `content` is still exactly the stub `default_skill_content` writes
+/// for a skill without a description. Its heading repeats the seed's original
+/// name, so any heading matches.
+pub(super) fn is_placeholder_skill_content(content: &str, slug: &str) -> bool {
+    fn around_heading(text: &str) -> Option<(&str, &str)> {
+        let (head, rest) = text.split_once("\n\n# ")?;
+        Some((head, rest.split_once('\n')?.1))
+    }
+    let generated = default_skill_content(slug, "", slug);
+    around_heading(content).is_some_and(|parts| Some(parts) == around_heading(&generated))
+}
+
+pub(super) fn normalized_skill_description(description: &str, slug: &str) -> String {
     if description.trim().is_empty() {
         format!("Use {slug} when its focused workflow is required.")
     } else {
@@ -127,9 +140,22 @@ pub(super) fn migrate_legacy_workspace(container: &Path, workspace: &Path) -> Re
     Ok(())
 }
 
+/// Seeds a draft without looking at the owner's installed skills.
+#[cfg(test)]
 pub(super) fn materialize_seed(
     workspace: &Path,
     seed: Option<&DesktopAgentBuilderSeed>,
+) -> Result<(), String> {
+    materialize_seed_with(workspace, seed, &|_| None)
+}
+
+/// `resolve` finds the installed skill behind a seed skill that has no
+/// content of its own. Only a new draft looks skills up: an existing draft
+/// keeps its files, and `upgrade_placeholder_skills` handles its stubs.
+pub(super) fn materialize_seed_with(
+    workspace: &Path,
+    seed: Option<&DesktopAgentBuilderSeed>,
+    resolve: &ResolveSkill<'_>,
 ) -> Result<(), String> {
     fs::create_dir_all(workspace)
         .map_err(|error| format!("Unable to create Kordi Factory workspace: {error}"))?;
@@ -146,6 +172,8 @@ pub(super) fn materialize_seed(
         format!("{}\n", seed.system_prompt.trim())
     };
 
+    let new_draft = !workspace.join(AGENT_FILE).exists();
+    let mut installed = SkillSeeder::new(resolve, 0);
     let mut skill_files = Vec::new();
     for skill in seed.skills.iter().take(MAX_SKILLS) {
         let slug = clean_slug(&skill.name);
@@ -153,16 +181,30 @@ pub(super) fn materialize_seed(
             continue;
         }
         let relative_path = format!("skills/{slug}/SKILL.md");
-        let content = skill
+        let supplied = skill
             .content
             .as_deref()
             .filter(|value| !value.trim().is_empty())
-            .map(|value| format!("{}\n", value.trim()))
-            .unwrap_or_else(|| default_skill_content(skill, &slug));
+            .map(|value| format!("{}\n", value.trim()));
+        let found = match &supplied {
+            Some(content) => {
+                installed.reserve(content.len());
+                None
+            }
+            None if new_draft => installed.seed(&slug),
+            None => None,
+        };
+        let description = match found.as_ref().and_then(|found| found.description.clone()) {
+            Some(description) if skill.description.trim().is_empty() => description,
+            _ => skill.description.clone(),
+        };
+        let content = supplied
+            .or_else(|| found.and_then(|found| found.content))
+            .unwrap_or_else(|| default_skill_content(&skill.name, &description, &slug));
         write_if_missing(&workspace.join(&relative_path), &content)?;
         skill_files.push(DesktopAgentBuilderSkillFile {
+            description: normalized_skill_description(&description, &slug),
             name: slug,
-            description: normalized_skill_description(&skill.description, &clean_slug(&skill.name)),
             path: Some(relative_path),
         });
     }
@@ -357,14 +399,7 @@ pub(super) fn write_draft(workspace: &Path, draft: DesktopAgentBuilderDraft) -> 
             ));
         }
         let content = if skill.content.trim().is_empty() {
-            default_skill_content(
-                &DesktopAgentBuilderSkillSeed {
-                    name: name.clone(),
-                    description: skill.description.clone(),
-                    content: None,
-                },
-                &name,
-            )
+            default_skill_content(&name, &skill.description, &name)
         } else {
             format!("{}\n", skill.content.trim())
         };

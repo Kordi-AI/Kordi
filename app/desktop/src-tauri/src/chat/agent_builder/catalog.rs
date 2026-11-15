@@ -122,7 +122,9 @@ async fn open_builder_metadata(
         .map_err(|error| format!("Unable to create Kordi Factory draft: {error}"))?;
     migrate_legacy_workspace(&container, &workspace)?;
     materialize_builder_skills(&container)?;
-    materialize_seed(&workspace, seed)?;
+    let installed = installed_skill_resolver();
+    materialize_seed_with(&workspace, seed, &installed)?;
+    upgrade_placeholder_skills(&workspace, &installed)?;
     write_metadata(&workspace, &metadata)?;
     associate_builder(&metadata)?;
     let handle = load_or_create_runtime(manager, &metadata, &workspace).await?;

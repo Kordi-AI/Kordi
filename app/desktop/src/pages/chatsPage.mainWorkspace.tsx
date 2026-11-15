@@ -401,7 +401,6 @@ export function ChatMainWorkspace({
                         paneKind: activePaneKind,
                         configTarget: localConfigTargetSessionId,
                         contextStatus: runtime.activeRuntimeContextStatus,
-                        cacheText: runtime.activeRuntimeCacheText,
                       }}
                       collaborationRouting={{
                         enabled: models.routing.enabled,

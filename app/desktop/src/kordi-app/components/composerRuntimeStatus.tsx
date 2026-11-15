@@ -32,10 +32,8 @@ function deriveComposerContextUsedTokens(status?: DesktopChatContextWindowStatus
 
 export function ComposerRuntimeStatus({
   contextStatus,
-  cacheText,
 }: {
   contextStatus?: DesktopChatContextWindowStatus | null;
-  cacheText?: string | null;
 }) {
   const contextPercent = deriveComposerContextPercent(contextStatus);
   const usedTokens = deriveComposerContextUsedTokens(contextStatus);
@@ -97,12 +95,6 @@ export function ComposerRuntimeStatus({
           ) : (
             <div className="mt-3 text-[11px] text-[color:var(--utility-foreground)]">Automatic compaction is off</div>
           )}
-          {cacheText ? (
-            <div className="mt-3 border-t border-[color:var(--app-divider)] pt-3 text-[11px] leading-[1.45] text-[color:var(--utility-muted-text)]">
-              <div className="mb-1 font-medium text-[color:var(--utility-foreground)]">Cache hit rate:</div>
-              <div>{cacheText}</div>
-            </div>
-          ) : null}
         </div>
       </div>
     </div>

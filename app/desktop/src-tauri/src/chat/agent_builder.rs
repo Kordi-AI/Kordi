@@ -45,14 +45,13 @@ use self::catalog::{
     is_untouched_creation,
 };
 use self::models::DesktopAgentBuilderMetadata;
-#[cfg(test)]
-use self::models::DesktopAgentBuilderSkillFile;
 pub use self::models::{
     DesktopAgentBuilderDraft, DesktopAgentBuilderFileStatus, DesktopAgentBuilderOpenResult,
-    DesktopAgentBuilderSeed, DesktopAgentBuilderSkillDraft, DesktopAgentBuilderSkillSeed,
-    DesktopAgentBuilderStatus, DesktopAgentBuilderSummary, DesktopAgentBuilderTestReport,
-    DesktopAgentBuilderValidation,
+    DesktopAgentBuilderSeed, DesktopAgentBuilderSkillDraft, DesktopAgentBuilderStatus,
+    DesktopAgentBuilderSummary, DesktopAgentBuilderTestReport, DesktopAgentBuilderValidation,
 };
+#[cfg(test)]
+use self::models::{DesktopAgentBuilderSkillFile, DesktopAgentBuilderSkillSeed};
 
 mod storage;
 
@@ -71,14 +70,20 @@ mod validation;
 use self::validation::{frontmatter_field, frontmatter_name, skill_path, workspace_fingerprint};
 use self::validation::{read_limited, validate_workspace};
 
+mod skill_seed;
 mod workspace;
 
 #[cfg(test)]
-use self::workspace::is_canonical_skill_file_path;
+use self::skill_seed::InstalledSkill;
+use self::skill_seed::{installed_skill_resolver, upgrade_placeholder_skills};
 use self::workspace::{
     atomically_update_workspace, canonical_skill_path, checked_draft_file_path, clean_slug,
     ensure_expected_fingerprint, is_safe_relative_path, is_skill_bundle_file_path,
-    materialize_builder_skills, materialize_seed, migrate_legacy_workspace, write_draft,
+    materialize_builder_skills, materialize_seed_with, migrate_legacy_workspace, write_draft,
+};
+#[cfg(test)]
+use self::workspace::{
+    is_canonical_skill_file_path, is_placeholder_skill_content, materialize_seed,
 };
 
 mod hosted_test;

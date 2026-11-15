@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LoaderCircle, ArrowUp, StopCircle } from 'lucide-react';
+import { LoaderCircle, ArrowUp } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ComposerStopButton } from '@/pages/chatsPage.voiceControls';
 import { ErrorLine } from '@/components/ui/ErrorLine';
 import type { AttachmentItem } from '@/features/chat/composerController.types';
 import { composerAttachmentItemFromFile } from '@/features/chat/composerAttachments';
@@ -369,6 +370,7 @@ export function AgentStudioConversation({
     setOpenRouteSelector(null);
   }, [updateRouteSelection]);
 
+  const sendEnabled = !opening && Boolean(sessionId) && (Boolean(draft.trim()) || attachments.length > 0);
   const submit = async () => {
     const text = draft.trim();
     if ((!text && attachments.length === 0) || busy || !sessionId) return;
@@ -495,7 +497,7 @@ export function AgentStudioConversation({
                 disabled={busy || opening || !sessionId}
               />
             </div>
-            <div className="flex min-w-0 shrink items-center gap-2 overflow-visible">
+            <div className="flex min-w-0 shrink items-center gap-3 overflow-visible">
               <ComposerRuntimeStatus contextStatus={detail?.contextWindowStatus} />
               <ComposerModelControls
                 scope="chat"
@@ -511,28 +513,26 @@ export function AgentStudioConversation({
                 modelOptions={modelOptions.length > 0 ? modelOptions : undefined}
                 compact
               />
-              {activeTurn && !activeTurn.completed ? (
-                <Button
-                  type="button"
-                  className="app-composer-send h-10 w-10 shrink-0 rounded-full p-0"
-                  aria-label="Stop Kordi Factory"
-                  title="Stop Kordi Factory"
-                  onClick={() => void onStop()}
-                >
-                  <StopCircle className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  className="app-composer-send h-10 w-10 shrink-0 rounded-full p-0"
-                  aria-label="Send to Kordi Factory"
-                  title="Send to Kordi Factory"
-                  disabled={opening || !sessionId || (!draft.trim() && attachments.length === 0)}
-                  onClick={() => void submit()}
-                >
-                  <ArrowUp className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" />
-                </Button>
-              )}
+              <div className="flex h-10 shrink-0 items-center pr-1">
+                {activeTurn && !activeTurn.completed ? (
+                  <ComposerStopButton
+                    key={activeTurn.id}
+                    requestKey={activeTurn.id}
+                    className="app-composer-send app-composer-send-compact h-8 w-8 shrink-0 rounded-full p-0"
+                    onStop={async () => { await onStop(); return true; }}
+                  />
+                ) : (
+                  <Button
+                    type="button"
+                    className="app-composer-send app-composer-send-compact h-8 w-8 shrink-0 rounded-full p-0"
+                    data-composer-send={sendEnabled ? 'true' : undefined}
+                    aria-label="Send to Kordi Factory" title="Send to Kordi Factory"
+                    disabled={!sendEnabled} onClick={() => void submit()}
+                  >
+                    <ArrowUp className="h-[15px] w-[15px]" strokeWidth={2.5} aria-hidden="true" />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>

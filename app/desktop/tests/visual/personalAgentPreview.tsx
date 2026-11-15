@@ -97,7 +97,7 @@ function PersonalAgentPreview() {
     removeChatComposerAttachment: () => undefined, updateChatComposerAttachment: () => undefined,
     chatComposerText: drafts[activeId] ?? '', updateChatComposerDraft: (value: string) => setDraft(value), setChatComposerText: setDraft,
     setChatComposerTextForSession: (sessionId: string, value: string) => setDrafts((current) => ({ ...current, [sessionId]: value })),
-    composerControlsRef: { current: null }, activeRuntimeContextStatus: null, activeRuntimeCacheText: null,
+    composerControlsRef: { current: null }, activeRuntimeContextStatus: null,
     composerSelection: { mode: 'Send as Me', model: 'GPT-5.6', thinking: 'default' }, openComposerSelector: null,
     toggleComposerSelector: () => undefined, selectComposerValue: () => undefined, composerAuthLabel: 'Preview account', composerAuthOptions: [],
     selectComposerAuthChoice: () => undefined, selectComposerProviderChoice: () => undefined, composerProviderOptions: [], chatModelOptions: [],

@@ -54,7 +54,6 @@ type CompanionLocalRouting = {
   loadError: string | null;
   retry: () => void;
   runtimeContextStatus: DesktopChatContextWindowStatus | null;
-  runtimeCacheText: string | null;
 };
 
 type CompanionCollaborationRouting = {
@@ -308,10 +307,7 @@ export function CompanionComposer({
             ) : localRouting.enabled && localRouting.selection && localRouting.configTarget ? (
               <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-visible" data-companion-model-controls="true">
                 {isNativeShell || localRouting.runtimeContextStatus ? (
-                  <ComposerRuntimeStatus
-                    contextStatus={localRouting.runtimeContextStatus}
-                    cacheText={localRouting.runtimeCacheText}
-                  />
+                  <ComposerRuntimeStatus contextStatus={localRouting.runtimeContextStatus} />
                 ) : null}
                 <div className="min-w-0 max-w-full overflow-visible">
                   <ComposerModelControls

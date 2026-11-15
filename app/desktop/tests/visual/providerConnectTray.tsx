@@ -78,7 +78,7 @@ function ProviderConnectTrayPreview() {
     removeChatComposerAttachment: () => undefined, updateChatComposerAttachment: () => undefined,
     chatComposerText: draft, updateChatComposerDraft: setDraft, setChatComposerText: setDraft,
     setChatComposerTextForSession: (_sessionId: string, value: string) => setDraft(value),
-    composerControlsRef: { current: null }, activeRuntimeContextStatus: null, activeRuntimeCacheText: null,
+    composerControlsRef: { current: null }, activeRuntimeContextStatus: null,
     composerSelection: { mode: 'Send as Me', model: '', thinking: 'default' },
     openComposerSelector: null, toggleComposerSelector: () => undefined, selectComposerValue: () => undefined,
     composerAuthLabel: '', composerAuthOptions: [], selectComposerAuthChoice: () => undefined,

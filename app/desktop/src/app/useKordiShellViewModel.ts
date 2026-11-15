@@ -107,7 +107,6 @@ export function useKordiShellViewModel({
     onChatTranscriptScroll,
     activeRuntimeSessionId: desktopChatState?.activeSessionId,
     activeRuntimeContextStatus: desktopChatState?.activeSession?.contextWindowStatus ?? (!activeConversationUsesCollaboration ? activeConv.contextWindowStatus : undefined),
-    activeRuntimeCacheText: desktopChatState?.activeSession?.cacheMonitorText ?? (!activeConversationUsesCollaboration ? activeConv.cacheMonitorText : undefined),
     activeSessionProject: !activeConversationUsesCollaboration ? (desktopChatState?.activeSession?.project ?? null) : null,
     chatModelOptionsForShell: chatModelOptions.length > 0 ? chatModelOptions : undefined,
     wrappedSelectComposerValue,
