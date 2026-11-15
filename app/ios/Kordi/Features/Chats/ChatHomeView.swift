@@ -35,6 +35,7 @@ struct ChatHomeView: View {
     @State private var showingArchivedChats = false
     @State private var groupManagementPresentation: GroupManagementPresentation?
     @State private var channelDissolveTarget: ChannelDissolveTarget?
+    @State private var closedDeleteTarget: ClosedChatDeleteTarget?
     /// Previews open the sheet at full height so every section shows.
     @State private var groupManagementDetent: PresentationDetent =
         ProcessInfo.processInfo.arguments.contains("--preview-group-management") ? .large : .medium
@@ -270,21 +271,22 @@ struct ChatHomeView: View {
             Text("This does not delete it for other participants. It will return only when a new visible message arrives.")
         }
         .alert(
-            channelDissolveTarget.map { "Dissolve \($0.conversation.displayName)?" } ?? "",
+            channelDissolveTarget.map { "Close \($0.conversation.displayName)?" } ?? "",
             isPresented: Binding(
                 get: { channelDissolveTarget != nil },
                 set: { if !$0 { channelDissolveTarget = nil } }
             ),
             presenting: channelDissolveTarget
         ) { target in
-            Button("Dissolve", role: .destructive) {
+            Button("Close channel", role: .destructive) {
                 channelDissolveTarget = nil
                 Task { _ = await model.dissolveGroupChannel(target.conversation, in: target.space) }
             }
             Button("Cancel", role: .cancel) { channelDissolveTarget = nil }
         } message: { _ in
-            Text("Its messages are deleted for everyone in the group.")
+            Text("Everyone keeps the history. No one can send messages.")
         }
+        .closedChatDeleteConfirmation($closedDeleteTarget)
         .task {
             // `--preview-channel-dissolve`: the confirmation for the sample group's second channel.
             guard ProcessInfo.processInfo.arguments.contains("--preview-channel-dissolve") else { return }
@@ -400,58 +402,16 @@ struct ChatHomeView: View {
                     isExpanded: isExpanded,
                     mutedSessionIds: model.mutedSessionIds,
                     isPinned: groupIsPinned(space),
-                    isMuted: groupIsMuted(space)
+                    isMuted: groupIsMuted(space),
+                    isClosed: model.isGroupSpaceClosed(space)
                 )
             }
             .buttonStyle(.plain)
             .contextMenu {
-                Button {
-                    channelCreationSpace = space
-                } label: {
-                    Label("Create channel", systemImage: "plus")
-                }
-                Button {
-                    groupManagementPresentation = GroupManagementPresentation(
-                        space: space,
-                        startsInInviteMode: false
-                    )
-                } label: {
-                    Label("Manage group", systemImage: "person.2")
-                }
-                Button {
-                    groupManagementPresentation = GroupManagementPresentation(
-                        space: space,
-                        startsInInviteMode: true
-                    )
-                } label: {
-                    Label("Invite people", systemImage: "person.badge.plus")
-                }
-                Button {
-                    Task { await model.markGroupSpaceRead(space) }
-                } label: {
-                    Label("Mark as read", systemImage: "checkmark.circle")
-                }
-                Divider()
-                Button {
-                    toggleGroupPinned(space)
-                } label: {
-                    Label(
-                        groupIsPinned(space) ? "Unpin group" : "Pin group",
-                        systemImage: groupIsPinned(space) ? "pin.slash" : "pin"
-                    )
-                }
-                Button {
-                    toggleGroupMuted(space)
-                } label: {
-                    Label(
-                        groupIsMuted(space) ? "Unmute group" : "Mute group",
-                        systemImage: groupIsMuted(space) ? "bell" : "bell.slash"
-                    )
-                }
-                Button {
-                    Task { _ = await model.archiveGroupSpace(space) }
-                } label: {
-                    Label("Archive group", systemImage: "archivebox")
+                if model.isGroupSpaceClosed(space) {
+                    closedGroupContextMenu(for: space)
+                } else {
+                    openGroupContextMenu(for: space)
                 }
             }
             .circularChatSwipeActions(
@@ -479,9 +439,80 @@ struct ChatHomeView: View {
                 GroupSessionRow(
                     session: session,
                     isPinned: model.pinnedSessionIds.contains(session.sessionId),
-                    isMuted: model.mutedSessionIds.contains(session.sessionId)
+                    isMuted: model.mutedSessionIds.contains(session.sessionId),
+                    isClosed: model.isConversationClosed(session)
                 )
             }
+        }
+    }
+
+    @ViewBuilder
+    private func closedGroupContextMenu(for space: GroupSpaceSummary) -> some View {
+        Button {
+            toggleGroupPinned(space)
+        } label: {
+            Label(
+                groupIsPinned(space) ? "Unpin group" : "Pin group",
+                systemImage: groupIsPinned(space) ? "pin.slash" : "pin"
+            )
+        }
+        Divider()
+        Button(role: .destructive) {
+            closedDeleteTarget = .group(space)
+        } label: {
+            Label("Delete chat", systemImage: "trash")
+        }
+    }
+
+    @ViewBuilder
+    private func openGroupContextMenu(for space: GroupSpaceSummary) -> some View {
+        Button {
+            channelCreationSpace = space
+        } label: {
+            Label("Create channel", systemImage: "plus")
+        }
+        Button {
+            groupManagementPresentation = GroupManagementPresentation(
+                space: space,
+                startsInInviteMode: false
+            )
+        } label: {
+            Label("Manage group", systemImage: "person.2")
+        }
+        Button {
+            groupManagementPresentation = GroupManagementPresentation(
+                space: space,
+                startsInInviteMode: true
+            )
+        } label: {
+            Label("Invite people", systemImage: "person.badge.plus")
+        }
+        Button {
+            Task { await model.markGroupSpaceRead(space) }
+        } label: {
+            Label("Mark as read", systemImage: "checkmark.circle")
+        }
+        Divider()
+        Button {
+            toggleGroupPinned(space)
+        } label: {
+            Label(
+                groupIsPinned(space) ? "Unpin group" : "Pin group",
+                systemImage: groupIsPinned(space) ? "pin.slash" : "pin"
+            )
+        }
+        Button {
+            toggleGroupMuted(space)
+        } label: {
+            Label(
+                groupIsMuted(space) ? "Unmute group" : "Mute group",
+                systemImage: groupIsMuted(space) ? "bell" : "bell.slash"
+            )
+        }
+        Button {
+            Task { _ = await model.archiveGroupSpace(space) }
+        } label: {
+            Label("Archive group", systemImage: "archivebox")
         }
     }
 
@@ -637,7 +668,11 @@ struct ChatHomeView: View {
             Task { _ = await model.archiveConversation(conversation) }
         }
         .accessibilityAction(named: "Delete chat") {
-            requestDelete(conversation)
+            if model.isConversationClosed(conversation) {
+                closedDeleteTarget = model.closedChatDeleteTarget(for: conversation)
+            } else {
+                requestDelete(conversation)
+            }
         }
         .accessibilityHint("Double-tap to open. Swipe right to pin. Swipe left to mute, delete, or archive.")
         .chatHomeRow(separatorLeading: 71)
@@ -755,10 +790,12 @@ struct ChatHomeView: View {
     ) -> [ChatCircularSwipeAction] {
         let isPinned = model.pinnedSessionIds.contains(conversation.sessionId)
         let isUnread = conversation.hasUnreadAttention
+        let pin = ChatCircularSwipeAction(id: "pin", label: isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin", color: .green) {
+            togglePinned(conversation)
+        }
+        if model.isConversationClosed(conversation) { return [pin] }
         return [
-            ChatCircularSwipeAction(id: "pin", label: isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin", color: .green) {
-                togglePinned(conversation)
-            },
+            pin,
             ChatCircularSwipeAction(id: "unread", label: isUnread ? "Mark as read" : "Mark as unread", systemImage: isUnread ? "checkmark.message" : "envelope.badge", color: chatTheme.accent) {
                 toggleUnread(conversation)
             }
@@ -769,6 +806,11 @@ struct ChatHomeView: View {
         for conversation: ConversationSummary
     ) -> [ChatCircularSwipeAction] {
         let isMuted = model.mutedSessionIds.contains(conversation.sessionId)
+        if model.isConversationClosed(conversation) {
+            return [ChatCircularSwipeAction(id: "delete", label: "Delete chat", systemImage: "trash", color: .red, role: .destructive) {
+                closedDeleteTarget = model.closedChatDeleteTarget(for: conversation)
+            }]
+        }
         return [
             ChatCircularSwipeAction(id: "archive", label: "Archive", systemImage: "archivebox", color: .gray) {
                 Task { _ = await model.archiveConversation(conversation) }
@@ -785,10 +827,12 @@ struct ChatHomeView: View {
     private func groupLeadingCircularActions(
         for space: GroupSpaceSummary
     ) -> [ChatCircularSwipeAction] {
-        [
-            ChatCircularSwipeAction(id: "pin", label: groupIsPinned(space) ? "Unpin group" : "Pin group", systemImage: groupIsPinned(space) ? "pin.slash" : "pin", color: .green) {
-                toggleGroupPinned(space)
-            },
+        let pin = ChatCircularSwipeAction(id: "pin", label: groupIsPinned(space) ? "Unpin group" : "Pin group", systemImage: groupIsPinned(space) ? "pin.slash" : "pin", color: .green) {
+            toggleGroupPinned(space)
+        }
+        if model.isGroupSpaceClosed(space) { return [pin] }
+        return [
+            pin,
             ChatCircularSwipeAction(id: "read", label: "Mark group as read", systemImage: "checkmark.message", color: chatTheme.accent) {
                 Task { await model.markGroupSpaceRead(space) }
             }
@@ -798,7 +842,12 @@ struct ChatHomeView: View {
     private func groupTrailingCircularActions(
         for space: GroupSpaceSummary
     ) -> [ChatCircularSwipeAction] {
-        [
+        if model.isGroupSpaceClosed(space) {
+            return [ChatCircularSwipeAction(id: "delete", label: "Delete chat", systemImage: "trash", color: .red, role: .destructive) {
+                closedDeleteTarget = .group(space)
+            }]
+        }
+        return [
             ChatCircularSwipeAction(id: "archive", label: "Archive group", systemImage: "archivebox", color: .gray) {
                 Task { _ = await model.archiveGroupSpace(space) }
             },
@@ -818,6 +867,25 @@ struct ChatHomeView: View {
 
     @ViewBuilder
     private func sessionContextMenu(for conversation: ConversationSummary) -> some View {
+        if model.isConversationClosed(conversation) {
+            Button {
+                togglePinned(conversation)
+            } label: {
+                Label(model.pinnedSessionIds.contains(conversation.sessionId) ? "Unpin" : "Pin", systemImage: "pin")
+            }
+            Divider()
+            Button(role: .destructive) {
+                closedDeleteTarget = model.closedChatDeleteTarget(for: conversation)
+            } label: {
+                Label("Delete chat", systemImage: "trash")
+            }
+        } else {
+            openSessionContextMenu(for: conversation)
+        }
+    }
+
+    @ViewBuilder
+    private func openSessionContextMenu(for conversation: ConversationSummary) -> some View {
         if model.canChooseProject(conversation) {
             Button("Move to project", systemImage: "folder") { projectPicker = .move(conversation) }
                 .disabled(conversation.agentActivity == .replying)
@@ -872,14 +940,14 @@ struct ChatHomeView: View {
             Button(role: .destructive) {
                 channelDissolveTarget = ChannelDissolveTarget(conversation: conversation, space: space)
             } label: {
-                Label("Dissolve channel", systemImage: "circle.slash")
+                Label("Close channel", systemImage: "circle.slash")
             }
         }
     }
 
-    /// The group whose admin may dissolve this channel; never its first channel.
+    /// The group whose admin may close this channel; never its first channel.
     private func dissolvableSpace(for conversation: ConversationSummary) -> GroupSpaceSummary? {
-        guard conversation.kind == .group else { return nil }
+        guard conversation.kind == .group, !model.isConversationClosed(conversation) else { return nil }
         return GroupSpaceCatalog.build(conversations: model.conversations, ownAccountId: model.account?.accountId ?? "")
             .first { space in
                 space.sessions.contains { $0.sessionId == conversation.sessionId }
@@ -1142,7 +1210,8 @@ struct ArchivedChatsView: View {
                 isExpanded: groupIsExpanded(space),
                 mutedSessionIds: model.mutedSessionIds,
                 isPinned: false,
-                isMuted: groupIsMuted(space)
+                isMuted: groupIsMuted(space),
+                isClosed: model.isGroupSpaceClosed(space)
             )
         }
         .buttonStyle(.plain)
@@ -1222,7 +1291,8 @@ struct ArchivedChatsView: View {
             GroupSessionRow(
                 session: conversation,
                 isPinned: false,
-                isMuted: model.mutedSessionIds.contains(conversation.sessionId)
+                isMuted: model.mutedSessionIds.contains(conversation.sessionId),
+                isClosed: model.isConversationClosed(conversation)
             )
         case .agent:
             AgentSessionRow(
@@ -1714,6 +1784,39 @@ private struct ErrorBanner: View {
 }
 
 /// A channel an admin asked to dissolve, with its group.
+extension View {
+    /// The "Delete <name>?" confirmation for Delete chat on a closed chat.
+    func closedChatDeleteConfirmation(
+        _ target: Binding<ClosedChatDeleteTarget?>,
+        onDeleted: @escaping (ClosedChatDeleteTarget) -> Void = { _ in }
+    ) -> some View {
+        modifier(ClosedChatDeleteConfirmation(target: target, onDeleted: onDeleted))
+    }
+}
+
+private struct ClosedChatDeleteConfirmation: ViewModifier {
+    @EnvironmentObject private var model: AppModel
+    @Binding var target: ClosedChatDeleteTarget?
+    let onDeleted: (ClosedChatDeleteTarget) -> Void
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            target.map { "Delete \($0.displayName)?" } ?? "",
+            isPresented: Binding(get: { target != nil }, set: { if !$0 { target = nil } }),
+            titleVisibility: .visible,
+            presenting: target
+        ) { presented in
+            Button("Delete chat", role: .destructive) {
+                target = nil
+                Task { if await model.deleteClosedChat(presented) { onDeleted(presented) } }
+            }
+            Button("Cancel", role: .cancel) { target = nil }
+        } message: { _ in
+            Text("It leaves your chat list. Others keep it.")
+        }
+    }
+}
+
 struct ChannelDissolveTarget: Identifiable {
     let conversation: ConversationSummary
     let space: GroupSpaceSummary

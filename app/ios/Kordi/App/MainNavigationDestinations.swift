@@ -60,7 +60,8 @@ struct MainNavigationDestination: View {
     @ViewBuilder private var screen: some View {
         switch route {
         case .conversation(let conversation):
-            ConversationView(conversation: conversation, onOpenSessionDetails: openSessionDetails)
+            ConversationView(conversation: conversation, onOpenSessionDetails: openSessionDetails,
+                onClosedChatDeleted: closeRoute)
                 .task {
                     if selectedTab == .contacts {
                         _ = await model.restoreConversationIfNeeded(conversation)
@@ -70,7 +71,7 @@ struct MainNavigationDestination: View {
             GroupSessionListView(space: space, onOpenConversation: { path.append(.conversation($0)) })
         case .message(let route):
             ConversationView(conversation: route.conversation, initialMessageID: route.messageID,
-                onOpenSessionDetails: openSessionDetails)
+                onOpenSessionDetails: openSessionDetails, onClosedChatDeleted: closeRoute)
         case .sessionDetails(let conversation):
             ConversationDetailsPage(conversation: conversation) {
                 if path.last == route { path.removeLast() }
@@ -86,6 +87,14 @@ struct MainNavigationDestination: View {
         case .commonGround:
             EmptyView()
         }
+    }
+
+    /// Pops this screen after Delete chat, and the group page under it when the group was left.
+    private func closeRoute(_ deleted: ClosedChatDeleteTarget) {
+        guard let index = path.lastIndex(of: route) else { return }
+        var remaining = Array(path[..<index])
+        if case .group = deleted, case .group? = remaining.last { remaining.removeLast() }
+        path = remaining
     }
 
     private func openSessionDetails(_ conversation: ConversationSummary) {

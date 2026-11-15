@@ -16,7 +16,7 @@ type DissolveDialogProps = {
   onConfirm: () => Promise<void> | void;
 };
 
-/** Confirms dissolving a group or one of its channels: everyone loses access. */
+/** Confirms closing a group or one of its channels: everyone keeps the history, no one can send. */
 export function DissolveDialog({ scope, name, anchorRect = null, backdropClassName, onCancel, onConfirm }: DissolveDialogProps) {
   const [isDissolving, setIsDissolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,9 +48,9 @@ export function DissolveDialog({ scope, name, anchorRect = null, backdropClassNa
       anchorRect={anchorRect}
       backdropClassName={backdropClassName}
     >
-      <AppDialogTitle id={titleId} className="text-[13px] leading-5">Dissolve {name}?</AppDialogTitle>
+      <AppDialogTitle id={titleId} className="text-[13px] leading-5">Close {name}?</AppDialogTitle>
       <p id={lineId} className="app-transient-muted mt-2 text-[11px] leading-4">
-        Everyone loses access to this {scope}.
+        Everyone keeps the history. No one can send messages.
       </p>
       {error ? (
         <ErrorLine className="mt-2">{error}</ErrorLine>
@@ -65,7 +65,7 @@ export function DissolveDialog({ scope, name, anchorRect = null, backdropClassNa
           onClick={() => { void confirm(); }}
         >
           {isDissolving ? <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
-          <span>{isDissolving ? 'Dissolving…' : 'Dissolve'}</span>
+          <span>{isDissolving ? 'Closing…' : scope === 'group' ? 'Close group' : 'Close channel'}</span>
         </Button>
       </AppDialogActions>
     </AppDialog>

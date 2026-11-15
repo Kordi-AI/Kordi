@@ -396,7 +396,7 @@ export type MainContentShellArgs = Pick<AssembleKordiShellSlotsArgs,
   | 'handleCreateChatSession'
   | 'handleCreateSideAgentSession' | 'handlePrefetchChatSession'
   | 'handleSelectChatSession'
-  | 'handleRenameChatSession'
+  | 'handleRenameChatSession' | 'handleDeleteChatSession'
   | 'handleStartChatWithPerson'
   | 'handleStartChatWithAgent'
   | 'filteredGroupedContacts'

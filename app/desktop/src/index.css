@@ -52,6 +52,7 @@
 @import './styles/shell-live-answer.css';
 @import './styles/shell-diff.css';
 @import './styles/shell-sidebar.css';
+@import './styles/closed-group.css';
 @import './styles/shell-native-sidebar.css';
 @import './styles/shell-titlebar.css';
 @import './styles/shell-companion.css';

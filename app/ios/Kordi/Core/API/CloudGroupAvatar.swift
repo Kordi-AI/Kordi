@@ -62,6 +62,8 @@ struct CloudChatConversation: Codable, Hashable {
     var personalAgent: CloudPersonalAgentBinding? = nil
     /// The team organization; absent for personal conversations and older servers.
     var organization: CloudConversationOrganization? = nil
+    /// Set once an admin closed the group or channel; absent while it is open.
+    var closed: CloudConversationClosed? = nil
     let forkedFromSessionId: String?
     let forkedFromMessageId: String?
     let latestMessageSequence: Int64
@@ -71,7 +73,7 @@ struct CloudChatConversation: Codable, Hashable {
     let preferences: CloudChatPreferences
 
     enum CodingKeys: String, CodingKey {
-        case id, kind, version, members, preferences, organization
+        case id, kind, version, members, preferences, organization, closed
         case sharedTitle = "shared_title"
         case createdByAccountId = "created_by_account_id"
         case legacySessionId = "legacy_session_id"
@@ -85,6 +87,35 @@ struct CloudChatConversation: Codable, Hashable {
         case latestMessageSequence = "latest_message_sequence"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+}
+
+/// A closed conversation keeps its members and history; nothing new is
+/// written there (docs/development/group-closed-state.md).
+struct CloudConversationClosed: Codable, Hashable {
+    let closedAt: String
+    var closedByAccountId: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case closedAt = "closed_at"
+        case closedByAccountId = "closed_by_account_id"
+    }
+}
+
+enum GroupClosedState {
+    /// The 409 code for a write to a closed conversation.
+    static let errorCode = "group_closed"
+    static let sendFailureMessage = "This group was closed."
+
+    /// Session ids of the closed conversations, keyed as the chat list keys sessions.
+    static func closedSessionIds(in conversations: [CloudChatConversation]) -> Set<String> {
+        Set(conversations.compactMap { conversation in
+            conversation.closed == nil ? nil : conversation.legacySessionId?.nonEmpty ?? conversation.id
+        })
+    }
+
+    static func isClosedError(_ error: Error) -> Bool {
+        (error as? CloudAPIError)?.code == errorCode
     }
 }
 

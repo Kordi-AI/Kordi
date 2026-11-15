@@ -49,7 +49,7 @@ export function GroupManagePage({
           <span className="grid h-5 w-5 place-items-center" aria-hidden="true">
             <CircleOff className="h-[13px] w-[13px]" />
           </span>
-          <span className="truncate">Dissolve group</span>
+          <span className="truncate">Close group</span>
         </button>
       </div>
       {confirming ? (

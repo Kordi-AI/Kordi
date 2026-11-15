@@ -308,8 +308,8 @@ test('group names, link expiry and error copy', () => {
   assert.equal(groupCreationErrorMessage(new Error("You can't message this person.")), "One of these people can't be added.");
   assert.equal(groupInvitationLinkErrorMessage(new Error('Only a verified group admin can create this invitation link.')), 'Only group admins can share a link.');
   assert.equal(groupInvitationLinkErrorMessage(new Error('Only a verified group admin can create this invitation link.'), { asCreator: true }), "Couldn't create the link. Try again.");
-  assert.equal(groupDissolveErrorMessage(new Error('The account is not allowed to perform this operation.'), 'group'), 'Only group admins can dissolve this group.');
-  assert.equal(groupDissolveErrorMessage(new Error('boom'), 'channel'), "Couldn't dissolve the channel. Try again.");
+  assert.equal(groupDissolveErrorMessage(new Error('The account is not allowed to perform this operation.'), 'group'), 'Only group admins can close this group.');
+  assert.equal(groupDissolveErrorMessage(new Error('boom'), 'channel'), "Couldn't close the channel. Try again.");
 });
 
 function session(overrides: Partial<CanonicalSessionState['sessions'][number]>): CanonicalSessionState['sessions'][number] {
