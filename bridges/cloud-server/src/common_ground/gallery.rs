@@ -445,6 +445,4 @@ pub(in crate::common_ground) async fn remove(
 #[cfg(test)]
 pub(super) use artifacts::{file_name_for, title_for};
 #[cfg(test)]
-pub(super) use content::never_render;
-#[cfg(test)]
 pub(super) use share::{preview_text, text_like};

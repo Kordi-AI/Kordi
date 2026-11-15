@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -198,13 +198,78 @@ pub async fn content(
         account_id: payload.account_id,
         device_id: payload.device_id,
     };
-    super::content::stream_attachment_content(&state, &session, &attachment_id, &request_headers)
-        .await
+    playable(
+        super::content::stream_attachment_content(
+            &state,
+            &session,
+            &attachment_id,
+            &request_headers,
+        )
+        .await,
+    )
+}
+
+/// A `<video>` element or a native player loads this URL directly, so audio
+/// and video are not marked as a download here; they still carry the sandbox
+/// policy and `nosniff`. Every other type stays a download.
+fn playable(mut response: Response) -> Response {
+    let media = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim().to_ascii_lowercase())
+        .is_some_and(|value| value.starts_with("video/") || value.starts_with("audio/"));
+    if media {
+        response.headers_mut().remove(header::CONTENT_DISPOSITION);
+    }
+    response
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_token, encode_token, PlaybackPayload, PlaybackTokenError};
+    use axum::response::IntoResponse;
+
+    use super::{decode_token, encode_token, playable, PlaybackPayload, PlaybackTokenError};
+    use crate::attachments::content::never_render;
+
+    fn served(content_type: Option<&str>) -> axum::response::Response {
+        let mut response = "bytes".into_response();
+        if let Some(value) = content_type {
+            response
+                .headers_mut()
+                .insert("content-type", value.parse().unwrap());
+        }
+        playable(never_render(response))
+    }
+
+    #[test]
+    fn audio_and_video_are_not_marked_as_a_download() {
+        for content_type in ["video/mp4", "Audio/MP4"] {
+            let response = served(Some(content_type));
+            let headers = response.headers();
+            assert!(
+                headers.get("content-disposition").is_none(),
+                "{content_type}"
+            );
+            assert_eq!(
+                headers["content-security-policy"],
+                "sandbox; default-src 'none'"
+            );
+            assert_eq!(headers["x-content-type-options"], "nosniff");
+        }
+    }
+
+    #[test]
+    fn other_types_stay_a_download() {
+        for content_type in [Some("text/html"), Some("image/svg+xml"), None] {
+            let response = served(content_type);
+            assert_eq!(
+                response.headers()["content-disposition"],
+                "attachment",
+                "{content_type:?}"
+            );
+        }
+    }
 
     const KEY: &[u8] = b"test-only-playback-secret-that-is-long-enough";
 

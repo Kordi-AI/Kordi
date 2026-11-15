@@ -5,11 +5,10 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::response::IntoResponse;
 use sqlx_postgres::PgPoolOptions;
 use tower::ServiceExt;
 
-use super::super::gallery::{file_name_for, never_render, preview_text, text_like, title_for};
+use super::super::gallery::{file_name_for, preview_text, text_like, title_for};
 use crate::events::EventBus;
 use crate::server::ServerState;
 
@@ -115,24 +114,4 @@ fn previews_are_cut_on_a_character_boundary() {
     assert_eq!(preview_text(&[0xff, 0xfe, 0x00]), None, "not UTF-8");
     assert_eq!(preview_text(b"a\0b"), None, "binary");
     assert_eq!(preview_text(b"  \n "), None, "blank");
-}
-
-#[test]
-fn content_answers_are_never_rendered_as_a_page() {
-    let partial = (
-        StatusCode::PARTIAL_CONTENT,
-        [("content-type", "text/html")],
-        "<script>",
-    )
-        .into_response();
-    let response = never_render(partial);
-    assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
-    let headers = response.headers();
-    assert_eq!(headers["content-type"], "text/html");
-    assert_eq!(
-        headers["content-security-policy"],
-        "sandbox; default-src 'none'"
-    );
-    assert_eq!(headers["x-content-type-options"], "nosniff");
-    assert_eq!(headers["content-disposition"], "attachment");
 }

@@ -4,7 +4,8 @@
 //! current text is stored (`cloud_document_contents`) serves that text, as
 //! the document routes read it. The answer tells a browser never to
 //! render the bytes as a page: they are another person's file, and API
-//! routes also accept the web session cookie.
+//! routes also accept the web session cookie. Streamed files get that from
+//! the shared attachment streaming code; stored Markdown text gets it here.
 
 use std::sync::Arc;
 
@@ -17,7 +18,7 @@ use axum::{
 use sqlx_core::query_as::query_as;
 
 use super::{item_not_found, member_room, visible_item};
-use crate::attachments::content::{stream_readable_object, StoredObject};
+use crate::attachments::content::{never_render, stream_readable_object, StoredObject};
 use crate::common_ground::db_error;
 use crate::{auth::routes::CloudSession, server::ServerState};
 
@@ -72,28 +73,9 @@ pub(in crate::common_ground) async fn content(
                 detected_content_type: detected_content_type.as_deref(),
                 size_bytes,
             };
-            never_render(stream_readable_object(&state, &object, &request_headers).await)
+            stream_readable_object(&state, &object, &request_headers).await
         }
         Ok(None) => item_not_found(),
         Err(error) => db_error(error),
     }
-}
-
-/// Adds the headers that stop a browser from running the file as a page in
-/// the app's origin; status, body and content type stay as they are.
-pub(in crate::common_ground) fn never_render(mut response: Response) -> Response {
-    let headers = response.headers_mut();
-    headers.insert(
-        header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static("sandbox; default-src 'none'"),
-    );
-    headers.insert(
-        header::X_CONTENT_TYPE_OPTIONS,
-        HeaderValue::from_static("nosniff"),
-    );
-    headers.insert(
-        header::CONTENT_DISPOSITION,
-        HeaderValue::from_static("attachment"),
-    );
-    response
 }

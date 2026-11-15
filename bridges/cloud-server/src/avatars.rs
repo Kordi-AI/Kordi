@@ -433,12 +433,15 @@ pub fn is_valid_avatar_seed(seed: &str) -> bool {
 
 fn avatar_png_response(bytes: Arc<[u8]>) -> Response {
     let mut response = bytes.to_vec().into_response();
-    response
-        .headers_mut()
-        .insert(header::CONTENT_TYPE, HeaderValue::from_static("image/png"));
-    response.headers_mut().insert(
+    let headers = response.headers_mut();
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("image/png"));
+    headers.insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=31536000, immutable"),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
     );
     response
 }
