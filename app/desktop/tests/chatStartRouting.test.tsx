@@ -11,56 +11,7 @@ import { cloudCollaborationConversationId } from '../src/features/collaboration/
 import { assembleSidebarSlot } from '../src/app/assembleSidebarSlot';
 import { buildChatsPageProps } from '../src/app/mainContentShellBuilders';
 import { publishHostedProviderSnapshots } from '../src/features/cloud/hostedAccounts';
-
-function directPersonConversation() {
-  return {
-    id: 'session:bridge:humans:bob',
-    canonicalSessionId: 'session:bridge:humans:bob',
-    name: 'Bob',
-    type: 'person',
-    subtitle: '',
-    unread: 0,
-    collaborationSources: ['Bridge'],
-    trust: 'Bridge',
-    directness: 'Direct chat',
-    participants: ['Me', 'Bob'],
-    canonicalParticipants: [{
-      id: 'human:bob',
-      name: 'Bob',
-      kind: 'human',
-      role: 'delegate',
-      source: 'bridge',
-      sourceIdentityId: 'node-shared',
-      humanId: 'human-bob',
-    }],
-    messages: [],
-  };
-}
-
-function directAgentConversation() {
-  return {
-    id: 'session:bridge:agents:bob-agent',
-    canonicalSessionId: 'session:bridge:agents:bob-agent',
-    name: 'Bob agent',
-    type: 'external-agent',
-    subtitle: '',
-    unread: 0,
-    collaborationSources: ['Bridge'],
-    trust: 'Bridge',
-    directness: 'Agent thread',
-    participants: ['Me', 'Bob agent'],
-    canonicalParticipants: [{
-      id: 'agent:bob',
-      name: 'Bob agent',
-      kind: 'agent',
-      role: 'delegate',
-      source: 'bridge',
-      sourceIdentityId: 'node-shared',
-      agentId: 'agent-bob',
-    }],
-    messages: [],
-  };
-}
+import { baseShellArgs, directAgentConversation, directPersonConversation } from './helpers/chatStartRoutingFixtures';
 
 function baseSidebarArgs(overrides: Record<string, unknown> = {}) {
   return {
@@ -123,85 +74,6 @@ function baseSidebarArgs(overrides: Record<string, unknown> = {}) {
     refreshDesktopCollaboration: async () => {},
     handleCopyBridgeText: async () => {},
     handleCreateBridgeDraft: () => {},
-    ...overrides,
-  };
-}
-
-function baseShellArgs(calls: string[], overrides: Record<string, unknown> = {}) {
-  return {
-    composerProviderOptions: [],
-    activeNav: 'contacts',
-    chatConversations: [directPersonConversation()],
-    setActiveNav: (nav: string) => calls.push(`nav:${nav}`),
-    handleSelectChatSession: async (sessionId: string) => { calls.push(`select:${sessionId}`); },
-    handleStartChatWithPerson: async () => { calls.push('startChatWithPerson'); },
-    handleOpenCollaborationConversation: async () => { calls.push('openBridge'); },
-    handleStartCollaborationPersonSession: async (target: Record<string, unknown>) => { calls.push(`startPerson:${target.hostId}:${target.nodeId}:${target.humanId}`); },
-    handleStartChatWithAgent: async (agent: Record<string, unknown>) => { calls.push(`startAgent:${agent.sourceHostId}:${agent.sourceParticipantId}:${agent.sourceAgentId}`); },
-    setContactOverlayMode: (value: unknown) => calls.push(`overlay:${String(value)}`),
-    displayedAgents: [],
-    filteredGroupedContacts: [],
-    contactRequests: [],
-    activeContact: {},
-    activeContactRequest: {},
-    getStatusBadgeClass: () => '',
-    desktopCollaborationState: null,
-    activeCollaborationPeople: [],
-    activeCollaborationAgents: [],
-    handleCreateChatSession: async () => { calls.push('createLocal'); },
-    setIsContactRequestsOpen: () => {},
-    setExpandedContactGroups: () => {},
-    setActiveContactGroup: () => {},
-    setActiveContactId: () => {},
-    setActiveAgentId: () => {},
-    setIsAgentOverlayOpen: () => {},
-    handleSelectBridgeHost: async () => {},
-    handleCreateBridgeDraft: () => {},
-    refreshDesktopCollaboration: async () => {},
-    handleSaveBridgeSettings: async () => {},
-    handleRemoveBridgeHost: async () => {},
-    handleCopyBridgeText: async () => {},
-    handleOpenBridgeConfigFolder: async () => {},
-    handleRevealBridgeStorageFile: async () => {},
-    handleExportBridgeHostsConfig: async () => {},
-    handleImportBridgeHostsConfig: async () => {},
-    handleAddCollaborationContact: async () => {},
-    handleSetBridgeDiscoveryMode: async () => {},
-    handleCreateBridgeAgent: async () => {},
-    handleActivateBridgeAgent: async () => {},
-    handleSetDefaultBridgeAgent: async () => {},
-    handleRemoveCollaborationContact: async () => {},
-    handleBridgeWizardPrimary: async () => {},
-    handleCreateProjectSession: async () => {},
-    handleRenameDesktopSession: async () => {},
-    handleStopDesktopChatTurn: async () => {},
-    handleSendChatMessage: async () => {},
-    handleSendProjectMessage: async () => {},
-    openAuthSettings: () => {},
-    selectComposerValue: async () => {},
-    selectAuthProvider: () => {},
-    openLoginFlow: async () => {},
-    refreshDesktopAuth: async () => {},
-    handleSelectAuthChoice: async () => {},
-    handleRemoveAuthProfile: async () => {},
-    handleLogoutProvider: async () => {},
-    handleCreateProject: async () => {},
-    handleCreateProjectFromFolder: async () => {},
-    selectProject: () => {},
-    handleSelectProjectSession: async () => {},
-    projectMentionTargetsForText: () => [],
-    chatMentionTargetsForText: () => [],
-    acceptProjectSlashCommand: () => {},
-    acceptChatSlashCommand: () => {},
-    saveDesktopAttachments: async () => [],
-    removeChatComposerAttachment: () => {},
-    updateChatComposerDraft: () => {},
-    updateProjectComposerDraft: () => {},
-    toggleComposerSelector: () => {},
-    selectComposerAuthChoice: async () => {},
-    selectComposerProviderChoice: async () => {},
-    setIsDetailPanelCollapsed: () => {},
-    setActiveSourcePreview: () => {},
     ...overrides,
   };
 }
