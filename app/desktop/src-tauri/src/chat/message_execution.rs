@@ -2,18 +2,14 @@
 
 use std::sync::{Arc, Mutex};
 
-use kordi_cli::desktop_runtime::{
-    DesktopChatContextMessage, DesktopChatMessage, DesktopChatSessionDetail,
-    DesktopVisibleTaskRecord,
-};
+use kordi_cli::desktop_runtime::{DesktopChatContextMessage, DesktopVisibleTaskRecord};
 
 use super::{
     agent_builder, apply_desktop_chat_message_route, apply_desktop_turn_event,
-    attach_cloud_scheduled_task_runtime_for_session, chat_cwd, desktop_task_tools_from_messages,
-    ensure_provider_ready_for_send, now_millis, prepare_desktop_session_for_send,
-    reserve_turn_in_session, snapshot_turn, sync_completed_desktop_session_to_canonical,
-    turn_snapshot_has_model_task_tools, update_turn, DesktopChatManager, DesktopChatMessageRoute,
-    DesktopChatTurnHandle, DesktopChatTurnSnapshot,
+    attach_cloud_scheduled_task_runtime_for_session, chat_cwd, ensure_provider_ready_for_send,
+    now_millis, prepare_desktop_session_for_send, reserve_turn_in_session, snapshot_turn,
+    sync_completed_desktop_session_to_canonical, update_turn, DesktopChatManager,
+    DesktopChatMessageRoute, DesktopChatTurnHandle, DesktopChatTurnSnapshot,
 };
 
 pub(super) struct StartMessageInput {
@@ -64,7 +60,11 @@ fn shared_request_runtime_session_id(session_id: &str, request_id: &str) -> Resu
 }
 
 mod admission;
+mod finish;
 mod shared;
+use finish::finish_turn;
+#[cfg(test)]
+use finish::{finished_turn_reply_text, latest_turn_assistant, latest_turn_assistant_entry_id};
 pub(super) use shared::start_shared_message;
 
 pub(super) async fn start_message(
@@ -139,6 +139,7 @@ pub(super) async fn start_message(
         retry_reason: None,
         transcript_refresh_required: false,
         background_follow_up: None,
+        stop_reason: None,
     }));
     let cancel = tokio_util::sync::CancellationToken::new();
 
@@ -149,11 +150,14 @@ pub(super) async fn start_message(
             snapshot: snapshot.clone(),
             cancel: cancel.clone(),
             execution_lease_deadline: Arc::new(Mutex::new(None)),
+            lease_refusal: Default::default(),
         },
     )
     .await?;
     if let Some(deadline) = execution_lease_deadline_ms {
-        if let Err(error) = super::turns::renew_execution_lease(manager, &turn_id, deadline).await {
+        if let Err(error) =
+            super::turns::renew_execution_lease(manager, &turn_id, deadline, None).await
+        {
             cancel.cancel();
             fail_turn(&snapshot, error.clone());
             return Err(error);
@@ -382,114 +386,6 @@ fn fail_chat_request(snapshot: &Arc<Mutex<DesktopChatTurnSnapshot>>, error: Stri
         state.succeeded = false;
         state.error = Some(error);
     });
-}
-
-fn latest_turn_assistant(messages: &[DesktopChatMessage]) -> Option<&DesktopChatMessage> {
-    messages
-        .iter()
-        .rev()
-        .take_while(|message| !message.role.trim().eq_ignore_ascii_case("user"))
-        .find(|message| message.role.trim().eq_ignore_ascii_case("assistant"))
-}
-
-/// The reply of a finished turn as its transcript stores it: it keeps text
-/// written before the turn's last tool call (see
-/// `kordi_core::types::fold_turn_reply_segments`), while the streamed text runs
-/// every message's text together without breaks.
-fn finished_turn_reply_text(assistant: Option<&DesktopChatMessage>) -> Option<String> {
-    let message = assistant.filter(|message| !message.failed && !message.cancelled)?;
-    (!message.text.trim().is_empty()).then(|| message.text.clone())
-}
-
-fn latest_turn_assistant_entry_id(messages: &[DesktopChatMessage]) -> Option<String> {
-    latest_turn_assistant(messages).and_then(|message| message.entry_id.clone())
-}
-
-async fn finish_turn(
-    snapshot: &Arc<Mutex<DesktopChatTurnSnapshot>>,
-    session_handle: &super::DesktopSessionHandle,
-    cwd: &std::path::Path,
-    session_id: &str,
-    is_agent_builder_session: bool,
-    cancel: &tokio_util::sync::CancellationToken,
-    result: Result<DesktopChatSessionDetail, String>,
-) {
-    match result {
-        Ok(detail) if cancel.is_cancelled() => {
-            let transcript_entry_id = latest_turn_assistant_entry_id(&detail.messages);
-            sync_completed_session(cwd, session_id, session_handle, is_agent_builder_session).await;
-            update_turn(snapshot, |state| {
-                state.status = "cancelled".to_string();
-                state.message = "Response stopped".to_string();
-                state.completed = true;
-                state.completed_at_ms = Some(now_millis());
-                state.transcript_entry_id = transcript_entry_id;
-                state.succeeded = false;
-                state.error = None;
-            });
-        }
-        Ok(detail) => {
-            let transcript_entry_id = latest_turn_assistant_entry_id(&detail.messages);
-            let assistant = latest_turn_assistant(&detail.messages);
-            let segments = assistant
-                .map(|message| message.segments.clone())
-                .unwrap_or_default();
-            let reply_text = finished_turn_reply_text(assistant);
-            sync_completed_session(cwd, session_id, session_handle, is_agent_builder_session).await;
-            let task_tools = {
-                let session = session_handle.lock().await;
-                session
-                    .detail()
-                    .map(|detail| desktop_task_tools_from_messages(&detail.messages))
-                    .unwrap_or_default()
-            };
-            update_turn(snapshot, |state| {
-                if !task_tools.is_empty() && !turn_snapshot_has_model_task_tools(&state.tools) {
-                    state.tools = task_tools;
-                }
-                if !segments.is_empty() {
-                    state.segments = segments;
-                }
-                if let Some(text) = reply_text {
-                    state.assistant_text = text;
-                }
-                state.status = "succeeded".to_string();
-                state.message = "Response complete".to_string();
-                state.completed = true;
-                state.completed_at_ms = Some(now_millis());
-                state.transcript_entry_id = transcript_entry_id;
-                state.succeeded = true;
-                state.error = None;
-            });
-        }
-        Err(_) if cancel.is_cancelled() => update_turn(snapshot, |state| {
-            state.status = "cancelled".to_string();
-            state.message = "Response stopped".to_string();
-            state.completed = true;
-            state.completed_at_ms = Some(now_millis());
-            state.succeeded = false;
-            state.error = None;
-        }),
-        Err(error) => {
-            // Provider failures can still persist a terminal assistant entry.
-            // Sync that entry before completing the live turn so Cloud receives
-            // the failed response immediately instead of leaving a processing
-            // placeholder until fallback timeout.
-            sync_completed_session(cwd, session_id, session_handle, is_agent_builder_session).await;
-            fail_chat_request(snapshot, error);
-        }
-    }
-}
-
-async fn sync_completed_session(
-    cwd: &std::path::Path,
-    session_id: &str,
-    session_handle: &super::DesktopSessionHandle,
-    is_agent_builder_session: bool,
-) {
-    if !is_agent_builder_session {
-        sync_completed_desktop_session_to_canonical(cwd, session_id, session_handle).await;
-    }
 }
 
 #[cfg(test)]

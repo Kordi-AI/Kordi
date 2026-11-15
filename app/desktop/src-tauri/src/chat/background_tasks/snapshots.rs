@@ -18,6 +18,15 @@ pub(super) async fn subsession_snapshot(
         .max_by_key(|turn| turn.started_at_ms);
     if let Some(turn) = latest {
         snapshot.turn_id = Some(turn.id.clone());
+        if turn.completed && turn.status == "cancelled" {
+            if let Some(reason) = turn
+                .stop_reason
+                .as_ref()
+                .and_then(|reason| serde_json::to_value(reason).ok())
+            {
+                snapshot.stop_reason = Some(reason);
+            }
+        }
         snapshot.activity = serde_json::json!({"tools":turn.tools.iter().map(|tool|serde_json::json!({"id":tool.id,"name":tool.name,"status":tool.status,"isError":tool.is_error,"arguments":"","liveOutput":""})).collect::<Vec<_>>()});
         snapshot.status = if !turn.completed {
             "running"
@@ -44,10 +53,23 @@ pub(super) async fn subsession_snapshot(
                 timestamp_ms: turn.started_at_ms,
             });
         }
-    } else if matches!(snapshot.status.as_str(), "running" | "pending") {
+    } else if matches!(snapshot.status.as_str(), "running" | "pending")
+        || snapshot.interrupted && !session_has_live_turn(manager, session_id).await
+    {
+        // No turn of this process runs it, so the app that ran it quit.
         snapshot.status = "stopped".to_string();
+        snapshot.stop_reason = Some(serde_json::json!({"kind": "app_quit"}));
     }
     Ok(snapshot)
+}
+
+async fn session_has_live_turn(manager: &DesktopChatManager, session_id: &str) -> bool {
+    let turns = manager.turns.lock().await;
+    turns.values().any(|turn| {
+        turn.snapshot
+            .lock()
+            .is_ok_and(|state| state.session_id == session_id && !state.completed)
+    })
 }
 
 #[tauri::command]

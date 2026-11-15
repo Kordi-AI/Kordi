@@ -73,7 +73,7 @@ pub(super) async fn claim(
 }
 
 pub(super) async fn mark_active(pool: &PgPool, run: &str, backend: &str) -> RunResult<()> {
-    query("UPDATE cloud_agent_subsessions s SET status='running',execution_backend=$2,execution_started_at=CASE WHEN s.status<>'running' THEN now() ELSE COALESCE(s.execution_started_at,now()) END,execution_finished_at=NULL,heartbeat_at=now(),version=version+1,updated_at=now() FROM cloud_agent_fallback_runs r WHERE r.subsession_id=s.subsession_id AND r.run_id=$1 AND r.status='running' AND (s.status<>'running' OR s.execution_backend<>$2 OR s.execution_started_at IS NULL)")
+    query("UPDATE cloud_agent_subsessions s SET status='running',stop_reason=NULL,execution_backend=$2,execution_started_at=CASE WHEN s.status<>'running' THEN now() ELSE COALESCE(s.execution_started_at,now()) END,execution_finished_at=NULL,heartbeat_at=now(),version=version+1,updated_at=now() FROM cloud_agent_fallback_runs r WHERE r.subsession_id=s.subsession_id AND r.run_id=$1 AND r.status='running' AND (s.status<>'running' OR s.execution_backend<>$2 OR s.execution_started_at IS NULL)")
         .bind(run).bind(backend).execute(pool).await?;
     Ok(())
 }
@@ -84,7 +84,7 @@ pub(crate) async fn revalidate(pool: &PgPool, run: &str) -> RunResult<bool> {
     if valid.is_some_and(|value| !value.0) {
         let mut tx = pool.begin().await?;
         super::run_locks::lock_run(&mut tx, run).await?;
-        query("UPDATE cloud_agent_subsessions s SET status='stopped',execution_finished_at=COALESCE(execution_finished_at,now()),version=version+1,updated_at=now() FROM cloud_agent_fallback_runs r WHERE r.run_id=$1 AND s.subsession_id=r.subsession_id AND r.status IN ('leased','running')")
+        query("UPDATE cloud_agent_subsessions s SET status='stopped',stop_reason=COALESCE(s.stop_reason,'{\"kind\":\"access_revoked\"}'::jsonb),execution_finished_at=COALESCE(execution_finished_at,now()),version=version+1,updated_at=now() FROM cloud_agent_fallback_runs r WHERE r.run_id=$1 AND s.subsession_id=r.subsession_id AND r.status IN ('leased','running')")
             .bind(run).execute(&mut *tx).await?;
         query("UPDATE cloud_agent_fallback_runs SET status='cancelled',completed_at=now()::text,updated_at=now()::text WHERE run_id=$1 AND status IN ('queued','leased','running')")
             .bind(run).execute(&mut *tx).await?;

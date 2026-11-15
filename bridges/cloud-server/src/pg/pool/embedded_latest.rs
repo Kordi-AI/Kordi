@@ -52,4 +52,9 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "0203_cloud_run_lease_head_start.sql"
     ),
     migration!(204, "group closed state", "0204_group_closed_state.sql"),
+    migration!(
+        205,
+        "subsession stop reasons",
+        "0205_subsession_stop_reasons.sql"
+    ),
 ];

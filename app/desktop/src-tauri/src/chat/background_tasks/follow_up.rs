@@ -4,7 +4,7 @@
 use kordi_cli::desktop_runtime::BACKGROUND_FOLLOW_UP_ENTRY_PREFIX;
 
 use super::super::{update_turn, DesktopBackgroundFollowUp, DesktopChatManager};
-use crate::chat::DesktopChatTurnSnapshot;
+use crate::chat::{DesktopChatTurnSnapshot, DesktopTurnStopReason};
 
 const FINAL_MESSAGE_LIMIT_CHARS: usize = 4_000;
 const ERROR_LIMIT_CHARS: usize = 300;
@@ -40,10 +40,16 @@ pub(super) fn follow_up_text(
     status: &str,
     final_message: &str,
     error: Option<&str>,
+    stop_reason: Option<&DesktopTurnStopReason>,
 ) -> String {
     let headline = match status {
         "done" => format!("Background session \"{title}\" finished."),
-        "stopped" => format!("Background session \"{title}\" was stopped."),
+        "stopped" => format!(
+            "Background session \"{title}\" was stopped{}.",
+            stop_reason
+                .map(DesktopTurnStopReason::follow_up_phrase)
+                .unwrap_or_default()
+        ),
         _ => {
             let error = error
                 .map(|error| error.split_whitespace().collect::<Vec<_>>().join(" "))
@@ -161,6 +167,7 @@ mod tests {
             retry_reason: None,
             transcript_refresh_required: false,
             background_follow_up: None,
+            stop_reason: None,
         }
     }
 
@@ -187,7 +194,7 @@ mod tests {
 
     #[test]
     fn follow_up_text_reports_each_outcome() {
-        let done = follow_up_text("Count lines", "done", "There are 1,204 lines.", None);
+        let done = follow_up_text("Count lines", "done", "There are 1,204 lines.", None, None);
         assert!(done.starts_with("Background session \"Count lines\" finished.\n\n"));
         assert!(done.contains("runtime follow-up, not a message from a person"));
         assert!(
@@ -199,14 +206,36 @@ mod tests {
             "failed",
             "",
             Some("Provider\nrejected the request"),
+            None,
         );
         assert!(failed.starts_with(
             "Background session \"Count lines\" failed: Provider rejected the request\n"
         ));
         assert!(!failed.contains("Final message"));
 
-        let stopped = follow_up_text("Count lines", "stopped", " ", None);
+        let stopped = follow_up_text("Count lines", "stopped", " ", None, None);
         assert!(stopped.starts_with("Background session \"Count lines\" was stopped.\n"));
+
+        let by_owner = DesktopTurnStopReason::of_kind("user");
+        let text = follow_up_text("Count lines", "stopped", "", None, Some(&by_owner));
+        assert!(text.starts_with("Background session \"Count lines\" was stopped by the owner.\n"));
+
+        let refused = DesktopTurnStopReason::lease_lapsed(Some(&crate::chat::DesktopSyncRefusal {
+            status: 409,
+            code: "subsession_version_conflict".into(),
+        }));
+        let text = follow_up_text("Count lines", "stopped", "", None, Some(&refused));
+        assert!(text.starts_with(
+            "Background session \"Count lines\" was stopped: the cloud refused its updates (version conflict).\n"
+        ));
+        let lapsed = DesktopTurnStopReason::lease_lapsed(None);
+        let text = follow_up_text("Count lines", "stopped", "", None, Some(&lapsed));
+        assert!(text.contains("was stopped: the app stopped renewing it."));
+        let expired = DesktopTurnStopReason::lease_lapsed(Some(&crate::chat::DesktopSyncRefusal {
+            status: 401,
+            code: "unauthorized".into(),
+        }));
+        assert!(expired.follow_up_phrase().ends_with("(sign-in expired)"));
     }
 
     fn handle(turn_id: &str) -> crate::chat::DesktopChatTurnHandle {
@@ -217,6 +246,7 @@ mod tests {
             snapshot: std::sync::Arc::new(std::sync::Mutex::new(snapshot)),
             cancel: tokio_util::sync::CancellationToken::new(),
             execution_lease_deadline: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            lease_refusal: Default::default(),
         }
     }
 
@@ -362,7 +392,7 @@ mod tests {
     #[test]
     fn follow_up_text_keeps_the_end_of_a_long_final_message() {
         let long = format!("{}END", "x".repeat(5_000));
-        let text = follow_up_text("Count lines", "done", &long, None);
+        let text = follow_up_text("Count lines", "done", &long, None, None);
         let tail = text.rsplit_once(":\n").unwrap().1;
         assert_eq!(tail.chars().count(), FINAL_MESSAGE_LIMIT_CHARS + 1);
         assert!(tail.starts_with('…') && tail.ends_with("END"));
