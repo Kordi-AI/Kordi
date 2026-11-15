@@ -10,11 +10,11 @@ use sqlx_core::{query::query, query_as::query_as, transaction::Transaction};
 use sqlx_postgres::{PgPool, Postgres};
 use uuid::Uuid;
 
-use super::prompt::{self, MATCH_SYSTEM, ROOM_SYSTEM};
+use super::prompt::{self, MATCH_BRIEF_SYSTEM, MATCH_SYSTEM, ROOM_SYSTEM};
 use super::queue::Ask;
 use super::{MatchResult, SharedCard};
 use crate::auth::rate_limit::{CloudRateLimiter, RateLimitDecision};
-use crate::common_ground::runs::{self, NewRun, MATCH_PREFIX, ROOM_PREFIX};
+use crate::common_ground::runs::{self, NewRun, BRIEF_MATCH_PREFIX, MATCH_PREFIX, ROOM_PREFIX};
 use crate::common_ground::{rooms, MATCH_LIMIT};
 
 /// People matched by one run. In a room these are the viewer's best
@@ -315,7 +315,12 @@ pub(super) async fn queue_new_matches(
         rooms::announce_matching(&mut tx, room_id).await?;
     }
     let batch = &stale[..stale.len().min(ask.batch())];
-    let run_id = runs::new_run_id(MATCH_PREFIX);
+    // A room's background runs list topic labels only (`Ask::Tail`).
+    let (prefix, system_prompt) = match ask {
+        Ask::Tail => (BRIEF_MATCH_PREFIX, MATCH_BRIEF_SYSTEM),
+        Ask::Best | Ask::Opened => (MATCH_PREFIX, MATCH_SYSTEM),
+    };
+    let run_id = runs::new_run_id(prefix);
     let cards: Vec<&SharedCard> = std::iter::once(viewer).chain(batch).collect();
     query(
         "INSERT INTO cloud_common_ground_match_runs
@@ -335,7 +340,7 @@ pub(super) async fn queue_new_matches(
         conversation_id: None,
         organization_id,
         prompt: prompt::match_prompt(viewer, batch),
-        system_prompt: MATCH_SYSTEM,
+        system_prompt,
     };
     let inserted = if ask == Ask::Opened {
         runs::insert_opened(&mut tx, service, new_run).await?

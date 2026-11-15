@@ -88,6 +88,7 @@ async fn complete_once(
         // Cards that changed while the run worked are matched again later.
         if is_current(viewer_card) {
             let both_ways = both_ways(pool, viewer_card, others).await?;
+            let brief = run_id.starts_with(runs::BRIEF_MATCH_PREFIX);
             let mut writes: Vec<(&SharedCard, &SharedCard, MatchResult, bool)> = Vec::new();
             for (other, found) in others.iter().zip(found) {
                 if !is_current(other) {
@@ -95,10 +96,17 @@ async fn complete_once(
                 }
                 let names = [viewer_card.name.as_str(), other.name.as_str()];
                 if both_ways.contains(&other.account_id) && reads_for_either(&found, &names) {
-                    let mirrored = result(other, viewer_card, reversed(&found));
+                    let mirrored = MatchResult {
+                        brief,
+                        ..result(other, viewer_card, reversed(&found))
+                    };
                     writes.push((other, viewer_card, mirrored, true));
                 }
-                writes.push((viewer_card, other, result(viewer_card, other, found), false));
+                let direct = MatchResult {
+                    brief,
+                    ..result(viewer_card, other, found)
+                };
+                writes.push((viewer_card, other, direct, false));
             }
             // Rows in one order for every run, so two runs that store the
             // same pair from each side never wait on each other in a cycle.
@@ -242,8 +250,16 @@ async fn store(
          ON CONFLICT (viewer_profile_id, other_profile_id) DO UPDATE SET
              viewer_revision = EXCLUDED.viewer_revision, other_revision = EXCLUDED.other_revision,
              result_json = EXCLUDED.result_json, computed_at = now()
-         WHERE NOT $8::boolean OR stored.viewer_revision <> EXCLUDED.viewer_revision
-             OR stored.other_revision <> EXCLUDED.other_revision",
+         WHERE CASE
+             WHEN stored.viewer_revision <> EXCLUDED.viewer_revision
+                 OR stored.other_revision <> EXCLUDED.other_revision THEN true
+             -- For the same cards a full result replaces a brief one, never
+             -- the reverse; a mirrored finding does not replace the
+             -- viewer's own.
+             WHEN COALESCE((stored.result_json->>'brief')::boolean, false) THEN true
+             WHEN $9::boolean THEN false
+             ELSE NOT $8::boolean
+         END",
     )
     .bind(&viewer.account_id)
     .bind(&other.account_id)
@@ -253,6 +269,7 @@ async fn store(
     .bind(other.revision)
     .bind(json!(result))
     .bind(mirrored)
+    .bind(result.brief)
     .execute(&mut **tx)
     .await?;
     Ok(())

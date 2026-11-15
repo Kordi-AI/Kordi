@@ -172,6 +172,11 @@ mod retry_and_effort {
     #[test]
     fn only_match_runs_send_low_effort_for_a_default_route() {
         assert_eq!(match_thinking("cg_match_fixture", "default"), Some("low"));
+        assert_eq!(
+            match_thinking("cg_match_brief_fixture", "default"),
+            Some("minimal")
+        );
+        assert_eq!(match_thinking("cg_match_brief_fixture", "high"), None);
         assert_eq!(match_thinking("cg_match_fixture", "high"), None);
         assert_eq!(match_thinking("cg_card_fixture", "default"), None);
         assert_eq!(match_thinking("cg_room_fixture", "default"), None);

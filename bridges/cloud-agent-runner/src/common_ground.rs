@@ -18,6 +18,8 @@ use crate::runtime::{CloudModelEngine, RunnerStepOutcome};
 
 pub const RUN_PREFIX: &str = "cg_";
 const MATCH_RUN_PREFIX: &str = "cg_match_";
+/// A room's background match runs, which list topic labels only.
+const BRIEF_MATCH_RUN_PREFIX: &str = "cg_match_brief_";
 /// Leaves room to wait out a few provider rate limits; the heartbeat keeps
 /// the lease alive meanwhile.
 const TIMEOUT_SECONDS: u64 = 300;
@@ -36,6 +38,8 @@ const MIN_ATTEMPT_TIME: Duration = Duration::from_secs(30);
 /// Matching compares short shared cards, and a large room sends them in big
 /// batches, so a route's "default" thinking runs at low effort there.
 const MATCH_DEFAULT_THINKING: &str = "low";
+/// A background run only picks topic labels, so it reasons least.
+const BRIEF_MATCH_DEFAULT_THINKING: &str = "minimal";
 /// OMP sends a route's "default" thinking as high effort. On a large matching
 /// batch, gpt-5-mini then reasons past the time limit before writing any reply.
 /// Medium is what the provider uses when no effort is sent (the Rust engine).
@@ -53,8 +57,15 @@ pub(crate) fn omp_thinking(thinking: &str) -> &str {
 /// The effort a match run sends in place of a route's "default" thinking.
 /// Card builds and room themes keep the engine's effort (`None`).
 pub(crate) fn match_thinking(run_id: &str, requested: &str) -> Option<&'static str> {
-    (requested == "default" && run_id.starts_with(MATCH_RUN_PREFIX))
-        .then_some(MATCH_DEFAULT_THINKING)
+    if requested != "default" {
+        None
+    } else if run_id.starts_with(BRIEF_MATCH_RUN_PREFIX) {
+        Some(BRIEF_MATCH_DEFAULT_THINKING)
+    } else {
+        run_id
+            .starts_with(MATCH_RUN_PREFIX)
+            .then_some(MATCH_DEFAULT_THINKING)
+    }
 }
 
 /// The run's provider settings: its route, background retries, and the

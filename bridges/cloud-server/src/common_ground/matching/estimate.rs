@@ -221,6 +221,7 @@ pub(in crate::common_ground) fn estimate(
         you_bring: found.you_bring,
         they_bring: found.they_bring,
         next_step: found.next_step,
+        brief: false,
     }
 }
 

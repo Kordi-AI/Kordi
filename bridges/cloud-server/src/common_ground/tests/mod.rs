@@ -6,6 +6,7 @@ mod auto_count_tests;
 mod auto_rebuild_tests;
 mod auto_unit_tests;
 mod block_visibility_tests;
+mod brief_tests;
 mod build_agents_tests;
 mod build_documents_tests;
 mod build_links_tests;

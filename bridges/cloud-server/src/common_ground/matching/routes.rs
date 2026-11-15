@@ -383,7 +383,8 @@ pub(in crate::common_ground) async fn match_detail(
         Ok(fresh) => fresh,
         Err(error) => return db_error(error),
     };
-    if let Some(result) = fresh.get(&other_card.profile_id) {
+    let stored = fresh.get(&other_card.profile_id);
+    if stored.is_some() {
         if let Err(error) = query(
             "UPDATE cloud_common_ground_matches SET opened_at = now()
              WHERE viewer_profile_id = $1 AND other_profile_id = $2",
@@ -395,15 +396,17 @@ pub(in crate::common_ground) async fn match_detail(
         {
             return db_error(error);
         }
-        let mut body = json!(result);
-        body["status"] = json!("ready");
-        body["person"] = person(other_card);
-        body["profileId"] = json!(viewer.profile_id);
-        match relationship(pool, account, &other).await {
-            Ok(relationship) => body["relationship"] = relationship,
-            Err(error) => return db_error(error),
-        }
-        return (StatusCode::OK, Json(body)).into_response();
+    }
+    // A brief result (a room's background run) has the score and topics but
+    // no reasons: opening the person queues a full run while the room is
+    // open, and the detail shows the topics meanwhile.
+    let brief = stored.filter(|result| result.brief && link.live);
+    if let (Some(result), None) = (stored, brief) {
+        let body = detail_body(pool, account, result, viewer, other_card, "ready", false);
+        return match body.await {
+            Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+            Err(error) => db_error(error),
+        };
     }
     if !link.live {
         return crate::common_ground::err(
@@ -412,7 +415,7 @@ pub(in crate::common_ground) async fn match_detail(
             StatusCode::NOT_FOUND,
         );
     }
-    match queue::queue_opened_match(
+    let queued = queue::queue_opened_match(
         pool,
         system_agent.config(),
         &rate_limiter,
@@ -422,47 +425,56 @@ pub(in crate::common_ground) async fn match_detail(
             .as_ref()
             .map(|Extension(o)| o.organization_id.as_str()),
     )
-    .await
-    {
-        Ok(Queued::Pending(pending)) => {
-            let body = estimated_match(
-                pool,
-                account,
-                &cards,
-                viewer,
-                other_card,
-                status(Some(pending)),
-            );
-            match body.await {
-                Ok(body) => (StatusCode::ACCEPTED, Json(body)).into_response(),
-                Err(error) => db_error(error),
-            }
+    .await;
+    // Until a run adds reasons, the detail shows the brief result's topics,
+    // or else the quick estimate's.
+    let estimate;
+    let shown = match brief {
+        Some(result) => result,
+        None => {
+            estimate = estimate_of(viewer, other_card, &cards);
+            &estimate
         }
-        Ok(Queued::Limited(retry_after)) => limited(retry_after),
-        // Someone declined AI, so no run will add reasons: the estimate is
-        // all there is.
-        Ok(Queued::Skipped) => {
-            match estimated_match(pool, account, &cards, viewer, other_card, "ready").await {
-                Ok(body) => (StatusCode::OK, Json(body)).into_response(),
-                Err(error) => db_error(error),
-            }
-        }
+    };
+    let (code, status) = match queued {
+        Ok(Queued::Pending(pending)) => (StatusCode::ACCEPTED, status(Some(pending))),
+        // Nothing more will run (someone declined AI, or the budget is used
+        // up): what is shown is all there is.
+        Ok(Queued::Skipped) => (StatusCode::OK, "ready"),
+        Ok(Queued::Limited(_)) if brief.is_some() => (StatusCode::OK, "ready"),
+        Ok(Queued::Limited(retry_after)) => return limited(retry_after),
+        Err(error) => return db_error(error),
+    };
+    // An estimate always is one; a brief result only while a run adds reasons.
+    let estimated = brief.is_none() || code == StatusCode::ACCEPTED;
+    match detail_body(pool, account, shown, viewer, other_card, status, estimated).await {
+        Ok(body) => (code, Json(body)).into_response(),
         Err(error) => db_error(error),
     }
 }
 
-/// The quick estimate of a match as the detail shows it: the topics at once,
-/// with empty reasons and next step until a model run adds them.
-async fn estimated_match(
+fn estimate_of(viewer: &SharedCard, other: &SharedCard, cards: &[SharedCard]) -> MatchResult {
+    estimate(viewer, other, &Rarity::of(cards))
+}
+
+/// A match as the detail shows it. `estimated` marks topics a model run
+/// has yet to add reasons to.
+async fn detail_body(
     pool: &sqlx_postgres::PgPool,
     account: &str,
-    cards: &[SharedCard],
+    result: &MatchResult,
     viewer: &SharedCard,
     other: &SharedCard,
     status: &str,
+    estimated: bool,
 ) -> sqlx_core::Result<Value> {
-    let mut body = json!(estimate(viewer, other, &Rarity::of(cards)));
-    body["estimated"] = json!(true);
+    let mut body = json!(result);
+    if let Some(fields) = body.as_object_mut() {
+        fields.remove("brief");
+    }
+    if estimated {
+        body["estimated"] = json!(true);
+    }
     body["status"] = json!(status);
     body["person"] = person(other);
     body["profileId"] = json!(viewer.profile_id);
