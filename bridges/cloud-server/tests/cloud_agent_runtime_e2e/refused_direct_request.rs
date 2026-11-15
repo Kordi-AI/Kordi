@@ -260,3 +260,132 @@ async fn refused_direct_request_with_use_my_agent_off_ends_the_same_way() {
     assert!(chat.runs(&plain).await.is_empty());
     assert!(chat.replies(&plain).await.is_empty());
 }
+
+/// The owners whose default agent `viewer`'s composer leaves out.
+async fn unavailable_default_agent_owners(chat: &DirectChat, viewer: &TestAccount) -> Value {
+    let owners = format!("{},{}", chat.owner.account_id, chat.peer.account_id);
+    let response = chat
+        .router
+        .clone()
+        .oneshot(get_with_token(
+            &format!("/v1/cloud/agents/shared?ownerAccountIds={owners}&includeDefaultAgents=true"),
+            &viewer.token,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    read_json(response).await["unavailableDefaultAgentOwnerIds"].clone()
+}
+
+#[tokio::test]
+async fn contacts_listing_tells_the_composer_which_default_agents_to_leave_out() {
+    let Some(chat) = DirectChat::new("unavailable-default-agent").await else {
+        return;
+    };
+    let none = json!([]);
+    let owner = json!([chat.owner.account_id]);
+    assert_eq!(
+        unavailable_default_agent_owners(&chat, &chat.peer).await,
+        none
+    );
+
+    // Access "Only me": hidden from the contact, never from the owner.
+    chat.set_default_access("private").await;
+    assert_eq!(
+        unavailable_default_agent_owners(&chat, &chat.peer).await,
+        owner
+    );
+    assert_eq!(
+        unavailable_default_agent_owners(&chat, &chat.owner).await,
+        none
+    );
+    chat.set_default_access("participant_conversations").await;
+    assert_eq!(
+        unavailable_default_agent_owners(&chat, &chat.peer).await,
+        none
+    );
+
+    // "Use my agent" off for this contact only.
+    chat.set_use_my_agent(false).await;
+    assert_eq!(
+        unavailable_default_agent_owners(&chat, &chat.peer).await,
+        owner
+    );
+    assert_eq!(
+        unavailable_default_agent_owners(&chat, &chat.owner).await,
+        none
+    );
+
+    chat.set_use_my_agent(true).await;
+
+    // A Factory agent is listed only while the contact may use it.
+    let created = chat
+        .send(
+            "/v1/cloud/agents",
+            &chat.owner.token,
+            json!({"name":"Scout","role":"Research helper","systemPrompt":"Help with research.",
+                "accessScope":"participant_conversations"}),
+        )
+        .await;
+    assert!(created.0.is_success(), "{:?}", created);
+    let scout = created.1["agent"]["agentId"]
+        .as_str()
+        .or_else(|| created.1["agentId"].as_str())
+        .unwrap()
+        .to_string();
+    assert!(listed_agent_ids(&chat, &chat.peer).await.contains(&scout));
+    chat.put(
+        &format!("/v1/cloud/agents/{scout}/access"),
+        json!({"accessScope": "private"}),
+    )
+    .await;
+    assert!(!listed_agent_ids(&chat, &chat.peer).await.contains(&scout));
+    chat.put(
+        &format!("/v1/cloud/agents/{scout}/access"),
+        json!({"accessScope": "participant_conversations"}),
+    )
+    .await;
+    chat.set_use_my_agent(false).await;
+    assert!(!listed_agent_ids(&chat, &chat.peer).await.contains(&scout));
+
+    // Older clients that do not ask get no new field.
+    let response = chat
+        .router
+        .clone()
+        .oneshot(get_with_token(
+            &format!(
+                "/v1/cloud/agents/shared?ownerAccountIds={}",
+                chat.owner.account_id
+            ),
+            &chat.peer.token,
+        ))
+        .await
+        .unwrap();
+    let body = read_json(response).await;
+    assert!(
+        body.get("unavailableDefaultAgentOwnerIds").is_none(),
+        "{body}"
+    );
+}
+
+async fn listed_agent_ids(chat: &DirectChat, viewer: &TestAccount) -> Vec<String> {
+    let response = chat
+        .router
+        .clone()
+        .oneshot(get_with_token(
+            &format!(
+                "/v1/cloud/agents/shared?ownerAccountIds={}&includeDefaultAgents=true",
+                chat.owner.account_id
+            ),
+            &viewer.token,
+        ))
+        .await
+        .unwrap();
+    read_json(response).await["agents"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|agent| agent["agentId"].as_str().map(str::to_owned))
+        .collect()
+}

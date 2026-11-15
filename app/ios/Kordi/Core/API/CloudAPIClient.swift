@@ -643,9 +643,19 @@ actor CloudAPIClient {
         token: String,
         ownerAccountIds: [String]
     ) async throws -> [CloudGroupMemberDefaultAgent] {
+        try await listDefaultAgentDirectory(token: token, ownerAccountIds: ownerAccountIds).agents
+    }
+
+    /// The default agents the viewer may mention as a group co-member, and
+    /// the owners whose default agent the viewer may not use.
+    func listDefaultAgentDirectory(
+        token: String,
+        ownerAccountIds: [String]
+    ) async throws -> CloudDefaultAgentDirectory {
         let owners = Array(Set(ownerAccountIds.filter { !$0.isEmpty })).sorted()
-        guard !owners.isEmpty else { return [] }
+        guard !owners.isEmpty else { return CloudDefaultAgentDirectory(agents: [], unavailableOwnerIds: []) }
         var agentsByOwner: [String: CloudGroupMemberDefaultAgent] = [:]
+        var unavailable: Set<String>? = nil
         for startIndex in stride(
             from: owners.startIndex,
             to: owners.endIndex,
@@ -666,8 +676,14 @@ actor CloudAPIClient {
             for agent in response.agents where agent.isDefaultAgent == true {
                 agentsByOwner[agent.ownerAccountId] = agent
             }
+            if let owners = response.unavailableDefaultAgentOwnerIds {
+                unavailable = (unavailable ?? []).union(owners)
+            }
         }
-        return agentsByOwner.values.sorted { $0.ownerAccountId < $1.ownerAccountId }
+        return CloudDefaultAgentDirectory(
+            agents: agentsByOwner.values.sorted { $0.ownerAccountId < $1.ownerAccountId },
+            unavailableOwnerIds: unavailable.map { $0.sorted() }
+        )
     }
 
     func createAgent(token: String, draft: CloudAgentDraft) async throws -> CloudAgent {
@@ -3271,13 +3287,16 @@ private struct SendContactRequest: Encodable { let peerAccountId: String; let me
 private struct AgentsResponse: Decodable { let agents: [CloudAgent] }
 private struct GroupMemberDefaultAgentsResponse: Decodable {
     let agents: [CloudGroupMemberDefaultAgent]
+    let unavailableDefaultAgentOwnerIds: [String]?
 
-    private enum CodingKeys: String, CodingKey { case agents }
+    private enum CodingKeys: String, CodingKey { case agents, unavailableDefaultAgentOwnerIds }
 
     /// Factory agents in the same list may not decode as default agents;
     /// they are skipped, never a failed load.
     init(from decoder: Decoder) throws {
-        var list = try decoder.container(keyedBy: CodingKeys.self).nestedUnkeyedContainer(forKey: .agents)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        unavailableDefaultAgentOwnerIds = try? container.decodeIfPresent([String].self, forKey: .unavailableDefaultAgentOwnerIds)
+        var list = try container.nestedUnkeyedContainer(forKey: .agents)
         var agents: [CloudGroupMemberDefaultAgent] = []
         while !list.isAtEnd {
             if let agent = try? list.decode(CloudGroupMemberDefaultAgent.self) {

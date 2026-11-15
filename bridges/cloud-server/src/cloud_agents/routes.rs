@@ -49,6 +49,11 @@ struct SharedAgentsQuery {
 #[serde(rename_all = "camelCase")]
 struct SharedCloudAgentListResponse {
     agents: Vec<SharedCloudAgentSummary>,
+    /// With `includeDefaultAgents`: the asked-about owners whose default
+    /// agent the caller may not use, which composers leave out of the
+    /// mention list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unavailable_default_agent_owner_ids: Option<Vec<String>>,
 }
 
 pub fn routes(state: Arc<ServerState>) -> Router {
@@ -188,19 +193,26 @@ async fn list_shared_agents(
             Ok(agents) => agents,
             Err(err) => return store_error_response("list_shared", err),
         };
+    let mut unavailable_default_agent_owner_ids = None;
     if query.include_default_agents {
-        match crate::cloud_agents::store_shared::list_group_member_default_agent_summaries(
-            state.db_pool(),
-            &owner_ids,
-            &session.account_id,
-        )
-        .await
-        {
+        let pool = state.db_pool();
+        let store = crate::cloud_agents::store_shared::list_group_member_default_agent_summaries;
+        match store(pool, &owner_ids, &session.account_id).await {
             Ok(defaults) => agents.extend(defaults),
             Err(err) => return store_error_response("list_shared", err),
         }
+        let unavailable =
+            crate::cloud_agents::store_shared::list_unavailable_default_agent_owner_ids;
+        match unavailable(pool, &owner_ids, &session.account_id).await {
+            Ok(owners) => unavailable_default_agent_owner_ids = Some(owners),
+            Err(err) => return store_error_response("list_shared", err),
+        }
     }
-    Json(SharedCloudAgentListResponse { agents }).into_response()
+    Json(SharedCloudAgentListResponse {
+        agents,
+        unavailable_default_agent_owner_ids,
+    })
+    .into_response()
 }
 
 async fn create_agent(

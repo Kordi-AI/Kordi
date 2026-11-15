@@ -836,6 +836,16 @@ struct CloudGroupMemberDefaultAgent: Codable, Hashable {
     let isDefaultAgent: Bool?
 }
 
+/// The default agents of some owners that the viewer may mention, and the
+/// owners whose default agent the viewer sees but may not use (Access
+/// "Only me", or "Use my agent" off for the viewer), which the composer
+/// never offers. `unavailableOwnerIds` is nil when the server does not
+/// report it; then nothing is left out.
+struct CloudDefaultAgentDirectory: Equatable {
+    let agents: [CloudGroupMemberDefaultAgent]
+    let unavailableOwnerIds: [String]?
+}
+
 struct CloudAgent: Codable, Hashable, Identifiable {
     let agentId: String
     let ownerAccountId: String

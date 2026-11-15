@@ -318,7 +318,7 @@ export function useCloudCollaborationState({
   const {
     catalog: {
       refreshDefinitions: refreshCloudAgents,
-      sharedAgents: sharedCloudAgents,
+      sharedAgents: sharedCloudAgents, unavailableDefaultAgentOwnerIds,
       refreshShared: refreshSharedCloudAgents,
       createDefinition: createCloudAgentDefinition,
       updateDefinition: updateCloudAgentDefinition,
@@ -657,7 +657,7 @@ export function useCloudCollaborationState({
     archiveCloudAgentDefinition,
     refreshSharedCloudAgents,
     cloudAgentDefinitionsById,
-    sharedCloudAgents,
+    sharedCloudAgents, unavailableDefaultAgentOwnerIds,
     cloudSessionActivity,
     refreshCloudSessionActivity,
     publishCloudTaskActivity,

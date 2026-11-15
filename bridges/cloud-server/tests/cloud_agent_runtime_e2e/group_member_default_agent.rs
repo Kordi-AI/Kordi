@@ -220,6 +220,24 @@ impl Group {
             .filter(|agent| agent["isDefaultAgent"] == json!(true))
             .collect()
     }
+
+    /// The owners whose default agent `viewer`'s composer leaves out.
+    async fn unavailable_default_agent_owners(&self, viewer: &TestAccount) -> Value {
+        let response = self
+            .router
+            .clone()
+            .oneshot(get_with_token(
+                &format!(
+                    "/v1/cloud/agents/shared?ownerAccountIds={}&includeDefaultAgents=true",
+                    self.owner.account_id
+                ),
+                &viewer.token,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        read_json(response).await["unavailableDefaultAgentOwnerIds"].clone()
+    }
 }
 
 #[tokio::test]
@@ -352,11 +370,34 @@ async fn shared_agent_list_offers_open_default_agents_to_group_members_only() {
         .await
         .is_empty());
 
+    // An open agent is not marked unavailable for anyone.
+    let none = json!([]);
+    assert_eq!(
+        group.unavailable_default_agent_owners(&group.member).await,
+        none
+    );
+    assert_eq!(
+        group.unavailable_default_agent_owners(&group.owner).await,
+        none
+    );
+
     group.set_use_my_agent(false).await;
     assert!(group
         .listed_default_agents(&group.member, true)
         .await
         .is_empty());
+    // The composer is told to stop offering it, only to the member it is off for.
+    let owner = json!([group.owner.account_id]);
+    assert_eq!(
+        group.unavailable_default_agent_owners(&group.member).await,
+        owner
+    );
+    assert_eq!(
+        group
+            .unavailable_default_agent_owners(&group.outsider)
+            .await,
+        none
+    );
     group.set_use_my_agent(true).await;
 
     group.set_default_access("private").await;
@@ -364,6 +405,15 @@ async fn shared_agent_list_offers_open_default_agents_to_group_members_only() {
         .listed_default_agents(&group.member, true)
         .await
         .is_empty());
+    assert_eq!(
+        group.unavailable_default_agent_owners(&group.member).await,
+        owner
+    );
+    // The owner always sees their own agent.
+    assert_eq!(
+        group.unavailable_default_agent_owners(&group.owner).await,
+        none
+    );
     // The Access change reaches the co-member at once, so their composer
     // refetches and stops offering the agent.
     let (hints,): (i64,) = sqlx_core::query_as::query_as(

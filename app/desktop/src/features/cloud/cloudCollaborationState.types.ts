@@ -145,6 +145,8 @@ export type UseCloudCollaborationStateResult = {
     (ownerAccountIds: string[]) => Promise<SharedCloudAgentSummary[]>;
   cloudAgentDefinitionsById: Record<string, CloudAgentDefinition>;
   sharedCloudAgents: SharedCloudAgentSummary[];
+  /** Owners whose default agent this account may not use; the composer never offers it. */
+  unavailableDefaultAgentOwnerIds: string[];
   cloudSessionActivity: CloudSessionActivityStore;
   refreshCloudSessionActivity: (sessionId: string) => Promise<void>;
   publishCloudTaskActivity:

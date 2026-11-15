@@ -55,7 +55,14 @@ export type CreateCloudAgentInput = {
 export type UpdateCloudAgentInput = Partial<CreateCloudAgentInput>;
 
 type CloudAgentEnvelope = { agent?: unknown };
-type CloudAgentListResponse = { agents?: unknown[] };
+type CloudAgentListResponse = { agents?: unknown[]; unavailableDefaultAgentOwnerIds?: unknown };
+
+/** The shared agents of some owners, and those owners whose default agent the viewer may not use. */
+export type SharedCloudAgentDirectory = {
+  agents: SharedCloudAgentSummary[];
+  /** Null when the server does not report it; then nothing is left out. */
+  unavailableDefaultAgentOwnerIds: string[] | null;
+};
 type ServerErrorBody = { errorCode?: string; message?: string };
 
 async function readJsonSafe(response: Response): Promise<unknown> {
@@ -137,15 +144,25 @@ export class CloudAgentsClient {
 
   /** Factory agents shared in conversations, plus the default agents of group co-members. */
   async listSharedCloudAgents(token: string, ownerAccountIds: string[]): Promise<SharedCloudAgentSummary[]> {
+    return (await this.listSharedCloudAgentDirectory(token, ownerAccountIds)).agents;
+  }
+
+  async listSharedCloudAgentDirectory(token: string, ownerAccountIds: string[]): Promise<SharedCloudAgentDirectory> {
     const owners = [...new Set(ownerAccountIds.map((value) => value.trim()).filter(Boolean))];
-    if (owners.length === 0) return [];
+    if (owners.length === 0) return { agents: [], unavailableDefaultAgentOwnerIds: [] };
     const body = await this.send<CloudAgentListResponse>(`/v1/cloud/agents/shared?ownerAccountIds=${encodeURIComponent(owners.join(','))}&includeDefaultAgents=true`, {
       method: 'GET',
       headers: this.authHeaders(token),
     }, 'Could not list shared Agents.');
-    return (Array.isArray(body.agents) ? body.agents : [])
-      .map(normalizeSharedCloudAgentSummary)
-      .filter((agent): agent is SharedCloudAgentSummary => Boolean(agent));
+    const unavailable = body.unavailableDefaultAgentOwnerIds;
+    return {
+      agents: (Array.isArray(body.agents) ? body.agents : [])
+        .map(normalizeSharedCloudAgentSummary)
+        .filter((agent): agent is SharedCloudAgentSummary => Boolean(agent)),
+      unavailableDefaultAgentOwnerIds: Array.isArray(unavailable)
+        ? unavailable.filter((id): id is string => typeof id === 'string' && id.trim().length > 0).map((id) => id.trim())
+        : null,
+    };
   }
 
   /** `accountId` is the signed-in account; without it the Agent is created in the personal organization. */

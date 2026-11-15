@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useState,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -108,6 +109,13 @@ export function useCloudAgentCatalog({
     () => Object.values(sharedByOwner).flat(),
     [sharedByOwner],
   );
+  // Owners whose default agent the viewer may not use, so the composer
+  // stops offering it (docs/contact-permissions.md).
+  const [unavailableByOwner, setUnavailableByOwner] = useState<Record<string, true>>({});
+  const unavailableDefaultAgentOwnerIds = useMemo(
+    () => Object.keys(unavailableByOwner).sort(),
+    [unavailableByOwner],
+  );
 
   const refreshShared = useCallback(async (
     ownerAccountIds: string[],
@@ -123,14 +131,24 @@ export function useCloudAgentCatalog({
       setSharedByOwner((current) =>
         Object.keys(current).length === 0 ? current : {}
       );
+      setUnavailableByOwner((current) => Object.keys(current).length === 0 ? current : {});
       return [];
     }
     const session = await loadSession();
     if (!session?.token) return [];
-    const agents = await client.listSharedCloudAgents(
-      session.token,
-      owners,
-    );
+    const directory = client.listSharedCloudAgentDirectory
+      ? await client.listSharedCloudAgentDirectory(session.token, owners)
+      : { agents: await client.listSharedCloudAgents(session.token, owners), unavailableDefaultAgentOwnerIds: null };
+    const { agents } = directory;
+    const unavailable = directory.unavailableDefaultAgentOwnerIds;
+    if (unavailable) {
+      setUnavailableByOwner((current) => {
+        const next = { ...current };
+        owners.forEach((owner) => { delete next[owner]; });
+        unavailable.forEach((owner) => { next[owner] = true; });
+        return recordEqual(current, next) ? current : next;
+      });
+    }
     const refreshed: Record<string, SharedCloudAgentSummary[]> = {};
     for (const agent of agents) {
       refreshed[agent.ownerAccountId] = [
@@ -211,6 +229,7 @@ export function useCloudAgentCatalog({
   return {
     refreshDefinitions,
     sharedAgents,
+    unavailableDefaultAgentOwnerIds,
     refreshShared,
     createDefinition,
     updateDefinition,
