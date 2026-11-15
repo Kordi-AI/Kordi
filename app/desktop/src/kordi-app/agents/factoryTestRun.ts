@@ -4,7 +4,8 @@ import { claimRuntimeRoute } from '@/features/digest/digestMacRuns';
 import type { DesktopAgentBuilderDraft, DesktopAgentBuilderStatus, DesktopChatMessageRoute } from '@/lib/desktop';
 import type { ComposerProviderOption } from '../components';
 
-function providerFamily(value: string | null | undefined) {
+/** The provider a model or account belongs to, with the OpenAI and Anthropic aliases folded together. */
+export function providerFamily(value: string | null | undefined) {
   const provider = value?.trim().toLowerCase() ?? '';
   if (['openai', 'openai-codex', 'chatgpt', 'openai-api'].includes(provider)) return 'openai';
   if (['anthropic', 'claude', 'claude-subscription'].includes(provider)) return 'anthropic';

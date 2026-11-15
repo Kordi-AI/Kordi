@@ -97,12 +97,15 @@ impl DesktopRuntimeSession {
 
 /// `proactive_run` marks an approved proactive run's turn: no instruction
 /// file and no home-folder pointer, as its memories hold what it needs.
+/// `skip_workspace_instructions` drops only the instruction files, for a
+/// session whose folder is app storage rather than a project.
 pub(super) fn environment_prompt(
     base: &str,
     workspace: &Path,
     policy: ExecutionPolicy,
     has_history: bool,
     proactive_run: bool,
+    skip_workspace_instructions: bool,
 ) -> String {
     if policy == ExecutionPolicy::Shared {
         return format!(
@@ -130,7 +133,7 @@ pub(super) fn environment_prompt(
     } else {
         "Safety mode is enabled. Respect the configured workspace and execution restrictions."
     };
-    let instructions = (!proactive_run)
+    let instructions = (!proactive_run && !skip_workspace_instructions)
         .then(|| crate::agents_md::load_agents_md(workspace))
         .flatten()
         .map(|text| format!("\n\nInstructions applicable to the selected workspace (retain their directory scope):\n{text}"))

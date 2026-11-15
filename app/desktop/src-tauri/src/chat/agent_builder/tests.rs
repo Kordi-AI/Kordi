@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod skill_seed;
+
 #[test]
 fn factory_prompt_covers_multiple_kordi_resource_types() {
     assert!(BUILDER_SYSTEM_PROMPT.starts_with("You are Kordi Factory"));
