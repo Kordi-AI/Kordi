@@ -214,7 +214,7 @@ extension AppModel {
     func scheduleRoomGroupInvitationRefresh(for hint: CommonGroundSyncHint) {
         switch hint {
         case .room, .invitations: break
-        case .matches: return
+        case .matches, .gallery: return
         }
         roomInvitationRefreshTask?.cancel()
         roomInvitationRefreshTask = Task { [weak self] in

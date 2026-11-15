@@ -34,7 +34,8 @@ export type CgHost = {
   memoryRouting?: boolean;
   /** True when a memory may feed several cards (`memoryVersion` 3); card pages add and remove them. */
   memoryCards?: boolean;
-  openChat: (person: CgPerson) => void;
+  /** Opens the direct chat; `draft` goes into its composer (a Gallery item's "About …"). */
+  openChat: (person: CgPerson, draft?: string) => void;
   acceptRequest: (requestId: string) => Promise<void>;
   contactsChanged: () => void;
   openGroup: (groupSpaceId: string) => void;

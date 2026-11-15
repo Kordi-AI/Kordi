@@ -5,10 +5,11 @@ import { DetailTile, DetailTiles } from '@/kordi-app/contacts/ContactDetailParts
 import type { CgHost } from './host';
 import { InviteToGroupDialog } from './InviteToGroupDialog';
 import { MeetDialog } from './MeetDialog';
-import { canMeet, contactActionFor, CONTACT_ACTION_LABELS } from './relationship';
+import { canMeet, CONTACT_ACTION_LABELS } from './relationship';
 import type { CgState, CommonGroundStore } from './store';
 import { groupInviteKey, inviteGroupsKey } from './storeGroupInvites';
 import type { CgPerson } from './types';
+import { usePersonContact } from './usePersonContact';
 
 const ICON = 'h-5 w-5';
 
@@ -24,12 +25,10 @@ export function PersonActions({ person, state, store, host }: {
   host: CgHost;
 }) {
   const [meeting, setMeeting] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [confirmation, setConfirmation] = useState<string | null>(null);
-  // `state` keeps this in step with the store; the lookup reads the newest relationship.
-  const relationship = state.relationships[person.accountId] ?? store.relationshipFor(person.accountId) ?? person.relationship;
-  const action = contactActionFor(relationship, state.support.contact);
+  const { relationship, action, busy, act, openChat: chatWith, accept, add } = usePersonContact(person, state, store, host);
+  const openChat = () => chatWith();
   const contact = canMeet(relationship);
   const showMeet = state.support.meet && Boolean(relationship);
   const showChat = state.support.chat && Boolean(relationship);
@@ -39,20 +38,6 @@ export function PersonActions({ person, state, store, host }: {
     setInviting(true);
     void store.loadInviteGroups(person.accountId);
   };
-  const act = async (work: () => Promise<void>) => {
-    setBusy(true);
-    try { await work(); } finally { setBusy(false); }
-  };
-  const openChat = () => void act(async () => { if (await store.chat(person.accountId)) host.openChat(person); });
-  const accept = () => void act(async () => {
-    const requestId = relationship?.requestId;
-    if (!requestId || !relationship) return;
-    await host.acceptRequest(requestId);
-    store.setRelationship(person.accountId, { ...relationship, contact: true, request: null, requestId: null });
-    host.contactsChanged();
-  });
-  const add = () => void act(async () => { await store.addContact(person.accountId); host.contactsChanged(); });
-
   // A contact's Message is the Chat tile, so the contact slot only shows before that.
   const contactTile = () => {
     if (action === 'hidden') return null;

@@ -8,6 +8,9 @@ export type ContactGroup = { id: ContactClass; label: string; items: Contact[] }
 
 export type ContactOverlayMode = 'contact' | 'request' | null;
 
+/** Message from elsewhere (a Grounding Gallery item) can carry text for the chat's composer. */
+export type ContactMessageOptions = { draft?: string };
+
 export type ContactsPageProps = {
   filteredGroupedContacts: ContactGroup[];
   addableContacts?: Contact[];
@@ -32,7 +35,7 @@ export type ContactsPageProps = {
   activeContactRequest?: ContactRequest;
   onCloseOverlay: () => void;
   getStatusBadgeClass: (value: string) => string;
-  onMessageContact?: (contact: Contact) => void;
+  onMessageContact?: (contact: Contact, options?: ContactMessageOptions) => void;
   onRemoveContact?: (contact: Contact) => Promise<void> | void;
   /** Richer profile (issue #1945); without it the pane keeps today's content. */
   contactProfileHost?: ContactProfileHost;

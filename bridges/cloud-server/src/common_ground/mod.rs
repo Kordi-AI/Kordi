@@ -15,6 +15,7 @@ mod build;
 mod card;
 mod contact_match;
 mod documents;
+mod gallery;
 mod intro;
 mod matching;
 mod nearby;
@@ -134,6 +135,13 @@ pub(super) const JOIN_REQUEST_LIMIT: AccountActionLimit = AccountActionLimit {
 pub(super) const GROUP_INVITE_LIMIT: AccountActionLimit = AccountActionLimit {
     action: "common-ground-group-invite",
     limit: 20,
+    window: Duration::from_secs(60 * 60),
+};
+
+/// Comments on room gallery items, per account.
+pub(super) const GALLERY_COMMENT_LIMIT: AccountActionLimit = AccountActionLimit {
+    action: "common-ground-gallery-comment",
+    limit: 60,
     window: Duration::from_secs(60 * 60),
 };
 
@@ -317,6 +325,30 @@ pub fn routes(state: Arc<ServerState>, rate_limiter: Arc<CloudRateLimiter>) -> R
         .route(
             "/v1/cloud/common-ground/join-requests/:request_id",
             get(actions::read_join_request).post(actions::decide_join_request),
+        )
+        .route(
+            "/v1/cloud/common-ground/rooms/:code/gallery",
+            get(gallery::list).post(gallery::share),
+        )
+        .route(
+            "/v1/cloud/common-ground/rooms/:code/gallery/candidates",
+            get(gallery::candidates),
+        )
+        .route(
+            "/v1/cloud/common-ground/rooms/:code/gallery/:item_id",
+            get(gallery::read).delete(gallery::remove),
+        )
+        .route(
+            "/v1/cloud/common-ground/rooms/:code/gallery/:item_id/content",
+            get(gallery::content),
+        )
+        .route(
+            "/v1/cloud/common-ground/rooms/:code/gallery/:item_id/comments",
+            post(gallery::add_comment),
+        )
+        .route(
+            "/v1/cloud/common-ground/rooms/:code/gallery/:item_id/comments/:comment_id",
+            delete(gallery::delete_comment),
         )
         .merge(nearby::routes())
         .route_layer(middleware::from_fn_with_state(
