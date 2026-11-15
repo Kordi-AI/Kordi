@@ -244,6 +244,7 @@ async fn assert_runtime_request_model_context(
         kordi_tools::ExecutionPolicy::Safety,
         false,
         workspace,
+        false,
     )?;
     let capture = std::sync::Arc::new(ModelContextCapture::default());
     config.provider = capture.clone();

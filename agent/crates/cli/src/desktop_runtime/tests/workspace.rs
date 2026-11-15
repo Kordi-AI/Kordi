@@ -28,7 +28,8 @@ async fn owner_workspace_is_durable_and_shared_requests_cannot_select_it() -> Re
     let workspace =
         runtime.execution_workspace("@\"~/My Project\" inspect the repository", policy)?;
     assert_eq!(workspace, canonical_project);
-    let header = super::workspace::environment_prompt("base", &workspace, policy, true, false);
+    let header =
+        super::workspace::environment_prompt("base", &workspace, policy, true, false, false);
     assert!(header.contains("Project instruction fixture"));
     assert!(header.contains("YOLO"));
     assert!(header.contains("workingDirectory"));
@@ -56,6 +57,7 @@ async fn owner_workspace_is_durable_and_shared_requests_cannot_select_it() -> Re
         kordi_tools::ExecutionPolicy::Shared,
         true,
         false,
+        false,
     );
     assert!(!shared_header.contains("My Project"));
     assert!(!shared_header.contains("Project instruction fixture"));
@@ -66,6 +68,62 @@ async fn owner_workspace_is_durable_and_shared_requests_cannot_select_it() -> Re
     );
     std::fs::remove_dir_all(&project)?;
     assert!(resumed.execution_workspace("continue", policy).is_err());
+    Ok(())
+}
+
+#[allow(clippy::await_holding_lock, reason = "global env lock; #235")]
+#[tokio::test]
+async fn app_storage_profiles_skip_instruction_files_found_above_their_folder() -> Result<()> {
+    const HOME_INSTRUCTION: &str = "HOME-INSTRUCTION-FIXTURE";
+    let _lock = env_lock();
+    let home = tempfile::tempdir()?;
+    let _home = EnvVarGuard::set_path("HOME", home.path());
+    let _storage = EnvVarGuard::unset("KORDI_STORAGE_ROOT");
+    let _app_data = EnvVarGuard::unset("APP_DATA_DIR");
+    let _key = EnvVarGuard::set_value("OPENAI_API_KEY", "test-only-key");
+    Settings {
+        default_provider: Some("openai".into()),
+        default_model: Some("gpt-4o-mini".into()),
+        ..Settings::default()
+    }
+    .save_global()?;
+    // The owner's home instruction file sits above the app storage folder.
+    std::fs::write(home.path().join("AGENTS.md"), HOME_INSTRUCTION)?;
+    let folder = home.path().join("app-data/drafts/draft-1/workspace");
+    std::fs::create_dir_all(&folder)?;
+    let profile = |skip_workspace_instructions| DesktopRuntimeProfile {
+        skip_workspace_instructions,
+        ..DesktopRuntimeProfile::default()
+    };
+
+    let mut plain =
+        DesktopRuntimeSession::create_profiled_with_id(folder.clone(), "profiled", profile(false))
+            .await?;
+    let turn = proactive_turn_prompt(&mut plain, "continue")?;
+    assert!(turn.contains(HOME_INSTRUCTION));
+    assert!(turn.contains("Instructions applicable to the selected workspace"));
+
+    let id = "profiled-app-storage";
+    let mut app_storage =
+        DesktopRuntimeSession::create_profiled_with_id(folder.clone(), id, profile(true)).await?;
+    let turn = proactive_turn_prompt(&mut app_storage, "continue")?;
+    assert!(!turn.contains(HOME_INSTRUCTION));
+    assert!(!turn.contains("Instructions applicable to the selected workspace"));
+    // Only the instruction files go: the execution context stays whole.
+    assert!(turn.contains("<local_execution_context>"));
+    assert!(turn.contains("homeDirectory"));
+    assert!(turn.contains("~ against homeDirectory"));
+
+    // A resume passes the profile again and keeps the rule.
+    app_storage.materialize_session()?;
+    drop(app_storage);
+    let mut resumed = DesktopRuntimeSession::resume_profiled(folder, id, profile(true)).await?;
+    assert!(!proactive_turn_prompt(&mut resumed, "continue")?.contains(HOME_INSTRUCTION));
+    // Profiles saved before the flag existed keep their instruction files.
+    let saved: DesktopRuntimeProfile = serde_json::from_str(
+        r#"{"provider":null,"model":null,"thinking":null,"system_prompt":null,"tool_names":null,"skill_names":null,"skill_paths":[],"proactive_run":false}"#,
+    )?;
+    assert!(!saved.skip_workspace_instructions);
     Ok(())
 }
 

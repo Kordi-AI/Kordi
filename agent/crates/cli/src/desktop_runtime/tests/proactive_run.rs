@@ -17,6 +17,7 @@ fn proactive_turn(
         policy,
         false,
         workspace,
+        runtime.skip_workspace_instructions,
     )
 }
 
