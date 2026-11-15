@@ -53,11 +53,11 @@ function agentRailElement(agent: Agent) {
       libraryArtifacts={{ tool: [], plugin: [] }}
       selectedLibraryId={null}
       section="agents"
-      librarySection="skill"
-      libraryCommunity={false}
+      libraryFilter={{ scope: 'mine', kind: 'skill' }}
+      community={{ providers: ['clawhub'], query: '', setQuery: () => undefined, browsing: true, results: [], loading: false, error: null, selected: null, select: () => undefined }}
       canCreateAgent
       onSectionChange={() => undefined}
-      onLibrarySectionChange={() => undefined}
+      onLibraryFilterChange={() => undefined}
       onOpenBuild={() => undefined}
       onOpenAgent={() => undefined}
       onOpenLibraryArtifact={() => undefined}

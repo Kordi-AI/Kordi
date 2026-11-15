@@ -20,6 +20,10 @@ pub enum RunError {
     /// The owner or requester declined AI models (`crate::ai_consent`).
     #[error("The agent's owner hasn't turned on AI models.")]
     AiConsentRequired,
+    /// The run's conversation is a closed group
+    /// (docs/development/group-closed-state.md).
+    #[error("This group was closed.")]
+    GroupClosed,
 }
 
 pub type RunResult<T> = Result<T, RunError>;
@@ -31,9 +35,10 @@ impl RunError {
         match self {
             Self::Persistence(error) => error,
             Self::NotFound => sqlx_core::Error::Protocol(self.to_string()),
-            Self::ContextUnavailable(_) | Self::AgentUnavailable | Self::AiConsentRequired => {
-                sqlx_core::Error::Protocol(self.to_string())
-            }
+            Self::ContextUnavailable(_)
+            | Self::AgentUnavailable
+            | Self::AiConsentRequired
+            | Self::GroupClosed => sqlx_core::Error::Protocol(self.to_string()),
         }
     }
 }
@@ -88,6 +93,11 @@ pub(crate) fn run_error_response(
             StatusCode::NOT_FOUND,
         ),
         RunError::AiConsentRequired => crate::ai_consent::required_response(),
+        RunError::GroupClosed => error_response(
+            crate::chat_sync::store::GROUP_CLOSED_CODE,
+            "This group was closed.",
+            StatusCode::CONFLICT,
+        ),
         RunError::Persistence(source) => {
             eprintln!("[cloud_agent_runtime] {context}: {source}");
             error_response(

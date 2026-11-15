@@ -56,6 +56,6 @@ export function groupInvitationLinkErrorMessage(error: unknown, { asCreator = fa
 export function groupDissolveErrorMessage(error: unknown, scope: 'group' | 'channel'): string {
   const text = errorText(error);
   if (isOffline(text)) return OFFLINE;
-  if (/not allowed|forbidden|admin/.test(text)) return `Only group admins can dissolve this ${scope}.`;
-  return `Couldn't dissolve the ${scope}. Try again.`;
+  if (/not allowed|forbidden|admin/.test(text)) return `Only group admins can close this ${scope}.`;
+  return `Couldn't close the ${scope}. Try again.`;
 }

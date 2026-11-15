@@ -69,6 +69,7 @@ import { SupportConversationEmptyState } from '@/features/support/SupportReportD
 import { SupportReportSubmissionProvider } from '@/features/support/SupportReportSubmissionContext';
 import { ConversationCallBanner } from '@/features/cloud/ConversationCallBanner';
 import { ModelRecoveryProvider } from '@/features/chat/ModelRecoveryProvider';
+import { closedConversationComposer } from '@/pages/closedConversationComposer';
 import { MessageSeenByProvider } from '@/features/chat/MessageSeenByProvider';
 
 type ChatMainWorkspaceProps = {
@@ -371,7 +372,7 @@ export function ChatMainWorkspace({
                 queuedMessages: transcript.queuedDesktopMessages,
                 onEditQueuedMessage: transcript.onEditQueuedMessage,
                 onCancelQueuedMessage: transcript.onCancelQueuedMessage,
-                composer: isEmptySelection ? null : (
+                composer: isEmptySelection ? null : closedConversationComposer(activeConv, session) ?? (
                   <ChatComposerShell
                     chatComposerAttachments={composer.chatComposerAttachments}
                     saveDesktopAttachments={composer.saveDesktopAttachments}

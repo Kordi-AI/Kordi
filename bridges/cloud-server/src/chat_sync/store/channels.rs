@@ -39,6 +39,7 @@ pub async fn create_group_channel(
          ORDER BY created_at, conversation_id LIMIT 1 FOR UPDATE",
     ).bind(space).fetch_optional(&mut *transaction).await?;
     let (source_id, title, organization_id) = source.ok_or(StoreError::Forbidden)?;
+    super::closed_state::require_open(&mut transaction, source_id).await?;
     let members: Vec<(String, String)> = query_as(
         "SELECT account_id, role FROM cloud_chat_conversation_members
          WHERE conversation_id = $1 AND membership_state = 'active' ORDER BY account_id FOR UPDATE",

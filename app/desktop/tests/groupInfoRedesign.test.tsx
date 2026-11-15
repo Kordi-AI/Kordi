@@ -112,7 +112,7 @@ test('group Info drops the bottom Group name, Dissolve group and Leave group row
     const view = await renderGroupInfo({ admin });
     try {
       const text = view.doc.body.textContent ?? '';
-      assert.doesNotMatch(text, /Group name|Dissolve group|Leave group/);
+      assert.doesNotMatch(text, /Group name|Close group|Leave group/);
       assert.equal(view.doc.querySelector('[aria-label="Group settings"]'), null);
       assert.equal(view.doc.querySelector('[data-group-dissolve], [data-group-leave]'), null);
     } finally {
@@ -208,7 +208,7 @@ test('Escape cancels a rename before it closes group Info', async () => {
   }
 });
 
-test('Manage opens a second level with Dissolve group; Escape and Back step back', async () => {
+test('Manage opens a second level with Close group; Escape and Back step back', async () => {
   const view = await renderGroupInfo({ admin: true });
   try {
     await view.click(view.button('Manage'));
@@ -216,8 +216,8 @@ test('Manage opens a second level with Dissolve group; Escape and Back step back
     assert.ok(view.doc.querySelector('[data-group-manage-page]'));
     assert.equal(view.doc.activeElement, view.button('Back'));
     const manage = view.doc.querySelector('[role="group"][aria-label="Manage"]');
-    assert.equal(manage?.textContent?.trim(), 'Dissolve group');
-    assert.equal(manage?.querySelectorAll('button').length, 1, 'Manage holds only Dissolve group');
+    assert.equal(manage?.textContent?.trim(), 'Close group');
+    assert.equal(manage?.querySelectorAll('button').length, 1, 'Manage holds only Close group');
     assert.doesNotMatch(view.doc.querySelector('[data-group-manage-page]')?.textContent ?? '', /Group name|Rename/);
     assert.equal(view.nameInput(), null);
     assert.equal(view.doc.querySelector('input[type="search"]'), null, 'the member gallery is replaced');
@@ -236,16 +236,16 @@ test('Manage opens a second level with Dissolve group; Escape and Back step back
   }
 });
 
-test('Dissolve group opens the existing confirmation and dissolves the group', async () => {
+test('Close group opens the existing confirmation and closes the group', async () => {
   const view = await renderGroupInfo({ admin: true });
   try {
     await view.click(view.button('Manage'));
-    await view.click(view.button('Dissolve group'));
+    await view.click(view.button('Close group'));
     const dialog = view.doc.querySelector('[role="dialog"][aria-labelledby="dissolve-group-dialog-title"]');
     assert.ok(dialog);
-    assert.match(dialog.textContent ?? '', /Dissolve Launch crew\?/);
-    assert.match(dialog.textContent ?? '', /Everyone loses access to this group\./);
-    await view.click([...dialog.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === 'Dissolve'));
+    assert.match(dialog.textContent ?? '', /Close Launch crew\?/);
+    assert.match(dialog.textContent ?? '', /Everyone keeps the history\. No one can send messages\./);
+    await view.click([...dialog.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === 'Close group'));
     await flushReactUpdates();
     assert.equal(view.calls.dissolves.length, 1);
     assert.equal(view.calls.dissolves[0][0], view.space.id.replace(/^group:/, ''));

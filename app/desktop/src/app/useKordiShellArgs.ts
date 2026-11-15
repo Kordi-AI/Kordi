@@ -135,6 +135,7 @@ export function useKordiShellArgs(groups: KordiShellCompositionArgs): KordiShell
         handlePrefetchChatSession: args.handlePrefetchChatSession,
         handleSelectChatSession: args.handleSelectChatSession,
         handleRenameChatSession: args.handleRenameChatSession,
+        handleDeleteChatSession: args.handleDeleteChatSession,
         handleStartChatWithPerson: args.handleStartChatWithPerson,
         handleStartChatWithAgent: args.handleStartChatWithAgent,
         filteredGroupedContacts: args.filteredGroupedContacts,

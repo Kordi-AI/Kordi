@@ -129,6 +129,8 @@ async fn send_message_in_transaction_measured(
         require_active_writer(transaction, conversation_id, account_id),
     )
     .await?;
+    // Nothing new is written in a closed group, by people, agents or notices.
+    super::closed_state::require_open(transaction, conversation_id).await?;
     if let Some(projection) = &group_projection {
         // Serialize group projections before taking any sibling conversation lock.
         measure(

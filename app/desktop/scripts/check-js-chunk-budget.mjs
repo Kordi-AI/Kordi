@@ -108,10 +108,12 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // The Facilitator in the group @ menu, its mention, and mentions that end a sentence add 1.5 kB,
 // so it moves to 5.963 MB.
 // Together, the room group join requests above (16 kB) and these come to 5.979 MB.
+// Background session stop reasons (the reason labels, the not-synced state and the sync retry policy)
+// and refreshing a session row when a continue starts add 3.4 kB, so it moves to 5.983 MB.
 // Inviting Grounding people into groups (the person-page group picker, Add people's From Grounding
 // section and person invitations in Contacts › Requests, 9.7 kB) and sending a joiner's first group
-// message at once (under 1 kB) bring it to 5.99 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_990_000;
+// message at once (under 1 kB) bring it to 5.994 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_994_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -162,9 +164,10 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The same single agent task row adds under 1 kB there, so it moves to 5.987 MB.
 // The web app carries the same Facilitator @ menu and mention code, 1.5 kB, so it moves to 5.989 MB.
 // Together, the room group join requests above (17 kB) and these come to 6.006 MB there.
+// The same stop reasons and session row refresh add up to 4 kB there, so it moves to 6.010 MB.
 // Inviting Grounding people into groups (9.7 kB) and sending a joiner's first group message at once
-// (under 1 kB) bring it to 6.017 MB there.
-const MAX_WEB_APP_DIST_BYTES = 6_017_000;
+// (under 1 kB) bring it to 6.021 MB there.
+const MAX_WEB_APP_DIST_BYTES = 6_021_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

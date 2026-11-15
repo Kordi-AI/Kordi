@@ -47,6 +47,7 @@ import type {
   CloudGroupControlCanonicalContext,
   CloudGroupControlTransport,
 } from './useCloudGroupControlSender.types';
+import { isGroupClosedError } from '@/features/chat/closedGroup';
 
 export type {
   SendCloudGroupControlInput,
@@ -265,6 +266,7 @@ export function useCloudGroupControlSender({
         return;
       }
       let sentAny = false;
+      const closed: { error: Error | null } = { error: null };
       const sentMessages: CloudMessage[] = [];
       let preparedEntry: Promise<CloudGroupOutboxEntry> | null = null;
       const outcome = await outbox.deliver(
@@ -293,7 +295,10 @@ export function useCloudGroupControlSender({
               conversationKind: 'group',
               memberAccountIds: targetAccountIds,
             },
-          );
+          ).catch((error: unknown) => {
+            if (isGroupClosedError(error) && error instanceof Error) closed.error = error;
+            throw error;
+          });
           recordFirstAck(
             ready.envelope,
             ready.attachments?.length ?? 0,
@@ -311,6 +316,11 @@ export function useCloudGroupControlSender({
             error,
           );
         });
+      }
+      // The group was closed: the outbox stopped trying, and the sender says why.
+      if (closed.error) {
+        void syncDiff().catch(() => {});
+        throw closed.error;
       }
       if (sentAny) {
         await finishPostSendWork(Promise.all([
