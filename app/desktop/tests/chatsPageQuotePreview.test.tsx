@@ -68,7 +68,6 @@ function renderChatsPage(overrides: Record<string, unknown> = {}) {
     setChatComposerText: () => undefined,
     composerControlsRef: { current: null },
     activeRuntimeContextStatus: null,
-    activeRuntimeCacheText: null,
     composerSelection: { mode: 'Send as Me', model: 'GPT-5.4', thinking: 'xhigh' },
     openComposerSelector: null,
     toggleComposerSelector: () => undefined,

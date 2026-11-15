@@ -1,15 +1,17 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Copy, LogOut } from 'lucide-react';
 
 import { DetailTile, DetailTiles } from '@/kordi-app/contacts/ContactDetailParts';
 import type { CgHost } from './host';
 import { groupLine, peopleCount, roomTitle, topicGroupDraft, type CgGroupDraft } from './format';
+import { GalleryTab } from './GalleryTab';
 import { CgAvatar, CgAvatarGrid, CgBack, CgButton, CgGroup, CgHero, CgNotice, CgProgress, CgRow, CgScore, CgSection, CgSegmented, CgTopicDot } from './parts';
 import { personTitle } from './profiles';
 import { RoomSharing } from './ShareProfileDialog';
 import { StartGroupDialog } from './StartGroupDialog';
 import { roomClosed, type CgState, type CommonGroundStore } from './store';
-import type { CgGroup as CgRoomGroup, CgPerson, CgResults } from './types';
+import { loadGallery, setRoomTab } from './storeGallery';
+import type { CgGroup as CgRoomGroup, CgPerson, CgResults, CgRoomTab } from './types';
 
 function names(people: CgPerson[], selfId: string) {
   const others = people.filter((person) => person.accountId !== selfId).map((person) => person.name);
@@ -103,16 +105,26 @@ function GroupsSection({ code, results, state, store, host, closed }: { code: st
   );
 }
 
-/** `initialTab` lets the help tour open the Topics list. */
-export function ResultsScreen({ code, state, store, host, initialTab = 'people' }: { code: string; state: CgState; store: CommonGroundStore; host: CgHost; initialTab?: 'people' | 'topics' }) {
-  const [tab, setTab] = useState<'people' | 'topics'>(initialTab);
+/** `initialTab` lets the help tour open another list than the saved one. */
+export function ResultsScreen({ code, state, store, host, initialTab }: { code: string; state: CgState; store: CommonGroundStore; host: CgHost; initialTab?: CgRoomTab }) {
   const [starting, setStarting] = useState<CgGroupDraft | null>(null);
   const [copied, setCopied] = useState(false);
+  // The tab is kept in the store too, so going back from a Gallery item shows the Gallery again.
+  const [savedTab, setSavedTab] = useState<CgRoomTab>(() => initialTab ?? state.gallery.tabs[code] ?? 'people');
+  const setTab = (next: CgRoomTab) => {
+    setSavedTab(next);
+    setRoomTab(store, code, next);
+  };
+  // The Gallery loads as the room opens; the segment shows once it has, so older servers look as before.
+  useEffect(() => { void loadGallery(store, code, { quiet: true, retry: true }); }, [store, code]);
   const results = state.results[code];
   const room = state.rooms[code];
   const selfId = host.self.accountId;
   const closed = roomClosed(state, code);
   if (!results) return <><CgBack onBack={() => store.home()} />{state.notice ? <CgNotice text={state.notice} /> : <CgProgress line="Finding overlap" />}</>;
+  const gallery = state.support.gallery ? state.gallery.lists[code] : undefined;
+  const tab: CgRoomTab = savedTab === 'gallery' && !gallery ? 'people' : savedTab;
+  const tabs: Array<[CgRoomTab, string]> = [['people', 'People'], ['topics', 'Topics'], ...(gallery ? [['gallery', 'Gallery'] as [CgRoomTab, string]] : [])];
   const members = room?.members ?? [];
   const everyone = [host.self, ...members];
   const suggestion = results.suggestion;
@@ -121,13 +133,13 @@ export function ResultsScreen({ code, state, store, host, initialTab = 'people' 
   const line = `${peopleCount(everyone.length)} · ${results.topics.length} shared topics`;
   const profileId = results.profileId ?? room?.profileId ?? undefined;
   const unmatched = arriving(results, members, selfId, closed);
-  const empty = (tab === 'people' ? results.people.length + unmatched.length : results.topics.length) === 0;
+  const empty = tab !== 'gallery' && (tab === 'people' ? results.people.length + unmatched.length : results.topics.length) === 0;
   // While matching, an empty list shows only the progress line under the tabs.
   const matchingEmpty = results.status === 'matching' && empty;
   // Alone in an open room, People waits for others instead of showing an empty list.
   // The server also reports `matching` while only the room's topics refresh, so People shows the line
   // only when someone is still unscored (or nothing else would be on screen).
-  const finding = results.status === 'matching' && (tab === 'topics' || unmatched.length > 0 || matchingEmpty);
+  const finding = tab !== 'gallery' && results.status === 'matching' && (tab === 'topics' || unmatched.length > 0 || matchingEmpty);
   const waiting = tab === 'people' && empty && !matchingEmpty && !closed && room?.members.length === 0;
 
   return (
@@ -162,8 +174,18 @@ export function ResultsScreen({ code, state, store, host, initialTab = 'people' 
           </CgGroup>
         </CgSection>
       ) : null}
-      <CgSegmented value={tab} onChange={setTab} label="Results" options={[['people', 'People'], ['topics', 'Topics']]} helpTarget="grounding-room-topics" />
-      {matchingEmpty || waiting ? null : <CgSection helpTarget="grounding-room-people">
+      <CgSegmented value={tab} onChange={setTab} label="Results" options={tabs} helpTarget="grounding-room-topics" />
+      {gallery && tab === 'gallery' ? (
+        <GalleryTab
+          code={code}
+          list={gallery}
+          roomName={roomTitle(code, room?.name)}
+          roomTopics={results.topics.map((theme) => theme.label)}
+          closed={closed}
+          state={state}
+          store={store}
+        />
+      ) : matchingEmpty || waiting ? null : <CgSection helpTarget="grounding-room-people">
         <CgGroup>
           {tab === 'people'
             ? <>

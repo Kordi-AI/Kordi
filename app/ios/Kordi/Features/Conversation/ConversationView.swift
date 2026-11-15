@@ -1260,6 +1260,7 @@ struct ConversationView: View {
         }
         .onAppear {
             prepareInitialConversationForDisplay()
+            if let prefill = ConversationDraftPrefill.take(for: initialConversation.id), draft.isEmpty { draft = prefill }
             isReadPresentationVisible = true
             synchronizeReadPresentation()
             if !conversation.kind.supportsQuotedReplies {

@@ -10,10 +10,12 @@ import { CommonGroundPage } from '../../src/features/commonGround/CommonGroundPa
 import type { CgHost } from '../../src/features/commonGround/host';
 import { localProfileMemory, profileStorageKey } from '../../src/features/commonGround/profiles';
 import { CommonGroundStore, type CgScreen } from '../../src/features/commonGround/store';
+import { setRoomTab } from '../../src/features/commonGround/storeGallery';
 import { saveSession } from '../../src/features/cloud/session';
 import { ContactsPage } from '../../src/kordi-app/pages';
 import type { Contact, ContactClass } from '../../src/kordi-app/types';
 import { commonGroundFixtures, generatedPersonAvatar } from './commonGroundFixtures';
+import { commonGroundGalleryFixtures } from './commonGroundGalleryFixtures';
 import '../../src/index.css';
 
 // Login-free preview of Common ground in the real Contacts page. A fetch stub answers the
@@ -25,6 +27,9 @@ import '../../src/index.css';
 // ?noPrompt makes Allow end without a macOS prompt; ?buildEmpty makes Build find nothing in the sources.
 // ?auto=off|on|updating gives the Work card "Rebuild automatically" (off or on); "updating" shows an
 // automatic update running, which lands one new topic about eight seconds after the page opens.
+// ?screen=gallery|gallery-share|gallery-item opens the Poster session room on its Gallery tab, with the
+// Share dialog open, or on an item with comments; only these screens answer the Gallery routes, so the
+// other screens show the room as a server without the Gallery does.
 const params = new URLSearchParams(location.search);
 const theme = params.get('theme') === 'light' ? 'light' : 'dark';
 const screen = params.get('screen') ?? 'home';
@@ -49,6 +54,8 @@ function workOwner() {
 // Workshops reuses the Work topics so clicking it in the rail opens a filled card page.
 const workshopsOwner = { ...fx.owner, memoriesSinceBuild: 0, profile: { profileId: 'cgp_ws', kind: 'custom', name: 'Workshops', design: 'workshop', icon: null, focus: 'Poster on memory benchmarks' } };
 const joinedRoom = { ...fx.room, roomId: 'room_5160', code: '5160', name: 'Poster session 2026' };
+const [maya, hana, ines, rafa] = fx.room.members;
+const gallery = screen.startsWith('gallery') ? commonGroundGalleryFixtures({ self: fx.self, maya, hana, ines, rafa }) : null;
 
 const ROUTES: Record<string, (query: string, body: Record<string, unknown>) => unknown> = {
   'GET profiles': () => ({ profiles: fx.profiles }),
@@ -102,6 +109,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const at = url.indexOf(marker);
   if (at < 0) return realFetch(input, init);
   const [path, query = ''] = url.slice(at + marker.length).split('?');
+  const galleryReply = gallery?.reply(init?.method ?? 'GET', path, typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {});
+  if (galleryReply) return galleryReply;
   const reply = ROUTES[`${init?.method ?? 'GET'} ${path}`];
   if (params.has('buildEmpty') && path === 'card/build') {
     return new Response(JSON.stringify({ errorCode: 'common_ground_no_sources', message: 'Choose at least one source.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
@@ -123,6 +132,9 @@ const STACKS: Record<string, CgScreen[]> = {
   card: [{ name: 'card' }],
   look: [{ name: 'card' }],
   results: [{ name: 'results', code: '4821' }],
+  gallery: [{ name: 'results', code: '4821' }],
+  'gallery-share': [{ name: 'results', code: '4821' }],
+  'gallery-item': [{ name: 'results', code: '4821' }, { name: 'galleryItem', code: '4821', itemId: 'gi_1' }],
   match: [{ name: 'match', accountId: 'acct_hana' }],
   meet: [{ name: 'match', accountId: 'acct_hana' }],
 };
@@ -204,6 +216,7 @@ void saveSession({ token: 'preview', accountId: fx.self.accountId, expiresAt: '2
   // The build screen previews the Health profile, which has no card yet.
   if (screen === 'build' || screen === 'unbuilt') localStorage.setItem(profileStorageKey(fx.self.accountId), 'cgp_health');
   const store = new CommonGroundStore(createCommonGroundClient(), { profiles: true, memory: localProfileMemory(fx.self.accountId) });
+  if (gallery) setRoomTab(store, '4821', 'gallery');
   for (const next of STACKS[screen] ?? []) store.open(next);
   createRoot(document.getElementById('root')!).render(<StrictMode><Preview store={store} /></StrictMode>);
   // Opens a popover once its button has rendered.
@@ -214,4 +227,5 @@ void saveSession({ token: 'preview', accountId: fx.self.accountId, expiresAt: '2
   };
   if (screen === 'look') clickWhenReady('.cg-cardpage-glyph.is-look');
   if (screen === 'pair' || screen === 'pair-off') clickWhenReady('[data-cg-pair]');
+  if (screen === 'gallery-share') clickWhenReady('[data-cg-gallery-share]');
 });

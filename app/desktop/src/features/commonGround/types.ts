@@ -319,3 +319,54 @@ export type CgCreatedGroup = { group: CgGroup; added: CgPerson[]; invited: CgPer
 
 /** Grounding › Pair › Nearby screens (`commonGroundNearbyVersion`): the Nearby column and a nearby person. */
 export type CgNearbyScreen = { name: 'nearby' } | { name: 'nearbyPerson'; accountId: string };
+
+/**
+ * One artifact a room member shared to the room's Gallery. `preview` is the first part of a text file
+ * (null for other files); `person` is the sharer with their `relationship`, as room results send it.
+ */
+export type CgGalleryItem = {
+  itemId: string;
+  attachmentId: string;
+  title: string;
+  fileName: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  topic: string | null;
+  preview: string | null;
+  person: CgPerson;
+  mine: boolean;
+  commentCount: number;
+  createdAt: string;
+};
+
+export type CgGalleryComment = { commentId: string; person: CgPerson; body: string; mine: boolean; createdAt: string };
+
+/** One of my own artifacts I may share; `shared` means it is already in this room's Gallery. */
+export type CgGalleryCandidate = {
+  attachmentId: string;
+  title: string;
+  fileName: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  updatedAt: string;
+  shared: boolean;
+};
+
+/** `GET rooms/:code/gallery`: newest first; `canShare` is false in a closed room. */
+export type CgGalleryList = { items: CgGalleryItem[]; canShare: boolean };
+/** `GET rooms/:code/gallery/:itemId`: comments oldest first. */
+export type CgGalleryItemView = { item: CgGalleryItem; comments: CgGalleryComment[] };
+
+/** The room page's segments; Gallery shows only once the room's gallery has loaded. */
+export type CgRoomTab = 'people' | 'topics' | 'gallery';
+
+/** Room galleries by room code, my share candidates by room code, open items by `code:itemId`, and each room's tab. */
+export type CgGalleryState = {
+  lists: Record<string, CgGalleryList>;
+  candidates: Record<string, CgGalleryCandidate[]>;
+  items: Record<string, CgGalleryItemView>;
+  tabs: Record<string, CgRoomTab>;
+};
+
+/** A Gallery item opened from a room, in place of the room column. */
+export type CgGalleryScreen = { name: 'galleryItem'; code: string; itemId: string };

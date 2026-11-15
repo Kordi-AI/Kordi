@@ -168,7 +168,6 @@ function AgentChatNavigationPreview() {
     setChatComposerTextForSession: (sessionId: string, value: string) => setDrafts((current) => ({ ...current, [sessionId]: value })),
     composerControlsRef: { current: null },
     activeRuntimeContextStatus: null,
-    activeRuntimeCacheText: null,
     composerSelection: { mode: 'Send as Me', model: 'GPT-5.6', thinking: 'default' },
     openComposerSelector: null,
     toggleComposerSelector: () => undefined,

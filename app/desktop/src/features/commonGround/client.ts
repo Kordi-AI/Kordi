@@ -6,6 +6,7 @@ import { cloudApiBaseUrl } from '@/features/cloud/cloudApiEnvironment';
 import { cloudFetchImpl } from '@/features/cloud/cloudTransport';
 import { loadSession } from '@/features/cloud/session';
 import { isCardDesign, isCardIcon } from './cardDesign';
+import { galleryRoutes } from './clientGallery';
 import { nearbyRoutes } from './clientNearby';
 import type {
   CgBuildRequest, CgCreatedGroup, CgDocument, CgCreateRoomInput, CgGroup, CgGroupInviteResult, CgInviteGroup, CgJoinInput, CgJoinRequestStatus, CgMatch, CgMeetInput, CgOwnerView, CgPairCode, CgPerson,
@@ -174,13 +175,12 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const buildTimeoutMs = options.buildTimeoutMs ?? BUILD_REQUEST_TIMEOUT_MS;
 
-  async function send<T>(method: string, path: string, body?: unknown, timeout = timeoutMs): Promise<CgResponse<T>> {
+  async function request(method: string, path: string, body: unknown, timeout: number): Promise<Response> {
     const bearer = await token();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
-    let response: Response;
     try {
-      response = await fetchImpl()(`${baseUrl()}/v1/cloud/${path}`, {
+      return await fetchImpl()(`${baseUrl()}/v1/cloud/${path}`, {
         method,
         signal: controller.signal,
         headers: body === undefined
@@ -193,16 +193,28 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
     } finally {
       clearTimeout(timer);
     }
-    const text = response.status === 204 ? '' : await response.text();
-    let parsed: unknown = null;
-    try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
-    if (!response.ok) {
-      const record = (parsed && typeof parsed === 'object' ? parsed : {}) as { errorCode?: unknown; message?: unknown };
-      const code = typeof record.errorCode === 'string' && record.errorCode ? record.errorCode : null;
-      const message = typeof record.message === 'string' && record.message ? record.message : 'Something went wrong. Try again.';
-      throw new CommonGroundError(message, response.status, code, parseRetryAfter(response.headers.get('retry-after')), parsed);
-    }
+  }
+  const parse = (text: string): unknown => { try { return text ? JSON.parse(text) : null; } catch { return null; } };
+  /** The server's `errorCode`, message, status and body for a refused request. */
+  function failure(response: Response, parsed: unknown): CommonGroundError {
+    const record = (parsed && typeof parsed === 'object' ? parsed : {}) as { errorCode?: unknown; message?: unknown };
+    const code = typeof record.errorCode === 'string' && record.errorCode ? record.errorCode : null;
+    const message = typeof record.message === 'string' && record.message ? record.message : 'Something went wrong. Try again.';
+    return new CommonGroundError(message, response.status, code, parseRetryAfter(response.headers.get('retry-after')), parsed);
+  }
+  async function send<T>(method: string, path: string, body?: unknown, timeout = timeoutMs): Promise<CgResponse<T>> {
+    const response = await request(method, path, body, timeout);
+    const parsed = parse(response.status === 204 ? '' : await response.text());
+    if (!response.ok) throw failure(response, parsed);
     return { status: response.status, body: parsed as T };
+  }
+  /** A file's raw bytes, keeping the server's content type (the native HTTP plugin can drop it from the blob). */
+  async function bytes(path: string): Promise<Blob> {
+    const response = await request('GET', path, undefined, buildTimeoutMs);
+    if (!response.ok) throw failure(response, parse(await response.text()));
+    const blob = await response.blob();
+    const contentType = response.headers.get('content-type');
+    return !blob.type && contentType ? blob.slice(0, blob.size, contentType) : blob;
   }
   const data = async <T>(method: string, path: string, body?: unknown, timeout?: number) => (await send<T>(method, path, body, timeout)).body;
   const cg = (path: string) => `common-ground/${path}`;
@@ -334,6 +346,7 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
       return { invited: body?.invited ?? [], added: body?.added ?? [], skipped: body?.skipped ?? [] };
     },
     ...nearbyRoutes(data),
+    ...galleryRoutes(data, bytes),
   };
 }
 

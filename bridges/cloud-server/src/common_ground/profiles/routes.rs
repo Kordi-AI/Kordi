@@ -387,6 +387,8 @@ pub(in crate::common_ground) async fn delete(
         .bind(account)
         .fetch_all(&mut *tx)
         .await?;
+        let room_ids: Vec<Uuid> = rooms.iter().map(|(room_id,)| *room_id).collect();
+        crate::common_ground::gallery::forget(&mut tx, &room_ids, account).await?;
         // Memberships, pairings, codes, matches and match runs go with it.
         let deleted = query(
             "DELETE FROM cloud_common_ground_profiles WHERE profile_id = $1 AND account_id = $2",
