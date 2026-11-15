@@ -17,6 +17,22 @@ export type SessionTraceMessage = Message & {
   traceModel?: { provider: string; model: string } | null;
 };
 
+/** A background session an agent started from the exported session, or from another background session. */
+export type SessionTraceSubsession = {
+  id: string;
+  parentSessionId: string;
+  /** The parent message that started it, when that message is in the file. */
+  parentMessageId?: string | null;
+  /** The parent tool call that started it. */
+  parentToolId?: string | null;
+  title: string;
+  status?: string | null;
+  source: 'local' | 'cloud';
+  /** False when this viewer's app could not read it; it then carries no messages. */
+  available: boolean;
+  messages: readonly SessionTraceMessage[];
+};
+
 export type SessionTraceInput = {
   exportedAt: Date;
   appVersion?: string | null;
@@ -33,6 +49,8 @@ export type SessionTraceInput = {
   /** Identity used for the viewer's own messages when a row names none. */
   viewerIdentityId?: string | null;
   messages: readonly SessionTraceMessage[];
+  /** Background sessions in file order: depth first, each parent before its children. */
+  subsessions?: readonly SessionTraceSubsession[];
   complete: boolean;
 };
 
@@ -136,13 +154,79 @@ function traceAgentTurn(turn: DesktopChatTurnSnapshot, model: { provider: string
   };
 }
 
+/** The id a message line carries; background session lines name their parent message by it. */
+export function traceMessageId(message: Message, index: number) {
+  return nonEmpty(message.id) ?? nonEmpty(message.entryId) ?? `message-${index + 1}`;
+}
+
+function firstTimestampMs(messages: readonly Message[]) {
+  return messages.map((message) => finiteMs(message.timestampMs)).find((value) => value !== null) ?? null;
+}
+
+/** One session's message lines, `seq` from 1, with a monotonic fallback timestamp. */
+function messageLines(
+  sessionId: string,
+  messages: readonly SessionTraceMessage[],
+  startMs: number,
+  input: Pick<SessionTraceInput, 'exportedBy' | 'viewerIdentityId'>,
+) {
+  let previousMs = startMs;
+  return messages.map((message, index) => {
+    const timestampMs = finiteMs(message.timestampMs)
+      ?? finiteMs(message.turn?.startedAtMs)
+      ?? finiteMs(message.turn?.completedAtMs)
+      ?? previousMs;
+    previousMs = timestampMs;
+    const sender = traceMessageSender(message, input);
+    const kind = nonEmpty(message.messageKind) ?? (message.voiceMessage ? 'voice' : null);
+    const replyTo = nonEmpty(message.replyToMessageId);
+    const attachments = traceAttachments(message);
+    const turn = message.turn;
+    return {
+      type: 'message',
+      session_id: sessionId,
+      id: traceMessageId(message, index),
+      seq: index + 1,
+      timestamp: rfc3339(timestampMs),
+      sender,
+      role: traceRole(sender.kind),
+      ...(kind ? { kind } : {}),
+      text: text(message.text) || text(turn?.assistantText),
+      ...(replyTo ? { reply_to: replyTo } : {}),
+      ...(attachments ? { attachments } : {}),
+      ...(turn ? { agent_turn: traceAgentTurn(turn, message.traceModel ?? null) } : {}),
+    };
+  });
+}
+
+function subsessionLines(
+  subsession: SessionTraceSubsession,
+  fallbackStartMs: number,
+  input: Pick<SessionTraceInput, 'exportedBy' | 'viewerIdentityId'>,
+) {
+  const messages = subsession.available ? subsession.messages : [];
+  const parentMessageId = nonEmpty(subsession.parentMessageId);
+  const parentToolId = nonEmpty(subsession.parentToolId);
+  const status = nonEmpty(subsession.status);
+  return [{
+    type: 'subsession',
+    id: subsession.id,
+    parent_session_id: subsession.parentSessionId,
+    ...(parentMessageId ? { parent_message_id: parentMessageId } : {}),
+    ...(parentToolId ? { parent_tool_id: parentToolId } : {}),
+    title: subsession.title,
+    ...(status ? { status } : {}),
+    source: subsession.source,
+    available: subsession.available,
+    message_count: messages.length,
+  }, ...messageLines(subsession.id, messages, firstTimestampMs(messages) ?? fallbackStartMs, input)];
+}
+
 /** Builds the JSON Lines text of a session trace. Pure: performs no I/O. */
 export function serializeSessionTrace(input: SessionTraceInput): string {
   const exportedAtMs = input.exportedAt.getTime();
-  const firstTimestamp = input.messages
-    .map((message) => finiteMs(message.timestampMs))
-    .find((value) => value !== null) ?? null;
-  const createdAtMs = finiteMs(input.session.createdAtMs) ?? firstTimestamp;
+  const subsessions = input.subsessions ?? [];
+  const createdAtMs = finiteMs(input.session.createdAtMs) ?? firstTimestampMs(input.messages);
   const appVersion = nonEmpty(input.appVersion);
   const project = nonEmpty(input.session.project);
   const header = {
@@ -171,35 +255,16 @@ export function serializeSessionTrace(input: SessionTraceInput): string {
     }),
     exported_by: input.exportedBy,
     message_count: input.messages.length,
+    subsession_count: subsessions.length,
     complete: input.complete,
   };
-  let previousMs = createdAtMs ?? exportedAtMs;
-  const lines = input.messages.map((message, index) => {
-    const timestampMs = finiteMs(message.timestampMs)
-      ?? finiteMs(message.turn?.startedAtMs)
-      ?? finiteMs(message.turn?.completedAtMs)
-      ?? previousMs;
-    previousMs = timestampMs;
-    const sender = traceMessageSender(message, input);
-    const kind = nonEmpty(message.messageKind) ?? (message.voiceMessage ? 'voice' : null);
-    const replyTo = nonEmpty(message.replyToMessageId);
-    const attachments = traceAttachments(message);
-    const turn = message.turn;
-    return {
-      type: 'message',
-      id: nonEmpty(message.id) ?? nonEmpty(message.entryId) ?? `message-${index + 1}`,
-      seq: index + 1,
-      timestamp: rfc3339(timestampMs),
-      sender,
-      role: traceRole(sender.kind),
-      ...(kind ? { kind } : {}),
-      text: text(message.text) || text(turn?.assistantText),
-      ...(replyTo ? { reply_to: replyTo } : {}),
-      ...(attachments ? { attachments } : {}),
-      ...(turn ? { agent_turn: traceAgentTurn(turn, message.traceModel ?? null) } : {}),
-    };
-  });
-  return [header, ...lines].map((line) => JSON.stringify(line)).join('\n') + '\n';
+  const startMs = createdAtMs ?? exportedAtMs;
+  const lines = [
+    header,
+    ...messageLines(input.session.id, input.messages, startMs, input),
+    ...subsessions.flatMap((subsession) => subsessionLines(subsession, startMs, input)),
+  ];
+  return lines.map((line) => JSON.stringify(line)).join('\n') + '\n';
 }
 
 function pad(value: number) {

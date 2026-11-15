@@ -113,10 +113,11 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // Inviting Grounding people into groups (the person-page group picker, Add people's From Grounding
 // section and person invitations in Contacts › Requests, 9.7 kB) and sending a joiner's first group
 // message at once (under 1 kB) bring it to 5.994 MB.
-// Session trace export (the Export menu row, complete history collection for every chat kind and
-// the JSON Lines serializer) adds 11.7 kB, most of it inside the remaining allowance, so it moves
-// to 5.996 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 5_996_000;
+// Session trace export (the Export menu row, complete history collection for every chat kind, the
+// background sessions a chat started and the JSON Lines serializer, in a chunk loaded by the first
+// export) adds 16.6 kB, most of it inside the remaining allowance, and loading the companion overview
+// on demand adds 0.3 kB, so it moves to 6.001 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_001_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -170,9 +171,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The same stop reasons and session row refresh add up to 4 kB there, so it moves to 6.010 MB.
 // Inviting Grounding people into groups (9.7 kB) and sending a joiner's first group message at once
 // (under 1 kB) bring it to 6.021 MB there.
-// The same session trace export adds 11.8 kB there, most of it inside the remaining allowance, so
-// it moves to 6.022 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_022_000;
+// The same session trace export, with background sessions, adds 16.7 kB there, most of it inside the
+// remaining allowance, and the on-demand companion overview 0.3 kB, so it moves to 6.028 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_028_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

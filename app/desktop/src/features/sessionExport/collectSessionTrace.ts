@@ -2,6 +2,7 @@ import { presentLocalAgentMessages } from '@/features/canonical/readModel/localA
 import { dedupeRepeatedFailedAgentTurns } from '@/features/canonical/repeatedFailedAgentTurns';
 import { createCanonicalSessionReadModel } from '@/features/canonical/sessionReadModel';
 import { mapDesktopMessagesForTranscript } from '@/features/chat/useDesktopTranscriptAdapter';
+import { cloudAgentPublicBackgroundToolsFromTurn } from '@/features/cloud/cloudAgentBackgroundSessions';
 import type {
   CanonicalMessagePage,
   CanonicalSessionMessage,
@@ -11,7 +12,8 @@ import type {
   Message,
 } from '@/kordi-app/types';
 import { completeCloudTranscript, type CloudSessionTraceDeps } from './cloudSessionTrace';
-import { runtimeTurnModel, type SessionTraceMessage } from './serializeSessionTrace';
+import { collectSubsessionTraces, type SubsessionTraceDeps } from './collectSubsessionTraces';
+import { runtimeTurnModel, type SessionTraceMessage, type SessionTraceSubsession } from './serializeSessionTrace';
 
 export const CANONICAL_TRACE_PAGE_SIZE = 200;
 
@@ -33,12 +35,15 @@ export type CollectSessionTraceDeps = {
   };
   /** Present only for a conversation the server holds. */
   cloud?: CloudSessionTraceDeps | null;
+  /** Where the background sessions the session started are found and read. */
+  subsessions?: SubsessionTraceDeps | null;
   localAgentLabel?: string | null;
 };
 
 export type CollectedSessionTrace = {
   source: SessionTraceSource;
   messages: SessionTraceMessage[];
+  subsessions: SessionTraceSubsession[];
   complete: boolean;
 };
 
@@ -90,6 +95,19 @@ function canonicalTranscript(
     ?.messages(sessionId) ?? [];
 }
 
+/**
+ * The trace the chat view shows: only the viewer's own agent shows its
+ * reasoning and tool calls; any other agent keeps only its public background
+ * session links, as the transcript renders it.
+ */
+function visibleTrace(messages: Message[]): Message[] {
+  return messages.map((message) => (
+    message.turn && message.role !== 'owned-agent'
+      ? { ...message, turn: { ...message.turn, thinkingText: '', segments: undefined, tools: cloudAgentPublicBackgroundToolsFromTurn(message.turn) } }
+      : message
+  ));
+}
+
 async function runtimeTranscript(
   sessionId: string,
   runtime: NonNullable<CollectSessionTraceDeps['runtime']>,
@@ -108,24 +126,12 @@ async function runtimeTranscript(
     });
 }
 
-/**
- * Collects a session's complete history, independent of what the chat view
- * has loaded. A local runtime session reads the runtime transcript; any other
- * session reads all canonical pages, and a server conversation is completed
- * from every server page. Any read error rejects.
- */
-export async function collectSessionTrace(
+/** The main session's messages and where they came from. Any read error rejects. */
+async function collectMainMessages(
   sessionId: string,
   deps: CollectSessionTraceDeps,
-): Promise<CollectedSessionTrace> {
-  const present = (messages: Message[]) => presentLocalAgentMessages(
-    dedupeRepeatedFailedAgentTurns(messages),
-    deps.localAgentLabel,
-  );
-  if (deps.runtime) {
-    const messages = await runtimeTranscript(sessionId, deps.runtime);
-    return { source: 'runtime', messages: present(messages), complete: true };
-  }
+): Promise<{ source: SessionTraceSource; messages: Message[] }> {
+  if (deps.runtime) return { source: 'runtime', messages: await runtimeTranscript(sessionId, deps.runtime) };
   const state = deps.canonical.state;
   if (!state) throw new Error('Session history is unavailable.');
   const rows = await collectCanonicalRows(sessionId, deps.canonical.fetchPage);
@@ -133,9 +139,36 @@ export async function collectSessionTrace(
   const completed = deps.cloud
     ? await completeCloudTranscript(sessionId, rendered, deps.cloud, deps.localAgentLabel?.trim() || 'My agent')
     : null;
-  return {
-    source: completed ? 'cloud' : 'canonical',
-    messages: present(completed ?? rendered),
-    complete: true,
-  };
+  return { source: completed ? 'cloud' : 'canonical', messages: completed ?? rendered };
+}
+
+/**
+ * Collects a session's complete history, independent of what the chat view
+ * has loaded. A local runtime session reads the runtime transcript; any other
+ * session reads all canonical pages, and a server conversation is completed
+ * from every server page. Any read error of the session itself rejects. The
+ * background sessions it started follow; one the viewer cannot read is kept
+ * as unavailable and makes the trace incomplete.
+ */
+export async function collectSessionTrace(
+  sessionId: string,
+  deps: CollectSessionTraceDeps,
+): Promise<CollectedSessionTrace> {
+  const present = (messages: Message[]) => visibleTrace(presentLocalAgentMessages(
+    dedupeRepeatedFailedAgentTurns(messages),
+    deps.localAgentLabel,
+  ));
+  const main = await collectMainMessages(sessionId, deps);
+  const messages = present(main.messages);
+  const native = deps.subsessions?.native;
+  const background = deps.subsessions
+    ? await collectSubsessionTraces(sessionId, messages, deps.subsessions, {
+      local: async (id) => {
+        if (!native) throw new Error('Session history is unavailable.');
+        return present(await runtimeTranscript(id, { fetchDetail: native.fetchDetail }));
+      },
+      present,
+    })
+    : { subsessions: [], complete: true };
+  return { source: main.source, messages, subsessions: background.subsessions, complete: background.complete };
 }

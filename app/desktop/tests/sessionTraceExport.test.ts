@@ -82,7 +82,7 @@ test('serializeSessionTrace writes the header, messages in order, attachment met
   const text = serializeSessionTrace(traceInput(messages));
   const [header, user, agent] = lines(text);
 
-  assert.deepEqual(Object.keys(header), ['type', 'schema', 'version', 'exported_at', 'session', 'participants', 'exported_by', 'message_count', 'complete']);
+  assert.deepEqual(Object.keys(header), ['type', 'schema', 'version', 'exported_at', 'session', 'participants', 'exported_by', 'message_count', 'subsession_count', 'complete']);
   assert.equal(header.schema, 'kordi.session-trace');
   assert.equal(header.version, 1);
   assert.equal(header.exported_at, '2026-11-14T09:31:00.000Z');
@@ -92,15 +92,17 @@ test('serializeSessionTrace writes the header, messages in order, attachment met
     { id: 'agent:alex', name: 'Kordi', kind: 'agent', role: 'owned-agent', owner_id: 'human:acct_alex' },
   ]);
   assert.equal(header.message_count, 2);
+  assert.equal(header.subsession_count, 0);
   assert.equal(header.complete, true);
 
-  assert.deepEqual(Object.keys(user), ['type', 'id', 'seq', 'timestamp', 'sender', 'role', 'text', 'attachments']);
+  assert.deepEqual(Object.keys(user), ['type', 'session_id', 'id', 'seq', 'timestamp', 'sender', 'role', 'text', 'attachments']);
+  assert.equal(user.session_id, 'session:trace');
   assert.deepEqual(user.sender, { id: 'human:acct_alex', name: 'Alex', kind: 'human' });
   assert.equal(user.role, 'user');
   assert.equal(user.seq, 1);
   assert.deepEqual(user.attachments, [{ name: 'venue.png', mime: 'image/png', size: 2048 }]);
 
-  assert.deepEqual(Object.keys(agent), ['type', 'id', 'seq', 'timestamp', 'sender', 'role', 'text', 'reply_to', 'agent_turn']);
+  assert.deepEqual(Object.keys(agent), ['type', 'session_id', 'id', 'seq', 'timestamp', 'sender', 'role', 'text', 'reply_to', 'agent_turn']);
   assert.equal(agent.seq, 2);
   assert.equal(agent.role, 'assistant');
   assert.equal(agent.text, 'The Harbor Hotel is a short walk away.');
