@@ -190,6 +190,9 @@ function SidebarSlot({ args, chatActions }: SidebarSlotProps) {
         onRestoreChatSession: (sessionId) => {
           void args.handleRestoreChatSession(sessionId);
         },
+        onExportChatSession: (target) => {
+          void args.handleExportChatSession(target);
+        },
         onSetChatSessionPinned: (sessionId, pinned) => {
           void args.handleSetChatSessionPinned(sessionId, pinned);
         },

@@ -30,7 +30,7 @@ function compactLabel(value: string, fallback: string): string {
 
 const SENSITIVE_TOOL_FIELD = /(?:authorization|cookie|credential|password|private.?key|secret|token|api.?key)/i;
 
-function redactSensitiveToolText(value: string): string {
+export function redactSensitiveToolText(value: string): string {
   return value
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
     .replace(/\b(?:sk|ghp|github_pat|xox[baprs]|AIza)[-_A-Za-z0-9]{8,}/g, '[redacted]')

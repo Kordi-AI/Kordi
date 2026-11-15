@@ -15,6 +15,10 @@ const __dirname = path.dirname(__filename)
 const DOCUMENT_EDITOR_SOURCE = /[\\/]src[\\/]features[\\/]documents[\\/]editor[\\/]/;
 // The Artifacts tab's card grid and thumbnails, loaded when the card layout first shows.
 const ARTIFACT_CARDS_SOURCE = /[\\/]src[\\/]pages[\\/](?:ArtifactCard|ArtifactCardGrid|artifactThumbnail)\.tsx?$/;
+// The companion pane's Digest and Calendar overview, loaded when that view first opens.
+const COMPANION_OVERVIEW_SOURCE = /[\\/]src[\\/]pages[\\/]chatsPage\.companionOverview\.tsx$/;
+// Session trace export (collection, background sessions, the serializer), loaded by the first Export.
+const SESSION_EXPORT_SOURCE = /[\\/]src[\\/]features[\\/]sessionExport[\\/]/;
 const HELP_CENTER_SOURCE = /[\\/]src[\\/]features[\\/]onboarding[\\/](?:HelpMenu|HelpTour|helpTourSteps|helpTourGeometry|HelpPermissions|HelpReleaseNotes|helpContent|permissionAccess)\.[tj]sx?$/;
 // w3c-keyname stays in vendor: the editor and the code viewer both use it, and neither should load the other.
 const DOCUMENT_EDITOR_PACKAGES = /[\\/]node_modules[\\/](?:@tiptap|prosemirror-[a-z-]+|marked|linkifyjs|orderedmap|rope-sequence|yjs|y-websocket|y-protocols|lib0)[\\/]/;
@@ -75,13 +79,15 @@ export function desktopViteConfig({ command, mode }, environment) {
               { name: 'contact-common-ground', minSize: 0, test: /[\\/]src[\\/]kordi-app[\\/]contacts[\\/](?:ContactCommonGround\.tsx|contactMatch\.ts)$/ },
               // Split before the 700 kB chunk budget, as agent-factory is.
               { name: 'cloud-features', test: /[\\/]src[\\/]features[\\/]cloud[\\/]/, maxSize: 650_000 },
-              { name: 'desktop-features', test: (id) => /[\\/]src[\\/]features[\\/]/.test(id) && !DOCUMENT_EDITOR_SOURCE.test(id) && !HELP_CENTER_SOURCE.test(id) && !CODE_VIEWER_SOURCE.test(id), maxSize: 650_000 },
+              // Session export stays out, so its dynamic import keeps it in its own lazy chunk.
+              { name: 'desktop-features', test: (id) => /[\\/]src[\\/]features[\\/]/.test(id) && !DOCUMENT_EDITOR_SOURCE.test(id) && !HELP_CENTER_SOURCE.test(id) && !CODE_VIEWER_SOURCE.test(id) && !SESSION_EXPORT_SOURCE.test(id), maxSize: 650_000 },
               // After the app groups, so modules the app shares with the editor stay in app chunks.
               { name: 'document-editor', test: (id) => DOCUMENT_EDITOR_PACKAGES.test(id) || DOCUMENT_EDITOR_SOURCE.test(id) },
               { name: 'code-viewer', test: CODE_VIEWER_CORE },
               { name: 'code-grammars', test: (id) => CODE_VIEWER_GRAMMARS.test(id) || CODE_GRAMMAR_SOURCE.test(id) },
-              // The Artifacts card grid stays out, so its dynamic import keeps it in its own lazy chunk.
-              { name: 'workspace-ui', test: (id) => /[\\/]src[\\/](?:app|components|kordi-app|pages)[\\/]/.test(id) && !ARTIFACT_CARDS_SOURCE.test(id) },
+              // The Artifacts card grid and the companion overview stay out, so their dynamic imports keep them in
+              // their own lazy chunks.
+              { name: 'workspace-ui', test: (id) => /[\\/]src[\\/](?:app|components|kordi-app|pages)[\\/]/.test(id) && !ARTIFACT_CARDS_SOURCE.test(id) && !COMPANION_OVERVIEW_SOURCE.test(id) },
               // Assign shared dependencies first so Help does not pull startup code into its lazy chunk.
               { name: 'help-center', minSize: 0, test: HELP_CENTER_SOURCE },
             ],

@@ -1,6 +1,6 @@
 import { ChatProjectPicker } from '@/features/projects/ChatProjectPicker';
 import { useState } from 'react';
-import { Archive, ArchiveRestore, Bell, BellOff, CheckCircle2, CircleOff, LoaderCircle, Mail, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Bell, BellOff, CheckCircle2, CircleOff, Download, LoaderCircle, Mail, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ErrorLine } from '@/components/ui/ErrorLine';
@@ -61,6 +61,7 @@ type SessionContextMenuProps = {
   onSetPinned: (sessionId: string, pinned: boolean) => void;
   onSetMuted: (sessionId: string, muted: boolean) => void;
   onSetUnread: (sessionId: string, unread: boolean) => void;
+  onExport: (target: SessionActionTarget) => void;
   onDelete: (target: SessionActionTarget) => void;
   onDissolveChannel?: (target: SessionActionTarget & { groupSpaceId: string }) => void;
 };
@@ -74,6 +75,7 @@ export function SessionContextMenu({
   onSetPinned,
   onSetMuted,
   onSetUnread,
+  onExport,
   onDelete,
   onDissolveChannel,
 }: SessionContextMenuProps) {
@@ -158,6 +160,15 @@ export function SessionContextMenu({
             ? <ArchiveRestore aria-hidden="true" />
             : <Archive aria-hidden="true" />}
           {target.archived ? 'Restore' : 'Archive'}
+        </button>
+        <button
+          type="button"
+          data-session-context-action="export"
+          className="app-dense-menu-row"
+          onClick={() => run(() => onExport({ sessionId: target.sessionId, sessionName: target.sessionName }))}
+        >
+          <Download aria-hidden="true" />
+          Export
         </button>
         <div className="app-dense-menu-divider" />
         <button

@@ -59,7 +59,7 @@ export async function invokeBrowserDesktop<T>(command: string, args: Record<stri
     result = await runBrowserChatSyncCommand(session.accountId, session.organizationId, command, args);
   } else if (command.startsWith('desktop_voice_record_') || command === 'desktop_voice_trim') {
     result = await runBrowserVoiceCommand(command, args, assertCurrent);
-  } else if (command === 'desktop_save_attachment_as' || /^desktop_chat_(?:store_attachment|read_attachment|download_attachment|discard_attachment|cache_cloud_attachment|cached_cloud_attachment_path|download_cloud_attachment|attachment_stream_)/.test(command)) {
+  } else if (command === 'desktop_save_attachment_as' || command === 'desktop_save_text_file_as' || /^desktop_chat_(?:store_attachment|read_attachment|download_attachment|discard_attachment|cache_cloud_attachment|cached_cloud_attachment_path|download_cloud_attachment|attachment_stream_)/.test(command)) {
     result = await runBrowserAttachmentCommand(command, args, assertCurrent);
   } else {
     throw new Error('This feature requires the Kordi desktop app. Your cloud chats are available in the browser.');

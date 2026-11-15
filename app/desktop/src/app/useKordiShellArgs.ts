@@ -74,6 +74,7 @@ export function useKordiShellArgs(groups: KordiShellCompositionArgs): KordiShell
         handleSetChatGroupMuted: args.handleSetChatGroupMuted,
         handleSetChatGroupArchived: args.handleSetChatGroupArchived,
         handleDeleteChatSession: args.handleDeleteChatSession,
+        handleExportChatSession: args.handleExportChatSession,
         handleDissolveChatGroup: args.handleDissolveChatGroup,
         handleDissolveChatChannel: args.handleDissolveChatChannel,
         handleMoveChatSessionToProject: args.handleMoveChatSessionToProject,

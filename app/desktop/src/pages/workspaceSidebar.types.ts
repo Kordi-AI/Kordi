@@ -26,6 +26,7 @@ import type {
   CloudAccountSettingsTabId,
 } from '@/pages/CloudAccountSettingsDialog';
 import type { AddContactLookupResult } from '@/pages/ChatCreateDialog';
+import type { SessionActionTarget } from '@/pages/SessionActionOverlays';
 
 export type WorkspaceSidebarConversation = {
   id: string;
@@ -126,6 +127,7 @@ export type WorkspaceSidebarChats = {
   onDissolveChatChannel?: (groupSpaceId: string, sessionId: string) => Promise<void>;
   onArchiveChatSession: (sessionId: string) => void | Promise<void>;
   onRestoreChatSession: (sessionId: string) => void | Promise<void>;
+  onExportChatSession: (target: SessionActionTarget) => void | Promise<void>;
   onSetChatSessionPinned: (sessionId: string, pinned: boolean) => void | Promise<void>;
   onSetChatSessionMuted: (sessionId: string, muted: boolean) => void | Promise<void>;
   onSetChatSessionUnread: (sessionId: string, unread: boolean) => void | Promise<void>;
