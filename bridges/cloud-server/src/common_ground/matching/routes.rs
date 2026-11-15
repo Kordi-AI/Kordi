@@ -12,6 +12,7 @@ use axum::{
 use serde_json::{json, Value};
 use sqlx_core::{query::query, query_as::query_as};
 
+use super::queue;
 use super::store::{self, Pending, Queued, MATCH_BATCH, MAX_THEME_MEMBERS, THEME_REFRESH};
 use super::{estimate, shared_cards, suggestion, visible_themes, MatchResult, Rarity, SharedCard};
 use crate::auth::rate_limit::CloudRateLimiter;
@@ -138,12 +139,18 @@ pub(in crate::common_ground) async fn results(
             .then(a.name.cmp(&b.name))
             .then(a.profile_id.cmp(&b.profile_id))
     });
-    let stale: Vec<SharedCard> = by_estimate
-        .into_iter()
-        .take(MATCH_BATCH)
-        .filter(|o| !fresh.contains_key(&o.profile_id))
-        .cloned()
-        .collect();
+    // The best few by estimate are matched first; once they all have a
+    // model result, the rest follow in the background, best first.
+    let unmatched = |cards: &[&SharedCard]| -> Vec<SharedCard> {
+        cards
+            .iter()
+            .filter(|o| !fresh.contains_key(&o.profile_id))
+            .map(|o| (*o).clone())
+            .collect()
+    };
+    let best = by_estimate.len().min(MATCH_BATCH);
+    let stale = unmatched(&by_estimate[..best]);
+    let rest = unmatched(&by_estimate[best..]);
     // Room themes leave out the viewer if they declined AI and anyone else
     // who has not allowed it (`crate::ai_consent`).
     let ids: Vec<String> = others.iter().map(|c| c.account_id.clone()).collect();
@@ -236,6 +243,23 @@ pub(in crate::common_ground) async fn results(
             &viewer,
             &stale,
             Some(room_id),
+            organization_id,
+        )
+        .await;
+        match queued {
+            Ok(Queued::Pending(state)) => pending = Some(state),
+            Ok(Queued::Skipped) => {}
+            Ok(Queued::Limited(retry_after)) => return limited(retry_after),
+            Err(error) => return db_error(error),
+        }
+    } else if open && !rest.is_empty() {
+        let queued = queue::queue_room_tail(
+            pool,
+            system_agent.config(),
+            &rate_limiter,
+            &viewer,
+            &rest,
+            room_id,
             organization_id,
         )
         .await;
@@ -387,7 +411,7 @@ pub(in crate::common_ground) async fn match_detail(
             StatusCode::NOT_FOUND,
         );
     }
-    match store::queue_opened_match(
+    match queue::queue_opened_match(
         pool,
         system_agent.config(),
         &rate_limiter,

@@ -11,13 +11,15 @@ use sqlx_postgres::{PgPool, Postgres};
 use uuid::Uuid;
 
 use super::prompt::{self, MATCH_SYSTEM, ROOM_SYSTEM};
+use super::queue::Ask;
 use super::{MatchResult, SharedCard};
 use crate::auth::rate_limit::{CloudRateLimiter, RateLimitDecision};
 use crate::common_ground::runs::{self, NewRun, MATCH_PREFIX, ROOM_PREFIX};
 use crate::common_ground::{rooms, MATCH_LIMIT};
 
 /// People matched by one run. In a room these are the viewer's best
-/// estimated matches (`estimate`); everyone else is matched when opened.
+/// estimated matches (`estimate`); the rest follow in larger background
+/// runs ([`super::queue::TAIL_BATCH`]).
 pub(super) const MATCH_BATCH: usize = 5;
 /// Members whose topics a room-theme run reads, in join order. The prompt
 /// is one line per person.
@@ -230,38 +232,14 @@ pub(in crate::common_ground) async fn queue_matches(
         stale,
         room_id,
         organization_id,
-        false,
-    );
-    Ok(queued.await?.0)
-}
-
-/// [`queue_matches`] for the one person the viewer opened. The viewer waits
-/// on this run, so the runner leases it ahead of bulk runs queued shortly
-/// before it, such as a large room's (`runs::insert_opened`).
-pub(in crate::common_ground) async fn queue_opened_match(
-    pool: &PgPool,
-    service: &crate::system_agent::SystemAgentConfig,
-    rate_limiter: &CloudRateLimiter,
-    viewer: &SharedCard,
-    other: &SharedCard,
-    organization_id: Option<&str>,
-) -> sqlx_core::Result<Queued> {
-    let queued = queue_new_matches(
-        pool,
-        service,
-        rate_limiter,
-        viewer,
-        std::slice::from_ref(other),
-        None,
-        organization_id,
-        true,
+        Ask::Best,
     );
     Ok(queued.await?.0)
 }
 
 /// [`queue_matches`], and whether this call queued the run: false when a
-/// run already at work, or other people's open runs, stand for it. An
-/// `opened` run is one the viewer waits on ([`queue_opened_match`]).
+/// run already at work, or other people's open runs, stand for it. `ask`
+/// sets how many people the run reads and how it is leased.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn queue_new_matches(
     pool: &PgPool,
@@ -271,7 +249,7 @@ pub(super) async fn queue_new_matches(
     stale: &[SharedCard],
     room_id: Option<Uuid>,
     organization_id: Option<&str>,
-    opened: bool,
+    ask: Ask,
 ) -> sqlx_core::Result<(Queued, bool)> {
     // The viewer asked, so only declining stops them; another person's
     // card reaches the model only when they allowed AI (`crate::ai_consent`).
@@ -332,7 +310,7 @@ pub(super) async fn queue_new_matches(
     if let Some(room_id) = room_id {
         rooms::announce_matching(&mut tx, room_id).await?;
     }
-    let batch = &stale[..stale.len().min(MATCH_BATCH)];
+    let batch = &stale[..stale.len().min(ask.batch())];
     let run_id = runs::new_run_id(MATCH_PREFIX);
     let cards: Vec<&SharedCard> = std::iter::once(viewer).chain(batch).collect();
     query(
@@ -355,7 +333,7 @@ pub(super) async fn queue_new_matches(
         prompt: prompt::match_prompt(viewer, batch),
         system_prompt: MATCH_SYSTEM,
     };
-    let inserted = if opened {
+    let inserted = if ask == Ask::Opened {
         runs::insert_opened(&mut tx, service, new_run).await?
     } else {
         runs::insert(&mut tx, service, new_run).await?

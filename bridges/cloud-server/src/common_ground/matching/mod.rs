@@ -9,6 +9,7 @@
 mod estimate;
 mod finish;
 pub(super) mod prompt;
+mod queue;
 mod recent;
 mod rematch;
 mod routes;

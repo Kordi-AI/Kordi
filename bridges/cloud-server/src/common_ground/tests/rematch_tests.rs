@@ -169,13 +169,14 @@ async fn more_than_five_people_get_one_run_with_the_opened_matches_first() {
     let limiter = limiter();
     tick(&pool, &limiter, &all).await;
     // The room matches Ada's five best estimates (all tie, so by name: Ben
-    // to Fay); opening Gus, Hal and Ivy matches each of them too.
+    // to Fay), then the other five in the background; Gus, Hal and Ivy are
+    // opened after.
     match_room(&app, &pool, &code, &ada, &ada_token).await;
-    assert_eq!(match_runs(&pool, &ada).await, 1);
+    assert_eq!(match_runs(&pool, &ada).await, 2);
     for index in [6, 7, 8] {
         open_match(&app, &pool, (&ada, &ada_token), &people[index].0).await;
     }
-    assert_eq!(match_runs(&pool, &ada).await, 4);
+    assert_eq!(match_runs(&pool, &ada).await, 2);
     // Dee and Fay, from the room run, were opened earlier; Fay more recently.
     for (index, at) in [(3, "2026-11-01T09:00:00Z"), (5, "2026-11-02T09:00:00Z")] {
         query(
@@ -191,7 +192,7 @@ async fn more_than_five_people_get_one_run_with_the_opened_matches_first() {
     }
     build_card_with(&app, &pool, &ada, &ada_token, &changed_card()).await;
     tick(&pool, &limiter, &all).await;
-    assert_eq!(match_runs(&pool, &ada).await, 5);
+    assert_eq!(match_runs(&pool, &ada).await, 3);
     assert_eq!(mark(&pool, &profiles[0]).await, None);
     let cards = open_cards(&pool, &ada).await;
     assert_eq!(cards.len(), 6, "the viewer and five people");
@@ -203,7 +204,7 @@ async fn more_than_five_people_get_one_run_with_the_opened_matches_first() {
     assert_eq!(newest, opened_now, "the most recently opened first");
     assert_eq!(cards[4..], [people[5].0.clone(), people[3].0.clone()]);
     tick(&pool, &limiter, &all).await;
-    assert_eq!(match_runs(&pool, &ada).await, 5, "the other three wait");
+    assert_eq!(match_runs(&pool, &ada).await, 3, "the other five wait");
 }
 
 #[tokio::test]

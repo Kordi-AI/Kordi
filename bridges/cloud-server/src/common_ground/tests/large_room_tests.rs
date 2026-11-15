@@ -1,5 +1,5 @@
-//! Large rooms: everyone shows at once by estimate, the model details only
-//! each viewer's best few, themes wait while people join, and polling a busy
+//! Large rooms: everyone shows at once by estimate, the model details each
+//! viewer's best few first and the rest in the background, themes wait while people join, and polling a busy
 //! room never starves the database pool.
 
 use serde_json::{json, Value};
@@ -41,6 +41,9 @@ async fn people_with(
     }
     (app, people)
 }
+
+/// A match reply that finds nothing in common with anyone it read.
+const NOTHING_IN_COMMON: &str = r#"{"people":[{"person":0,"shared":[],"next_step":""}]}"#;
 
 fn ids(body: &Value) -> Vec<String> {
     body["people"]
@@ -135,23 +138,26 @@ async fn everyone_shows_at_once_and_the_model_details_the_best_few() {
         .unwrap();
     answer_themes(&pool, &[]).await;
 
+    // The best five have model results, so the rest of the room follows in
+    // one background run, best estimate first.
     let (status, body) = send(&app, "POST", &results, ada_token, None).await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["status"], "ready", "{body}");
+    assert_eq!(body["status"], "matching", "{body}");
     assert_eq!(ids(&body).len(), 7);
     assert_eq!(estimated(&body), 2, "the model replaced the best five");
     assert_eq!(body["people"][0]["person"]["accountId"], json!(people[1].0));
     assert!(body["people"][0].get("estimated").is_none());
-    assert_eq!(
-        open_runs(&pool, ada).await,
-        0,
-        "nobody else is matched until opened"
-    );
+    let rest: Vec<String> = body["people"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p["estimated"] == json!(true))
+        .map(|p| p["person"]["accountId"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(open_runs(&pool, ada).await, 1, "one background run");
 
-    // Opening someone outside the best five queues one run for that pair
+    // Opening someone it reads waits on that run instead of queueing another,
     // and shows the estimated topics at once.
-    let rest: Vec<&String> = shown.iter().filter(|id| !cards.contains(id)).collect();
-    assert_eq!(rest.len(), 2);
     let (status, body) = send(
         &app,
         "GET",
@@ -167,8 +173,76 @@ async fn everyone_shows_at_once_and_the_model_details_the_best_few() {
         body["shared"].is_array() && body["nextStep"] == "",
         "{body}"
     );
-    let (_, cards) = claim_open(&pool, "match", Some(ada)).await;
-    assert_eq!(cards, vec![ada.clone(), rest[0].clone()]);
+    assert_eq!(open_runs(&pool, ada).await, 1);
+    let (run_id, cards) = claim_open(&pool, "match", Some(ada)).await;
+    assert_eq!(cards[0], *ada);
+    assert_eq!(cards[1..], rest[..], "in estimate order");
+    complete(&pool, &run_id, RUNNER, NOTHING_IN_COMMON)
+        .await
+        .unwrap();
+
+    // Every row now has a model result, and nothing more is queued.
+    let (status, body) = send(&app, "POST", &results, ada_token, None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["status"], "ready", "{body}");
+    assert_eq!(ids(&body).len(), 7);
+    assert_eq!(estimated(&body), 0);
+    assert_eq!(open_runs(&pool, ada).await, 0);
+}
+
+#[tokio::test]
+async fn a_large_room_is_matched_in_batches_of_ten_after_the_best_five() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    let topics: Vec<(String, String)> = (0..18)
+        .map(|i| (format!("P{i:02}"), format!("Topic {i} area")))
+        .collect();
+    let cards: Vec<(&str, &str)> = topics
+        .iter()
+        .map(|(n, t)| (n.as_str(), t.as_str()))
+        .collect();
+    let (app, people) = people_with(&pool, &cards).await;
+    let tokens: Vec<&str> = people.iter().map(|(_, t)| t.as_str()).collect();
+    let code = join_fresh_room(&app, &pool, &tokens).await;
+    let results = format!("/v1/cloud/common-ground/rooms/{code}/results");
+    let (viewer, token) = &people[0];
+
+    // 17 others: five, then ten, then the last two, one run at a time.
+    for (round, expected) in [5, 10, 2].into_iter().enumerate() {
+        let (status, body) = send(&app, "POST", &results, token, None).await;
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(body["status"], "matching", "{body}");
+        if round == 0 {
+            answer_themes(&pool, &[]).await;
+        }
+        assert_eq!(open_runs(&pool, viewer).await, 1);
+        let (run_id, cards) = claim_open(&pool, "match", Some(viewer)).await;
+        assert_eq!(cards.len(), 1 + expected);
+        complete(&pool, &run_id, RUNNER, NOTHING_IN_COMMON)
+            .await
+            .unwrap();
+    }
+    let (status, body) = send(&app, "POST", &results, token, None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["status"], "ready", "{body}");
+    assert_eq!(estimated(&body), 0);
+    assert_eq!(open_runs(&pool, viewer).await, 0);
+
+    // A closed room queues nothing, even for a card that changed since.
+    query("UPDATE cloud_common_ground_rooms SET closed_at = now() WHERE code = $1 AND closed_at IS NULL")
+        .bind(&code)
+        .execute(&pool)
+        .await
+        .unwrap();
+    query("UPDATE cloud_common_ground_cards SET revision = revision + 1 WHERE account_id = $1")
+        .bind(viewer)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, body) = send(&app, "POST", &results, token, None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(open_runs(&pool, viewer).await, 0);
 }
 
 #[tokio::test]
