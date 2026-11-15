@@ -18,9 +18,10 @@ enum CommonGroundSyncHint: Equatable, Sendable {
     case matches
     /// A group invitation to this account arrived or was answered elsewhere.
     case invitations
-    /// Someone shared to the room's gallery, removed an item, or added or
-    /// deleted a comment on `itemId`.
-    case gallery(code: String, itemId: String?)
+    /// Someone shared to the room's gallery or removed an item (`.list`), or
+    /// the named items changed in place: a comment was added or deleted, or
+    /// the title or preview was refreshed (`.item`).
+    case gallery(code: String, itemIds: [String], change: CommonGroundGalleryChange)
 
     static let eventTypes: Set<String> = [
         "common_ground.room.updated", "common_ground.matches.updated", "common_ground.invitations.updated",
@@ -43,7 +44,10 @@ enum CommonGroundSyncHint: Equatable, Sendable {
         case "common_ground.gallery.updated":
             // A hint without a room code names nothing to refresh.
             guard let code = event.payload.code?.nonEmpty else { return nil }
-            self = .gallery(code: code, itemId: event.payload.itemId?.nonEmpty)
+            // An older server sends one `itemId` and no `change`.
+            let itemIds = (event.payload.itemIds ?? event.payload.itemId.map { [$0] } ?? []).compactMap(\.nonEmpty)
+            let change = event.payload.change.flatMap(CommonGroundGalleryChange.init(rawValue:)) ?? .list
+            self = .gallery(code: code, itemIds: itemIds, change: change)
         default:
             return nil
         }
@@ -58,6 +62,14 @@ enum CommonGroundSyncHint: Equatable, Sendable {
             NotificationCenter.default.post(name: .kordiCommonGroundHint, object: hint)
         }
     }
+}
+
+/// What a gallery hint says changed. A missing or unknown `change` is `.list`.
+enum CommonGroundGalleryChange: String, Sendable {
+    /// Items were shared or removed: the room's list is refetched.
+    case list
+    /// The named items changed in place: only those are refetched.
+    case item
 }
 
 /// A screen on display that reloads when a hint concerns it.
@@ -132,10 +144,12 @@ final class CommonGroundHintWake {
 extension CommonGroundModel {
     /// A Grounding hint from the sync stream: wakes the screens on display
     /// that it concerns. Screens that are not on display do nothing. A
-    /// gallery hint refreshes a loaded gallery and the open item it names.
+    /// gallery hint refreshes what it names in a loaded gallery.
     func receive(_ hint: CommonGroundSyncHint) {
         hintsArrived = true
-        if case .gallery(let code, let itemId) = hint { scheduleGalleryRefresh(code: code, itemId: itemId) }
+        if case .gallery(let code, let itemIds, let change) = hint {
+            scheduleGalleryRefresh(code: code, itemIds: itemIds, change: change)
+        }
         for wake in hintWakes where wake.target.wakes(on: hint) { wake.signal() }
     }
 

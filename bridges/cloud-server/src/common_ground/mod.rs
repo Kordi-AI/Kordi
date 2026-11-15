@@ -51,6 +51,7 @@ use crate::{auth::routes::cloud_session_middleware, server::ServerState};
 
 pub(crate) use auto::{note_connector_event, note_memory_change};
 pub(crate) use contact_match::contact_match;
+pub(crate) use gallery::refresh_gallery_copies;
 pub(crate) use nearby::{
     forget_device as forget_nearby_device, forget_devices as forget_nearby_devices,
 };

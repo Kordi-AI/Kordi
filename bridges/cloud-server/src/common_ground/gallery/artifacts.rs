@@ -23,9 +23,10 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx_core::query_as::query_as;
-use sqlx_postgres::PgPool;
+use sqlx_postgres::{PgPool, Postgres};
 use uuid::Uuid;
 
+use super::copies::{candidate_title, HEAD_CHARS};
 use super::{member_room, Room};
 use crate::common_ground::db_error;
 use crate::{auth::routes::CloudSession, server::ServerState};
@@ -39,7 +40,8 @@ const UNTITLED: &str = "Untitled";
 /// Eligible attachments of `$1`, newest first, at most `$3`; only the ids
 /// in `$2` when it is not null. The name is the one an agent artifact, an
 /// agent document or the chat message gave the attachment, as in
-/// `common_ground::documents`.
+/// `common_ground::documents`; the head is the first `$4` characters of the
+/// stored document text.
 const ELIGIBLE_SQL: &str = "
 WITH owned AS MATERIALIZED (
     SELECT a.attachment_id, a.object_key, a.document_title, a.size_bytes, a.finalized_at,
@@ -75,7 +77,8 @@ kept AS (
 SELECT kept.attachment_id, kept.object_key, kept.document_title, kept.doc_title, named.name,
        kept.content_type,
        COALESCE(octet_length(contents.source)::bigint, kept.size_bytes),
-       COALESCE(contents.updated_at, kept.finalized_at)::timestamptz AS updated_at
+       COALESCE(contents.updated_at, kept.finalized_at)::timestamptz AS updated_at,
+       left(contents.source, $4)
 FROM kept
 LEFT JOIN cloud_document_contents contents ON contents.attachment_id = kept.attachment_id
 CROSS JOIN LATERAL (
@@ -104,14 +107,17 @@ LIMIT $3";
 
 /// One artifact the viewer may share.
 #[derive(Debug, Clone)]
-pub(super) struct Artifact {
+pub(in crate::common_ground) struct Artifact {
     pub attachment_id: String,
     pub object_key: String,
+    /// The title without reading the text (see [`title_for`]).
     pub title: String,
     pub file_name: String,
     pub content_type: Option<String>,
     pub size_bytes: Option<i64>,
     pub updated_at: DateTime<Utc>,
+    /// The first [`HEAD_CHARS`] characters of its stored document text.
+    pub head: Option<String>,
 }
 
 type ArtifactRow = (
@@ -123,21 +129,26 @@ type ArtifactRow = (
     Option<String>,
     Option<i64>,
     DateTime<Utc>,
+    Option<String>,
 );
 
 /// `account`'s eligible artifacts, newest first, at most `limit`; only
 /// `ids` when given.
-pub(super) async fn eligible(
-    pool: &PgPool,
+pub(super) async fn eligible<'e, E>(
+    executor: E,
     account: &str,
     ids: Option<&[String]>,
     limit: i64,
-) -> sqlx_core::Result<Vec<Artifact>> {
+) -> sqlx_core::Result<Vec<Artifact>>
+where
+    E: sqlx_core::executor::Executor<'e, Database = Postgres>,
+{
     let rows: Vec<ArtifactRow> = query_as(ELIGIBLE_SQL)
         .bind(account)
         .bind(ids)
         .bind(limit)
-        .fetch_all(pool)
+        .bind(HEAD_CHARS)
+        .fetch_all(executor)
         .await?;
     Ok(rows
         .into_iter()
@@ -151,6 +162,7 @@ pub(super) async fn eligible(
                 content_type,
                 size_bytes,
                 updated_at,
+                head,
             )| Artifact {
                 title: title_for(
                     stored_title.as_deref(),
@@ -163,6 +175,7 @@ pub(super) async fn eligible(
                 content_type,
                 size_bytes,
                 updated_at,
+                head,
             },
         )
         .collect())
@@ -226,7 +239,9 @@ pub(super) async fn already_shared(
 
 /// `GET /v1/cloud/common-ground/rooms/:code/gallery/candidates`: your own
 /// artifacts you may share, newest first, each with whether it is already
-/// in this room's gallery.
+/// in this room's gallery. The title comes from a document's heading only
+/// when its text is stored (see [`candidate_title`]); `POST gallery` reads
+/// the whole text.
 pub(in crate::common_ground) async fn candidates(
     State(state): State<Arc<ServerState>>,
     Extension(session): Extension<CloudSession>,
@@ -250,9 +265,10 @@ pub(in crate::common_ground) async fn candidates(
             let artifacts: Vec<_> = artifacts
                 .into_iter()
                 .map(|artifact| {
+                    let title = candidate_title(&artifact);
                     json!({
                         "attachmentId": artifact.attachment_id,
-                        "title": artifact.title,
+                        "title": title,
                         "fileName": artifact.file_name,
                         "contentType": artifact.content_type,
                         "sizeBytes": artifact.size_bytes,

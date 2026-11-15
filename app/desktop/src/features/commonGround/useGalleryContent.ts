@@ -48,24 +48,46 @@ export function useGalleryContent(client: ContentClient, code: string, itemId: s
 }
 
 const MAX_THUMBNAILS = 60;
-const thumbnails = new Map<string, Promise<string | null>>();
+type Thumbnail = { url: Promise<string | null>; users: number };
+/** Least recently used first; an entry a mounted card uses is never evicted or revoked. */
+const thumbnails = new Map<string, Thumbnail>();
 
-/** An image item's object URL for its card, read once per item and kept while the page is open. */
-function thumbnailUrl(client: ContentClient, code: string, itemId: string): Promise<string | null> {
+/** Evicts unused entries, oldest first, while more than `MAX_THUMBNAILS` are kept; may stay over while cards use them. */
+function evictThumbnails() {
+  for (const [key, entry] of thumbnails) {
+    if (thumbnails.size <= MAX_THUMBNAILS) return;
+    if (entry.users > 0) continue;
+    thumbnails.delete(key);
+    void entry.url.then((url) => { if (url) URL.revokeObjectURL(url); });
+  }
+}
+
+/** Retains an image item's thumbnail for a mounted card, read once per item and marked most recently used. */
+function retainThumbnail(client: ContentClient, code: string, itemId: string): Thumbnail {
   const key = `${code}:${itemId}`;
   const cached = thumbnails.get(key);
-  if (cached) return cached;
-  const next = client.galleryContent(code, itemId).then((blob) => URL.createObjectURL(blob)).catch(() => {
+  if (cached) {
     thumbnails.delete(key);
-    return null;
-  });
-  thumbnails.set(key, next);
-  if (thumbnails.size > MAX_THUMBNAILS) {
-    const [oldestKey, oldest] = thumbnails.entries().next().value as [string, Promise<string | null>];
-    thumbnails.delete(oldestKey);
-    void oldest.then((url) => { if (url) URL.revokeObjectURL(url); });
+    thumbnails.set(key, cached);
+    cached.users += 1;
+    return cached;
   }
-  return next;
+  const entry: Thumbnail = {
+    users: 1,
+    // A failed read leaves the cache so a later mount asks again.
+    url: client.galleryContent(code, itemId).then((blob) => URL.createObjectURL(blob)).catch(() => {
+      if (thumbnails.get(key) === entry) thumbnails.delete(key);
+      return null;
+    }),
+  };
+  thumbnails.set(key, entry);
+  evictThumbnails();
+  return entry;
+}
+
+function releaseThumbnail(entry: Thumbnail) {
+  entry.users = Math.max(0, entry.users - 1);
+  evictThumbnails();
 }
 
 /** The object URL of an image card once it is near the viewport; null until then or when it fails. */
@@ -75,8 +97,12 @@ export function useGalleryThumbnailUrl(client: ContentClient, code: string, item
   useEffect(() => {
     if (!active) return undefined;
     let cancelled = false;
-    void thumbnailUrl(client, code, itemId).then((url) => { if (!cancelled) setLoaded({ key, url }); });
-    return () => { cancelled = true; };
+    const entry = retainThumbnail(client, code, itemId);
+    void entry.url.then((url) => { if (!cancelled) setLoaded({ key, url }); });
+    return () => {
+      cancelled = true;
+      releaseThumbnail(entry);
+    };
   }, [active, client, code, itemId, key]);
   return loaded?.key === key ? loaded.url : null;
 }

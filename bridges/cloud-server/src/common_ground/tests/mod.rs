@@ -15,6 +15,8 @@ mod contact_permission_tests;
 pub(crate) mod db_fixture;
 mod flow_tests;
 mod gallery_comment_tests;
+mod gallery_copies_tests;
+mod gallery_hint_tests;
 mod gallery_support;
 mod gallery_tests;
 mod gallery_unit_tests;

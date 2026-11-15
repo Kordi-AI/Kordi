@@ -195,7 +195,7 @@ test('gallery hints reach the page once per batch and refetch the loaded Gallery
   ]);
   notifyCommonGroundGalleryEvents([{ eventType: 'common_ground.room.updated', payload: { code: CODE } }]);
   stop();
-  assert.deepEqual(heard, [[{ code: CODE, itemId: 'gi_runner' }]]);
+  assert.deepEqual(heard, [[{ code: CODE, itemId: 'gi_runner', itemIds: ['gi_runner'], change: 'list' }]]);
 
   const screen = { name: 'galleryItem' as const, code: CODE, itemId: 'gi_runner' };
   const { store, calls } = await galleryStore({
