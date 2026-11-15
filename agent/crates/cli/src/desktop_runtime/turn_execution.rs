@@ -230,8 +230,14 @@ impl DesktopRuntimeSession {
         refresh_provider_runtime_fields(&mut self.setup);
 
         let scoped = self.has_shared_observation_scope()?;
-        let turn_config =
-            build_turn_config(&mut self.setup, cancel, execution_policy, scoped, workspace);
+        let turn_config = build_turn_config(
+            &mut self.setup,
+            cancel,
+            execution_policy,
+            scoped,
+            workspace,
+            self.skip_workspace_instructions,
+        );
         if self.setup.ephemeral_auth.is_some() {
             // The spawned turn owns its private copy. Drop the session's copy
             // immediately so another turn cannot reuse a stale hosted token.
@@ -347,6 +353,7 @@ pub(super) fn build_turn_config(
     execution_policy: kordi_tools::ExecutionPolicy,
     shared_scope: bool,
     workspace: std::path::PathBuf,
+    skip_workspace_instructions: bool,
 ) -> Result<TurnConfig> {
     let sibling_conn = if let Some(conn) = setup.sibling_conn.clone() {
         conn
@@ -376,6 +383,7 @@ pub(super) fn build_turn_config(
             execution_policy,
             setup.tool_ctx.session_observation.is_some(),
             setup.proactive_run,
+            skip_workspace_instructions,
         ),
         model: setup.model.clone(),
         provider: setup.provider.clone(),
