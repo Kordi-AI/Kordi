@@ -84,6 +84,24 @@ async fn share_list_read_and_remove() {
 }
 
 #[tokio::test]
+async fn content_is_never_rendered_as_a_page() {
+    let Some(s) = setup().await else {
+        return;
+    };
+    let plan = document(&s.pool, &s.alex.0, "Plan", "# Plan").await;
+    let item = s.share_one(&s.alex.1, &plan).await;
+    let (status, headers) = s.content_headers(&s.priya.1, &item).await;
+    assert_eq!(status, 200);
+    assert_eq!(headers["content-type"], "text/markdown; charset=utf-8");
+    assert_eq!(
+        headers["content-security-policy"],
+        "sandbox; default-src 'none'"
+    );
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+    assert_eq!(headers["content-disposition"], "attachment");
+}
+
+#[tokio::test]
 async fn only_your_own_artifacts_can_be_shared() {
     let Some(s) = setup().await else {
         return;

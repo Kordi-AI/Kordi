@@ -170,6 +170,14 @@ test('Enter sends a comment, Shift+Enter does not, and the file renders from the
   });
 });
 
+test('another person\'s HTML runs in a frame that may run scripts and nothing else', async () => {
+  const page = item('gi_page', { title: 'Demo page', fileName: 'demo.html', contentType: 'text/html', preview: null });
+  const { store } = await itemStore(page, { [`GET rooms/${CODE}/gallery/gi_page/content`]: { status: 200, text: '<p>Hi</p>', headers: { 'content-type': 'text/html' } } });
+  await mount(createElement(ItemPage, { store, host: galleryHost(), itemId: 'gi_page' }), async (root) => {
+    assert.equal(root.querySelector('iframe.cg-gallery-web')?.getAttribute('sandbox'), 'allow-scripts');
+  });
+});
+
 test('a file that cannot be read says so, and a removed item goes back to the room', async () => {
   const { store } = await itemStore(runner, { [`DELETE rooms/${CODE}/gallery/gi_minutes`]: { status: 204 } });
   await mount(createElement(ItemPage, { store, host: galleryHost(), itemId: runner.itemId }), async (root) => {

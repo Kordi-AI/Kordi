@@ -36,6 +36,17 @@ export function galleryKind(fileName: string, contentType: string | null): CgGal
 /** True for kinds read as text: their bytes decode into the code, table, Markdown or HTML view. */
 export const isTextKind = (kind: CgGalleryKind) => kind === 'markdown' || kind === 'html' || kind === 'code' || kind === 'table';
 
+/** Above these sizes the item screen shows the file card instead of reading the file into memory. */
+export const GALLERY_TEXT_VIEW_MAX_BYTES = 2 * 1024 * 1024;
+export const GALLERY_MEDIA_VIEW_MAX_BYTES = 25 * 1024 * 1024;
+
+/** The kind the item screen draws: a file too large to read there is a file card; unknown sizes are read. */
+export function galleryViewKind(kind: CgGalleryKind, sizeBytes: number | null): CgGalleryKind {
+  if (sizeBytes === null) return kind;
+  const max = isTextKind(kind) ? GALLERY_TEXT_VIEW_MAX_BYTES : kind === 'image' || kind === 'pdf' ? GALLERY_MEDIA_VIEW_MAX_BYTES : null;
+  return max !== null && sizeBytes > max ? 'file' : kind;
+}
+
 const KIND_LABELS: Record<CgGalleryKind, string> = { markdown: 'MD', html: 'HTML', code: 'CODE', table: 'CSV', image: 'IMG', pdf: 'PDF', file: 'FILE' };
 
 /** The type chip: the file's own extension when short, else the kind's. */

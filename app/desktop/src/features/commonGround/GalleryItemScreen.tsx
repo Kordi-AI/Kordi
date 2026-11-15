@@ -5,7 +5,7 @@ import { OPEN_ARTIFACT_FAILED } from '@/features/documents/openArtifactExternall
 import { isNativeDesktopShell } from '@/lib/desktop';
 import { roomTitle } from './format';
 import { GalleryComments } from './GalleryComments';
-import { galleryAuthor, galleryKind, galleryMessageDraft } from './galleryFormat';
+import { galleryAuthor, galleryKind, galleryMessageDraft, galleryViewKind } from './galleryFormat';
 import { GalleryItemBody } from './GalleryItemBody';
 import { openGalleryItemExternally } from './galleryOpen';
 import { GalleryMenu } from './GalleryParts';
@@ -34,7 +34,7 @@ function SharerContact({ item, state, store, host }: ScreenProps & { item: CgGal
 }
 
 function ItemDetail({ code, item, back, state, store, host }: ScreenProps & { code: string; item: CgGalleryItem; back: ReactNode }) {
-  const kind = galleryKind(item.fileName, item.contentType);
+  const kind = galleryViewKind(galleryKind(item.fileName, item.contentType), item.sizeBytes);
   const content = useGalleryContent(store.client, code, item.itemId, kind);
   const [openFailed, setOpenFailed] = useState(false);
   const text = content.status === 'ready' ? content.text : null;

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { ACCOUNT_HINT_EVENT_TYPES } from '../src/features/cloud/accountHintEvents';
 import { GALLERY_HINT_TYPE, notifyCommonGroundGalleryEvents, subscribeGalleryHints, type CgGalleryHint } from '../src/features/commonGround/galleryHints';
-import { galleryKind, galleryTypeLabel } from '../src/features/commonGround/galleryFormat';
+import { GALLERY_MEDIA_VIEW_MAX_BYTES, GALLERY_TEXT_VIEW_MAX_BYTES, galleryKind, galleryTypeLabel, galleryViewKind } from '../src/features/commonGround/galleryFormat';
 import { ResultsScreen } from '../src/features/commonGround/ResultsScreen';
 import { loadGallery, receiveGalleryHints, removeFromGallery, setRoomTab, shareToGallery } from '../src/features/commonGround/storeGallery';
 import { CODE, galleryHost, galleryReply, galleryStore, item, ITEMS, Room } from './helpers/commonGroundGallery';
@@ -35,6 +35,22 @@ test('a server without the Gallery routes leaves the room page exactly as before
   // Once off, the route is not asked again.
   await loadGallery(store, CODE);
   assert.equal(galleryCalls(calls).length, 1);
+});
+
+test('opening the room asks again after a missing route and shows the segment once it answers', async () => {
+  const { store, calls } = await galleryStore({ [`GET rooms/${CODE}/gallery`]: [{ status: 404 }, galleryReply()] });
+  await mount(createElement(Room, { store, host }), async (root) => {
+    assert.equal(store.getSnapshot().support.gallery, false);
+    assert.equal(buttonNamed(root, 'Gallery'), undefined);
+  });
+  // Hints stay off while the Gallery is.
+  await receiveGalleryHints(store, [{ code: CODE, itemId: 'gi_runner' }]);
+  assert.equal(galleryCalls(calls).length, 1);
+  await mount(createElement(Room, { store, host }), async (root) => {
+    assert.equal(store.getSnapshot().support.gallery, true);
+    assert.ok(buttonNamed(root, 'Gallery'));
+  });
+  assert.equal(galleryCalls(calls).length, 2);
 });
 
 test('a loaded Gallery adds the segment, cards with type, author and comments, and topic chips', async () => {
@@ -208,4 +224,21 @@ test('kinds and type labels follow the file name, then the content type', () => 
   assert.equal(galleryTypeLabel('notes.markdown', 'markdown'), 'MD');
   assert.equal(galleryTypeLabel('runner.ts', 'code'), 'TS');
   assert.equal(galleryTypeLabel('README', 'code'), 'CODE');
+});
+
+test('the item screen shows a file card for text over 2 MB and images or PDFs over 25 MB', () => {
+  assert.equal(GALLERY_TEXT_VIEW_MAX_BYTES, 2 * 1024 * 1024);
+  assert.equal(GALLERY_MEDIA_VIEW_MAX_BYTES, 25 * 1024 * 1024);
+  for (const kind of ['markdown', 'html', 'code', 'table'] as const) {
+    assert.equal(galleryViewKind(kind, GALLERY_TEXT_VIEW_MAX_BYTES), kind);
+    assert.equal(galleryViewKind(kind, GALLERY_TEXT_VIEW_MAX_BYTES + 1), 'file');
+    assert.equal(galleryViewKind(kind, null), kind);
+  }
+  for (const kind of ['image', 'pdf'] as const) {
+    assert.equal(galleryViewKind(kind, GALLERY_TEXT_VIEW_MAX_BYTES + 1), kind);
+    assert.equal(galleryViewKind(kind, GALLERY_MEDIA_VIEW_MAX_BYTES), kind);
+    assert.equal(galleryViewKind(kind, GALLERY_MEDIA_VIEW_MAX_BYTES + 1), 'file');
+    assert.equal(galleryViewKind(kind, null), kind);
+  }
+  assert.equal(galleryViewKind('file', 10 ** 10), 'file');
 });

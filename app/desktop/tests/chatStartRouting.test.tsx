@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
 import { assembleMainContentSlot } from '../src/app/assembleMainContentSlot';
+import { useKordiSideAgentSessionActions } from '../src/app/useKordiSideAgentSessionActions';
+import { EMPTY_COMPOSER_DRAFT_STATE, type ComposerDraftState } from '../src/features/chat/composerDrafts';
+import { cloudCollaborationConversationId } from '../src/features/collaboration/conversationIds';
 import { assembleSidebarSlot } from '../src/app/assembleSidebarSlot';
 import { buildChatsPageProps } from '../src/app/mainContentShellBuilders';
 import { publishHostedProviderSnapshots } from '../src/features/cloud/hostedAccounts';
@@ -409,6 +415,36 @@ test('external agent contact Message starts an agent session instead of routing 
   });
 
   assert.deepEqual(calls, ['overlay:null', 'startAgent:host-1:node-shared:agent-bob']);
+});
+
+test('Message with a draft fills only an empty composer and keeps unsent text', () => {
+  let drafts: ComposerDraftState = EMPTY_COMPOSER_DRAFT_STATE;
+  let setText: ReturnType<typeof useKordiSideAgentSessionActions>['setComposerTextForSession'] | null = null;
+  function Probe() {
+    setText = useKordiSideAgentSessionActions({
+      isNativeShell: false,
+      setComposerDrafts: (next) => { drafts = typeof next === 'function' ? next(drafts) : next; },
+      setDesktopChatError: () => {},
+      setDesktopChatState: () => {},
+    }).setComposerTextForSession;
+    return null;
+  }
+  renderToStaticMarkup(createElement(Probe));
+  const element = assembleMainContentSlot(baseShellArgs([], { setChatComposerTextForSession: setText }) as never) as never as {
+    props: { contactsPageProps: { onMessageContact: (contact: Record<string, unknown>, options?: { draft?: string }) => void } };
+  };
+  const bea = { id: 'cloud-contact:acct_bea', classType: 'other-users', sourceParticipantId: 'acct_bea', sourceHostId: 'cloud', name: 'Bea', owner: 'Bea', sourceRuntime: 'person' };
+  const session = cloudCollaborationConversationId('acct_bea', 'person');
+  const message = (draft: string) => element.props.contactsPageProps.onMessageContact(bea, { draft });
+
+  message('About "Plan": ');
+  assert.equal(drafts.chat[session]?.text, 'About "Plan": ');
+  setText!(session, 'Half-written reply');
+  message('About "Notes": ');
+  assert.equal(drafts.chat[session]?.text, 'Half-written reply');
+  setText!(session, '  ');
+  message('About "Notes": ');
+  assert.equal(drafts.chat[session]?.text, 'About "Notes": ');
 });
 
 test('built-in support Message uses the stable system-contact chat route', () => {

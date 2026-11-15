@@ -2,7 +2,7 @@
 //! room gallery tests.
 
 use axum::body::Body;
-use axum::http::Request;
+use axum::http::{HeaderMap, Request};
 use chrono::Utc;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
@@ -119,19 +119,23 @@ pub(super) async fn agent_document(
     .unwrap();
 }
 
-/// (status, body text, content type) of a request whose answer is not JSON.
-pub(super) async fn send_raw(
-    app: &axum::Router,
-    path: &str,
-    token: &str,
-) -> (u16, String, Option<String>) {
+async fn get_raw(app: &axum::Router, path: &str, token: &str) -> axum::response::Response {
     let request = Request::builder()
         .method("GET")
         .uri(path)
         .header("authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
-    let response = app.clone().oneshot(request).await.unwrap();
+    app.clone().oneshot(request).await.unwrap()
+}
+
+/// (status, body text, content type) of a request whose answer is not JSON.
+pub(super) async fn send_raw(
+    app: &axum::Router,
+    path: &str,
+    token: &str,
+) -> (u16, String, Option<String>) {
+    let response = get_raw(app, path, token).await;
     let status = response.status().as_u16();
     let content_type = response
         .headers()
@@ -216,6 +220,13 @@ impl Setup {
 
     pub(super) async fn content(&self, token: &str, item: &str) -> (u16, String, Option<String>) {
         send_raw(&self.app, &self.path(&format!("/{item}/content")), token).await
+    }
+
+    /// The status and headers of an item's content answer.
+    pub(super) async fn content_headers(&self, token: &str, item: &str) -> (u16, HeaderMap) {
+        let path = self.path(&format!("/{item}/content"));
+        let response = get_raw(&self.app, &path, token).await;
+        (response.status().as_u16(), response.headers().clone())
     }
 
     pub(super) async fn comment(&self, token: &str, item: &str, body: &str) -> (u16, Value) {

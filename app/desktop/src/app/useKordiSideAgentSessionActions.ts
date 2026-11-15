@@ -28,9 +28,11 @@ export function useKordiSideAgentSessionActions({
 }: UseKordiSideAgentSessionActionsArgs) {
   const createFlightRef = useRef<{ source?: string; promise: Promise<string | null> } | null>(null);
   const setComposerTextForSession = useCallback(
-    (sessionId: string, value: string) => {
+    (sessionId: string, value: string, options?: { onlyIfEmpty?: boolean }) => {
       setComposerDrafts((current) => (
-        updateScopeDraft(current, 'chat', sessionId, value)
+        options?.onlyIfEmpty && current.chat[sessionId]?.text.trim()
+          ? current
+          : updateScopeDraft(current, 'chat', sessionId, value)
       ));
     },
     [setComposerDrafts],

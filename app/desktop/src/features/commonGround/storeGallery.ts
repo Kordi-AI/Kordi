@@ -68,12 +68,18 @@ export function galleryItemFor(state: CgState, code: string, itemId: string): Cg
   return state.gallery.items[galleryItemKey(code, itemId)]?.item ?? state.gallery.lists[code]?.items.find((item) => item.itemId === itemId) ?? null;
 }
 
-/** Loads a room's Gallery. `quiet` leaves failures off the page (the room opening, a hint). */
-export async function loadGallery(host: CgGalleryHost, code: string, { quiet = false } = {}): Promise<void> {
-  if (!host.getSnapshot().support.gallery) return;
+/**
+ * Loads a room's Gallery. `quiet` leaves failures off the page (the room opening, a hint). `retry`
+ * (the room opening) asks even after a server lacked the routes, and turns the Gallery back on when
+ * it answers, so a server swap needs no reload.
+ */
+export async function loadGallery(host: CgGalleryHost, code: string, { quiet = false, retry = false } = {}): Promise<void> {
+  if (!host.getSnapshot().support.gallery && !retry) return;
   try {
     const list = await host.client.gallery(code);
     patchGallery(host, (gallery) => ({ lists: { ...gallery.lists, [code]: list } }));
+    const support = host.getSnapshot().support;
+    if (!support.gallery) host.set({ support: { ...support, gallery: true } });
   } catch (error) {
     if (!unsupported(host, error) && !quiet) host.set({ notice: commonGroundErrorMessage(error) });
   }

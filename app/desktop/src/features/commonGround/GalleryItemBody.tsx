@@ -39,7 +39,7 @@ export function GalleryItemBody({ item, kind, content }: { item: CgGalleryItem; 
     if (kind === 'html') {
       return (
         <div className="cg-gallery-doc is-web">
-          <iframe title={item.title} srcDoc={artifactPreviewDocumentSource(text, 'panel')} sandbox="allow-forms allow-popups allow-scripts" className="cg-gallery-web" />
+          <iframe title={item.title} srcDoc={artifactPreviewDocumentSource(text, 'panel')} sandbox="allow-scripts" className="cg-gallery-web" />
         </div>
       );
     }

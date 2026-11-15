@@ -115,7 +115,7 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
     setRoomTab(store, code, next);
   };
   // The Gallery loads as the room opens; the segment shows once it has, so older servers look as before.
-  useEffect(() => { void loadGallery(store, code, { quiet: true }); }, [store, code]);
+  useEffect(() => { void loadGallery(store, code, { quiet: true, retry: true }); }, [store, code]);
   const results = state.results[code];
   const room = state.rooms[code];
   const selfId = host.self.accountId;

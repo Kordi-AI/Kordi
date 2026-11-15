@@ -121,9 +121,10 @@ export function assembleMainContentSlot(args: MainContentShellArgs) {
               contact.owner,
               contactTargetsAgent ? contact.sourceRuntime : 'person',
             );
-            // Message from a Grounding Gallery item opens the chat with "About …" in its composer.
+            // Message from a Grounding Gallery item opens the chat with "About …" in its composer,
+            // unless something unsent is already there.
             if (options?.draft && !contactTargetsAgent) {
-              args.setChatComposerTextForSession(cloudCollaborationConversationId(contact.sourceParticipantId, 'person'), options.draft);
+              args.setChatComposerTextForSession(cloudCollaborationConversationId(contact.sourceParticipantId, 'person'), options.draft, { onlyIfEmpty: true });
             }
             return;
           }

@@ -130,7 +130,7 @@ struct CommonGroundGalleryItemScreen: View {
             return
         }
         guard !Task.isCancelled, let item, !content.isReady else { return }
-        let kind = item.kind
+        let kind = item.kind.forViewing(sizeBytes: item.sizeBytes)
         guard kind.isText || kind == .image else {
             content = .file
             return

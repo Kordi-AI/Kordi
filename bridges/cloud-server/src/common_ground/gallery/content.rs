@@ -2,7 +2,9 @@
 //! gallery check stands in for the attachment owner check; the bytes are
 //! served by the attachment `/content` code path. A Kordi document whose
 //! current text is stored (`cloud_document_contents`) serves that text, as
-//! the document routes read it.
+//! the document routes read it. The answer tells a browser never to
+//! render the bytes as a page: they are another person's file, and API
+//! routes also accept the web session cookie.
 
 use std::sync::Arc;
 
@@ -61,7 +63,7 @@ pub(in crate::common_ground) async fn content(
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("text/markdown; charset=utf-8"),
             );
-            response
+            never_render(response)
         }
         Ok(Some((object_key, content_type, detected_content_type, size_bytes, None))) => {
             let object = StoredObject {
@@ -70,9 +72,28 @@ pub(in crate::common_ground) async fn content(
                 detected_content_type: detected_content_type.as_deref(),
                 size_bytes,
             };
-            stream_readable_object(&state, &object, &request_headers).await
+            never_render(stream_readable_object(&state, &object, &request_headers).await)
         }
         Ok(None) => item_not_found(),
         Err(error) => db_error(error),
     }
+}
+
+/// Adds the headers that stop a browser from running the file as a page in
+/// the app's origin; status, body and content type stay as they are.
+pub(in crate::common_ground) fn never_render(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("sandbox; default-src 'none'"),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment"),
+    );
+    response
 }

@@ -124,6 +124,24 @@ final class CommonGroundGalleryTests: XCTestCase {
         XCTAssertEqual(Kind.markdown.typeLabel(fileName: "Untitled"), "MD")
     }
 
+    func testTheItemScreenShowsAFileRowForTextOver2MBAndMediaOver25MB() {
+        typealias Kind = CommonGroundGalleryKind
+        XCTAssertEqual(Kind.textViewMaxBytes, 2 * 1024 * 1024)
+        XCTAssertEqual(Kind.mediaViewMaxBytes, 25 * 1024 * 1024)
+        for kind in [Kind.markdown, .html, .code, .table] {
+            XCTAssertEqual(kind.forViewing(sizeBytes: Kind.textViewMaxBytes), kind)
+            XCTAssertEqual(kind.forViewing(sizeBytes: Kind.textViewMaxBytes + 1), .file)
+            XCTAssertEqual(kind.forViewing(sizeBytes: nil), kind)
+        }
+        for kind in [Kind.image, .pdf] {
+            XCTAssertEqual(kind.forViewing(sizeBytes: Kind.textViewMaxBytes + 1), kind)
+            XCTAssertEqual(kind.forViewing(sizeBytes: Kind.mediaViewMaxBytes), kind)
+            XCTAssertEqual(kind.forViewing(sizeBytes: Kind.mediaViewMaxBytes + 1), .file)
+            XCTAssertEqual(kind.forViewing(sizeBytes: nil), kind)
+        }
+        XCTAssertEqual(Kind.file.forViewing(sizeBytes: Int.max), .file)
+    }
+
     func testTableRowsAndMarkdownThumbnailLines() {
         let rows = CommonGroundGalleryText.rows("Job,Runs,Note\nLint,640,\"fast, cheap\"\n\nBuild,\"3\"\"\",x\n", tabs: false, limit: 5)
         XCTAssertEqual(rows, [["Job", "Runs", "Note"], ["Lint", "640", "fast, cheap"], ["Build", "3\"", "x"]])

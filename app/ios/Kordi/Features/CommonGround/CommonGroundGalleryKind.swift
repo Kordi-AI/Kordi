@@ -61,6 +61,20 @@ enum CommonGroundGalleryKind: Equatable {
     /// Read as text: the bytes decode into the Markdown, HTML, code or table view.
     var isText: Bool { self == .markdown || self == .html || self == .code || self == .table }
 
+    /// Above these sizes the item screen shows the file row instead of
+    /// reading the file into memory.
+    static let textViewMaxBytes = 2 * 1024 * 1024
+    static let mediaViewMaxBytes = 25 * 1024 * 1024
+
+    /// The kind the item screen draws: a file too large to read there is a
+    /// file row; an unknown size is read.
+    func forViewing(sizeBytes: Int?) -> Self {
+        guard let sizeBytes else { return self }
+        let limit = isText ? Self.textViewMaxBytes : self == .image || self == .pdf ? Self.mediaViewMaxBytes : nil
+        guard let limit, sizeBytes > limit else { return self }
+        return .file
+    }
+
     private var label: String {
         switch self {
         case .markdown: "MD"
