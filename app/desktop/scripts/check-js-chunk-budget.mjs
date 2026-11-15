@@ -175,7 +175,8 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // (under 1 kB) bring it to 6.021 MB there.
 // The same session trace export, with background sessions, adds 16.7 kB there, most of it inside the
 // remaining allowance, and the on-demand companion overview 0.3 kB, so it moves to 6.028 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_028_000;
+// Quick Grounding match estimates add 2 kB there too, so it moves to 6.030 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_030_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
