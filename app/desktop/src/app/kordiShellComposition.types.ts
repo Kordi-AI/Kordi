@@ -242,7 +242,6 @@ export type KordiShellCompositionArgs = {
     | 'composerControlsRef'
     | 'activeRuntimeSessionId'
     | 'activeRuntimeContextStatus'
-    | 'activeRuntimeCacheText'
     | 'composerSelectionProject'
     | 'composerSelectionChat'
     | 'openComposerSelector'

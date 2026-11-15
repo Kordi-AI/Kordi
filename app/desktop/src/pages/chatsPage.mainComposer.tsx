@@ -407,10 +407,7 @@ export function MainComposer({
             {!editingMessage && !voiceSurfaceActive && localRouting.paneKind === 'agent'
               && !collaborationRouting.enabled
               && (display.isNativeShell || localRouting.contextStatus) ? (
-                <ComposerRuntimeStatus
-                  contextStatus={localRouting.contextStatus}
-                  cacheText={localRouting.cacheText}
-                />
+                <ComposerRuntimeStatus contextStatus={localRouting.contextStatus} />
               ) : null}
             {!editingMessage && !voiceSurfaceActive && canConfigureModelRoute
               && localRouting.paneKind === 'agent'

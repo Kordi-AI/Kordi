@@ -349,7 +349,6 @@ function GroupMentionPreview() {
     setChatComposerTextForSession: (_sessionId: string, value: string) => setDraft(value),
     composerControlsRef: { current: null },
     activeRuntimeContextStatus: null,
-    activeRuntimeCacheText: null,
     composerSelection: { mode: 'Send as Me', model: 'GPT-5.6', thinking: 'default' },
     openComposerSelector: null,
     toggleComposerSelector: () => undefined,
