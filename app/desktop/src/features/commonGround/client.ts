@@ -6,11 +6,12 @@ import { cloudApiBaseUrl } from '@/features/cloud/cloudApiEnvironment';
 import { cloudFetchImpl } from '@/features/cloud/cloudTransport';
 import { loadSession } from '@/features/cloud/session';
 import { isCardDesign, isCardIcon } from './cardDesign';
+import { galleryRoutes } from './clientGallery';
 import { nearbyRoutes } from './clientNearby';
 import type {
   CgBuildRequest, CgCreatedGroup, CgDocument, CgCreateRoomInput, CgGroup, CgGroupInviteResult, CgInviteGroup, CgJoinInput, CgJoinRequestStatus, CgMatch, CgMeetInput, CgOwnerView, CgPairCode, CgPerson,
-  CgPersonCard, CgPersonGroups, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry, CgRelationship, CgResults, CgRoom, CgRoomPreview, CgRoomSummary, CgRoutedMemory,
-  CgTopicLists,
+  CgPersonCard, CgPersonGroups, CgProfile, CgProfileInput, CgProfilePatch, CgRankedPerson, CgReason, CgRecentEntry, CgRelationship, CgResults, CgRoom, CgRoomPreview,
+  CgRoomSummary, CgRoutedMemory, CgTopicLists, CgTrade,
 } from './types';
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -109,6 +110,48 @@ function withRelationship<T extends { person: CgPerson; relationship?: CgRelatio
   return relationship && body.person ? { ...body, person: { ...body.person, relationship } } : body;
 }
 
+/** Newer servers list everyone, marking quick estimates with `estimated: true`; the key is absent otherwise. */
+function rankedPerson(entry: CgRankedPerson): CgRankedPerson {
+  const { estimated, ...rest } = withRelationship(entry);
+  return estimated === true ? { ...rest, estimated: true } : rest;
+}
+
+const stringOf = (value: unknown) => (typeof value === 'string' ? value : '');
+const records = (value: unknown): Array<Record<string, unknown>> =>
+  Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object') : [];
+
+function reasonsOf(value: unknown): CgReason[] {
+  return records(value).map((item) => ({ topic: stringOf(item.topic), theirTopic: stringOf(item.theirTopic), why: stringOf(item.why) })).filter((item) => item.topic);
+}
+
+function tradesOf(value: unknown): CgTrade[] {
+  return records(value).map((item) => ({ topic: stringOf(item.topic), for: stringOf(item.for), why: stringOf(item.why) })).filter((item) => item.topic);
+}
+
+/** A 202 match from newer servers carries the quick estimate's topics; older servers send none and nothing is added. */
+function matchEstimate(body: Partial<CgMatch>): Partial<CgMatch> {
+  const raw = body as Record<string, unknown>;
+  if (!['shared', 'youBring', 'theyBring'].some((key) => Array.isArray(raw[key]))) return {};
+  return {
+    ...(typeof body.score === 'number' ? { score: body.score } : {}),
+    ...(typeof body.headline === 'string' ? { headline: body.headline } : {}),
+    shared: reasonsOf(raw.shared),
+    youBring: tradesOf(raw.youBring),
+    theyBring: tradesOf(raw.theyBring),
+    nextStep: stringOf(raw.nextStep),
+    estimated: true,
+  };
+}
+
+/**
+ * A 200 match is ready. When no model run may be queued, the server answers ready with only the
+ * estimate (`estimated: true`, empty reasons); it is read like a pending estimate and not polled.
+ */
+function readyMatch(body: CgMatch): CgMatch {
+  const { estimated, ...rest } = body;
+  return estimated === true ? { ...rest, ...matchEstimate(body), estimated: true, status: 'ready' } : { ...rest, status: 'ready' };
+}
+
 /** Groups carry `topic` from newer servers; a missing field is null. */
 function withTopic(group: CgGroup): CgGroup {
   return {
@@ -174,13 +217,12 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const buildTimeoutMs = options.buildTimeoutMs ?? BUILD_REQUEST_TIMEOUT_MS;
 
-  async function send<T>(method: string, path: string, body?: unknown, timeout = timeoutMs): Promise<CgResponse<T>> {
+  async function request(method: string, path: string, body: unknown, timeout: number): Promise<Response> {
     const bearer = await token();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
-    let response: Response;
     try {
-      response = await fetchImpl()(`${baseUrl()}/v1/cloud/${path}`, {
+      return await fetchImpl()(`${baseUrl()}/v1/cloud/${path}`, {
         method,
         signal: controller.signal,
         headers: body === undefined
@@ -193,16 +235,28 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
     } finally {
       clearTimeout(timer);
     }
-    const text = response.status === 204 ? '' : await response.text();
-    let parsed: unknown = null;
-    try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
-    if (!response.ok) {
-      const record = (parsed && typeof parsed === 'object' ? parsed : {}) as { errorCode?: unknown; message?: unknown };
-      const code = typeof record.errorCode === 'string' && record.errorCode ? record.errorCode : null;
-      const message = typeof record.message === 'string' && record.message ? record.message : 'Something went wrong. Try again.';
-      throw new CommonGroundError(message, response.status, code, parseRetryAfter(response.headers.get('retry-after')), parsed);
-    }
+  }
+  const parse = (text: string): unknown => { try { return text ? JSON.parse(text) : null; } catch { return null; } };
+  /** The server's `errorCode`, message, status and body for a refused request. */
+  function failure(response: Response, parsed: unknown): CommonGroundError {
+    const record = (parsed && typeof parsed === 'object' ? parsed : {}) as { errorCode?: unknown; message?: unknown };
+    const code = typeof record.errorCode === 'string' && record.errorCode ? record.errorCode : null;
+    const message = typeof record.message === 'string' && record.message ? record.message : 'Something went wrong. Try again.';
+    return new CommonGroundError(message, response.status, code, parseRetryAfter(response.headers.get('retry-after')), parsed);
+  }
+  async function send<T>(method: string, path: string, body?: unknown, timeout = timeoutMs): Promise<CgResponse<T>> {
+    const response = await request(method, path, body, timeout);
+    const parsed = parse(response.status === 204 ? '' : await response.text());
+    if (!response.ok) throw failure(response, parsed);
     return { status: response.status, body: parsed as T };
+  }
+  /** A file's raw bytes, keeping the server's content type (the native HTTP plugin can drop it from the blob). */
+  async function bytes(path: string): Promise<Blob> {
+    const response = await request('GET', path, undefined, buildTimeoutMs);
+    if (!response.ok) throw failure(response, parse(await response.text()));
+    const blob = await response.blob();
+    const contentType = response.headers.get('content-type');
+    return !blob.type && contentType ? blob.slice(0, blob.size, contentType) : blob;
   }
   const data = async <T>(method: string, path: string, body?: unknown, timeout?: number) => (await send<T>(method, path, body, timeout)).body;
   const cg = (path: string) => `common-ground/${path}`;
@@ -274,7 +328,7 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
       const results = await data<CgResults>('POST', cg(`rooms/${enc(code)}/results`));
       return {
         ...results,
-        people: (results.people ?? []).map(withRelationship),
+        people: (results.people ?? []).map(rankedPerson),
         ...(results.groups ? { groups: results.groups.map(withTopic) } : {}),
       };
     },
@@ -301,8 +355,8 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
     match: async (accountId: string, profileId?: string | null): Promise<CgMatch> => {
       const { status, body } = await send<CgMatch>('GET', cg(`people/${enc(accountId)}/match${profileQuery(profileId)}`));
       const match: CgMatch = status === 202
-        ? { status: body.status === 'failed' ? 'failed' : 'matching', person: body.person, relationship: body.relationship, profileId: body.profileId }
-        : { ...body, status: 'ready' };
+        ? { status: body.status === 'failed' ? 'failed' : 'matching', person: body.person, relationship: body.relationship, profileId: body.profileId, ...matchEstimate(body) }
+        : readyMatch(body);
       return withRelationship(match);
     },
     addContact: (accountId: string, message?: string) => data<{ relationship: CgRelationship }>(
@@ -334,6 +388,7 @@ export function createCommonGroundClient(options: CommonGroundClientOptions = {}
       return { invited: body?.invited ?? [], added: body?.added ?? [], skipped: body?.skipped ?? [] };
     },
     ...nearbyRoutes(data),
+    ...galleryRoutes(data, bytes),
   };
 }
 

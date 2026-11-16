@@ -18,13 +18,13 @@ import * as roomOps from './storeRooms';
 import { pollTop, reconcileRooms, refreshScreen } from './storeRefresh';
 import type {
   CgBuildRequest, CgCardLook, CgCreateRoomInput, CgInviteGroup, CgJoinInput, CgMatch, CgMeetInput, CgOwnerView, CgPerson, CgPersonCard, CgPersonGroups, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry,
-  CgNearbyScreen, CgRelationship, CgResults, CgRoom, CgRoomSummary, CgTopicLists,
+  CgGalleryScreen, CgGalleryState, CgNearbyScreen, CgRelationship, CgResults, CgRoom, CgRoomSummary, CgTopicLists,
 } from './types';
 
 export type CgScreen =
   | { name: 'home' }
   | { name: 'build'; memory?: boolean }
-  | { name: 'card' } | CgNearbyScreen
+  | { name: 'card' } | CgNearbyScreen | CgGalleryScreen
   | { name: 'results'; code: string }
   | { name: 'match'; accountId: string; profileId?: string }
   | { name: 'person'; accountId: string; profileId?: string };
@@ -35,7 +35,7 @@ export function personKey(accountId: string, profileId?: string | null): string 
 }
 
 /** Routes the server may not have yet; a 404 without an error code turns one off. */
-export type CgSupport = { contact: boolean; chat: boolean; meet: boolean; group: boolean; invitations: boolean; rooms: boolean; groupInvite: boolean };
+export type CgSupport = { contact: boolean; chat: boolean; meet: boolean; group: boolean; invitations: boolean; rooms: boolean; groupInvite: boolean; gallery: boolean };
 
 export type CgState = {
   stack: CgScreen[];
@@ -52,6 +52,8 @@ export type CgState = {
   relationships: Record<string, CgRelationship>;
   /** The person-page group picker by account; null when they cannot be invited. */
   inviteGroups: Record<string, CgPersonGroups | null>;
+  /** Room galleries, my share candidates, the open item and each room's tab (`storeGallery`). */
+  gallery: CgGalleryState;
   support: CgSupport;
   /** One line for the current screen. */
   notice: string | null;
@@ -72,7 +74,7 @@ export type CommonGroundStoreOptions = {
 
 export const MATCH_POLL_MS = 3_000;
 /** The matching poll delay once room and match hints arrive and polling is the fallback. */
-export const MATCH_FALLBACK_POLL_MS = 10_000;
+export const MATCH_FALLBACK_POLL_MS = 20_000;
 export const BUILD_POLL_MS = 3_000;
 export { BUILD_CHECK_MS, BUILD_START_CHECKS } from './storeBuild';
 /** The shortest gap between two refreshes from other devices. */
@@ -90,7 +92,8 @@ const initialState = (profilesOn = false): CgState => ({
   people: {},
   relationships: {},
   inviteGroups: {},
-  support: { contact: true, chat: true, meet: true, group: true, invitations: true, rooms: true, groupInvite: true },
+  gallery: { lists: {}, candidates: {}, items: {}, tabs: {} },
+  support: { contact: true, chat: true, meet: true, group: true, invitations: true, rooms: true, groupInvite: true, gallery: true },
   notice: null,
   busy: null,
   profilesOn,

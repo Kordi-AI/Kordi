@@ -3,6 +3,7 @@ pub mod client;
 pub mod common_ground;
 pub mod config;
 pub mod connectors;
+pub mod grounding_throttle;
 pub mod k8s_sandbox;
 pub mod memory;
 pub mod model_loop;

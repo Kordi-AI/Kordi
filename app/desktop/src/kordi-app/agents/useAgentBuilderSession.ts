@@ -2,6 +2,7 @@ import { requireAiConsent } from '@/features/aiConsent/aiConsentStore';
 import { defaultCloudAuthClient } from '@/features/cloud/authClient';
 import { loadSession } from '@/features/cloud/session';
 import type { ComposerProviderOption } from '../components';
+import { factoryBuildRoute, runFactoryBuildTurn } from './factoryBuildRun';
 import { factoryDraftWithAccount, runFactoryDraftTest } from './factoryTestRun';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -208,19 +209,28 @@ export function useAgentBuilderSession({
     setOptimisticPrompt(text);
     setOptimisticAttachments(attachments);
     try {
-      let turn = await startDesktopChatMessage(
-        status.sessionId,
-        text,
-        attachments.map((attachment) => attachment.path),
-        route,
-      );
-      if (generationRef.current !== generation) return;
-      setActiveTurn(turn);
-      while (!turn.completed && generationRef.current === generation) {
-        await wait(TURN_POLL_INTERVAL_MS);
-        turn = await fetchDesktopChatTurnState(turn.id);
-        if (generationRef.current === generation) setActiveTurn(turn);
-      }
+      const runRoute = factoryBuildRoute(route, providerOptions);
+      const isCurrent = () => generationRef.current === generation;
+      const turn = await runFactoryBuildTurn({
+        route: runRoute, session: loadSession, client: defaultCloudAuthClient(),
+        run: async (contextMessages) => {
+          let current = await startDesktopChatMessage(
+            status.sessionId,
+            text,
+            attachments.map((attachment) => attachment.path),
+            runRoute,
+            contextMessages,
+          );
+          if (isCurrent()) setActiveTurn(current);
+          // A leased turn keeps its Factory run until it completes, even after the view moves on.
+          while (!current.completed && (isCurrent() || contextMessages.length > 0)) {
+            await wait(TURN_POLL_INTERVAL_MS);
+            current = await fetchDesktopChatTurnState(current.id);
+            if (isCurrent()) setActiveTurn(current);
+          }
+          return current;
+        },
+      });
       if (generationRef.current !== generation) return;
       await refresh(status);
       setOptimisticPrompt(null);
@@ -239,7 +249,7 @@ export function useAgentBuilderSession({
     } finally {
       if (generationRef.current === generation) setActiveTurn(null);
     }
-  }, [activeTurn, opening, refresh, status]);
+  }, [activeTurn, opening, providerOptions, refresh, status]);
 
   const stop = useCallback(async () => {
     if (!activeTurn) return;

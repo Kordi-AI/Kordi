@@ -127,7 +127,6 @@ export function buildChatsPageProps(args: MainContentShellArgs): ComponentProps<
     runtime: {
     composerControlsRef: args.composerControlsRef,
     activeRuntimeContextStatus: args.activeRuntimeContextStatus,
-    activeRuntimeCacheText: args.activeRuntimeCacheText,
     composerSelection: args.composerSelectionChat,
     openComposerSelector: args.openComposerSelector,
     toggleComposerSelector: args.toggleComposerSelector,

@@ -4,7 +4,12 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::session_bootstrap::{SessionBootstrapOptions, SessionRuntimeSetup};
+use anyhow::Result;
+
+use super::{DesktopRuntimeSession, normalize_setup_thinking, retarget_runtime_setup_session};
+use crate::session_bootstrap::{
+    SessionBootstrapOptions, SessionRuntimeSetup, prepare_session_runtime_for_cwd,
+};
 use crate::tool_registry::ToolSelectionPreference;
 
 /// A constrained runtime profile for purpose-built desktop sessions.
@@ -27,6 +32,11 @@ pub struct DesktopRuntimeProfile {
     /// A subsession of an approved proactive run follows the run's prompt rules.
     #[serde(default)]
     pub proactive_run: bool,
+    /// The session's folder is app storage rather than a project, so the
+    /// instruction files found by walking up from it (such as the owner's
+    /// home `AGENTS.md` or `CLAUDE.md`) do not apply to its turns.
+    #[serde(default)]
+    pub skip_workspace_instructions: bool,
     /// The request route the parent turn ran with: its model and the account
     /// that pays for it. `provider` above is the model namespace only (a
     /// ChatGPT sign-in and an OpenAI key share `openai`), so a background
@@ -46,7 +56,41 @@ pub struct DesktopRuntimeTurnRoute {
     pub thinking: Option<String>,
 }
 
-pub(super) fn profile_bootstrap_options(
+impl DesktopRuntimeSession {
+    pub async fn create_profiled_with_id(
+        cwd: PathBuf,
+        session_id: &str,
+        profile: DesktopRuntimeProfile,
+    ) -> Result<Self> {
+        let options = profile_bootstrap_options(&profile, None);
+        let (_runtime_host, _ui, mut setup) = prepare_session_runtime_for_cwd(cwd, options).await?;
+        retarget_runtime_setup_session(&mut setup, session_id)?;
+        apply_runtime_profile(&mut setup, &profile);
+        normalize_setup_thinking(&mut setup);
+        Ok(Self::from_profiled_setup(setup, &profile))
+    }
+
+    pub async fn resume_profiled(
+        cwd: PathBuf,
+        session_id: &str,
+        profile: DesktopRuntimeProfile,
+    ) -> Result<Self> {
+        let options = profile_bootstrap_options(&profile, Some(session_id.to_string()));
+        let (_runtime_host, _ui, mut setup) = prepare_session_runtime_for_cwd(cwd, options).await?;
+        apply_runtime_profile(&mut setup, &profile);
+        normalize_setup_thinking(&mut setup);
+        super::background_sessions::save_runtime_profile(&setup, &profile)?;
+        Ok(Self::from_profiled_setup(setup, &profile))
+    }
+
+    fn from_profiled_setup(setup: SessionRuntimeSetup, profile: &DesktopRuntimeProfile) -> Self {
+        let mut session = Self::from_setup(setup, false);
+        session.skip_workspace_instructions = profile.skip_workspace_instructions;
+        session
+    }
+}
+
+fn profile_bootstrap_options(
     profile: &DesktopRuntimeProfile,
     session: Option<String>,
 ) -> SessionBootstrapOptions {
@@ -69,10 +113,7 @@ pub(super) fn profile_bootstrap_options(
     }
 }
 
-pub(super) fn apply_runtime_profile(
-    setup: &mut SessionRuntimeSetup,
-    profile: &DesktopRuntimeProfile,
-) {
+fn apply_runtime_profile(setup: &mut SessionRuntimeSetup, profile: &DesktopRuntimeProfile) {
     if let Some(execution_policy) = profile.execution_policy {
         setup.tool_ctx.execution_policy = execution_policy;
     }

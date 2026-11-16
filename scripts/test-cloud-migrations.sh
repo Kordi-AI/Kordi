@@ -102,6 +102,7 @@ tests=(
   common_ground_rematch_tests::upgrade_from_199_adds_card_rematch_marks
   common_ground_join_request_tests::upgrade_from_201_adds_room_join_requests
   common_ground_group_invitation_tests::upgrade_from_204_adds_group_invitations
+  common_ground_gallery_tests::upgrade_from_206_adds_the_room_gallery
 )
 index=0
 for test_name in "${tests[@]}"; do
@@ -200,10 +201,12 @@ KORDI_DIGEST_TEST_DATABASE_URL="$(migration_database_url kordi_migration_test_pl
 # The System agent quality harness, replayed with its scripted stub model
 # through the real sweep, plan_card handler and run completion. Each test
 # creates and drops its own database on this server; the named database is
-# only the administration connection.
+# only the administration connection. The brief check calls the configured
+# provider, so it stays an opt-in run (docs/testing/system-agent-quality.md).
 migration_create_database kordi_migration_test_system_agent_eval
 KORDI_SYSTEM_AGENT_EVAL_DATABASE_URL="$(migration_database_url kordi_migration_test_system_agent_eval)" \
-  cargo test -p kordi-system-agent-eval --locked -- --include-ignored --test-threads=1
+  cargo test -p kordi-system-agent-eval --locked -- --include-ignored --skip brief_check_tests::brief_check \
+    --test-threads=1
 
 # Authentication cache and expiry regressions must exercise real PostgreSQL.
 DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \

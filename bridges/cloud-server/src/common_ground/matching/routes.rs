@@ -1,5 +1,6 @@
 //! Room results and match detail, per pair of shared profiles.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::{
@@ -11,8 +12,9 @@ use axum::{
 use serde_json::{json, Value};
 use sqlx_core::{query::query, query_as::query_as};
 
-use super::store::{self, Pending, Queued, MAX_THEME_MEMBERS};
-use super::{shared_cards, suggestion, visible_themes, MatchResult, SharedCard};
+use super::queue;
+use super::store::{self, Pending, Queued, MATCH_BATCH, MAX_THEME_MEMBERS, THEME_REFRESH};
+use super::{estimate, shared_cards, suggestion, visible_themes, MatchResult, Rarity, SharedCard};
 use crate::auth::rate_limit::CloudRateLimiter;
 use crate::common_ground::actions::{attach, relationship, relationships, room_extras};
 use crate::common_ground::profiles::{self, ProfileQuery};
@@ -32,7 +34,7 @@ pub(super) fn person(card: &SharedCard) -> Value {
     person
 }
 
-fn status(pending: Option<Pending>) -> &'static str {
+pub(super) fn status(pending: Option<Pending>) -> &'static str {
     match pending {
         None => "ready",
         Some(Pending::Running) => "matching",
@@ -42,10 +44,15 @@ fn status(pending: Option<Pending>) -> &'static str {
 
 /// `POST /v1/cloud/common-ground/rooms/:code/results`: everyone in the room
 /// ranked by match with you, the themes several people share, and the
-/// suggested group. People still being matched are left out until ready;
-/// `status` is "matching" until everything is in, and the last themes stay
-/// while new ones are found. A closed room shows what was stored for it and
-/// never queues a run.
+/// suggested group. Everyone shows at once: a person without a model result
+/// yet is ranked by a quick estimate from topic words (`estimated: true`).
+/// The model writes reasons for your best few estimated matches
+/// ([`MATCH_BATCH`]) and for anyone you open (`match_detail`), then for
+/// the rest in the background; `status` is "matching" until every person
+/// a run can match has a model result (`queue::room_status`). The last
+/// themes stay while new ones are found, and a room filling up runs themes
+/// at most every [`THEME_REFRESH`]. A closed room shows what was stored for it and never
+/// queues a run.
 pub(in crate::common_ground) async fn results(
     State(state): State<Arc<ServerState>>,
     Extension(rate_limiter): Extension<Arc<CloudRateLimiter>>,
@@ -118,11 +125,33 @@ pub(in crate::common_ground) async fn results(
         Ok(fresh) => fresh,
         Err(error) => return db_error(error),
     };
-    let stale: Vec<SharedCard> = others
+    // Every pair is estimated, so the best few stay the same people while
+    // their model results come in.
+    let rarity = Rarity::of(&visible_cards);
+    let estimates: HashMap<&str, MatchResult> = others
         .iter()
-        .filter(|o| !fresh.contains_key(&o.profile_id))
-        .cloned()
+        .map(|o| (o.profile_id.as_str(), estimate(&viewer, o, &rarity)))
         .collect();
+    let mut by_estimate: Vec<&SharedCard> = others.iter().collect();
+    by_estimate.sort_by(|a, b| {
+        let score = |card: &SharedCard| estimates[card.profile_id.as_str()].score;
+        score(b)
+            .cmp(&score(a))
+            .then(a.name.cmp(&b.name))
+            .then(a.profile_id.cmp(&b.profile_id))
+    });
+    // The best few by estimate are matched first; once they all have a
+    // model result, the rest follow in the background, best first.
+    let unmatched = |cards: &[&SharedCard]| -> Vec<SharedCard> {
+        cards
+            .iter()
+            .filter(|o| !fresh.contains_key(&o.profile_id))
+            .map(|o| (*o).clone())
+            .collect()
+    };
+    let best = by_estimate.len().min(MATCH_BATCH);
+    let stale = unmatched(&by_estimate[..best]);
+    let rest = unmatched(&by_estimate[best..]);
     // Room themes leave out the viewer if they declined AI and anyone else
     // who has not allowed it (`crate::ai_consent`).
     let ids: Vec<String> = others.iter().map(|c| c.account_id.clone()).collect();
@@ -156,27 +185,29 @@ pub(in crate::common_ground) async fn results(
     // An open room's themes count only for the current theme members; a
     // closed room keeps themes computed with people who no longer share.
     let mut visible = themes.map(|themes| visible_themes(themes, &visible_cards));
-    let needs_themes = open && visible.is_none() && theme_members.len() >= 2;
-    // Each queued run is charged; polling while one works or pauses is free.
-    let mut pending = None;
-    if open && !stale.is_empty() {
-        let queued = store::queue_matches(
-            pool,
-            system_agent.config(),
-            &rate_limiter,
-            &viewer,
-            &stale,
-            Some(room_id),
-            organization_id,
-        )
-        .await;
-        match queued {
-            Ok(Queued::Pending(state)) => pending = Some(state),
-            Ok(Queued::Skipped) => {}
-            Ok(Queued::Limited(retry_after)) => return limited(retry_after),
+    // The people the viewer sees and a theme run reads: older themes count
+    // only for them, as their labels may come from earlier cards.
+    let seen: Vec<SharedCard> = theme_members
+        .iter()
+        .filter(|c| !hidden.contains(&c.account_id))
+        .cloned()
+        .collect();
+    let mut needs_themes = open && visible.is_none() && theme_members.len() >= 2;
+    // A viewer who declined AI may not queue a theme run, so sees none.
+    if needs_themes && !excluded.contains(account) {
+        match store::latest_themes_with_age(pool, room_id).await {
+            Ok(Some((themes, age))) if age < THEME_REFRESH => {
+                visible = Some(visible_themes(themes, &seen));
+                needs_themes = false;
+            }
+            Ok(_) => {}
             Err(error) => return db_error(error),
         }
     }
+    // Each queued run is charged; polling while one works or pauses is free.
+    let mut pending = None;
+    // The theme run is queued first: runs are leased in the order they
+    // were queued, and one theme run serves the whole room.
     if needs_themes {
         let queued = store::queue_themes(
             pool,
@@ -194,11 +225,6 @@ pub(in crate::common_ground) async fn results(
                 // Until the new themes land, the last ones stay for the people
                 // the viewer sees and the run reads. Their labels may come from
                 // earlier cards, so only a pending run keeps them up.
-                let seen: Vec<SharedCard> = theme_members
-                    .iter()
-                    .filter(|c| !hidden.contains(&c.account_id))
-                    .cloned()
-                    .collect();
                 visible = match store::latest_themes(pool, room_id).await {
                     Ok(themes) => themes.map(|themes| visible_themes(themes, &seen)),
                     Err(error) => return db_error(error),
@@ -210,21 +236,82 @@ pub(in crate::common_ground) async fn results(
             Err(error) => return db_error(error),
         }
     }
+    // The tail follows once the best few are in, or when none of them can be
+    // matched (they declined AI).
+    let mut tail = open && !rest.is_empty();
+    if open && !stale.is_empty() {
+        let queued = store::queue_matches(
+            pool,
+            system_agent.config(),
+            &rate_limiter,
+            &viewer,
+            &stale,
+            Some(room_id),
+            organization_id,
+        )
+        .await;
+        match queued {
+            Ok(Queued::Pending(state)) => {
+                pending = Some(state);
+                tail = false;
+            }
+            Ok(Queued::Skipped) => {}
+            Ok(Queued::Limited(retry_after)) => return limited(retry_after),
+            Err(error) => return db_error(error),
+        }
+    }
+    if tail {
+        let queued = queue::queue_room_tail(
+            pool,
+            system_agent.config(),
+            &rate_limiter,
+            &viewer,
+            &rest,
+            room_id,
+            organization_id,
+        )
+        .await;
+        match queued {
+            Ok(Queued::Pending(state)) => pending = Some(state),
+            // The rows still show as matching; a later look queues the run.
+            Ok(Queued::Skipped | Queued::Limited(_)) => {}
+            Err(error) => return db_error(error),
+        }
+    }
+    let status = queue::room_status(open, &stale, &rest, &excluded, account, pending);
 
-    let mut ranked: Vec<(&SharedCard, &MatchResult)> = others
+    // A model result replaces the estimate as soon as it is stored.
+    // A closed room shows only what was stored for it.
+    let mut ranked: Vec<(&SharedCard, &MatchResult, bool)> = others
         .iter()
-        .filter_map(|o| fresh.get(&o.profile_id).map(|r| (o, r)))
+        .filter_map(|o| match fresh.get(&o.profile_id) {
+            Some(result) => Some((o, result, false)),
+            None if open => Some((o, &estimates[o.profile_id.as_str()], true)),
+            None => None,
+        })
         .collect();
-    ranked.sort_by(|a, b| b.1.score.cmp(&a.1.score).then(a.0.name.cmp(&b.0.name)));
-    let ranked_ids: Vec<String> = ranked.iter().map(|(c, _)| c.account_id.clone()).collect();
+    // Model results first, then the estimates, each best first.
+    ranked.sort_by(|a, b| {
+        a.2.cmp(&b.2)
+            .then(b.1.score.cmp(&a.1.score))
+            .then(a.0.name.cmp(&b.0.name))
+            .then(a.0.profile_id.cmp(&b.0.profile_id))
+    });
+    let ranked_ids: Vec<String> = ranked
+        .iter()
+        .map(|(c, _, _)| c.account_id.clone())
+        .collect();
     let relationships = match relationships(pool, account, &ranked_ids).await {
         Ok(relationships) => relationships,
         Err(error) => return db_error(error),
     };
     let people: Vec<Value> = ranked
         .iter()
-        .map(|(card, result)| {
+        .map(|(card, result, estimated)| {
             let mut entry = json!({ "person": person(card), "score": result.score, "headline": result.headline });
+            if *estimated {
+                entry["estimated"] = json!(true);
+            }
             attach(&mut entry, &card.account_id, &relationships);
             entry
         })
@@ -244,7 +331,7 @@ pub(in crate::common_ground) async fn results(
     (
         StatusCode::OK,
         Json(json!({
-            "status": status(pending),
+            "status": status,
             "profileId": viewer.profile_id,
             "people": people,
             "topics": themes.iter().map(theme_view).collect::<Vec<_>>(),
@@ -305,7 +392,8 @@ pub(in crate::common_ground) async fn match_detail(
         Ok(fresh) => fresh,
         Err(error) => return db_error(error),
     };
-    if let Some(result) = fresh.get(&other_card.profile_id) {
+    let stored = fresh.get(&other_card.profile_id);
+    if stored.is_some() {
         if let Err(error) = query(
             "UPDATE cloud_common_ground_matches SET opened_at = now()
              WHERE viewer_profile_id = $1 AND other_profile_id = $2",
@@ -317,15 +405,17 @@ pub(in crate::common_ground) async fn match_detail(
         {
             return db_error(error);
         }
-        let mut body = json!(result);
-        body["status"] = json!("ready");
-        body["person"] = person(other_card);
-        body["profileId"] = json!(viewer.profile_id);
-        match relationship(pool, account, &other).await {
-            Ok(relationship) => body["relationship"] = relationship,
-            Err(error) => return db_error(error),
-        }
-        return (StatusCode::OK, Json(body)).into_response();
+    }
+    // A brief result (a room's background run) has the score and topics but
+    // no reasons: opening the person queues a full run while the room is
+    // open, and the detail shows the topics meanwhile.
+    let brief = stored.filter(|result| result.brief && link.live);
+    if let (Some(result), None) = (stored, brief) {
+        let body = detail_body(pool, account, result, viewer, other_card, "ready", false);
+        return match body.await {
+            Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+            Err(error) => db_error(error),
+        };
     }
     if !link.live {
         return crate::common_ground::err(
@@ -334,7 +424,7 @@ pub(in crate::common_ground) async fn match_detail(
             StatusCode::NOT_FOUND,
         );
     }
-    match store::queue_opened_match(
+    let queued = queue::queue_opened_match(
         pool,
         system_agent.config(),
         &rate_limiter,
@@ -344,27 +434,59 @@ pub(in crate::common_ground) async fn match_detail(
             .as_ref()
             .map(|Extension(o)| o.organization_id.as_str()),
     )
-    .await
-    {
-        Ok(Queued::Pending(pending)) => match relationship(pool, account, &other).await {
-            Ok(relationship) => (
-                StatusCode::ACCEPTED,
-                Json(json!({
-                    "status": status(Some(pending)),
-                    "person": person(other_card),
-                    "profileId": viewer.profile_id,
-                    "relationship": relationship,
-                })),
-            )
-                .into_response(),
-            Err(error) => db_error(error),
-        },
-        Ok(Queued::Limited(retry_after)) => limited(retry_after),
-        Ok(Queued::Skipped) => crate::common_ground::err(
-            "common_ground_match_not_found",
-            "No match was saved for this person.",
-            StatusCode::NOT_FOUND,
-        ),
+    .await;
+    // Until a run adds reasons, the detail shows the brief result's topics,
+    // or else the quick estimate's.
+    let estimate;
+    let shown = match brief {
+        Some(result) => result,
+        None => {
+            estimate = estimate_of(viewer, other_card, &cards);
+            &estimate
+        }
+    };
+    let (code, status) = match queued {
+        Ok(Queued::Pending(pending)) => (StatusCode::ACCEPTED, status(Some(pending))),
+        // Nothing more will run (someone declined AI, or the budget is used
+        // up): what is shown is all there is.
+        Ok(Queued::Skipped) => (StatusCode::OK, "ready"),
+        Ok(Queued::Limited(_)) if brief.is_some() => (StatusCode::OK, "ready"),
+        Ok(Queued::Limited(retry_after)) => return limited(retry_after),
+        Err(error) => return db_error(error),
+    };
+    // An estimate always is one; a brief result only while a run adds reasons.
+    let estimated = brief.is_none() || code == StatusCode::ACCEPTED;
+    match detail_body(pool, account, shown, viewer, other_card, status, estimated).await {
+        Ok(body) => (code, Json(body)).into_response(),
         Err(error) => db_error(error),
     }
+}
+
+fn estimate_of(viewer: &SharedCard, other: &SharedCard, cards: &[SharedCard]) -> MatchResult {
+    estimate(viewer, other, &Rarity::of(cards))
+}
+
+/// A match as the detail shows it. `estimated` marks topics a model run
+/// has yet to add reasons to.
+async fn detail_body(
+    pool: &sqlx_postgres::PgPool,
+    account: &str,
+    result: &MatchResult,
+    viewer: &SharedCard,
+    other: &SharedCard,
+    status: &str,
+    estimated: bool,
+) -> sqlx_core::Result<Value> {
+    let mut body = json!(result);
+    if let Some(fields) = body.as_object_mut() {
+        fields.remove("brief");
+    }
+    if estimated {
+        body["estimated"] = json!(true);
+    }
+    body["status"] = json!(status);
+    body["person"] = person(other);
+    body["profileId"] = json!(viewer.profile_id);
+    body["relationship"] = relationship(pool, account, &other.account_id).await?;
+    Ok(body)
 }

@@ -1,8 +1,10 @@
 // Grounding's account hints from the cloud sync stream, handed on in one call: Nearby
-// (`nearbyHints`), card builds (`cardHints`), and rooms and matches (`roomHints`). Like those
-// modules this one stays tiny: the sync stream imports it outside the lazy Grounding page.
+// (`nearbyHints`), card builds (`cardHints`), rooms and matches (`roomHints`), and room
+// galleries (`galleryHints`). Like those modules this one stays tiny: the sync stream imports it
+// outside the lazy Grounding page.
 
 import { notifyCommonGroundCardEvents } from './cardHints';
+import { notifyCommonGroundGalleryEvents } from './galleryHints';
 import { notifyCommonGroundNearbyEvents } from './nearbyHints';
 import { notifyCommonGroundRoomEvents } from './roomHints';
 
@@ -10,4 +12,5 @@ export function notifyCommonGroundSyncEvents(events: ReadonlyArray<{ eventType?:
   notifyCommonGroundNearbyEvents(events);
   notifyCommonGroundCardEvents(events);
   notifyCommonGroundRoomEvents(events);
+  notifyCommonGroundGalleryEvents(events);
 }

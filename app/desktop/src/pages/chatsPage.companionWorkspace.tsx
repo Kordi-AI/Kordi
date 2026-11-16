@@ -396,7 +396,6 @@ export function ChatCompanionWorkspace({
             loadError: localRuntime.loadError,
             retry: localRuntime.retry,
             runtimeContextStatus: conversation.contextWindowStatus ?? null,
-            runtimeCacheText: conversation.cacheMonitorText ?? null,
           }}
           collaborationRouting={{
             enabled: presentation.isCollaborationAgent,

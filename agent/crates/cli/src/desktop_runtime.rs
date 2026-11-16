@@ -6,7 +6,6 @@ use kordi_core::settings::Settings;
 use kordi_core::types::ContentBlock;
 use kordi_core::types::{EntryBase, EntryId, SessionEntry};
 use kordi_provider::registry::Model;
-use std::path::PathBuf;
 
 use crate::login;
 use crate::session_bootstrap::{
@@ -23,7 +22,6 @@ mod models;
 mod proactive_run;
 mod runtime_profile;
 pub use runtime_profile::{DesktopRuntimeProfile, DesktopRuntimeTurnRoute};
-use runtime_profile::{apply_runtime_profile, profile_bootstrap_options};
 mod prompt_context;
 mod shared_context;
 mod tool_runtimes;
@@ -98,6 +96,8 @@ pub struct DesktopRuntimeSession {
     setup: SessionRuntimeSetup,
     owner_persona_enabled: bool,
     configured_route: Option<turn_route::ConfiguredRoute>,
+    /// See `DesktopRuntimeProfile::skip_workspace_instructions`.
+    skip_workspace_instructions: bool,
 }
 
 impl DesktopRuntimeSession {
@@ -106,6 +106,7 @@ impl DesktopRuntimeSession {
             setup,
             owner_persona_enabled,
             configured_route: None,
+            skip_workspace_instructions: false,
         };
         session.refresh_saved_agent_persona();
         session
@@ -136,32 +137,6 @@ impl DesktopRuntimeSession {
             .await;
         }
         Self::resume_chat(cwd, session_id, false).await
-    }
-
-    pub async fn create_profiled_with_id(
-        cwd: PathBuf,
-        session_id: &str,
-        profile: DesktopRuntimeProfile,
-    ) -> Result<Self> {
-        let options = profile_bootstrap_options(&profile, None);
-        let (_runtime_host, _ui, mut setup) = prepare_session_runtime_for_cwd(cwd, options).await?;
-        retarget_runtime_setup_session(&mut setup, session_id)?;
-        apply_runtime_profile(&mut setup, &profile);
-        normalize_setup_thinking(&mut setup);
-        Ok(Self::from_setup(setup, false))
-    }
-
-    pub async fn resume_profiled(
-        cwd: PathBuf,
-        session_id: &str,
-        profile: DesktopRuntimeProfile,
-    ) -> Result<Self> {
-        let options = profile_bootstrap_options(&profile, Some(session_id.to_string()));
-        let (_runtime_host, _ui, mut setup) = prepare_session_runtime_for_cwd(cwd, options).await?;
-        apply_runtime_profile(&mut setup, &profile);
-        normalize_setup_thinking(&mut setup);
-        background_sessions::save_runtime_profile(&setup, &profile)?;
-        Ok(Self::from_setup(setup, false))
     }
 
     pub fn session_id(&self) -> &str {

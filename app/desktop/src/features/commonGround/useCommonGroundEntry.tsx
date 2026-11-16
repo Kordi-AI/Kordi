@@ -13,6 +13,7 @@ import { cloudContactToContact, type UseCloudContactsResult } from '@/features/c
 import { connectorsClientForAccount } from '@/features/connectors/connectorsClientSelection';
 import { CONNECTORS_SETTINGS_LINK_EVENT, type ConnectorsSettingsTarget } from '@/features/connectors/connectorsSettingsLink';
 import { openDesktopExternalUrl } from '@/lib/desktop';
+import type { ContactMessageOptions } from '@/kordi-app/contacts/contactsPageTypes';
 import type { Contact, ContactClass, ContactRequest } from '@/kordi-app/types';
 import { CommonGroundAvailabilityPanel } from './CommonGroundAvailabilityPanel';
 import { CommonGroundContactsRow } from './CommonGroundContactsRow';
@@ -35,8 +36,8 @@ export type CommonGroundEntry = ContactsSelectionHandlers & {
 
 export type CommonGroundEntryOptions = {
   account: CloudAccount | null;
-  /** The Contacts "Message" path; receives a contact for the person. */
-  onMessageContact?: (contact: Contact) => void;
+  /** The Contacts "Message" path; receives a contact for the person and an optional composer draft. */
+  onMessageContact?: (contact: Contact, options?: ContactMessageOptions) => void;
   cloud: Pick<UseCloudContactsResult, 'contacts' | 'acceptRequest' | 'refresh'>;
 };
 
@@ -110,9 +111,9 @@ export function useCommonGroundEntry(handlers: ContactsSelectionHandlers, option
     memoryAvailable,
     memoryRouting,
     memoryCards,
-    openChat: (person) => {
+    openChat: (person, draft) => {
       setSelected(false);
-      latest.current.onMessageContact?.(contactForPerson(latest.current.cloud.contacts, person));
+      latest.current.onMessageContact?.(contactForPerson(latest.current.cloud.contacts, person), draft ? { draft } : undefined);
     },
     acceptRequest: (requestId) => latest.current.cloud.acceptRequest(requestId),
     contactsChanged: () => { void latest.current.cloud.refresh().catch(() => undefined); },

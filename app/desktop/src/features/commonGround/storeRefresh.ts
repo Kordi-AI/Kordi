@@ -4,6 +4,7 @@ import {
   type CgScreen, type CgState, type CommonGroundStore,
 } from './store';
 import * as autoOps from './storeAutoRebuild';
+import { refreshGalleryItem } from './storeGallery';
 import * as hintOps from './storeHints';
 import type { CgRoomSummary } from './types';
 
@@ -36,6 +37,8 @@ export async function refreshScreen(store: CommonGroundStore, screen: CgScreen):
   try {
     switch (screen.name) {
       case 'home': await store.loadHome(); return true;
+      // A Gallery item handles its own errors: a removed item goes back to the room.
+      case 'galleryItem': return await refreshGalleryItem(store, screen);
       case 'results': {
         // The room comes along, so people who just joined show before their match is in.
         const room = store.client.room(screen.code).catch(() => null);
@@ -92,9 +95,14 @@ export async function pollTop(store: CommonGroundStore): Promise<number | null> 
       if (state().profileId === profileId) store.applyOwner(owner);
       return owner.build.status === 'building' ? BUILD_POLL_MS : null;
     }
+    // A room's Results keep polling while any row still shows the matching ring, whatever the
+    // status says: background runs fill those rows in batches.
     const matching = () => {
-      const status = screen.name === 'results' ? state().results[screen.code]?.status
-        : screen.name === 'match' ? state().matches[personKey(screen.accountId, screen.profileId)]?.status : 'ready';
+      if (screen.name === 'results') {
+        const results = state().results[screen.code];
+        return !results || results.status === 'matching' || results.people.some((entry) => entry.estimated);
+      }
+      const status = screen.name === 'match' ? state().matches[personKey(screen.accountId, screen.profileId)]?.status : 'ready';
       return !status || status === 'matching';
     };
     if (matching() && (screen.name !== 'results' || !roomClosed(state(), screen.code))) {

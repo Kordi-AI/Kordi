@@ -13,7 +13,6 @@ type MainComposerLocalRouting = {
   paneKind: 'human' | 'agent' | null;
   configTarget: ComposerConfigTargetOverride;
   contextStatus: DesktopChatContextWindowStatus | null | undefined;
-  cacheText: string | null | undefined;
 };
 
 type MainComposerCollaborationRouting = {

@@ -2,8 +2,8 @@ import Foundation
 
 extension Notification.Name {
     /// Posted on the main actor for the account sync hints
-    /// `common_ground.room.updated`, `common_ground.matches.updated` and
-    /// `common_ground.invitations.updated`.
+    /// `common_ground.room.updated`, `common_ground.matches.updated`,
+    /// `common_ground.invitations.updated` and `common_ground.gallery.updated`.
     /// The object is a `CommonGroundSyncHint`.
     static let kordiCommonGroundHint = Notification.Name("kordi.commonGround.hint")
 }
@@ -18,9 +18,13 @@ enum CommonGroundSyncHint: Equatable, Sendable {
     case matches
     /// A group invitation to this account arrived or was answered elsewhere.
     case invitations
+    /// Someone shared to the room's gallery, removed an item, or added or
+    /// deleted a comment on `itemId`.
+    case gallery(code: String, itemId: String?)
 
     static let eventTypes: Set<String> = [
         "common_ground.room.updated", "common_ground.matches.updated", "common_ground.invitations.updated",
+        "common_ground.gallery.updated",
     ]
 
     /// True once any Grounding hint reached the app since launch: the stream
@@ -36,6 +40,10 @@ enum CommonGroundSyncHint: Equatable, Sendable {
             self = .matches
         case "common_ground.invitations.updated":
             self = .invitations
+        case "common_ground.gallery.updated":
+            // A hint without a room code names nothing to refresh.
+            guard let code = event.payload.code?.nonEmpty else { return nil }
+            self = .gallery(code: code, itemId: event.payload.itemId?.nonEmpty)
         default:
             return nil
         }
@@ -123,9 +131,11 @@ final class CommonGroundHintWake {
 
 extension CommonGroundModel {
     /// A Grounding hint from the sync stream: wakes the screens on display
-    /// that it concerns. Screens that are not on display do nothing.
+    /// that it concerns. Screens that are not on display do nothing. A
+    /// gallery hint refreshes a loaded gallery and the open item it names.
     func receive(_ hint: CommonGroundSyncHint) {
         hintsArrived = true
+        if case .gallery(let code, let itemId) = hint { scheduleGalleryRefresh(code: code, itemId: itemId) }
         for wake in hintWakes where wake.target.wakes(on: hint) { wake.signal() }
     }
 
@@ -134,11 +144,12 @@ extension CommonGroundModel {
     var matchingPollInterval: Duration { hintsArrived ? Self.hintedMatchPollInterval : Self.matchPollInterval }
 
     /// How long an open room's Results wait between looks: the matching
-    /// interval while matching, else the fallback for a missed hint. Until a
+    /// interval while rows are still to come, else the fallback for a
+    /// missed hint. Until a
     /// hint shows the stream works, every look is `matchPollInterval` apart.
     func resultsPollInterval(_ code: String) -> Duration {
         guard hintsArrived else { return Self.matchPollInterval }
-        return results[code]?.isMatching == true ? Self.hintedMatchPollInterval : Self.fallbackPollInterval
+        return results[code]?.awaitsRows == true ? Self.hintedMatchPollInterval : Self.fallbackPollInterval
     }
 
     /// Calls `refresh` now (or first after one wait), then each time

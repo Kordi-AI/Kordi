@@ -20,9 +20,13 @@
  * (`features/commonGround/roomHints`). `common_ground.invitations.updated` (a
  * person invited this account to a group, or it answered one elsewhere)
  * refreshes Contacts › Requests (`features/commonGround/roomInvitations`).
+ * `common_ground.gallery.updated` (a share, removal or comment in a room's
+ * Gallery) refreshes that Gallery and its open item
+ * (`features/commonGround/galleryHints`).
  */
 export const ACCOUNT_HINT_EVENT_TYPES: ReadonlySet<string> = new Set([
   'common_ground.card.updated',
+  'common_ground.gallery.updated',
   'common_ground.invitations.updated',
   'common_ground.matches.updated',
   'common_ground.nearby.alert',

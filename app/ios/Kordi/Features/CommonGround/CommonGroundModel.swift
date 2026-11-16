@@ -16,7 +16,7 @@ final class CommonGroundModel: ObservableObject {
     nonisolated static let lobbyPollInterval: Duration = .seconds(2)
     nonisolated static let matchPollInterval: Duration = .seconds(3)
     /// The matching poll once a sync hint showed that hints arrive.
-    nonisolated static let hintedMatchPollInterval: Duration = .seconds(10)
+    nonisolated static let hintedMatchPollInterval: Duration = .seconds(20)
     /// An open room's ready Results look again this often, in case a hint was missed.
     nonisolated static let fallbackPollInterval: Duration = .seconds(60)
     /// Home reloads cards on appear and on foreground at most this often.
@@ -65,6 +65,9 @@ final class CommonGroundModel: ObservableObject {
     @Published var profileMemories: [CloudProfileMemory] = []
     /// Nearby settings, people and requests, set in CommonGroundModel+Nearby.swift.
     @Published var nearby = CommonGroundNearbyState()
+    /// Room galleries, set in CommonGroundModel+Gallery.swift.
+    @Published var gallery = CommonGroundGalleryState()
+    let galleryRuntime = CommonGroundGalleryRuntime()
     /// The viewer's profile to see each person through, from Recent or a room.
     var viewerProfiles: [String: String] = [:]
     /// The last code looked up; an answer for any other code is stale.
@@ -153,7 +156,7 @@ final class CommonGroundModel: ObservableObject {
             let seconds = Double(error.retryAfterSeconds ?? 60)
             return "Try again in \(max(1, Int((seconds / 60).rounded(.up)))) min."
         }
-        return messages[error.code] ?? nearbyMessages[error.code] ?? error.message
+        return messages[error.code] ?? nearbyMessages[error.code] ?? galleryMessages[error.code] ?? error.message
     }
 
     func report(_ error: Error) {
@@ -442,6 +445,7 @@ final class CommonGroundModel: ObservableObject {
         withAnimation(.snappy) { roomList?.removeAll { $0.code == code } }
         rooms[code] = nil
         results[code] = nil
+        gallery.lists[code] = nil
     }
 
     @discardableResult
@@ -459,10 +463,10 @@ final class CommonGroundModel: ObservableObject {
         }
     }
 
-    /// Polls results while the server is still matching; a closed room's
+    /// Polls results while rows are still to come; a closed room's
     /// results are stored, so they are never polled.
     func waitForResults(_ code: String, every interval: Duration = matchPollInterval) async {
-        while results[code]?.isMatching == true, !isClosed(code), !Task.isCancelled {
+        while results[code]?.awaitsRows == true, !isClosed(code), !Task.isCancelled {
             try? await Task.sleep(for: interval)
             guard !Task.isCancelled else { return }
             await loadResults(code, quiet: true)
