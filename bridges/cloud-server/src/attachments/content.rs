@@ -13,7 +13,8 @@ use crate::auth::routes::CloudSession;
 use crate::server::ServerState;
 
 /// Streams attachment bytes through the authenticated Cloud API while keeping
-/// object storage private and preserving HTTP range requests for media.
+/// object storage private and preserving HTTP range requests for media. The
+/// bytes are never rendered as a page.
 pub async fn content(
     State(state): State<Arc<ServerState>>,
     Extension(session): Extension<CloudSession>,
@@ -60,7 +61,7 @@ pub(crate) struct StoredObject<'a> {
 /// Streams a finalized attachment that the caller already checked the
 /// reader may see by another rule than [`attachment_access_row`] (a Grounding
 /// room gallery item), with the same headers and range handling as
-/// `/content`.
+/// `/content`. The bytes are never rendered as a page.
 pub(crate) async fn stream_readable_object(
     state: &ServerState,
     object: &StoredObject<'_>,
@@ -162,5 +163,52 @@ async fn stream_object(
     *response.status_mut() =
         StatusCode::from_u16(object_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     *response.headers_mut() = headers;
+    never_render(response)
+}
+
+/// Adds the headers that stop a browser from running stored bytes as a page
+/// in the app's origin; status, body and content type stay as they are.
+pub(crate) fn never_render(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("sandbox; default-src 'none'"),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment"),
+    );
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    use super::never_render;
+
+    #[test]
+    fn content_answers_are_never_rendered_as_a_page() {
+        let partial = (
+            StatusCode::PARTIAL_CONTENT,
+            [("content-type", "text/html")],
+            "<script>",
+        )
+            .into_response();
+        let response = never_render(partial);
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        let headers = response.headers();
+        assert_eq!(headers["content-type"], "text/html");
+        assert_eq!(
+            headers["content-security-policy"],
+            "sandbox; default-src 'none'"
+        );
+        assert_eq!(headers["x-content-type-options"], "nosniff");
+        assert_eq!(headers["content-disposition"], "attachment");
+    }
 }

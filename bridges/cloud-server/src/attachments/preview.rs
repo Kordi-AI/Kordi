@@ -3,6 +3,7 @@ use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
+use crate::attachments::content::never_render;
 use crate::attachments::response::boxed_err;
 
 pub(crate) fn normalize_preview_url(value: Option<&str>) -> Result<String, Box<Response>> {
@@ -45,7 +46,7 @@ pub(crate) fn preview_content_response(value: Option<&str>) -> Result<Response, 
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, max-age=31536000, immutable"),
     );
-    Ok((headers, Bytes::from(bytes)).into_response())
+    Ok(never_render((headers, Bytes::from(bytes)).into_response()))
 }
 
 fn invalid_preview(message: &'static str) -> Box<Response> {
@@ -69,7 +70,7 @@ fn decode_preview_data_url(value: &str) -> Result<(&'static str, Vec<u8>), ()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_preview_data_url, normalize_preview_url};
+    use super::{decode_preview_data_url, normalize_preview_url, preview_content_response};
 
     #[test]
     fn preview_data_urls_decode_with_their_image_type() {
@@ -83,5 +84,18 @@ mod tests {
     fn preview_validation_rejects_non_image_and_malformed_data() {
         assert!(normalize_preview_url(Some("data:text/plain;base64,SGVsbG8=")).is_err());
         assert!(normalize_preview_url(Some("data:image/png;base64,not-base64")).is_err());
+    }
+
+    #[test]
+    fn preview_content_is_never_rendered_as_a_page() {
+        let response = preview_content_response(Some("data:image/png;base64,iVBORw==")).unwrap();
+        let headers = response.headers();
+        assert_eq!(headers["content-type"], "image/png");
+        assert_eq!(
+            headers["content-security-policy"],
+            "sandbox; default-src 'none'"
+        );
+        assert_eq!(headers["x-content-type-options"], "nosniff");
+        assert_eq!(headers["content-disposition"], "attachment");
     }
 }

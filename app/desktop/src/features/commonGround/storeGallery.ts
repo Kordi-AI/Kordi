@@ -4,6 +4,7 @@
 // Gallery off (`support.gallery`), and the room page stays as it was.
 
 import { CommonGroundError, commonGroundErrorCode, commonGroundErrorMessage, isRouteMissing, type CommonGroundClient } from './client';
+import type { CgGalleryHint } from './galleryHints';
 import type { CgScreen, CgState } from './store';
 import type { CgGalleryComment, CgGalleryItem, CgGalleryItemView, CgGalleryScreen, CgGalleryState, CgPerson, CgRoomTab } from './types';
 
@@ -134,7 +135,8 @@ function dropItem(host: CgGalleryHost, code: string, itemId: string) {
   });
 }
 
-const isItemScreen = (screen: CgScreen, code: string, itemId: string) => screen.name === 'galleryItem' && screen.code === code && screen.itemId === itemId;
+const isItemScreen = (screen: CgScreen, code: string, itemId: string): screen is CgGalleryScreen => screen.name === 'galleryItem' && screen.code === code && screen.itemId === itemId;
+const isGone = (error: unknown) => error instanceof CommonGroundError && [403, 404].includes(error.status);
 
 /** The sharer takes an item out of the Gallery; an open item screen goes back to the room. */
 export async function removeFromGallery(host: CgGalleryHost, code: string, itemId: string): Promise<boolean> {
@@ -151,12 +153,16 @@ export async function removeFromGallery(host: CgGalleryHost, code: string, itemI
   });
 }
 
-/** Keeps the room's list in step with an item the server just sent (comment count, topic). */
-function landItem(host: CgGalleryHost, code: string, view: CgGalleryItemView) {
+/**
+ * Keeps the room's list in step with an item the server just sent (comment count, topic). `open`
+ * false replaces the item's view only when one is cached, so a hint never creates one.
+ */
+function landItem(host: CgGalleryHost, code: string, view: CgGalleryItemView, open = true) {
   patchGallery(host, (gallery) => {
     const list = gallery.lists[code];
+    const key = galleryItemKey(code, view.item.itemId);
     return {
-      items: { ...gallery.items, [galleryItemKey(code, view.item.itemId)]: view },
+      ...(open || gallery.items[key] ? { items: { ...gallery.items, [key]: view } } : {}),
       ...(list ? { lists: { ...gallery.lists, [code]: { ...list, items: list.items.map((item) => (item.itemId === view.item.itemId ? view.item : item)) } } } : {}),
     };
   });
@@ -171,8 +177,7 @@ export async function refreshGalleryItem(host: CgGalleryHost, screen: CgGalleryS
   try {
     landItem(host, code, await host.client.galleryItem(code, itemId));
   } catch (error) {
-    const gone = error instanceof CommonGroundError && [403, 404].includes(error.status);
-    if (unsupported(host, error) || gone) {
+    if (unsupported(host, error) || isGone(error)) {
       dropItem(host, code, itemId);
       if (host.top() === screen) host.back();
     } else if (!quiet) {
@@ -255,20 +260,53 @@ export async function deleteGalleryComment(host: CgGalleryHost, code: string, it
   });
 }
 
+/** More `item` ids than this for one room at once refetch the room's whole list instead. */
+export const GALLERY_ITEM_HINT_MAX = 8;
+
 /**
- * `common_ground.gallery.updated` (a share, removal, comment or comment deletion in a room): refetches
- * that room's Gallery when it is loaded, and the open item when it is the one named.
+ * Refetches one listed item in place for an `item` hint: its list entry, and its view only when
+ * cached. A 403/404 drops it; a server without the route turns the Gallery off; others stay quiet.
  */
-export async function receiveGalleryHints(host: CgGalleryHost, hints: Array<{ code: string; itemId: string | null }>): Promise<void> {
+async function refreshListedItem(host: CgGalleryHost, code: string, itemId: string): Promise<void> {
+  try {
+    landItem(host, code, await host.client.galleryItem(code, itemId), false);
+  } catch (error) {
+    if (!unsupported(host, error) && isGone(error)) dropItem(host, code, itemId);
+  }
+}
+
+/** A gallery hint; older callers and servers leave out `itemIds` and `change`. */
+type GalleryHintIn = Pick<CgGalleryHint, 'code' | 'itemId'> & Partial<Pick<CgGalleryHint, 'itemIds' | 'change'>>;
+
+/**
+ * `common_ground.gallery.updated`. A room with any `list` hint (a share or removal; also a missing or
+ * unknown `change`) refetches its loaded Gallery, and the open item when it is one of those named.
+ * A room with only `item` hints (a comment, or a refreshed title or preview) refetches just the named
+ * items: the open one, or those in its loaded list, never the whole list.
+ */
+export async function receiveGalleryHints(host: CgGalleryHost, hints: ReadonlyArray<GalleryHintIn>): Promise<void> {
   const state = host.getSnapshot();
   if (!state.support.gallery) return;
-  const work: Promise<unknown>[] = [];
-  for (const code of new Set(hints.map((hint) => hint.code))) {
-    if (state.gallery.lists[code]) work.push(loadGallery(host, code, { quiet: true }));
+  const rooms = new Map<string, { list: boolean; ids: Set<string> }>();
+  for (const hint of hints) {
+    const room = rooms.get(hint.code) ?? { list: false, ids: new Set<string>() };
+    room.list ||= hint.change !== 'item';
+    (hint.itemIds ?? (hint.itemId ? [hint.itemId] : [])).forEach((itemId) => room.ids.add(itemId));
+    rooms.set(hint.code, room);
   }
   const top = host.top();
-  if (top.name === 'galleryItem' && hints.some((hint) => hint.code === top.code && hint.itemId === top.itemId)) {
-    work.push(refreshGalleryItem(host, top, { quiet: true }));
+  const work: Promise<unknown>[] = [];
+  for (const [code, { list, ids }] of rooms) {
+    const listed = state.gallery.lists[code];
+    if (list || ids.size > GALLERY_ITEM_HINT_MAX) {
+      if (listed) work.push(loadGallery(host, code, { quiet: true }));
+      if (top.name === 'galleryItem' && top.code === code && ids.has(top.itemId)) work.push(refreshGalleryItem(host, top, { quiet: true }));
+      continue;
+    }
+    for (const itemId of ids) {
+      if (isItemScreen(top, code, itemId)) work.push(refreshGalleryItem(host, top, { quiet: true }));
+      else if (listed?.items.some((item) => item.itemId === itemId)) work.push(refreshListedItem(host, code, itemId));
+    }
   }
   await Promise.all(work);
 }
