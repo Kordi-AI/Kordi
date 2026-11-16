@@ -3,8 +3,8 @@
   "targetTriple": "aarch64-apple-darwin",
   "bunVersion": "1.4.2",
   "ompVersion": "18.12.6",
-  "workerSourceSha256": "948dcff5c9cc84ac368500542f79fe2156892145e1d51c6ae97b4ea4b54991d6",
-  "inputCount": 3670,
+  "workerSourceSha256": "6de8e8b44836400bac0f3559a061a82531b0df37401b7caf0cfb369eb4896f8c",
+  "inputCount": 3671,
   "optionalLibvips": {
     "present": false,
     "matchingBundledInputCount": 0
