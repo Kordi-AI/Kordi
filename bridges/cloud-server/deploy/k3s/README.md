@@ -358,6 +358,18 @@ kubectl -n kordi-cloud create secret generic kordi-support-openai \
 unset KORDI_SUPPORT_OPENAI_API_KEY
 ```
 
+For endpoints that issue short-lived keys, set `KORDI_SUPPORT_OPENAI_API_KEY_FILE`
+to the path of a file that holds only the key, instead of
+`KORDI_SUPPORT_OPENAI_API_KEY`. The server reads the file again each time a
+KordiSpot run needs the key, so a replaced key is used by the next run without
+a restart. Surrounding whitespace is ignored, and the key file takes precedence
+over a shared `KORDI_SERVICE_MODEL_API_KEY`. Setting both KordiSpot settings, or
+a file that is missing or empty at startup, stops the server with a
+configuration error; a file that becomes unreadable later fails only the runs
+that need it, and the error never includes the key. The bundled manifest sets
+`KORDI_SUPPORT_OPENAI_API_KEY` from the Secret; an empty value counts as unset,
+so leave its `api-key` empty (or remove the entry) when you mount a key file.
+
 The system agent is created and locked by the server; it is intentionally
 hidden from normal Factory edit/archive routes.
 
