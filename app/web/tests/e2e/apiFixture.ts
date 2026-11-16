@@ -44,6 +44,8 @@ export async function installApiFixture(page: Page, baseURL: string, signedIn: b
       case '/v2/chat/sync': body = { protocol_version: 2, events: [], next_cursor: 'fixture-cursor', last_stream_seq: 0, has_more: false, server_time: '2026-11-05T12:00:00Z' }; break;
       case '/v1/cloud/contacts': body = { contacts: [], requests: [] }; break;
       case '/v1/cloud/contacts/requests': body = { requests: [] }; break;
+      // An account with no Mac publishing projects.
+      case '/v1/cloud/projects': body = { devices: [] }; break;
       default: return route.fulfill({ status: 404, json: { errorCode: 'fixture_route_unavailable' } });
     }
     return route.fulfill({ status: 200, json: body });

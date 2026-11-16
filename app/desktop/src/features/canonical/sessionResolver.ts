@@ -61,6 +61,8 @@ export type ProjectRoutingOptions = {
   previousGroupIdBySession?: ReadonlyMap<string, string>;
   /** Other Macs' catalogs; they place synced sessions this Mac has no project for. */
   remoteProjects?: readonly RemoteProjectMembership[];
+  /** A client with no project folders lists every published project, even one with no known session. */
+  listEmptyRemoteProjects?: boolean;
 };
 
 function normalizedProjectRoot(value?: string | null) {
@@ -281,6 +283,7 @@ export function buildProjectRoutingGroups(
   for (const project of options.remoteProjects ?? []) {
     const localGroupId = canonicalProjectGroupIdFromRoot(project.localRoot);
     const groupId = localGroupId ?? `${REMOTE_PROJECT_GROUP_PREFIX}${project.id}`;
+    if (options.listEmptyRemoteProjects && !localGroupId) addGroup(groupId, 0);
     for (const sessionId of project.sessions) {
       if (placedSessionIds.has(sessionId) || archivedSessionIds.has(sessionId)) continue;
       if (!knownSessionTimestamps.has(sessionId)) continue;
@@ -300,7 +303,7 @@ export function buildProjectRoutingGroups(
         .sort((left, right) => (sessionTimestampById.get(right) ?? 0) - (sessionTimestampById.get(left) ?? 0))
         .map((id) => ({ id })),
     }))
-    .filter((group) => group.persisted || group.sessions.length > 0);
+    .filter((group) => group.persisted || group.sessions.length > 0 || (options.listEmptyRemoteProjects && group.remote));
 }
 
 /** Remember where each session was shown; plain chats the runtime lists drop their memory. */

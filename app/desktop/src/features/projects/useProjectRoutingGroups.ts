@@ -5,6 +5,7 @@ import {
 } from '@/features/canonical/sessionResolver';
 import type { CanonicalSessionState, DesktopChatState } from '@/kordi-app/types';
 import { isNativeDesktopShell } from '@/lib/desktop';
+import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
 import { localProjectSessionHints } from './localProjectSessions';
 import { useRemoteProjectCatalog } from './remoteProjectCatalog';
 
@@ -32,13 +33,16 @@ export function useProjectRoutingGroups(
   const localRoots = useMemo(() => (desktopChatState?.projects ?? []).map((project) => project.root), [desktopChatState?.projects]);
   // Folders this profile already works in help find a synced project's folder.
   const folderHints = useMemo(() => [desktopChatState?.cwd ?? '', desktopChatState?.activeSession.cwd ?? ''], [desktopChatState?.cwd, desktopChatState?.activeSession.cwd]);
-  const remoteProjects = useRemoteProjectCatalog(Boolean(desktopChatState) && isNativeDesktopShell(), localRoots, folderHints);
+  // The web app has no project folders; it lists the projects the account's Macs publish.
+  const browser = isBrowserAppRuntime();
+  const remoteProjects = useRemoteProjectCatalog(browser || (Boolean(desktopChatState) && isNativeDesktopShell()), localRoots, folderHints);
   const groups = useMemo(() => buildProjectRoutingGroups(desktopChatState?.projects, canonicalSessionState, {
     sessionHints: hints?.sessionHints,
     unboundSessionIds: hints?.unboundSessionIds,
     previousGroupIdBySession: membership,
     remoteProjects,
-  }), [canonicalSessionState, desktopChatState?.projects, hints, membership, remoteProjects]);
+    listEmptyRemoteProjects: browser,
+  }), [browser, canonicalSessionState, desktopChatState?.projects, hints, membership, remoteProjects]);
   const nextMembership = useMemo(
     () => rememberProjectMembership(membership, groups, hints?.unboundSessionIds),
     [groups, hints, membership],

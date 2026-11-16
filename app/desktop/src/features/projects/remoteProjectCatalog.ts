@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { CLOUD_SESSION_CHANGED_EVENT, loadSession } from '@/features/cloud/session';
 import type { RemoteProjectMembership } from '@/features/canonical/sessionResolver';
 import type { DesktopProjectSettings } from '@/kordi-app/types';
-import { invokeDesktop } from '@/lib/desktop';
+import { invokeDesktop, isNativeDesktopShell } from '@/lib/desktop';
 import { PROJECTS_UPDATED_EVENT, projectCatalogRequest, projectID } from './projectSync';
 import { desktopProjectImportApi } from './projectImportApi';
 
@@ -105,7 +105,7 @@ export async function locateRemoteProject(catalogId: string) {
 }
 
 /**
- * Polls the account's project catalogs while the native shell is signed in and
+ * Polls the account's project catalogs while signed in. In the native shell it also
  * binds each project whose folder exists on this Mac, as adding it manually does.
  */
 export function useRemoteProjectCatalog(enabled: boolean, localRoots: readonly string[], folderHints: readonly string[] = []) {
@@ -143,21 +143,26 @@ export function useRemoteProjectCatalog(enabled: boolean, localRoots: readonly s
         // Keep the previous array when nothing changed so the sidebar does not rebuild every poll.
         setProjects((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
         publishSnapshot(next);
-        void bindLocalFolders(next);
+        // Only the native shell can look for project folders.
+        if (isNativeDesktopShell()) void bindLocalFolders(next);
       } catch { /* Older servers and offline periods keep the last known catalog. */ }
     };
     const update = () => { void refresh(); };
+    // A tab the user returns to shows a project created meanwhile without waiting for the poll.
+    const visible = () => { if (document.visibilityState === 'visible') update(); };
     // A different account must never see the previous account's catalog.
     const reset = () => { setProjects(null); publishSnapshot([]); void refresh(); };
     update();
     const timer = window.setInterval(update, REFRESH_MS);
     window.addEventListener(PROJECTS_UPDATED_EVENT, update);
     window.addEventListener(CLOUD_SESSION_CHANGED_EVENT, reset);
+    document.addEventListener('visibilitychange', visible);
     return () => {
       stopped = true;
       window.clearInterval(timer);
       window.removeEventListener(PROJECTS_UPDATED_EVENT, update);
       window.removeEventListener(CLOUD_SESSION_CHANGED_EVENT, reset);
+      document.removeEventListener('visibilitychange', visible);
     };
   }, [enabled, rootsKey, hintsKey]);
   return enabled ? projects ?? undefined : undefined;

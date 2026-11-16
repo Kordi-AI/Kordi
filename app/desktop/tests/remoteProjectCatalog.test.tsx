@@ -77,6 +77,29 @@ test('a catalog project this Mac also has merges into the local project', () => 
   ]);
 });
 
+test('a client with no project folders lists every published project, even one without known sessions', () => {
+  const empty: RemoteProjectMembership = { id: 'b'.repeat(64), name: 'new-project', sessions: ['not-synced-yet'] };
+  const canonical = synced(['worktree-status', 3], ['plain', 1]);
+  // Another Mac still waits for a session it knows before it shows the project.
+  assert.deepEqual(route(freshProfile(), canonical, [remote, empty]).map((group) => group.name), ['example-project']);
+  const groups = buildProjectRoutingGroups(undefined, canonical, { remoteProjects: [remote, empty], listEmptyRemoteProjects: true });
+  assert.deepEqual(groups, [
+    { id: `remote-project:${CATALOG_ID}`, persisted: false, name: 'example-project', remote: true, sessions: [{ id: 'worktree-status' }] },
+    { id: `remote-project:${'b'.repeat(64)}`, persisted: false, name: 'new-project', remote: true, sessions: [] },
+  ]);
+  assert.deepEqual(sidebar(groups, ['worktree-status', 'plain']).recents, ['plain']);
+});
+
+test('listing every published project never duplicates a project this client has locally', () => {
+  const local = [{ id: `project:${ROOT}`, name: 'example-project', root: ROOT, summary: '', sharedSources: [], sessions: [] }];
+  const groups = buildProjectRoutingGroups(local, synced(['worktree-status', 3]), {
+    remoteProjects: [{ ...remote, localRoot: ROOT }], listEmptyRemoteProjects: true,
+  });
+  assert.deepEqual(groups.map((group) => [group.id, group.remote ?? false, group.sessions.map((session) => session.id)]), [
+    [`project:${ROOT}`, false, ['worktree-status']],
+  ]);
+});
+
 test('archived and unknown sessions never join a catalog project', () => {
   const groups = route(freshProfile(), synced(['worktree-status', 3, 'archived']), [{ ...remote, sessions: ['worktree-status', 'gone'] }]);
   assert.deepEqual(groups, []);

@@ -75,11 +75,13 @@ export function WorkspaceChatLists({
     closePersonalAgentPage();
     onSelectChatSession(sessionId);
   }, [onSelectChatSession]);
+  // The web app lists the account's Mac projects read-only, and no heading when there are none.
+  const listProjects = Boolean(projects?.enabled) || (isBrowserAppRuntime() && (projects?.projects.length ?? 0) > 0);
   const grouped = useMemo(() => projectChatGroups(
     model.agentSidebarRows, model.showArchived ? [] : projects?.projects ?? [], collapsed,
-    Boolean(projects?.enabled && !model.chatSearch && !model.showArchived),
+    listProjects && !model.chatSearch && !model.showArchived,
     { pinnedSessionIds, expandedProjectIds, previewLimit: model.chatSearch ? Infinity : 5, personal },
-  ), [model.agentSidebarRows, projects?.projects, projects?.enabled, collapsed, model.chatSearch, model.showArchived, pinnedSessionIds, expandedProjectIds, personal]);
+  ), [model.agentSidebarRows, projects?.projects, listProjects, collapsed, model.chatSearch, model.showArchived, pinnedSessionIds, expandedProjectIds, personal]);
   // Rows render again only when they change, so opening or closing the page gives them new identities.
   const animatedRows = useMemo(() => grouped.rows.map((row) => {
     if (row.kind !== 'session') return row;
@@ -227,7 +229,7 @@ export function WorkspaceChatLists({
                   onClick={() => { void createProjectSession(descriptor.spaceId); }}>
                   <Plus size={15} aria-hidden="true" />
                 </button>
-              ) : remoteProjectCatalogId(descriptor.spaceId) ? (
+              ) : projects?.enabled && remoteProjectCatalogId(descriptor.spaceId) ? (
                 <button type="button" className="chat-project-new-session"
                   title={`Locate ${grouped.groups.get(descriptor.spaceId)?.name} on this Mac`}
                   aria-label={`Locate folder for ${grouped.groups.get(descriptor.spaceId)?.name}`}
