@@ -13,7 +13,7 @@ const schema = {
       type: 'array', minItems: 1, maxItems: 64,
       items: {
         type: 'object', additionalProperties: false,
-        required: ['id', 'lawChaos', 'goodEvil', 'evidence'],
+        required: ['id'],
         properties: {
           id: { type: 'string', description: 'Non-sensitive local decision identifier' },
           lawChaos: { type: 'number', minimum: -2, maximum: 2 },
@@ -43,7 +43,7 @@ module.exports = function registerAlignmentCompass(kordi) {
     description: 'Explain Alignment Compass or classify a JSON payload: /alignment {"scope":"fictional","items":[...]}',
     handler: async (args) => {
       if (!args || !args.trim() || args.trim() === 'help') {
-        return { message: 'Alignment Compass: call the alignment_compass tool or use /alignment <JSON>. Required: scope=fictional|agent_decision, items=[{id, lawChaos:-2..2, goodEvil:-2..2, evidence:[...] }]. Scores are supplied, never inferred. This is advisory and cannot override Kordi safeguards.' };
+        return { message: 'Alignment Compass: call the alignment_compass tool or use /alignment <JSON>. Required: scope=fictional|agent_decision, items=[{id}]. Optional: lawChaos:-2..2, goodEvil:-2..2, evidence:[...]. Missing scores or evidence return UNKNOWN. Scores are supplied, never inferred. This is advisory and cannot override Kordi safeguards.' };
       }
       try {
         return { message: JSON.stringify(assess(JSON.parse(args)), null, 2) };
