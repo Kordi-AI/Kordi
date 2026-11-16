@@ -119,9 +119,10 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // on demand adds 0.3 kB, so it moves to 6.001 MB.
 // The Grounding room Gallery (the card grid with its topic filter, the share dialog, the item screen with
 // its read-only file view and comments, and the gallery client and store) adds 33.6 kB, so it moves to 6.035 MB.
-// The reordered help tour with its example room, together with the Gallery, comes to 1.1 kB more, and the
-// example room's Gallery for the two Gallery tour steps adds 1.3 kB, so it moves to 6.038 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_038_000;
+// Quick Grounding match estimates (estimated entries, their detail screen and the slower hinted poll)
+// add 2 kB, so it moves to 6.037 MB.
+// The reordered help tour, with its example room and that room's Gallery, adds 2.4 kB, so it moves to 6.040 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_040_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -178,8 +179,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The same session trace export, with background sessions, adds 16.7 kB there, most of it inside the
 // remaining allowance, and the on-demand companion overview 0.3 kB, so it moves to 6.028 MB.
 // The same room Gallery adds 33.5 kB there, so it moves to 6.062 MB.
-// The same reordered help tour and its example room with a Gallery add 2.1 kB there, so it moves to 6.065 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_065_000;
+// Quick Grounding match estimates add 2 kB there too, so it moves to 6.064 MB.
+// The same reordered help tour and its example room with a Gallery add 2.1 kB there, so it moves to 6.067 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_067_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

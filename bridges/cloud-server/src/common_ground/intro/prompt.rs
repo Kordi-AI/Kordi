@@ -313,6 +313,7 @@ mod tests {
             you_bring: Vec::new(),
             they_bring: Vec::new(),
             next_step: String::new(),
+            brief: false,
         };
         assert_eq!(Relation::from_match(&result), None);
         result.you_bring.push(Trade {

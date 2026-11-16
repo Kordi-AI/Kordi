@@ -195,6 +195,11 @@ export function CgScore({ score }: { score: number | null | undefined }) {
   return typeof score === 'number' ? <span className="cg-trail">{score}%</span> : null;
 }
 
+/** A small neutral ring in place of the score while the model is still matching a person. */
+export function CgMatching() {
+  return <span className="cg-matching" role="img" aria-label="Matching" />;
+}
+
 export function CgTag({ topic, muted = false, onRemove, small = false }: { topic: string; muted?: boolean; onRemove?: () => void; small?: boolean }) {
   return (
     <span className={cn('cg-tag', `tone-${topicTone(topic)}`, muted && 'is-muted', small && 'is-small')}>

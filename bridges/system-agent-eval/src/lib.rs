@@ -7,6 +7,8 @@
 //! Real runs call a model and are never part of CI; the stub provider keeps
 //! the harness itself tested. See docs/testing/system-agent-quality.md.
 
+#[cfg(test)]
+mod brief_check_tests;
 pub mod client;
 pub mod database;
 pub mod fixture;
