@@ -5,7 +5,7 @@ import { DetailTile, DetailTiles } from '@/kordi-app/contacts/ContactDetailParts
 import type { CgHost } from './host';
 import { groupLine, peopleCount, roomTitle, topicGroupDraft, type CgGroupDraft } from './format';
 import { GalleryTab } from './GalleryTab';
-import { CgAvatar, CgAvatarGrid, CgBack, CgButton, CgGroup, CgHero, CgNotice, CgProgress, CgRow, CgScore, CgSection, CgSegmented, CgTopicDot } from './parts';
+import { CgAvatar, CgAvatarGrid, CgBack, CgButton, CgGroup, CgHero, CgMatching, CgNotice, CgProgress, CgRow, CgScore, CgSection, CgSegmented, CgTopicDot } from './parts';
 import { personTitle } from './profiles';
 import { RoomSharing } from './ShareProfileDialog';
 import { StartGroupDialog } from './StartGroupDialog';
@@ -27,7 +27,7 @@ function candidates(results: CgResults, members: CgPerson[], selfId: string): Cg
   return [...byId.values()];
 }
 
-/** Members whose match is not in yet, in join order; a closed room lists its results only. */
+/** Members not listed in the results yet, in join order; a closed room lists its results only. Estimated people are listed. */
 function arriving(results: CgResults, members: CgPerson[], selfId: string, closed: boolean): CgPerson[] {
   if (closed) return [];
   const listed = new Set([selfId, ...results.people.map((entry) => entry.person.accountId)]);
@@ -137,8 +137,9 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
   const matchingEmpty = results.status === 'matching' && empty;
   // Alone in an open room, People waits for others instead of showing an empty list.
   // The server also reports `matching` while only the room's topics refresh, so People shows the line
-  // only when someone is still unscored (or nothing else would be on screen).
-  const finding = tab !== 'gallery' && results.status === 'matching' && (tab === 'topics' || unmatched.length > 0 || matchingEmpty);
+  // only when someone is still unscored or only estimated (or nothing else would be on screen).
+  const estimating = results.people.some((entry) => entry.estimated);
+  const finding = tab !== 'gallery' && results.status === 'matching' && (tab === 'topics' || unmatched.length > 0 || estimating || matchingEmpty);
   const waiting = tab === 'people' && empty && !matchingEmpty && !closed && room?.members.length === 0;
 
   return (
@@ -193,8 +194,8 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
                   key={entry.person.accountId}
                   lead={<CgAvatar person={entry.person} size={36} />}
                   title={personTitle(entry.person)}
-                  sub={entry.headline}
-                  trailing={<CgScore score={entry.score} />}
+                  sub={entry.estimated ? undefined : entry.headline}
+                  trailing={entry.estimated ? <CgMatching /> : <CgScore score={entry.score} />}
                   onClick={() => store.open({ name: 'match', accountId: entry.person.accountId, profileId })}
                 />
               ))}

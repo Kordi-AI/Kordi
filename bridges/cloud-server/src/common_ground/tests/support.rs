@@ -275,3 +275,17 @@ pub(super) async fn make_contacts(pool: &PgPool, a: &str, b: &str) {
             .unwrap();
     }
 }
+
+/// Makes the stored themes of the open room under `code` old enough that a
+/// change of members runs them again (`THEME_REFRESH`).
+pub(super) async fn age_themes_of(pool: &PgPool, code: &str) {
+    query(
+        "UPDATE cloud_common_ground_room_themes t SET computed_at = now() - interval '3 minutes'
+         FROM cloud_common_ground_rooms r
+         WHERE r.room_id = t.room_id AND r.code = $1 AND r.closed_at IS NULL",
+    )
+    .bind(code)
+    .execute(pool)
+    .await
+    .unwrap();
+}

@@ -217,6 +217,7 @@ async fn real_bun_cloud_images_reach_provider_in_message_order_including_newer_i
             verbatim_model: false,
             max_output_tokens: None,
             headers: Default::default(),
+            retry: Default::default(),
         },
         worker: OmpRuntime::new(WorkerCommand {
             program: "bun".into(),

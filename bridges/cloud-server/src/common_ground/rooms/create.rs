@@ -13,9 +13,9 @@ use axum::{
 };
 use rand::Rng;
 
+use super::limits::check_limits;
 use super::{
-    check_limits, enter, joining_profile, room_full, room_name, room_request, view::view, Entered,
-    JoinRequest,
+    enter, joining_profile, room_full, room_name, room_request, view::view, Entered, JoinRequest,
 };
 use crate::auth::rate_limit::CloudRateLimiter;
 use crate::common_ground::{db_error, err};
@@ -63,7 +63,7 @@ pub(in crate::common_ground) async fn create(
     for _ in 0..ATTEMPTS {
         let code = random_code();
         match enter(pool, &code, account, &body, &profile, &name, true).await {
-            Ok(Entered::Room(room_id)) => {
+            Ok(Entered::Opened(room_id) | Entered::Room(room_id)) => {
                 return match view(pool, room_id, account).await {
                     Ok(view) => (StatusCode::CREATED, Json(view)).into_response(),
                     Err(error) => db_error(error),

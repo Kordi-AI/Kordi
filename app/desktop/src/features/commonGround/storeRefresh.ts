@@ -95,9 +95,14 @@ export async function pollTop(store: CommonGroundStore): Promise<number | null> 
       if (state().profileId === profileId) store.applyOwner(owner);
       return owner.build.status === 'building' ? BUILD_POLL_MS : null;
     }
+    // A room's Results keep polling while any row still shows the matching ring, whatever the
+    // status says: background runs fill those rows in batches.
     const matching = () => {
-      const status = screen.name === 'results' ? state().results[screen.code]?.status
-        : screen.name === 'match' ? state().matches[personKey(screen.accountId, screen.profileId)]?.status : 'ready';
+      if (screen.name === 'results') {
+        const results = state().results[screen.code];
+        return !results || results.status === 'matching' || results.people.some((entry) => entry.estimated);
+      }
+      const status = screen.name === 'match' ? state().matches[personKey(screen.accountId, screen.profileId)]?.status : 'ready';
       return !status || status === 'matching';
     };
     if (matching() && (screen.name !== 'results' || !roomClosed(state(), screen.code))) {

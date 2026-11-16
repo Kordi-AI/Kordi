@@ -100,6 +100,14 @@ Everything comes from environment variables; nothing is read from files and no k
 
 The provider fallback (`KORDI_SYSTEM_AGENT_FALLBACK_*`) must be unset, so each run measures one model.
 
+### Brief background match runs
+
+`brief_check` (an ignored test in `bridges/system-agent-eval/src/brief_check_tests.rs`) compares a room's brief background runs with full match runs on the same people: six batches of one viewer and ten others from `KORDI_BRIEF_CHECK_CARDS` (a JSON list of cards), each run twice in full and once brief, three calls at a time. It prints the mean score difference, Spearman correlation and 0/score crossings for each pair of kinds, and tokens and seconds per run. Run it with the provider settings below:
+
+```bash
+cargo test -p kordi-system-agent-eval brief_check -- --ignored --nocapture
+```
+
 ### OpenAI-compatible gateways
 
 Any endpoint that serves OpenAI chat completions over HTTPS works, for example OpenRouter:

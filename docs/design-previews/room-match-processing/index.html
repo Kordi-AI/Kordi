@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room Match Processing</title>
+<style>
+  :root {
+    --ground: #e9e8e4; --window: #f7f7f6; --card: #efefee; --fill: #e4e4e2; --line: #dcdcda;
+    --ink: #1d1d1f; --muted: #6e6e73;
+    --ios-bg: #f2f2f7; --ios-card: #ffffff; --ios-line: #e5e5ea; --ios-muted: #8e8e93;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #121214; --window: #1e1e1f; --card: #262627; --fill: #303032; --line: #38383a;
+      --ink: #f2f2f2; --muted: #9b9ba1;
+      --ios-bg: #000; --ios-card: #1c1c1e; --ios-line: #38383a; --ios-muted: #8e8e93;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #121214; --window: #1e1e1f; --card: #262627; --fill: #303032; --line: #38383a;
+    --ink: #f2f2f2; --muted: #9b9ba1;
+    --ios-bg: #000; --ios-card: #1c1c1e; --ios-line: #38383a; --ios-muted: #8e8e93;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 13px/1.4 var(--sans); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus { outline: none; }
+  button:focus-visible { outline: 2px solid color-mix(in oklab, var(--ink) 30%, transparent); outline-offset: 2px; }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: center; padding: 16px; }
+  .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: color-mix(in oklab, var(--ink) 8%, transparent); }
+  .seg button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; font-size: 12px; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--window); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .bar label { color: var(--muted); font-size: 12px; margin-right: 6px; }
+  .reset { border: 0; background: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+
+  .stage { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; align-items: flex-start; padding: 0 16px 40px; }
+  .caption { color: var(--muted); font-size: 12px; margin: 0 0 8px 4px; }
+
+  /* Mac */
+  .mac { width: min(560px, 100%); border-radius: 12px; background: var(--window); box-shadow: 0 24px 60px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.08); overflow: hidden; }
+  .mac-body { padding: 18px 22px 22px; }
+  .hero { text-align: center; margin-bottom: 14px; }
+  .hero h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  .hero p { margin: 2px 0 0; color: var(--muted); }
+  .tabs { display: flex; justify-content: center; margin: 10px 0 12px; }
+  .group { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+  .row { position: relative; display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 7px 12px; }
+  .row + .row::before { content: ""; position: absolute; top: 0; right: 0; left: 58px; border-top: 1px solid var(--line); }
+  .row-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .row-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trail { flex: none; min-width: 34px; display: flex; justify-content: flex-end; align-items: center; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .av { display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 600; flex: none; }
+  .progress { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+  /* Indicators: neutral grey only. */
+  .spin { width: 14px; height: 14px; border-radius: 50%; border: 1.6px solid color-mix(in oklab, var(--muted) 30%, transparent); border-top-color: var(--muted); animation: turn .9s linear infinite; }
+  .ios .spin { width: 16px; height: 16px; border-width: 1.8px; }
+  .dots { display: inline-flex; gap: 3px; }
+  .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--muted); animation: pulse 1.2s ease-in-out infinite; }
+  .dots i:nth-child(2) { animation-delay: .2s; }
+  .dots i:nth-child(3) { animation-delay: .4s; }
+  .ios .dots i { width: 5px; height: 5px; }
+  .ticks { width: 14px; height: 14px; animation: step 1s steps(8) infinite; }
+  .ios .ticks { width: 17px; height: 17px; }
+  .ticks line { stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+  @keyframes step { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .spin, .ticks, .dots i { animation: none; } }
+
+  /* iPhone */
+  .phone { width: 340px; height: 690px; border-radius: 44px; padding: 12px; background: #111; box-shadow: 0 24px 60px rgba(0,0,0,.25); }
+  .screen { height: 100%; border-radius: 34px; overflow: hidden; background: var(--ios-bg); display: flex; flex-direction: column; font-size: 15px; }
+  .ios-nav { padding: 44px 16px 4px; text-align: center; font-weight: 600; font-size: 16px; }
+  .ios-scroll { flex: 1; overflow: auto; padding: 4px 16px 20px; }
+  .ios-card { background: var(--ios-card); border-radius: 12px; overflow: hidden; margin-top: 12px; }
+  .ios-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 14px; }
+  .ios-row + .ios-row::before { content: ""; position: absolute; top: 0; left: 66px; right: 0; border-top: 0.5px solid var(--ios-line); }
+  .ios-row .row-title { font-weight: 600; font-size: 16px; }
+  .ios-row .row-sub { font-size: 14px; color: var(--ios-muted); }
+  .ios-row .trail { color: var(--ios-muted); font-size: 14px; min-width: 38px; }
+  .chev { color: color-mix(in oklab, var(--ios-muted) 70%, transparent); font-size: 13px; font-weight: 600; }
+  .ios .progress { font-size: 13px; color: var(--ios-muted); }
+</style>
+</head>
+<body>
+<div class="bar">
+  <span><label>Indicator</label><span class="seg" id="kind">
+    <button data-v="spin" aria-pressed="true">Ring</button>
+    <button data-v="ticks">Ticks</button>
+    <button data-v="dots">Dots</button>
+  </span></span>
+  <span><label>Unmatched rows</label><span class="seg" id="sub">
+    <button data-v="none" aria-pressed="true">No subtitle</button>
+    <button data-v="topic">Topic hint</button>
+  </span></span>
+  <span><label>Theme</label><span class="seg" id="theme">
+    <button data-v="auto" aria-pressed="true">Auto</button>
+    <button data-v="light">Light</button>
+    <button data-v="dark">Dark</button>
+  </span></span>
+  <button class="reset" id="play">Play results arriving</button>
+</div>
+<div class="stage">
+  <div>
+    <p class="caption">Mac · room results</p>
+    <div class="mac"><div class="mac-body">
+      <div class="hero"><h1>Room 4634</h1><p>48 people · 9 shared topics</p></div>
+      <div class="tabs"><span class="seg"><button aria-pressed="true">People</button><button>Topics</button></span></div>
+      <div class="group" id="mac-list"></div>
+      <div class="progress" id="mac-progress"></div>
+    </div></div>
+  </div>
+  <div class="ios">
+    <p class="caption">iPhone · room results</p>
+    <div class="phone"><div class="screen">
+      <div class="ios-nav">Room 4634</div>
+      <div class="ios-scroll"><div class="ios-card" id="ios-list"></div><div class="progress" id="ios-progress"></div></div>
+    </div></div>
+  </div>
+</div>
+<script>
+  // Synthetic people. score set = model result; estimate only = still matching.
+  const tones = ['#c96a4a', '#5a8f6b', '#7a68b8', '#b08a3e', '#4f86a3', '#a65d84', '#6d7a8a', '#8a6b52'];
+  const start = [
+    { name: 'Maya Chen', score: 82, headline: 'Agent memory benchmarks' },
+    { name: 'Jonas Weber', score: 71, headline: 'Needs your Rust firmware help' },
+    { name: 'Priya Nair', score: 64, headline: 'LLM evaluation harness' },
+    { name: 'Tom Okafor', score: 48, headline: 'Vector search ranking' },
+    { name: 'Lea Martin', score: 33, headline: 'Robotics simulation' },
+    { name: 'Sam Rivera', est: 40, topic: 'Retrieval for code' },
+    { name: 'Hana Sato', est: 22, topic: 'Speech interfaces' },
+    { name: 'Ravi Kumar', est: 0, topic: '' },
+    { name: 'Elena Rossi', est: 0, topic: '' },
+    { name: 'Omar Haddad', est: 0, topic: '' },
+    { name: 'Zoe Park', est: 0, topic: '' },
+  ];
+  const results = { 'Sam Rivera': [57, 'Retrieval for code'], 'Hana Sato': [29, 'Voice agents for support'],
+    'Ravi Kumar': [12, 'Different area'], 'Elena Rossi': [38, 'Needs your eval design'], 'Omar Haddad': [8, 'Different area'], 'Zoe Park': [21, 'Data labeling tools'] };
+  let people = structuredClone(start);
+  let kind = 'spin', sub = 'none';
+
+  const indicator = () => kind === 'dots' ? '<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>'
+    : kind === 'ticks' ? '<svg class="ticks" viewBox="0 0 20 20" aria-hidden="true">' + Array.from({ length: 8 }, (_, i) =>
+        `<line x1="10" y1="3" x2="10" y2="6" opacity="${(0.25 + i * 0.1).toFixed(2)}" transform="rotate(${i * 45} 10 10)"/>`).join('') + '</svg>'
+    : '<span class="spin" aria-hidden="true"></span>';
+  const initials = (n) => n.split(' ').map((p) => p[0]).join('');
+  const avatar = (n, size) => `<span class="av" style="width:${size}px;height:${size}px;font-size:${size * .36}px;background:${tones[n.length % tones.length]}">${initials(n)}</span>`;
+  const ordered = () => [...people.filter((p) => p.score != null).sort((a, b) => b.score - a.score),
+    ...people.filter((p) => p.score == null).sort((a, b) => b.est - a.est || a.name.localeCompare(b.name))];
+  const subtitle = (p) => p.score != null ? p.headline : (sub === 'topic' ? p.topic : '');
+
+  function render() {
+    const list = ordered();
+    document.getElementById('mac-list').innerHTML = list.map((p) => `
+      <div class="row">${avatar(p.name, 36)}
+        <div class="row-text"><span class="row-title">${p.name}</span>${subtitle(p) ? `<span class="row-sub">${subtitle(p)}</span>` : ''}</div>
+        <span class="trail" ${p.score == null ? 'role="img" aria-label="Matching"' : ''}>${p.score != null ? p.score + '%' : indicator()}</span>
+      </div>`).join('');
+    document.getElementById('ios-list').innerHTML = list.map((p) => `
+      <div class="ios-row">${avatar(p.name, 40)}
+        <div class="row-text"><span class="row-title">${p.name}</span>${subtitle(p) ? `<span class="row-sub">${subtitle(p)}</span>` : ''}</div>
+        <span class="trail">${p.score != null ? p.score + '%' : indicator()}</span><span class="chev">›</span>
+      </div>`).join('');
+    const pending = people.some((p) => p.score == null);
+    for (const id of ['mac-progress', 'ios-progress']) document.getElementById(id).textContent = pending ? 'Finding overlap' : '';
+  }
+
+  function seg(id, set) {
+    const el = document.getElementById(id);
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      el.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      set(b.dataset.v); render();
+    });
+  }
+  seg('kind', (v) => { kind = v; });
+  seg('sub', (v) => { sub = v; });
+  seg('theme', (v) => { if (v === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v; });
+
+  let timer = null;
+  document.getElementById('play').addEventListener('click', () => {
+    clearInterval(timer); people = structuredClone(start); render();
+    const queue = ordered().filter((p) => p.score == null).map((p) => p.name);
+    timer = setInterval(() => {
+      const name = queue.shift(); if (!name) return clearInterval(timer);
+      const p = people.find((x) => x.name === name);
+      [p.score, p.headline] = results[name]; render();
+    }, 1400);
+  });
+  render();
+</script>
+</body>
+</html>

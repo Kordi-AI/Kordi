@@ -6,13 +6,16 @@
 //! kept for both of them, so each pair runs once. A card that changed is
 //! matched again with the people it is still linked to (`rematch`).
 
+mod estimate;
 mod finish;
 pub(super) mod prompt;
+mod queue;
 mod recent;
 mod rematch;
 mod routes;
 mod store;
 
+pub(super) use estimate::{estimate, Rarity};
 pub(super) use finish::{complete, fail};
 pub(super) use recent::recent;
 pub(super) use rematch::rematch;
@@ -174,6 +177,11 @@ pub(super) struct MatchResult {
     pub you_bring: Vec<Trade>,
     pub they_bring: Vec<Trade>,
     pub next_step: String,
+    /// From a room's background run, which lists topic labels only: the
+    /// score and topics are final, the reasons and next step come with the
+    /// full run that opening the person queues.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub brief: bool,
 }
 
 const WORKING_ON: f64 = 1.0;
@@ -244,6 +252,7 @@ pub(super) fn result(viewer: &SharedCard, other: &SharedCard, found: prompt::Fou
         you_bring: found.you_bring,
         they_bring: found.they_bring,
         next_step: found.next_step,
+        brief: false,
     }
 }
 

@@ -16,6 +16,7 @@ mod card;
 mod contact_match;
 mod documents;
 mod gallery;
+mod hints;
 mod intro;
 mod matching;
 mod nearby;
@@ -414,5 +415,11 @@ pub(super) async fn hint(
 ) -> sqlx_core::Result<()> {
     crate::chat_sync::store::append_account_hint(tx, account, event_type, &payload)
         .await
-        .map_err(|_| sqlx_core::Error::Protocol("Could not publish a Grounding update.".into()))
+        .map_err(|error| match error {
+            // A deadlock or lock timeout keeps its code, so callers can retry.
+            crate::chat_sync::store::StoreError::Database(error) => error,
+            other => {
+                sqlx_core::Error::Protocol(format!("Could not publish a Grounding update: {other}"))
+            }
+        })
 }
