@@ -123,8 +123,9 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // add 2 kB, so it moves to 6.037 MB.
 // Ending refused agent requests at once and leaving agents the viewer may not use out of the mention
 // list add under 1 kB, so it moves to 6.039 MB.
-// The reordered help tour, with its example room and that room's Gallery, adds 2.4 kB, so it moves to 6.040 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_040_000;
+// The reordered help tour, with its example room and that room's Gallery, adds 2.4 kB.
+// The Beta 10 What's New entry adds about 0.6 kB, so it moves to 6.044 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_044_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -184,8 +185,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // Quick Grounding match estimates add 2 kB there too, so it moves to 6.064 MB.
 // Ending refused agent requests at once and the filtered mention list add under 1 kB there too, so it
 // moves to 6.066 MB.
-// The same reordered help tour and its example room with a Gallery add 2.1 kB there, so it moves to 6.067 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_067_000;
+// The same reordered help tour and its example room with a Gallery add 2.1 kB there.
+// The Beta 10 What's New entry adds about 0.6 kB there too, so it moves to 6.071 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_071_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
