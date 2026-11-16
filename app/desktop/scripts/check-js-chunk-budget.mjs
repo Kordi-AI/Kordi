@@ -121,7 +121,9 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // its read-only file view and comments, and the gallery client and store) adds 33.6 kB, so it moves to 6.035 MB.
 // Quick Grounding match estimates (estimated entries, their detail screen and the slower hinted poll)
 // add 2 kB, so it moves to 6.037 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_037_000;
+// Ending refused agent requests at once and leaving agents the viewer may not use out of the mention
+// list add under 1 kB, so it moves to 6.039 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_039_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
