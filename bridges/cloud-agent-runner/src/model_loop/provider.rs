@@ -20,6 +20,8 @@ use model_choice::{default_thinking_for_model, snapshot_model};
 mod endpoint;
 mod model_choice;
 mod payload_headers;
+mod retry_policy;
+pub use retry_policy::ProviderRetryPolicy;
 #[cfg(test)]
 mod pool_headers_tests;
 
@@ -48,6 +50,7 @@ pub struct OpenAiProviderConfig {
     /// Extra request headers from the provider payload, such as a
     /// gateway's attribution headers.
     pub headers: BTreeMap<String, String>,
+    pub retry: ProviderRetryPolicy,
 }
 
 impl OpenAiProviderConfig {
@@ -166,6 +169,7 @@ impl OpenAiProviderConfig {
             verbatim_model,
             max_output_tokens: None,
             headers: payload_headers::from_payload(payload),
+            retry: ProviderRetryPolicy::default(),
         })
     }
 
@@ -229,10 +233,18 @@ impl OpenAiProviderConfig {
                 .map(|(name, value)| (name.clone(), value.clone()))
                 .collect::<HashMap<_, _>>(),
             cancel: CancellationToken::new(),
-            retry_callback: None,
-            max_retries: 2,
-            retry_base_delay_ms: 250,
-            max_retry_delay_ms: 2_000,
+            retry_callback: self.retry.report_rate_limits.then(|| {
+                let report: kordi_provider::RetryCallback = std::sync::Arc::new(|event| {
+                    crate::grounding_throttle::report_retry(
+                        crate::grounding_throttle::controller(),
+                        &event,
+                    );
+                });
+                report
+            }),
+            max_retries: self.retry.max_retries,
+            retry_base_delay_ms: self.retry.retry_base_delay_ms,
+            max_retry_delay_ms: self.retry.max_retry_delay_ms,
         }
     }
 }

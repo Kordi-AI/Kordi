@@ -39,8 +39,51 @@ pub(super) async fn stream_attachment_content(
             Ok(value) => value,
             Err(resp) => return *resp,
         };
+    let object = StoredObject {
+        object_key: &object_key,
+        content_type: content_type.as_deref(),
+        detected_content_type: detected_content_type.as_deref(),
+        size_bytes,
+    };
+    stream_object(s3, &object, request_headers).await
+}
 
-    let url = match presign_download_url(s3, &object_key) {
+/// The stored facts of a finalized attachment that streaming its bytes needs.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StoredObject<'a> {
+    pub object_key: &'a str,
+    pub content_type: Option<&'a str>,
+    pub detected_content_type: Option<&'a str>,
+    pub size_bytes: Option<i64>,
+}
+
+/// Streams a finalized attachment that the caller already checked the
+/// reader may see by another rule than [`attachment_access_row`] (a Grounding
+/// room gallery item), with the same headers and range handling as
+/// `/content`.
+pub(crate) async fn stream_readable_object(
+    state: &ServerState,
+    object: &StoredObject<'_>,
+    request_headers: &HeaderMap,
+) -> Response {
+    match s3_or_503(state) {
+        Ok(s3) => stream_object(s3, object, request_headers).await,
+        Err(resp) => *resp,
+    }
+}
+
+async fn stream_object(
+    s3: &crate::attachments::S3Config,
+    object: &StoredObject<'_>,
+    request_headers: &HeaderMap,
+) -> Response {
+    let StoredObject {
+        object_key,
+        content_type,
+        detected_content_type,
+        size_bytes,
+    } = *object;
+    let url = match presign_download_url(s3, object_key) {
         Ok(value) => value,
         Err(error) => {
             eprintln!("[attachments] presign content download: {error}");
@@ -94,9 +137,8 @@ pub(super) async fn stream_attachment_content(
 
     let mut headers = HeaderMap::new();
     if let Some(value) = detected_content_type
-        .as_deref()
         .or(object_content_type.as_deref())
-        .or(content_type.as_deref())
+        .or(content_type)
     {
         if let Ok(header_value) = HeaderValue::from_str(value) {
             headers.insert(header::CONTENT_TYPE, header_value);

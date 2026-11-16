@@ -55,11 +55,12 @@ export function CgAvatarGrid({ people, size }: { people: AvatarPerson[]; size: n
   );
 }
 
-export function CgBack({ onBack }: { onBack: () => void }) {
+/** Back, or the name of the screen it returns to (a Gallery item shows the room's name). */
+export function CgBack({ onBack, label = 'Back' }: { onBack: () => void; label?: string }) {
   return (
     <button type="button" className="cg-back" onClick={onBack}>
       <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-      Back
+      {label}
     </button>
   );
 }
@@ -191,6 +192,11 @@ export function CgUnreadLinks({ links, signIn = [], onUseNotes, quiet = false }:
 
 export function CgScore({ score }: { score: number | null | undefined }) {
   return typeof score === 'number' ? <span className="cg-trail">{score}%</span> : null;
+}
+
+/** A small neutral ring in place of the score while the model is still matching a person. */
+export function CgMatching() {
+  return <span className="cg-matching" role="img" aria-label="Matching" />;
 }
 
 export function CgTag({ topic, muted = false, onRemove, small = false }: { topic: string; muted?: boolean; onRemove?: () => void; small?: boolean }) {

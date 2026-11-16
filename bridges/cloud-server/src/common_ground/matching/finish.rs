@@ -9,13 +9,49 @@ use uuid::Uuid;
 
 use super::store::members_key;
 use super::{prompt, reads_for_either, result, reversed, MatchResult, SharedCard};
-use crate::common_ground::runs;
+use crate::common_ground::{hints::Hints, runs};
 
 type RunRow = (String, Option<String>, Option<Uuid>, Value);
+
+/// Attempts at a transaction that Postgres rolled back to break a deadlock
+/// or a serialization conflict with a concurrent one.
+const ATTEMPTS: usize = 3;
 
 /// Stores what a finished match or room run found. A reply that is not the
 /// expected JSON fails the run instead.
 pub(in crate::common_ground) async fn complete(
+    pool: &PgPool,
+    run_id: &str,
+    runner_id: &str,
+    text: &str,
+) -> sqlx_core::Result<()> {
+    retry_conflicts(|| complete_once(pool, run_id, runner_id, text)).await
+}
+
+/// Runs `attempt` again when Postgres rolled it back for a deadlock or a
+/// serialization conflict; nothing of a rolled-back attempt was kept.
+async fn retry_conflicts<F, Fut>(mut attempt: F) -> sqlx_core::Result<()>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = sqlx_core::Result<()>>,
+{
+    for _ in 1..ATTEMPTS {
+        match attempt().await {
+            Err(error) if conflicted(&error) => {
+                eprintln!("[common-ground] Retrying a run update after a database conflict");
+            }
+            done => return done,
+        }
+    }
+    attempt().await
+}
+
+fn conflicted(error: &sqlx_core::Error) -> bool {
+    let code = error.as_database_error().and_then(|error| error.code());
+    matches!(code.as_deref(), Some("40P01" | "40001"))
+}
+
+async fn complete_once(
     pool: &PgPool,
     run_id: &str,
     runner_id: &str,
@@ -38,6 +74,7 @@ pub(in crate::common_ground) async fn complete(
     if !runs::mark_completed(&mut tx, run_id, runner_id).await? {
         return Err(sqlx_core::Error::RowNotFound);
     }
+    let mut hints = Hints::default();
     if kind == "match" {
         let (Some(viewer_card), others) = (cards.first(), cards.get(1..).unwrap_or_default())
         else {
@@ -51,32 +88,41 @@ pub(in crate::common_ground) async fn complete(
         // Cards that changed while the run worked are matched again later.
         if is_current(viewer_card) {
             let both_ways = both_ways(pool, viewer_card, others).await?;
+            let brief = run_id.starts_with(runs::BRIEF_MATCH_PREFIX);
+            let mut writes: Vec<(&SharedCard, &SharedCard, MatchResult, bool)> = Vec::new();
             for (other, found) in others.iter().zip(found) {
                 if !is_current(other) {
                     continue;
                 }
                 let names = [viewer_card.name.as_str(), other.name.as_str()];
                 if both_ways.contains(&other.account_id) && reads_for_either(&found, &names) {
-                    let mirrored = result(other, viewer_card, reversed(&found));
-                    store(&mut tx, other, viewer_card, &mirrored, true).await?;
+                    let mirrored = MatchResult {
+                        brief,
+                        ..result(other, viewer_card, reversed(&found))
+                    };
+                    writes.push((other, viewer_card, mirrored, true));
                 }
-                store(
-                    &mut tx,
-                    viewer_card,
-                    other,
-                    &result(viewer_card, other, found),
-                    false,
-                )
-                .await?;
+                let direct = MatchResult {
+                    brief,
+                    ..result(viewer_card, other, found)
+                };
+                writes.push((viewer_card, other, direct, false));
+            }
+            // Rows in one order for every run, so two runs that store the
+            // same pair from each side never wait on each other in a cycle.
+            writes.sort_by(|a, b| {
+                (&a.0.profile_id, &a.1.profile_id).cmp(&(&b.0.profile_id, &b.1.profile_id))
+            });
+            for (viewer, other, result, mirrored) in &writes {
+                store(&mut tx, viewer, other, result, *mirrored).await?;
             }
         }
         if let Some(viewer) = &viewer {
             let payload = json!({ "profileId": viewer_card.profile_id });
-            crate::common_ground::hint(&mut tx, viewer, "common_ground.matches.updated", payload)
-                .await?;
-            crate::common_ground::nearby::run_finished(&mut tx, viewer).await?;
+            hints.add(viewer, "common_ground.matches.updated", payload);
+            hints.nearby(viewer);
         }
-        tell_others(&mut tx, others).await?;
+        tell_others(&mut hints, others);
     } else if let Some(room_id) = room_id {
         let Some(themes) = prompt::parse_themes(text, cards.len()) else {
             drop(tx);
@@ -108,15 +154,25 @@ pub(in crate::common_ground) async fn complete(
             .execute(&mut *tx)
             .await?;
         }
-        notify_room(&mut tx, room_id).await?;
+        notify_room(&mut tx, &mut hints, room_id).await?;
     }
     if !finish(&mut tx, run_id, None).await? {
         return Err(sqlx_core::Error::RowNotFound);
     }
+    hints.send(&mut tx).await?;
     tx.commit().await
 }
 
 pub(in crate::common_ground) async fn fail(
+    pool: &PgPool,
+    run_id: &str,
+    runner_id: Option<&str>,
+    code: &str,
+) -> sqlx_core::Result<()> {
+    retry_conflicts(|| fail_once(pool, run_id, runner_id, code)).await
+}
+
+async fn fail_once(
     pool: &PgPool,
     run_id: &str,
     runner_id: Option<&str>,
@@ -137,22 +193,18 @@ pub(in crate::common_ground) async fn fail(
     if !finish(&mut tx, run_id, Some(code)).await? {
         return Ok(());
     }
+    let mut hints = Hints::default();
     match row {
         Some((Some(viewer), _, cards)) => {
-            crate::common_ground::hint(
-                &mut tx,
-                &viewer,
-                "common_ground.matches.updated",
-                json!({}),
-            )
-            .await?;
-            crate::common_ground::nearby::run_finished(&mut tx, &viewer).await?;
+            hints.add(&viewer, "common_ground.matches.updated", json!({}));
+            hints.nearby(&viewer);
             let cards: Vec<SharedCard> = serde_json::from_value(cards).unwrap_or_default();
-            tell_others(&mut tx, cards.get(1..).unwrap_or_default()).await?;
+            tell_others(&mut hints, cards.get(1..).unwrap_or_default());
         }
-        Some((None, Some(room_id), _)) => notify_room(&mut tx, room_id).await?,
+        Some((None, Some(room_id), _)) => notify_room(&mut tx, &mut hints, room_id).await?,
         _ => {}
     }
+    hints.send(&mut tx).await?;
     tx.commit().await
 }
 
@@ -198,8 +250,16 @@ async fn store(
          ON CONFLICT (viewer_profile_id, other_profile_id) DO UPDATE SET
              viewer_revision = EXCLUDED.viewer_revision, other_revision = EXCLUDED.other_revision,
              result_json = EXCLUDED.result_json, computed_at = now()
-         WHERE NOT $8::boolean OR stored.viewer_revision <> EXCLUDED.viewer_revision
-             OR stored.other_revision <> EXCLUDED.other_revision",
+         WHERE CASE
+             WHEN stored.viewer_revision <> EXCLUDED.viewer_revision
+                 OR stored.other_revision <> EXCLUDED.other_revision THEN true
+             -- For the same cards a full result replaces a brief one, never
+             -- the reverse; a mirrored finding does not replace the
+             -- viewer's own.
+             WHEN COALESCE((stored.result_json->>'brief')::boolean, false) THEN true
+             WHEN $9::boolean THEN false
+             ELSE NOT $8::boolean
+         END",
     )
     .bind(&viewer.account_id)
     .bind(&other.account_id)
@@ -209,6 +269,7 @@ async fn store(
     .bind(other.revision)
     .bind(json!(result))
     .bind(mirrored)
+    .bind(result.brief)
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -217,22 +278,12 @@ async fn store(
 /// Tells everyone else a finished match run read to refresh: it may have
 /// stored their side of the pair, and a person whose request waited on it
 /// (`store::queue_matches`) queues their own run when it did not.
-async fn tell_others(
-    tx: &mut sqlx_core::transaction::Transaction<'_, sqlx_postgres::Postgres>,
-    others: &[SharedCard],
-) -> sqlx_core::Result<()> {
+fn tell_others(hints: &mut Hints, others: &[SharedCard]) {
     for other in others {
         let payload = json!({ "profileId": other.profile_id });
-        crate::common_ground::hint(
-            tx,
-            &other.account_id,
-            "common_ground.matches.updated",
-            payload,
-        )
-        .await?;
-        crate::common_ground::nearby::run_finished(tx, &other.account_id).await?;
+        hints.add(&other.account_id, "common_ground.matches.updated", payload);
+        hints.nearby(&other.account_id);
     }
-    Ok(())
 }
 
 /// Marks an open run finished and drops the cards it read: other people's
@@ -256,6 +307,7 @@ async fn finish(
 
 async fn notify_room(
     tx: &mut sqlx_core::transaction::Transaction<'_, sqlx_postgres::Postgres>,
+    hints: &mut Hints,
     room_id: Uuid,
 ) -> sqlx_core::Result<()> {
     let members: Vec<(String, String)> = query_as(
@@ -267,13 +319,11 @@ async fn notify_room(
     .fetch_all(&mut **tx)
     .await?;
     for (account, code) in members {
-        crate::common_ground::hint(
-            tx,
+        hints.add(
             &account,
             "common_ground.room.updated",
             json!({ "code": code }),
-        )
-        .await?;
+        );
     }
     Ok(())
 }

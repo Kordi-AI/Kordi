@@ -9,7 +9,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::card::Topics;
-use super::matching::prompt::{json_object, match_prompt, parse_matches, MATCH_SYSTEM};
+use super::matching::prompt::{
+    json_object, match_prompt, parse_matches, MATCH_BRIEF_SYSTEM, MATCH_SYSTEM,
+};
 use super::matching::{self, SharedCard};
 use super::profiles::Profile;
 use super::prompt::{self, Gathered};
@@ -101,6 +103,8 @@ impl CardBuild {
 
 /// The instructions every match run is queued with.
 pub const MATCH_SYSTEM_PROMPT: &str = MATCH_SYSTEM;
+/// The labels-only instructions of a room's background match runs.
+pub const MATCH_BRIEF_SYSTEM_PROMPT: &str = MATCH_BRIEF_SYSTEM;
 
 /// The SHA-256 of a prompt text, in hex, to tell instruction versions apart
 /// in reports.

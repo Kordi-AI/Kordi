@@ -117,7 +117,11 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // background sessions a chat started and the JSON Lines serializer, in a chunk loaded by the first
 // export) adds 16.6 kB, most of it inside the remaining allowance, and loading the companion overview
 // on demand adds 0.3 kB, so it moves to 6.001 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_001_000;
+// The Grounding room Gallery (the card grid with its topic filter, the share dialog, the item screen with
+// its read-only file view and comments, and the gallery client and store) adds 33.6 kB, so it moves to 6.035 MB.
+// Quick Grounding match estimates (estimated entries, their detail screen and the slower hinted poll)
+// add 2 kB, so it moves to 6.037 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_037_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -173,7 +177,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // (under 1 kB) bring it to 6.021 MB there.
 // The same session trace export, with background sessions, adds 16.7 kB there, most of it inside the
 // remaining allowance, and the on-demand companion overview 0.3 kB, so it moves to 6.028 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_028_000;
+// The same room Gallery adds 33.5 kB there, so it moves to 6.062 MB.
+// Quick Grounding match estimates add 2 kB there too, so it moves to 6.064 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_064_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

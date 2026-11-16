@@ -141,14 +141,50 @@ pub(in crate::common_ground) async fn view(
         .bind(viewer)
         .fetch_one(pool)
         .await?;
-    // Cards show only while both your card and theirs here are shared.
-    let viewer_shares = match &profile_id {
+    // Members arrive in join order; you are never in the list.
+    let members: Vec<Value> = member_people(pool, room_id, viewer, profile_id.as_deref(), None)
+        .await?
+        .into_iter()
+        .map(|(_, person)| person)
+        .collect();
+    let (groups, invitations) = actions::room_extras(pool, room_id, viewer).await?;
+    let matching_started = matching_started(pool, room_id).await?;
+    Ok(json!({
+        "roomId": room_id,
+        "code": code,
+        "name": name,
+        "kind": kind,
+        "profileId": profile_id,
+        "openedByYou": created_by.as_deref() == Some(viewer),
+        "open": open,
+        "expiresAt": last_join_at + chrono::Duration::hours(24),
+        "members": members,
+        "groups": groups,
+        "invitations": invitations,
+        "matchingStarted": matching_started,
+    }))
+}
+
+/// Members of `room_id` who have not left, in join order, each as the
+/// lobby shows them to `viewer`: the person with `hasCard` (only while both
+/// their card and the viewer's card here, `viewer_profile`, are built and
+/// shared, and they did not stop the viewer from seeing it), the `profile`
+/// they share here and the viewer's `relationship` with them. Without
+/// `only`, everyone but the viewer; with it, only those accounts, the viewer
+/// included when listed.
+pub(in crate::common_ground) async fn member_people(
+    pool: &PgPool,
+    room_id: Uuid,
+    viewer: &str,
+    viewer_profile: Option<&str>,
+    only: Option<&[String]>,
+) -> sqlx_core::Result<Vec<(String, Value)>> {
+    let viewer_shares = match viewer_profile {
         Some(profile_id) => card::load(pool, profile_id)
             .await?
             .is_some_and(|card| card.has_card() && card.sharing),
         None => false,
     };
-    // Members arrive in join order; you are never in the list.
     let members: Vec<MemberRow> = query_as(&format!(
         "SELECT member.account_id, account.display_name, COALESCE(account.public_handle, account.public_account_number::TEXT), account.avatar_url,
                 COALESCE(card.built_at IS NOT NULL AND card.sharing_enabled, false) AND {allowed},
@@ -158,17 +194,19 @@ pub(in crate::common_ground) async fn view(
          JOIN cloud_accounts account ON account.account_id = member.account_id
          JOIN cloud_common_ground_profiles profile ON profile.profile_id = member.profile_id
          LEFT JOIN cloud_common_ground_cards card ON card.profile_id = member.profile_id
-         WHERE member.room_id = $1 AND member.left_at IS NULL AND member.account_id <> $2
+         WHERE member.room_id = $1 AND member.left_at IS NULL
+           AND (($3::text[] IS NULL AND member.account_id <> $2) OR member.account_id = ANY($3))
          ORDER BY member.joined_at, member.account_id",
         allowed = crate::contact_permissions::card_allowed_sql("member.account_id", "$2"),
     ))
     .bind(room_id)
     .bind(viewer)
+    .bind(only)
     .fetch_all(pool)
     .await?;
     let ids: Vec<String> = members.iter().map(|m| m.0.clone()).collect();
     let relationships = actions::relationships(pool, viewer, &ids).await?;
-    let members: Vec<Value> = members
+    Ok(members
         .into_iter()
         .map(
             |(
@@ -198,26 +236,10 @@ pub(in crate::common_ground) async fn view(
                     icon.as_deref(),
                 );
                 actions::attach(&mut person, &account_id, &relationships);
-                person
+                (account_id, person)
             },
         )
-        .collect();
-    let (groups, invitations) = actions::room_extras(pool, room_id, viewer).await?;
-    let matching_started = matching_started(pool, room_id).await?;
-    Ok(json!({
-        "roomId": room_id,
-        "code": code,
-        "name": name,
-        "kind": kind,
-        "profileId": profile_id,
-        "openedByYou": created_by.as_deref() == Some(viewer),
-        "open": open,
-        "expiresAt": last_join_at + chrono::Duration::hours(24),
-        "members": members,
-        "groups": groups,
-        "invitations": invitations,
-        "matchingStarted": matching_started,
-    }))
+        .collect())
 }
 
 /// True once someone asked for the room's common ground: a match or theme

@@ -4,12 +4,14 @@ import { ArrowUpRight, Eye, FileText } from 'lucide-react';
  * A file the panel does not draw itself (Office, Keynote, audio, video, archives): its Quick Look
  * thumbnail, name, and kind, with Quick Look and Open in default app. Centered in the panel.
  */
-export function FileCard({ name, details, thumbnail, onQuickLook, onOpenExternal }: {
+export function FileCard({ name, details, thumbnail, onQuickLook, onOpenExternal, note = 'Open this file in the Kordi desktop app.' }: {
   name: string;
   details: string;
   thumbnail?: string | null;
   onQuickLook?: () => void;
   onOpenExternal?: () => void;
+  /** The line shown when there are no actions; null shows none. */
+  note?: string | null;
 }) {
   return (
     <div className="app-file-card" data-file-card="">
@@ -26,9 +28,9 @@ export function FileCard({ name, details, thumbnail, onQuickLook, onOpenExternal
             {onQuickLook ? <button type="button" className="app-file-card-primary" onClick={onQuickLook}><Eye size={14} aria-hidden="true" />Quick Look</button> : null}
             {onOpenExternal ? <button type="button" onClick={onOpenExternal}><ArrowUpRight size={14} aria-hidden="true" />Open in default app</button> : null}
           </div>
-        ) : (
-          <p className="app-file-card-details">Open this file in the Kordi desktop app.</p>
-        )}
+        ) : note ? (
+          <p className="app-file-card-details">{note}</p>
+        ) : null}
       </div>
     </div>
   );

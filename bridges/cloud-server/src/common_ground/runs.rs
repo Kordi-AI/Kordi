@@ -15,6 +15,9 @@ use crate::resource_pools::Feature;
 pub const RUN_PREFIX: &str = "cg_";
 pub(super) const CARD_PREFIX: &str = "cg_card_";
 pub(super) const MATCH_PREFIX: &str = "cg_match_";
+/// A room's background match runs, which list topic labels only. Under
+/// [`MATCH_PREFIX`], so they are match runs everywhere else.
+pub(super) const BRIEF_MATCH_PREFIX: &str = "cg_match_brief_";
 pub(super) const ROOM_PREFIX: &str = "cg_room_";
 pub(super) const INTRO_PREFIX: &str = "cg_intro_";
 

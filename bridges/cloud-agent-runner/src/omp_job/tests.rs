@@ -88,6 +88,7 @@ fn auth_fixture(base_url: String) -> OpenAiProviderConfig {
         verbatim_model: false,
         max_output_tokens: None,
         headers: Default::default(),
+        retry: Default::default(),
     }
 }
 
