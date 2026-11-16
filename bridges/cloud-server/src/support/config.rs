@@ -29,21 +29,24 @@ impl SupportProviderAuth {
         model: impl Into<String>,
     ) -> Result<Self, SupportConfigError> {
         let api_key = api_key.into();
-        let model = model.into();
         let api_key = api_key.trim().to_string();
-        let model = model.trim().to_string();
         if api_key.is_empty() {
             return Err(SupportConfigError::Invalid(
                 "KORDI_SUPPORT_OPENAI_API_KEY is required",
             ));
         }
+        Self::openai(ServiceCredential::ApiKey(api_key), model.into())
+    }
+
+    fn openai(credential: ServiceCredential, model: String) -> Result<Self, SupportConfigError> {
+        let model = model.trim().to_string();
         if model.is_empty() {
             return Err(SupportConfigError::Invalid(
                 "KORDI_SUPPORT_OPENAI_MODEL is required",
             ));
         }
         Ok(Self {
-            credential: ServiceCredential::ApiKey(api_key),
+            credential,
             model,
             base_url: SUPPORT_OPENAI_BASE_URL.to_string(),
         })
@@ -175,7 +178,15 @@ fn required_or_default(
 
 impl PendingSupportConfig {
     pub fn from_env() -> Result<Option<Self>, SupportConfigError> {
-        let config = Self::from_lookup(|key| env::var(key).ok())?;
+        Self::from_lookup_for_startup(|key| env::var(key).ok())
+    }
+
+    /// Resolves the settings and checks what startup needs, such as a
+    /// readable, non-empty key file.
+    fn from_lookup_for_startup(
+        get: impl FnMut(&str) -> Option<String>,
+    ) -> Result<Option<Self>, SupportConfigError> {
+        let config = Self::from_lookup(get)?;
         if let Some(config) = &config {
             if config.name.trim().is_empty() || config.subtitle.trim().is_empty() {
                 return Err(SupportConfigError::Invalid(
@@ -220,15 +231,29 @@ impl PendingSupportConfig {
                 }
             }
             None | Some("openai" | "openai-compatible") => {
-                let api_key = optional(&mut get, "KORDI_SUPPORT_OPENAI_API_KEY").ok_or(
-                    SupportConfigError::Invalid("KORDI_SUPPORT_OPENAI_API_KEY is required"),
-                )?;
+                // A key file overrides a shared operator key, but never sits
+                // beside the dedicated KordiSpot key.
+                let dedicated_key = get("KORDI_SUPPORT_OPENAI_API_KEY")
+                    .is_some_and(|value| !value.trim().is_empty());
+                let credential = match optional(&mut get, "KORDI_SUPPORT_OPENAI_API_KEY_FILE") {
+                    Some(_) if dedicated_key => {
+                        return Err(SupportConfigError::Invalid(
+                            "Set only one of KORDI_SUPPORT_OPENAI_API_KEY or KORDI_SUPPORT_OPENAI_API_KEY_FILE",
+                        ))
+                    }
+                    Some(path) => ServiceCredential::ApiKeyFile(path.into()),
+                    None => ServiceCredential::ApiKey(
+                        optional(&mut get, "KORDI_SUPPORT_OPENAI_API_KEY").ok_or(
+                            SupportConfigError::Invalid("KORDI_SUPPORT_OPENAI_API_KEY is required"),
+                        )?,
+                    ),
+                };
                 let model = required_or_default(
                     &mut get,
                     "KORDI_SUPPORT_OPENAI_MODEL",
                     DEFAULT_SUPPORT_OPENAI_MODEL,
                 );
-                let mut auth = SupportProviderAuth::openai_api_key(api_key, model)?;
+                let mut auth = SupportProviderAuth::openai(credential, model)?;
                 let base_url = optional(&mut get, "KORDI_SUPPORT_OPENAI_BASE_URL")
                     .unwrap_or_else(|| SUPPORT_OPENAI_BASE_URL.to_string());
                 auth.base_url =
@@ -282,6 +307,10 @@ impl SupportConfig {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "config_key_file_tests.rs"]
+mod key_file_tests;
 
 #[cfg(test)]
 mod tests {

@@ -67517,7 +67517,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-Notice 9d7d889c2a70a12cc5c0a2abc0d410ab2d3ea87ada79607e73883c810313f331
+Notice 71d8b6b89b38c6ecc6510d966650a9fc27f39d27b72844a17cba7cd39f480d42
 ========================================================================
 # Third-party source access and library modifications
 
@@ -67611,7 +67611,7 @@ retains its Apache-2.0 copyright and license notices. DiceBear Lorelei artwork i
 CC0; other styles in dicebear-styles have their own terms. Provider names and
 logos identify their owners and do not imply endorsement.
 
-Source download manifest for this release: https://kordi.ai/updates/releases/0.0.2-beta.9/sources/manifest.json
+Source download manifest for this release: https://kordi.ai/updates/releases/0.0.2-beta.10/sources/manifest.json
 
 
 Notice ab00a482b6a3902e40211b43c5d0441962ea99b6cc7c25c0f243fa270b78d482

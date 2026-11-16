@@ -30,7 +30,8 @@ export function CommonGroundPage({ store, host }: { store: CommonGroundStore; ho
 function CommonGroundPageBody({ store, host }: { store: CommonGroundStore; host: CgHost }) {
   const state = useCommonGround(store);
   const tour = useHelpTourLocation();
-  const demo = Boolean(tour?.groundingScreen && state.loaded && state.owner && !state.owner.card);
+  // The tour's room is always an example, so every account sees a room full of people.
+  const demo = tour?.groundingScreen === 'room' || Boolean(tour?.groundingScreen && state.loaded && state.owner && !state.owner.card);
   const ownerReady = Boolean(state.owner);
   const helpCard = state.loaded && state.owner ? (state.owner.card ? 'built' : 'empty') : undefined;
   const helpSocial = state.loaded && state.owner ? (hasAnyCard(state) ? 'ready' : 'empty') : undefined;
@@ -38,7 +39,7 @@ function CommonGroundPageBody({ store, host }: { store: CommonGroundStore; host:
     if (!state.loaded || !ownerReady) return;
     const navigate = () => {
       const name = consumeHelpGroundingScreen(host.self.accountId);
-      if (name && !(getHelpTourLocation()?.groundingScreen && !store.getSnapshot().owner?.card)) {
+      if (name && name !== 'room' && !(getHelpTourLocation()?.groundingScreen && !store.getSnapshot().owner?.card)) {
         const destination = name === 'card' && !store.getSnapshot().owner?.card ? 'build' : name;
         if (store.top().name !== destination) store.replace({ name: destination });
       }

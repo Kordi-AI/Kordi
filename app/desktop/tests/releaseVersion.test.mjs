@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const releaseName = 'V0.0.2.beta9';
-const appVersion = '0.0.2-beta.9';
+const releaseName = 'V0.0.2.beta10';
+const appVersion = '0.0.2-beta.10';
 
 function readJson(path) {
   return JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
@@ -17,7 +17,7 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-test('desktop release metadata is set for V0.0.2.beta9 and iOS 0.0.2 build 11', () => {
+test('desktop release metadata is set for V0.0.2.beta10 and iOS 0.0.2 build 12', () => {
   const pkg = readJson('../package.json');
   const packageLock = readJson('../package-lock.json');
   const tauri = readJson('../src-tauri/tauri.conf.json');
@@ -34,7 +34,7 @@ test('desktop release metadata is set for V0.0.2.beta9 and iOS 0.0.2 build 11', 
     'm',
   ));
 
-  assert.equal(releaseName, 'V0.0.2.beta9');
+  assert.equal(releaseName, 'V0.0.2.beta10');
   assert.equal(pkg.version, appVersion);
   assert.equal(packageLock.version, appVersion);
   assert.equal(packageLock.packages[''].version, appVersion);
@@ -43,13 +43,13 @@ test('desktop release metadata is set for V0.0.2.beta9 and iOS 0.0.2 build 11', 
   assert.equal(tauri.bundle.macOS.minimumSystemVersion, '13.0');
   assert.match(readText('../../../scripts/build-macos-desktop.sh'), /export MACOSX_DEPLOYMENT_TARGET=13\.0/);
   assert.equal(cloudTauri.productName, 'Kordi');
-  assert.match(cargoToml, /name = "kordi-desktop"\nversion = "0\.0\.2-beta\.9"/);
-  assert.match(cargoLock, /name = "kordi-desktop"\nversion = "0\.0\.2-beta\.9"/);
-  assert.match(workspaceCargoLock, /name = "kordi-desktop"\nversion = "0\.0\.2-beta\.9"/);
+  assert.match(cargoToml, /name = "kordi-desktop"\nversion = "0\.0\.2-beta\.10"/);
+  assert.match(cargoLock, /name = "kordi-desktop"\nversion = "0\.0\.2-beta\.10"/);
+  assert.match(workspaceCargoLock, /name = "kordi-desktop"\nversion = "0\.0\.2-beta\.10"/);
   assert.match(iosProject, /deploymentTarget:\n    iOS: "17\.0"/);
   assert.match(iosProject, /IPHONEOS_DEPLOYMENT_TARGET: 17\.0/);
   assert.match(iosProject, /MARKETING_VERSION: 0\.0\.2/);
-  assert.match(iosProject, /CURRENT_PROJECT_VERSION: 11\n/);
+  assert.match(iosProject, /CURRENT_PROJECT_VERSION: 12\n/);
   assert.ok(releaseEntryMatch, `CHANGELOG.md must contain a dated ${appVersion} entry`);
   assert.match(
     releaseEntryMatch[1],

@@ -124,7 +124,7 @@ export function WorkspaceChatLists({
   const searching = model.chatSearch.trim();
   const emptyState = (
     <>
-      {!searching && !model.showArchived ? <HelpEmptyExample kind="chat" /> : null}
+      {!searching && !model.showArchived ? <HelpEmptyExample kind={isContact ? 'chat' : 'agent-chats'} /> : null}
       <div className="rounded-[14px] border border-white/10 bg-white/[0.03] px-3 py-3 text-[11px] text-slate-400">
         {searching ? (
           <>

@@ -32,7 +32,7 @@ export function GalleryTab({ code, list, roomName, roomTopics, closed, state, st
     void loadCandidates(store, code);
   };
   const shareButton = list.canShare && !closed
-    ? <button type="button" className="cg-button" data-cg-gallery-share="" onClick={openShare}>Share</button>
+    ? <button type="button" className="cg-button" data-help-target="grounding-room-gallery-share" data-cg-gallery-share="" onClick={openShare}>Share</button>
     : null;
 
   return (
@@ -62,7 +62,7 @@ export function GalleryTab({ code, list, roomName, roomTopics, closed, state, st
               {shareButton}
             </div>
           ) : null}
-          <div className="cg-gallery-grid">
+          <div className="cg-gallery-grid" data-help-target="grounding-room-gallery">
             {shown.map((item) => (
               <GalleryCard
                 key={item.itemId}

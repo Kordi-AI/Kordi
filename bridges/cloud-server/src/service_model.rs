@@ -1,6 +1,7 @@
 //! Authentication for Kordi-operated models. Google credentials stay on the
 //! server; runners receive only a short-lived token for an admitted run.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -96,7 +97,23 @@ fn validate_workload_identity(config: &serde_json::Value) -> Result<(), &'static
 #[derive(Clone)]
 pub(crate) enum ServiceCredential {
     ApiKey(String),
+    /// A file holding an API key. The file is read again for every token, so
+    /// an operator can replace a short-lived key without a restart.
+    ApiKeyFile(PathBuf),
     GoogleCloud(Arc<dyn ServiceTokenSource>),
+}
+
+// Never name the path or echo the contents: the file holds a secret.
+const API_KEY_FILE_UNAVAILABLE: &str =
+    "The service model API key file cannot be read, is empty, or holds more than one key";
+
+fn key_from_file(contents: std::io::Result<String>) -> Result<String, &'static str> {
+    let contents = contents.map_err(|_| API_KEY_FILE_UNAVAILABLE)?;
+    let key = contents.trim();
+    if key.is_empty() || key.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err(API_KEY_FILE_UNAVAILABLE);
+    }
+    Ok(key.to_string())
 }
 
 impl ServiceCredential {
@@ -107,11 +124,15 @@ impl ServiceCredential {
     pub(crate) async fn bearer_token(&self) -> Result<String, &'static str> {
         match self {
             Self::ApiKey(key) => Ok(key.clone()),
+            Self::ApiKeyFile(path) => key_from_file(tokio::fs::read_to_string(path).await),
             Self::GoogleCloud(source) => source.access_token().await,
         }
     }
 
     pub(crate) fn validate_configuration(&self) -> Result<(), &'static str> {
+        if let Self::ApiKeyFile(path) = self {
+            return key_from_file(std::fs::read_to_string(path)).map(drop);
+        }
         if !self.is_google_cloud() {
             return Ok(());
         }
@@ -132,6 +153,7 @@ impl ServiceCredential {
     pub(crate) fn api_key(&self) -> &str {
         match self {
             Self::ApiKey(key) => key,
+            Self::ApiKeyFile(_) => panic!("An API key file is read for each token"),
             Self::GoogleCloud(_) => panic!("Google Cloud has no static API key"),
         }
     }
@@ -211,6 +233,38 @@ mod tests {
             assert!(vertex_endpoint("test-project", invalid).is_err());
         }
     }
+
+    #[tokio::test]
+    async fn an_api_key_file_is_read_again_for_every_token() {
+        let path = std::env::temp_dir().join(format!("kordi-key-file-{}", uuid::Uuid::new_v4()));
+        let credential = ServiceCredential::ApiKeyFile(path.clone());
+        assert!(!credential.is_google_cloud());
+        assert!(credential.validate_configuration().is_err());
+        assert!(credential.bearer_token().await.is_err());
+
+        std::fs::write(&path, "\n  synthetic-key-one \n").unwrap();
+        assert!(credential.validate_configuration().is_ok());
+        assert_eq!(
+            credential.bearer_token().await.unwrap(),
+            "synthetic-key-one"
+        );
+        // A replaced key is used by the next request, with no restart.
+        std::fs::write(&path, "synthetic-key-two\n").unwrap();
+        assert_eq!(
+            credential.bearer_token().await.unwrap(),
+            "synthetic-key-two"
+        );
+
+        for invalid in ["", " \n", "synthetic-key one", "synthetic-key\nother"] {
+            std::fs::write(&path, invalid).unwrap();
+            let error = credential.bearer_token().await.unwrap_err();
+            assert_eq!(credential.validate_configuration(), Err(error));
+            assert!(!error.contains("synthetic-key") && !error.contains("kordi-key-file"));
+        }
+        assert!(!format!("{credential:?}").contains("kordi-key-file"));
+        std::fs::remove_file(&path).unwrap();
+    }
+
     #[test]
     fn credential_cache_refreshes_before_the_runner_can_outlive_its_token() {
         let created = Instant::now();

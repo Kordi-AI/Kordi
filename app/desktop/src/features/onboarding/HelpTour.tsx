@@ -81,8 +81,10 @@ export default function HelpTour({ progressKey, tourId = 'workspace', initialSec
       // Clearing it would send the popover to a fallback position for one frame.
       if (nextRect) setAnchor((old) => old?.target === targetName && JSON.stringify(old.rect) === JSON.stringify(nextRect) ? old : { target: targetName, rect: nextRect });
       setTrackedTarget(nextRect ? targetName : null);
+      // An optional source may be left out of a screen that is already showing; do not wait long for it.
+      const screenShown = () => helpTourSteps.some((item) => !item.optional && item.groundingScreen === step.groundingScreen && document.querySelector(`[data-help-target="${item.target}"]`));
       if (nextRect) missingSince = now;
-      else if (now - missingSince >= (step.groundingScreen || step.settings ? 6000 : 1500)) {
+      else if (now - missingSince >= (step.groundingScreen || step.settings ? (step.optional && screenShown() ? 1500 : 6000) : 1500)) {
         // A tour only explains controls the user can see and use.
         setUnavailable((old) => old.includes(step.target) ? old : [...old, step.target]);
         return;
@@ -94,7 +96,7 @@ export default function HelpTour({ progressKey, tourId = 'workspace', initialSec
     };
     frame = requestAnimationFrame(measure);
     return () => { cancelAnimationFrame(frame); target?.dispose(); };
-  }, [step, targetName]);
+  }, [step, targetName, helpTourSteps]);
 
   useEffect(() => { if (steps.length === 0) onExit(); }, [steps.length, onExit]);
 

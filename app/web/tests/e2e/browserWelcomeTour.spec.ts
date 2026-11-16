@@ -35,9 +35,11 @@ for (const width of [1440, 390]) {
       await expect(tourCard(page).getByRole('heading')).not.toHaveText(title, { timeout: 10_000 });
     }
     // The fixture reports neither Grounding nor Memory, so their sections are skipped.
+    // At phone width the chat list is collapsed, so the step that points at a chat row is skipped too.
     expect(titles).toEqual([
-      'Connect an AI account', 'Add someone to your contacts', 'Start a conversation',
-      'Set up an agent', 'Check your daily overview', 'Find help here anytime',
+      'Contacts: people you know', 'Chats: talk with people', 'Agent Chats: work with your agents',
+      'Factory: build your agents', 'Digest: your daily overview', 'Connect an AI account',
+      ...(width === 390 ? [] : ['Export a session']), 'Find help here anytime',
     ]);
     await expect(page.locator('.help-tour-card')).toHaveCount(0);
     await page.reload();
