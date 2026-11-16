@@ -2,22 +2,29 @@ use super::*;
 use serde_json::json;
 
 #[test]
-fn the_baseline_differs_from_the_current_instructions_only_where_pr_2503_changed_them() {
+fn the_baseline_differs_from_the_current_instructions_only_where_pr_2503_and_2546_changed_them() {
     let baseline = MatchPrompt::Baseline.text();
     let current = MatchPrompt::Current.text();
     let old: Vec<&str> = baseline.lines().collect();
     let new: Vec<&str> = current.lines().collect();
     let removed: Vec<&str> = old.iter().copied().filter(|l| !new.contains(l)).collect();
     let added: Vec<&str> = new.iter().copied().filter(|l| !old.contains(l)).collect();
+    // #2546 caps each list at two, for shorter replies in large rooms.
+    let (capped, reworded): (Vec<&str>, Vec<&str>) =
+        removed.iter().partition(|line| line.contains("At most 3"));
+    assert_eq!(capped.len(), 3, "{removed:#?}");
     assert_eq!(
-        removed,
+        reworded,
         [
             "- why: one short reason per pair, under 14 words.",
             "- next_step: one concrete next step for the two of you, under 16 words. Empty when there is nothing in common.",
             "Copy topic labels exactly as written. Refer to people by name or \"you\", never by he, she, him or her.",
         ]
     );
-    assert_eq!(added.len(), 4, "{added:#?}");
+    for line in &capped {
+        assert!(added.contains(&line.replace("At most 3", "At most 2").as_str()));
+    }
+    assert_eq!(added.len(), 4 + 3, "{added:#?}");
     assert!(added
         .iter()
         .any(|line| line.contains("read the same to either person")));

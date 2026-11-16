@@ -14,6 +14,7 @@ use chrono::{DateTime, Utc};
 use sqlx_core::{query::query, query_as::query_as};
 use sqlx_postgres::PgPool;
 
+use super::queue::Ask;
 use super::shared_cards;
 use super::store::{queue_new_matches, Pending, Queued, MATCH_BATCH};
 use crate::auth::rate_limit::CloudRateLimiter;
@@ -117,7 +118,7 @@ async fn one(
         others,
         None,
         None,
-        false,
+        Ask::Best,
     );
     match queued.await? {
         (Queued::Pending(Pending::Running), true) => {

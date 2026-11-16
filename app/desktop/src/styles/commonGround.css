@@ -69,6 +69,13 @@
 .cg-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .cg-row-sub { color: var(--utility-muted-text); font-size: 12px; }
 .cg-trail { color: var(--utility-muted-text); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.cg-matching {
+  display: inline-block; flex: none; width: 14px; height: 14px; margin-right: 2px; border-radius: 50%;
+  border: 1.6px solid color-mix(in oklab, var(--utility-muted-text) 30%, transparent);
+  border-top-color: var(--utility-muted-text); animation: cg-matching-turn 0.9s linear infinite;
+}
+@keyframes cg-matching-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cg-matching { animation: none; } }
 .cg-muted { color: var(--utility-muted-text); font-weight: 400; }
 .cg-icon {
   display: inline-grid; flex: none; place-items: center; width: 26px; height: 26px; border-radius: 6px;
