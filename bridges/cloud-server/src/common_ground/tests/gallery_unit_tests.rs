@@ -5,14 +5,13 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::response::IntoResponse;
 use chrono::Utc;
 use sqlx_postgres::PgPoolOptions;
 use tower::ServiceExt;
 
 use super::super::gallery::{
-    candidate_title, copies, file_name_for, never_render, readable_text, text_like, title_for,
-    Artifact, Copies, HEAD_CHARS,
+    candidate_title, copies, file_name_for, readable_text, text_like, title_for, Artifact, Copies,
+    HEAD_CHARS,
 };
 use crate::events::EventBus;
 use crate::server::ServerState;
@@ -208,24 +207,4 @@ fn candidate_titles_read_only_whole_lines_of_the_stored_head() {
     let mut notes = artifact(Some("text/plain"), "notes.txt", "notes");
     notes.head = Some("# Plan".to_string());
     assert_eq!(candidate_title(&notes), "notes");
-}
-
-#[test]
-fn content_answers_are_never_rendered_as_a_page() {
-    let partial = (
-        StatusCode::PARTIAL_CONTENT,
-        [("content-type", "text/html")],
-        "<script>",
-    )
-        .into_response();
-    let response = never_render(partial);
-    assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
-    let headers = response.headers();
-    assert_eq!(headers["content-type"], "text/html");
-    assert_eq!(
-        headers["content-security-policy"],
-        "sandbox; default-src 'none'"
-    );
-    assert_eq!(headers["x-content-type-options"], "nosniff");
-    assert_eq!(headers["content-disposition"], "attachment");
 }

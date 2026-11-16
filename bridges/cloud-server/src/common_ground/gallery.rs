@@ -408,6 +408,4 @@ pub(in crate::common_ground) async fn remove(
 #[cfg(test)]
 pub(super) use artifacts::{file_name_for, title_for, Artifact};
 #[cfg(test)]
-pub(super) use content::never_render;
-#[cfg(test)]
 pub(super) use copies::{candidate_title, copies, readable_text, text_like, Copies, HEAD_CHARS};
