@@ -1703,11 +1703,11 @@ struct CloudChatEventPayload: Codable, Hashable {
     var attachmentId: String? = nil, revision: Int64? = nil, change: String? = nil, title: String? = nil // `document.updated`
     var readOutboxSnake: CloudChatReadOutbox? = nil, readOutboxCamel: CloudChatReadOutbox? = nil // read via `readOutbox`
     var code: String? = nil // the room in `common_ground.room.updated` and `common_ground.gallery.updated`
-    var itemId: String? = nil // the gallery item in `common_ground.gallery.updated`
+    var itemId: String? = nil, itemIds: [String]? = nil // the gallery items (with `change`) in `common_ground.gallery.updated`
 
     enum CodingKeys: String, CodingKey {
         case conversation, message, preferences, cursor, call, pinHistoryEvent, messageIds, kind, targetMessageId
-        case sessionId, messageId, scope, updatedAt, updatedByAccountId, attachmentId, revision, change, title, code, itemId
+        case sessionId, messageId, scope, updatedAt, updatedByAccountId, attachmentId, revision, change, title, code, itemId, itemIds
         case deviceId = "deviceId", readOutboxSnake = "read_outbox", readOutboxCamel = "readOutbox"
     }
 }

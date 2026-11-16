@@ -79,6 +79,7 @@ async fn uploaded_avatar_assets_are_reference_backed_and_renderable() {
         .unwrap();
     assert_eq!(rendered.status(), StatusCode::OK);
     assert_eq!(rendered.headers()["content-type"], "image/jpeg");
+    assert_eq!(rendered.headers()["x-content-type-options"], "nosniff");
     let bytes = to_bytes(rendered.into_body(), 2 * 1024 * 1024)
         .await
         .unwrap();

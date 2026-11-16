@@ -147,6 +147,10 @@ pub async fn render_uploaded_avatar(
         header::CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=31536000, immutable"),
     );
+    response.headers_mut().insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
     if let Ok(value) = HeaderValue::from_str(&format!("\"{asset_id}-{size}\"")) {
         response.headers_mut().insert(header::ETAG, value);
     }

@@ -28,7 +28,10 @@ final class CommonGroundGalleryRuntime {
     /// Item screens on display, which gallery hints refresh.
     var openItems: Set<String> = []
     var hintTasks: [String: Task<Void, Never>] = [:]
+    /// The items hints named in the current pause, by room code.
     var hintedItems: [String: Set<String>] = [:]
+    /// Rooms whose hints in the current pause included a `.list` change.
+    var hintedLists: Set<String> = []
     var pendingSequence = 0
 
     init() {
@@ -44,6 +47,8 @@ final class CommonGroundGalleryRuntime {
 extension CommonGroundModel {
     /// Gallery hints for one room arriving this close together cause one refresh.
     nonisolated static let galleryHintDelay: Duration = .milliseconds(300)
+    /// More items changed in place than this in one pause refetch the room's list instead.
+    static let galleryHintItemMax = 8
     static let galleryShareMax = 8
     static let galleryCommentMax = 2000
     /// Images up to this size draw a thumbnail; larger ones show their type.
@@ -235,25 +240,63 @@ extension CommonGroundModel {
 
     // MARK: Hints
 
-    /// `common_ground.gallery.updated`: after a short pause, refetches the
-    /// room's gallery when it is loaded and the named items that are open.
-    func scheduleGalleryRefresh(code: String, itemId: String?) {
+    /// `common_ground.gallery.updated`: after a short pause, refreshes what
+    /// the room's hints in that pause named (see `refreshGallery`).
+    func scheduleGalleryRefresh(code: String, itemIds: [String], change: CommonGroundGalleryChange) {
         guard gallery.supported != false else { return }
-        galleryRuntime.hintedItems[code, default: []].insert(itemId ?? "")
+        galleryRuntime.hintedItems[code, default: []].formUnion(itemIds)
+        // An item change that names no item says nothing narrower than the list.
+        if change == .list || itemIds.isEmpty { galleryRuntime.hintedLists.insert(code) }
         guard galleryRuntime.hintTasks[code] == nil else { return }
         galleryRuntime.hintTasks[code] = Task { [weak self] in
             try? await Task.sleep(for: Self.galleryHintDelay)
             guard let self else { return }
             let items = self.galleryRuntime.hintedItems.removeValue(forKey: code) ?? []
+            let list = self.galleryRuntime.hintedLists.remove(code) != nil
             self.galleryRuntime.hintTasks[code] = nil
-            await self.refreshGallery(code: code, hintedItems: items)
+            await self.refreshGallery(code: code, hintedItems: items, list: list)
         }
     }
 
-    func refreshGallery(code: String, hintedItems: Set<String>) async {
+    /// After a `.list` change, or more than `galleryHintItemMax` items,
+    /// refetches the room's list when it is loaded, then the named items that
+    /// are open. After `.item` changes alone, refetches only the named items.
+    func refreshGallery(code: String, hintedItems: Set<String>, list: Bool) async {
+        let itemIds = hintedItems.sorted()
+        guard list || itemIds.count > Self.galleryHintItemMax else {
+            for itemId in itemIds where gallery.supported != false {
+                await refreshGalleryItem(code: code, itemId: itemId)
+            }
+            return
+        }
         if gallery.lists[code] != nil { await loadGallery(code, quiet: true) }
-        for itemId in hintedItems.sorted() where galleryRuntime.openItems.contains(Self.galleryKey(code, itemId)) {
+        for itemId in itemIds where galleryRuntime.openItems.contains(Self.galleryKey(code, itemId)) {
             await loadGalleryItem(code: code, itemId: itemId, quiet: true)
+        }
+    }
+
+    /// Refetches one item that changed in place: its screen when open, else
+    /// its entry in the loaded list, and a view kept from earlier with its
+    /// pending comments. An item that is gone leaves without a notice.
+    private func refreshGalleryItem(code: String, itemId: String) async {
+        let key = Self.galleryKey(code, itemId)
+        if galleryRuntime.openItems.contains(key) {
+            await loadGalleryItem(code: code, itemId: itemId, quiet: true)
+            return
+        }
+        guard gallery.lists[code]?.items.contains(where: { $0.itemId == itemId }) == true else { return }
+        do {
+            let view = try await call { try await $0.commonGroundGalleryItem(token: $1, code: code, itemId: itemId) }
+            if gallery.items[key] != nil {
+                applyGalleryItem(view, code: code)
+            } else if let index = gallery.lists[code]?.items.firstIndex(where: { $0.itemId == itemId }),
+                      gallery.lists[code]?.items[index] != view.item {
+                gallery.lists[code]?.items[index] = view.item
+            }
+        } catch {
+            guard !CloudTransportErrorPolicy.isCancellation(error), !galleryUnsupported(error) else { return }
+            let status = (error as? CloudAPIError)?.statusCode ?? 0
+            if status == 403 || status == 404 { dropGalleryItem(code: code, itemId: itemId) }
         }
     }
 }

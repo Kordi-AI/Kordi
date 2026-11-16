@@ -301,35 +301,128 @@ final class CommonGroundGalleryTests: XCTestCase {
 
     // MARK: Hints
 
+    private static let item2Path = galleryPath + "/item_2"
+    /// item_2 after two comments and a new title and preview.
+    static let item2Changed = #"""
+    {"item":{"itemId":"item_2","attachmentId":"att_2","title":"CI minutes","fileName":"ci-minutes.csv","contentType":null,"sizeBytes":null,
+     "topic":null,"preview":"job,minutes","person":\#(alex),"mine":true,"commentCount":2,"createdAt":"2026-11-15T08:00:00Z"},"comments":[]}
+    """#
+    static let beaComment = #"{"commentId":"c_3","person":\#(bea),"body":"It does.","mine":false,"createdAt":"2026-11-15T09:30:00Z"}"#
+
+    private func galleryHint(_ payload: String) throws -> CommonGroundSyncHint? {
+        let json = #"{"stream_seq":1,"event_id":"evt_1","protocol_version":2,"type":"common_ground.gallery.updated","critical":false,"#
+            + #""conversation_id":null,"entity_id":null,"entity_version":null,"occurred_at":"2026-11-15T09:00:00Z","payload":\#(payload)}"#
+        return CommonGroundSyncHint(event: try decode(CloudChatEvent.self, json))
+    }
+
     func testGalleryHintsDecodeFromSyncEvents() throws {
-        func hint(_ payload: String) throws -> CommonGroundSyncHint? {
-            let json = #"{"stream_seq":1,"event_id":"evt_1","protocol_version":2,"type":"common_ground.gallery.updated","critical":false,"#
-                + #""conversation_id":null,"entity_id":null,"entity_version":null,"occurred_at":"2026-11-15T09:00:00Z","payload":\#(payload)}"#
-            return CommonGroundSyncHint(event: try decode(CloudChatEvent.self, json))
-        }
         XCTAssertTrue(CommonGroundSyncHint.eventTypes.contains("common_ground.gallery.updated"))
-        XCTAssertEqual(try hint(#"{"code":"4821","itemId":"item_1"}"#), .gallery(code: "4821", itemId: "item_1"))
-        XCTAssertEqual(try hint(#"{"code":"4821"}"#), .gallery(code: "4821", itemId: nil))
-        XCTAssertNil(try hint(#"{"itemId":"item_1"}"#), "A gallery hint names its room")
+        XCTAssertEqual(try galleryHint(#"{"code":"4821","itemId":"item_1"}"#), .gallery(code: "4821", itemIds: ["item_1"], change: .list),
+                       "An older server names one item and no change")
+        XCTAssertEqual(try galleryHint(#"{"code":"4821"}"#), .gallery(code: "4821", itemIds: [], change: .list))
+        XCTAssertEqual(try galleryHint(#"{"code":"4821","itemId":"item_1","itemIds":["item_1","item_2"],"change":"item"}"#),
+                       .gallery(code: "4821", itemIds: ["item_1", "item_2"], change: .item))
+        XCTAssertEqual(try galleryHint(#"{"code":"4821","itemId":"item_3","itemIds":["item_3"],"change":"list"}"#),
+                       .gallery(code: "4821", itemIds: ["item_3"], change: .list))
+        XCTAssertEqual(try galleryHint(#"{"code":"4821","itemId":"item_1","change":"moved"}"#),
+                       .gallery(code: "4821", itemIds: ["item_1"], change: .list), "An unknown change is a list change")
+        XCTAssertNil(try galleryHint(#"{"itemId":"item_1"}"#), "A gallery hint names its room")
     }
 
     func testAHintRefetchesTheLoadedListAndTheOpenItemItNames() async throws {
         let model = await loadedModel()
-        await model.refreshGallery(code: "4821", hintedItems: ["item_2"])
+        await model.refreshGallery(code: "4821", hintedItems: ["item_2"], list: true)
         XCTAssertEqual(count("GET", Self.galleryPath), 2)
         XCTAssertEqual(count("GET", Self.itemPath), 1, "An item that is not named is not refetched")
 
         model.closeGalleryItem(code: "4821", itemId: "item_1")
-        await model.refreshGallery(code: "4821", hintedItems: ["item_1"])
+        await model.refreshGallery(code: "4821", hintedItems: ["item_1"], list: true)
         XCTAssertEqual(count("GET", Self.itemPath), 1, "A closed item is not refetched")
 
-        await model.refreshGallery(code: "9999", hintedItems: [""])
+        await model.refreshGallery(code: "9999", hintedItems: [], list: true)
         XCTAssertEqual(count("GET", "/v1/cloud/common-ground/rooms/9999/gallery"), 0, "A room not loaded is not fetched")
 
         model.openGalleryItem(code: "4821", itemId: "item_1")
-        model.receive(.gallery(code: "4821", itemId: "item_1"))
-        model.receive(.gallery(code: "4821", itemId: nil))
+        model.receive(.gallery(code: "4821", itemIds: ["item_1"], change: .list))
+        model.receive(.gallery(code: "4821", itemIds: [], change: .list))
         try await waitUntil { count("GET", Self.itemPath) == 2 }
         XCTAssertEqual(count("GET", Self.galleryPath), 4, "Hints close together refresh the list once")
+    }
+
+    func testAnItemHintUpdatesOneListEntryWithoutAListRequest() async throws {
+        let model = await loadedModel()
+        CommonGroundURLProtocol.stub("GET", Self.item2Path, [(200, Self.item2Changed)])
+        model.receive(.gallery(code: "4821", itemIds: ["item_2"], change: .item))
+        try await waitUntil { model.galleryItem(code: "4821", itemId: "item_2")?.commentCount == 2 }
+        let entry = try XCTUnwrap(model.galleryItem(code: "4821", itemId: "item_2"))
+        XCTAssertEqual(entry.title, "CI minutes")
+        XCTAssertEqual(entry.preview, "job,minutes")
+        XCTAssertEqual(model.gallery.lists["4821"]?.items.map(\.itemId), ["item_1", "item_2"])
+        XCTAssertNil(model.gallery.items[CommonGroundModel.galleryKey("4821", "item_2")], "No view is made for a closed item")
+        XCTAssertEqual(count("GET", Self.galleryPath), 1, "The list is not refetched")
+        XCTAssertEqual(count("GET", Self.itemPath), 1, "An item that is not named is not refetched")
+
+        model.closeGalleryItem(code: "4821", itemId: "item_1")
+        CommonGroundURLProtocol.stub("GET", Self.itemPath, [(200, #"{"item":\#(Self.item1),"comments":[\#(Self.chenComment),\#(Self.beaComment)]}"#)])
+        await model.refreshGallery(code: "4821", hintedItems: ["item_1"], list: false)
+        XCTAssertEqual(model.gallery.items[Self.key]?.comments.map(\.commentId), ["c_1", "c_3"], "A kept view is replaced")
+
+        await model.refreshGallery(code: "4821", hintedItems: ["item_9"], list: false)
+        XCTAssertEqual(count("GET", Self.galleryPath + "/item_9"), 0, "An item the list does not hold is not fetched")
+        XCTAssertEqual(count("GET", Self.galleryPath), 1)
+    }
+
+    func testAListHintOrOneWithoutAChangeRefetchesTheList() async throws {
+        let model = await loadedModel()
+        model.closeGalleryItem(code: "4821", itemId: "item_1")
+        model.receive(try XCTUnwrap(try galleryHint(#"{"code":"4821","itemId":"item_2"}"#)))
+        try await waitUntil { count("GET", Self.galleryPath) == 2 }
+
+        model.receive(.gallery(code: "4821", itemIds: ["item_2"], change: .item))
+        model.receive(.gallery(code: "4821", itemIds: ["item_3"], change: .list))
+        try await waitUntil { count("GET", Self.galleryPath) == 3 }
+
+        model.receive(.gallery(code: "4821", itemIds: [], change: .item))
+        try await waitUntil { count("GET", Self.galleryPath) == 4 }
+        XCTAssertEqual(count("GET", Self.item2Path), 0, "A list refresh refetches only the open items")
+        XCTAssertEqual(count("GET", Self.itemPath), 1)
+    }
+
+    func testEveryNamedItemReachesAnOpenItem() async throws {
+        let model = await loadedModel()
+        model.receive(.gallery(code: "4821", itemIds: ["item_3", "item_1"], change: .list))
+        try await waitUntil { count("GET", Self.itemPath) == 2 }
+        XCTAssertEqual(count("GET", Self.galleryPath), 2)
+
+        CommonGroundURLProtocol.stub("GET", Self.item2Path, [(200, Self.item2Changed)])
+        model.receive(.gallery(code: "4821", itemIds: ["item_2", "item_1"], change: .item))
+        try await waitUntil { model.galleryItem(code: "4821", itemId: "item_2")?.commentCount == 2 }
+        XCTAssertEqual(count("GET", Self.itemPath), 3)
+        XCTAssertEqual(count("GET", Self.galleryPath), 2, "Items changed in place do not refetch the list")
+    }
+
+    func testAGoneItemIsDroppedQuietly() async {
+        let model = await loadedModel()
+        CommonGroundURLProtocol.stub("GET", Self.item2Path, [(404, #"{"errorCode":"common_ground_gallery_item_not_found","message":"Item not found."}"#)])
+        await model.refreshGallery(code: "4821", hintedItems: ["item_2"], list: false)
+        XCTAssertEqual(model.gallery.lists["4821"]?.items.map(\.itemId), ["item_1"])
+        XCTAssertNil(model.notice, "A gone item leaves without a notice")
+        XCTAssertEqual(count("GET", Self.galleryPath), 1)
+
+        let older = await loadedModel()
+        await older.refreshGallery(code: "4821", hintedItems: ["item_2"], list: false)
+        XCTAssertEqual(older.gallery.supported, false, "A server without the item route turns the gallery off")
+        XCTAssertNil(older.notice)
+    }
+
+    func testMoreThanEightItemsChangedInPlaceRefetchTheList() async throws {
+        let model = await loadedModel()
+        let others = (1...8).map { "other_\($0)" }
+        await model.refreshGallery(code: "4821", hintedItems: Set(others), list: false)
+        XCTAssertEqual(count("GET", Self.galleryPath), 1, "Eight items stay item refreshes")
+
+        for itemId in ["item_1"] + others { model.receive(.gallery(code: "4821", itemIds: [itemId], change: .item)) }
+        try await waitUntil { count("GET", Self.galleryPath) == 2 && count("GET", Self.itemPath) == 2 }
+        XCTAssertFalse(CommonGroundURLProtocol.paths.contains { $0.contains("/other_") }, "Items not loaded are not fetched")
     }
 }

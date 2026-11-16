@@ -15,11 +15,16 @@
 mod artifacts;
 mod comments;
 mod content;
+mod copies;
+mod hints;
+mod refresh;
 mod share;
 
 pub(super) use artifacts::candidates;
 pub(super) use comments::{add_comment, delete_comment};
 pub(super) use content::content;
+pub(super) use hints::forget;
+pub(crate) use refresh::refresh_gallery_copies;
 pub(super) use share::share;
 
 use std::collections::HashMap;
@@ -33,7 +38,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use sqlx_core::{query_as::query_as, transaction::Transaction};
+use sqlx_core::query_as::query_as;
 use sqlx_postgres::{PgPool, Postgres};
 use uuid::Uuid;
 
@@ -44,10 +49,8 @@ use crate::{auth::routes::CloudSession, server::ServerState};
 pub(super) const MAX_ITEMS_PER_PERSON: i64 = 20;
 /// Items `GET gallery` lists, newest first.
 const MAX_LISTED_ITEMS: i64 = 200;
-/// Comments an item lists, oldest first.
+/// Comments an item lists: the newest ones, oldest first.
 const MAX_LISTED_COMMENTS: i64 = 200;
-/// The refresh hint every member gets when the gallery changes.
-const UPDATED_HINT: &str = "common_ground.gallery.updated";
 
 /// SQL that is true when the account in `viewer` sees the account in
 /// `person` in the room in `room` (all SQL expressions): `person` is still
@@ -191,7 +194,8 @@ type ItemRow = (
 );
 
 /// The items of `room` that `viewer` sees, newest first, as `GalleryItem`
-/// objects. `commentCount` counts the comments the viewer sees.
+/// objects. `commentCount` counts the comments the viewer sees, up to the
+/// [`MAX_LISTED_COMMENTS`] an item lists.
 async fn load_items(
     pool: &PgPool,
     room: &Room,
@@ -208,8 +212,10 @@ async fn load_items(
                 COALESCE(attachment.content_type, attachment.detected_content_type),
                 COALESCE(octet_length(contents.source)::bigint, attachment.size_bytes),
                 item.topic, item.preview, item.account_id, item.created_at,
-                (SELECT COUNT(*) FROM cloud_common_ground_room_gallery_comments comment
-                 WHERE comment.item_id = item.item_id AND {comment_sees})
+                (SELECT COUNT(*) FROM (
+                     SELECT 1 FROM cloud_common_ground_room_gallery_comments comment
+                     WHERE comment.item_id = item.item_id AND {comment_sees}
+                     LIMIT $6) listed)
          FROM cloud_common_ground_room_gallery_items item
          JOIN cloud_attachments attachment ON attachment.attachment_id = item.attachment_id
          LEFT JOIN cloud_document_contents contents
@@ -227,6 +233,7 @@ async fn load_items(
     .bind(item_id)
     .bind(attachments)
     .bind(MAX_LISTED_ITEMS)
+    .bind(MAX_LISTED_COMMENTS)
     .fetch_all(pool)
     .await?;
     let ids: Vec<String> = rows.iter().map(|row| row.8.clone()).collect();
@@ -284,58 +291,6 @@ where
     Ok(count)
 }
 
-/// Tells every member of the room who has not left, but `except`, that
-/// this item changed: it was shared, removed or commented on.
-async fn notify(
-    tx: &mut Transaction<'_, Postgres>,
-    room_id: Uuid,
-    code: &str,
-    item_id: Uuid,
-    except: Option<&str>,
-) -> sqlx_core::Result<()> {
-    let members: Vec<(String,)> = query_as(
-        "SELECT account_id FROM cloud_common_ground_room_members
-         WHERE room_id = $1 AND left_at IS NULL AND ($2::text IS NULL OR account_id <> $2)",
-    )
-    .bind(room_id)
-    .bind(except)
-    .fetch_all(&mut **tx)
-    .await?;
-    let payload = json!({ "code": code, "itemId": item_id });
-    for (account,) in members {
-        super::hint(tx, &account, UPDATED_HINT, payload.clone()).await?;
-    }
-    Ok(())
-}
-
-/// Deletes `account`'s items in these rooms, which they are leaving, and
-/// tells the other members about each. Their comments on other items stay
-/// but are listed only while they are members. Call it in the transaction
-/// that ends the memberships.
-pub(super) async fn forget(
-    tx: &mut Transaction<'_, Postgres>,
-    room_ids: &[Uuid],
-    account: &str,
-) -> sqlx_core::Result<()> {
-    if room_ids.is_empty() {
-        return Ok(());
-    }
-    let removed: Vec<(Uuid, Uuid, String)> = query_as(
-        "DELETE FROM cloud_common_ground_room_gallery_items item
-         USING cloud_common_ground_rooms room
-         WHERE item.account_id = $1 AND item.room_id = ANY($2) AND room.room_id = item.room_id
-         RETURNING item.item_id, item.room_id, room.code",
-    )
-    .bind(account)
-    .bind(room_ids)
-    .fetch_all(&mut **tx)
-    .await?;
-    for (item_id, room_id, code) in removed {
-        notify(tx, room_id, &code, item_id, Some(account)).await?;
-    }
-    Ok(())
-}
-
 /// `GET /v1/cloud/common-ground/rooms/:code/gallery`: the items you see,
 /// newest first, and whether you may share more (an open room where you
 /// have fewer than [`MAX_ITEMS_PER_PERSON`]).
@@ -367,7 +322,7 @@ pub(in crate::common_ground) async fn list(
 }
 
 /// `GET /v1/cloud/common-ground/rooms/:code/gallery/:item_id`: the item and
-/// the comments you see, oldest first.
+/// the newest [`MAX_LISTED_COMMENTS`] comments you see, oldest first.
 pub(in crate::common_ground) async fn read(
     State(state): State<Arc<ServerState>>,
     Extension(session): Extension<CloudSession>,
@@ -430,7 +385,15 @@ pub(in crate::common_ground) async fn remove(
         if removed.is_none() {
             return Ok(false);
         }
-        notify(&mut tx, room.room_id, &room.code, item_id, None).await?;
+        hints::notify(
+            &mut tx,
+            room.room_id,
+            &room.code,
+            &[item_id],
+            hints::Change::List,
+            None,
+        )
+        .await?;
         tx.commit().await?;
         Ok::<_, sqlx_core::Error>(true)
     }
@@ -443,8 +406,6 @@ pub(in crate::common_ground) async fn remove(
 }
 
 #[cfg(test)]
-pub(super) use artifacts::{file_name_for, title_for};
+pub(super) use artifacts::{file_name_for, title_for, Artifact};
 #[cfg(test)]
-pub(super) use content::never_render;
-#[cfg(test)]
-pub(super) use share::{preview_text, text_like};
+pub(super) use copies::{candidate_title, copies, readable_text, text_like, Copies, HEAD_CHARS};

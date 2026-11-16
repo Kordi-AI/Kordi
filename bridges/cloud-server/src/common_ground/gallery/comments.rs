@@ -17,9 +17,9 @@ use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 use uuid::Uuid;
 
+use super::hints::{notify, Change};
 use super::{
-    member_room, notify, parse_id, people, room_closed, sees_sql, visible_item, Room,
-    MAX_LISTED_COMMENTS,
+    member_room, parse_id, people, room_closed, sees_sql, visible_item, Room, MAX_LISTED_COMMENTS,
 };
 use crate::auth::rate_limit::{CloudRateLimiter, RateLimitDecision};
 use crate::common_ground::{db_error, err, limited, GALLERY_COMMENT_LIMIT};
@@ -52,7 +52,8 @@ fn comment_json(
     })
 }
 
-/// The comments on `item_id` that `viewer` sees, oldest first.
+/// The newest [`MAX_LISTED_COMMENTS`] comments on `item_id` that `viewer`
+/// sees, oldest first.
 pub(super) async fn load(
     pool: &PgPool,
     room: &Room,
@@ -60,12 +61,14 @@ pub(super) async fn load(
     item_id: Uuid,
 ) -> sqlx_core::Result<Vec<Value>> {
     let rows: Vec<(Uuid, String, String, DateTime<Utc>)> = query_as(&format!(
-        "SELECT comment.comment_id, comment.account_id, comment.body, comment.created_at
-         FROM cloud_common_ground_room_gallery_comments comment
-         JOIN cloud_common_ground_room_gallery_items item ON item.item_id = comment.item_id
-         WHERE comment.item_id = $1 AND {sees}
-         ORDER BY comment.created_at, comment.comment_id
-         LIMIT $3",
+        "SELECT comment_id, account_id, body, created_at FROM (
+             SELECT comment.comment_id, comment.account_id, comment.body, comment.created_at
+             FROM cloud_common_ground_room_gallery_comments comment
+             JOIN cloud_common_ground_room_gallery_items item ON item.item_id = comment.item_id
+             WHERE comment.item_id = $1 AND {sees}
+             ORDER BY comment.created_at DESC, comment.comment_id DESC
+             LIMIT $3) newest
+         ORDER BY created_at, comment_id",
         sees = sees_sql("$2", "comment.account_id", "item.room_id"),
     ))
     .bind(item_id)
@@ -152,7 +155,15 @@ pub(in crate::common_ground) async fn add_comment(
         let Some((created_at,)) = created else {
             return Ok(None);
         };
-        notify(&mut tx, room.room_id, &room.code, item.item_id, None).await?;
+        notify(
+            &mut tx,
+            room.room_id,
+            &room.code,
+            &[item.item_id],
+            Change::Item,
+            None,
+        )
+        .await?;
         tx.commit().await?;
         let people = people(pool, &room, viewer, vec![viewer.to_string()]).await?;
         Ok::<_, sqlx_core::Error>(Some((created_at, people)))
@@ -208,7 +219,15 @@ pub(in crate::common_ground) async fn delete_comment(
         if deleted.is_none() {
             return Ok(false);
         }
-        notify(&mut tx, room.room_id, &room.code, item.item_id, None).await?;
+        notify(
+            &mut tx,
+            room.room_id,
+            &room.code,
+            &[item.item_id],
+            Change::Item,
+            None,
+        )
+        .await?;
         tx.commit().await?;
         Ok::<_, sqlx_core::Error>(true)
     }

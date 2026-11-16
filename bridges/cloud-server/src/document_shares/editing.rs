@@ -7,6 +7,9 @@
 //! Afterwards every member is told to reload through `document.updated`
 //! (see [`super::events`]).
 //!
+//! An accepted save also refreshes the title and preview of the document's
+//! Grounding room gallery items.
+//!
 //! While a collaboration room is in use, editors write Markdown snapshots
 //! with `"mode": "snapshot"` instead: a new revision only when the source
 //! changed. A revisioned save (a person's or an agent's) records its revision
@@ -260,6 +263,8 @@ pub(super) async fn save(
     let targets = annotation_targets(&markdown_blocks(&old_text), &markdown_blocks(text), stamped);
     remap_annotations(&mut tx, &record.attachment_id, &targets, &now).await?;
     tx.commit().await?;
+    // Every save path (a person's, a room snapshot, an agent edit) ends here.
+    crate::common_ground::refresh_gallery_copies(pool, &record.attachment_id).await;
     Ok(SaveOutcome::Saved(DocumentSource {
         text: text.to_string(),
         revision: new_revision,
