@@ -3,11 +3,11 @@
   "status": "verified",
   "targetTriple": "aarch64-apple-darwin",
   "bunVersion": "1.4.2",
-  "workerSourceSha256": "948dcff5c9cc84ac368500542f79fe2156892145e1d51c6ae97b4ea4b54991d6",
+  "workerSourceSha256": "6de8e8b44836400bac0f3559a061a82531b0df37401b7caf0cfb369eb4896f8c",
   "sourcePinsSha256": "19b23dc48c6e5f1ae535454bc46350f7530d1a653ae12b00bddb7d07b688c11e",
   "binarySha256": {
-    "baselineWorker": "4164231da59b0cbb54cda4f9cb8827687521d474424d4c1cf9f03e523016cb59",
-    "modifiedWorker": "211a37061afa4f680cc417ea2b5279ed5983719d2b090b29b155c416ec7c7090",
+    "baselineWorker": "f7afbe537a52fea7f76d1dbd3ac34f08f0b8118e150c4ba8d901b2186b0ec844",
+    "modifiedWorker": "c9ba8907766fe7520a92045deefb35b7a30a7db5e84c5da890e4cfb3e137736e",
     "modifiedBun": "3b776a7ebb068e4614f722f5d98138aac2ff304ae7d62ecccde30a225c54fd26"
   },
   "checks": {
