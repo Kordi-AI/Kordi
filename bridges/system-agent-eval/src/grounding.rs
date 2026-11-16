@@ -141,9 +141,22 @@ pub(crate) async fn complete(
     user_prompt: &str,
     stub: Option<&str>,
 ) -> anyhow::Result<(Result<String, String>, u64, Option<UsageRecord>)> {
+    let prefix = format!("{}eval_", kordi_cloud_server::common_ground::RUN_PREFIX);
+    complete_as(&prefix, config, engine, system_prompt, user_prompt, stub).await
+}
+
+/// [`complete`] with a run id under `prefix`, which sets the effort the
+/// runner sends for that kind of run (such as `cg_match_`).
+pub(crate) async fn complete_as(
+    prefix: &str,
+    config: &SystemAgentConfig,
+    engine: Engine,
+    system_prompt: &str,
+    user_prompt: &str,
+    stub: Option<&str>,
+) -> anyhow::Result<(Result<String, String>, u64, Option<UsageRecord>)> {
     let run: CloudAgentRun = serde_json::from_value(json!({
-        "runId": format!("{}eval_{}", kordi_cloud_server::common_ground::RUN_PREFIX,
-            uuid::Uuid::new_v4().simple()),
+        "runId": format!("{prefix}{}", uuid::Uuid::new_v4().simple()),
         "status": "leased", "prompt": user_prompt, "systemPrompt": system_prompt,
         "ownerAccountId": config.account_id, "requesterAccountId": config.account_id,
         "sessionId": "grounding-quality-test", "sandboxId": null,

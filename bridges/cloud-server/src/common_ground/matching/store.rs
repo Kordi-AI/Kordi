@@ -10,21 +10,36 @@ use sqlx_core::{query::query, query_as::query_as, transaction::Transaction};
 use sqlx_postgres::{PgPool, Postgres};
 use uuid::Uuid;
 
-use super::prompt::{self, MATCH_SYSTEM, ROOM_SYSTEM};
+use super::prompt::{self, MATCH_BRIEF_SYSTEM, MATCH_SYSTEM, ROOM_SYSTEM};
+use super::queue::Ask;
 use super::{MatchResult, SharedCard};
 use crate::auth::rate_limit::{CloudRateLimiter, RateLimitDecision};
-use crate::common_ground::runs::{self, NewRun, MATCH_PREFIX, ROOM_PREFIX};
+use crate::common_ground::runs::{self, NewRun, BRIEF_MATCH_PREFIX, MATCH_PREFIX, ROOM_PREFIX};
 use crate::common_ground::{rooms, MATCH_LIMIT};
 
-/// People matched by one run; larger rooms fill in over several runs.
-pub(super) const MATCH_BATCH: usize = 8;
-/// Members whose topics a room-theme run reads, in join order.
-pub(super) const MAX_THEME_MEMBERS: usize = 60;
+/// People matched by one run. In a room these are the viewer's best
+/// estimated matches (`estimate`); the rest follow in larger background
+/// runs ([`super::queue::TAIL_BATCH`]).
+pub(super) const MATCH_BATCH: usize = 5;
+/// Members whose topics a room-theme run reads, in join order. The prompt
+/// is one line per person.
+pub(super) const MAX_THEME_MEMBERS: usize = 150;
+/// Themes found moments ago stay while people join: a new theme run waits
+/// until the stored ones are this old, so a room filling up does not run
+/// once per join.
+pub(super) const THEME_REFRESH: Duration = Duration::from_secs(120);
 
-/// A run blocks another of its kind while it is open, and for two minutes
-/// after it failed, so a failing provider is not called on every refresh.
-const BLOCKING_RUN_SQL: &str = "created_at > now() - interval '15 minutes'
-    AND (finished_at IS NULL OR (error_code IS NOT NULL AND finished_at > now() - interval '2 minutes'))";
+/// A run blocks another of its kind while it is open (up to an hour, so a
+/// run that was lost does not block forever), and for two minutes after it
+/// failed, so a failing provider is not called on every refresh. A run the
+/// provider only rate-limited (`common_ground_rate_limited` from the
+/// runner) blocks for 20 seconds: the provider is busy, not broken. In a
+/// busy room a run can wait in the queue for many minutes; queueing it
+/// again while it waits only doubles the work.
+const BLOCKING_RUN_SQL: &str = "created_at > now() - interval '60 minutes'
+    AND (finished_at IS NULL OR (error_code IS NOT NULL AND finished_at > now() - CASE
+        WHEN error_code = 'common_ground_rate_limited' THEN interval '20 seconds'
+        ELSE interval '2 minutes' END))";
 
 /// Stored results for `viewer`, keyed by the other profile, that are still
 /// valid for both current cards.
@@ -110,11 +125,14 @@ async fn charge(rate_limiter: &CloudRateLimiter, account: &str) -> Option<Durati
     }
 }
 
-async fn blocking_run(
-    pool: &PgPool,
+async fn blocking_run<'e, E>(
+    executor: E,
     column: &str,
     key: &str,
-) -> sqlx_core::Result<Option<Pending>> {
+) -> sqlx_core::Result<Option<Pending>>
+where
+    E: sqlx_core::executor::Executor<'e, Database = Postgres>,
+{
     let sql = format!(
         "SELECT error_code IS NOT NULL FROM cloud_common_ground_match_runs
          WHERE kind = $2 AND {column} = $1 AND {BLOCKING_RUN_SQL} ORDER BY created_at DESC LIMIT 1"
@@ -124,13 +142,13 @@ async fn blocking_run(
         query_as(&sql)
             .bind(room)
             .bind("room")
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await?
     } else {
         query_as(&sql)
             .bind(key)
             .bind("match")
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await?
     };
     Ok(row.map(|(failed,)| {
@@ -157,24 +175,27 @@ async fn lock_room(tx: &mut Transaction<'_, Postgres>, room_id: Uuid) -> sqlx_co
 /// viewer's current card: that run stores the pair for the viewer too
 /// (`finish::complete`). Open means unfinished and in the window
 /// [`BLOCKING_RUN_SQL`] uses.
-async fn not_covered(
-    tx: &mut Transaction<'_, Postgres>,
+async fn not_covered<'e, E>(
+    executor: E,
     viewer: &SharedCard,
     stale: Vec<SharedCard>,
-) -> sqlx_core::Result<Vec<SharedCard>> {
+) -> sqlx_core::Result<Vec<SharedCard>>
+where
+    E: sqlx_core::executor::Executor<'e, Database = Postgres>,
+{
     let ids: Vec<&str> = stale.iter().map(|card| card.profile_id.as_str()).collect();
     let runs: Vec<(String, Option<i64>)> = query_as(
         "SELECT viewer_profile_id, (cards_json -> 0 ->> 'revision')::bigint
          FROM cloud_common_ground_match_runs
          WHERE kind = 'match' AND finished_at IS NULL
-           AND created_at > now() - interval '15 minutes' AND viewer_profile_id = ANY($1)
+           AND created_at > now() - interval '60 minutes' AND viewer_profile_id = ANY($1)
            AND cards_json @> jsonb_build_array(
                jsonb_build_object('profileId', $2::text, 'revision', $3::bigint))",
     )
     .bind(&ids)
     .bind(&viewer.profile_id)
     .bind(viewer.revision)
-    .fetch_all(&mut **tx)
+    .fetch_all(executor)
     .await?;
     let covered: HashSet<(String, i64)> = runs
         .into_iter()
@@ -186,11 +207,18 @@ async fn not_covered(
         .collect())
 }
 
-/// Queues a run matching `viewer` with up to [`MATCH_BATCH`] of `stale`,
-/// unless one is already working for this viewer profile. A person whose
-/// own open run already matches them with the viewer is left out; when
-/// that leaves nobody, the viewer waits for those runs. Only a queued run
-/// is charged to the viewer's matching budget.
+/// Queues a run matching `viewer` with the first [`MATCH_BATCH`] of
+/// `stale` (callers put the best first), unless one is already working for
+/// this viewer profile. A person whose own open run already matches them
+/// with the viewer is left out; when that leaves nobody, the viewer waits
+/// for those runs. Only a queued run is charged to the viewer's matching
+/// budget.
+///
+/// Every member of a room polls this, so the usual answer ("a run is
+/// already at work") is read without a transaction or lock. Only a call
+/// that is about to queue takes the room lock, then checks again inside
+/// its transaction, which it uses for every query: holding a lock never
+/// waits for a second pool connection.
 pub(in crate::common_ground) async fn queue_matches(
     pool: &PgPool,
     service: &crate::system_agent::SystemAgentConfig,
@@ -208,38 +236,14 @@ pub(in crate::common_ground) async fn queue_matches(
         stale,
         room_id,
         organization_id,
-        false,
-    );
-    Ok(queued.await?.0)
-}
-
-/// [`queue_matches`] for the one person the viewer opened. The viewer waits
-/// on this run, so the runner leases it ahead of bulk runs queued shortly
-/// before it, such as a large room's (`runs::insert_opened`).
-pub(in crate::common_ground) async fn queue_opened_match(
-    pool: &PgPool,
-    service: &crate::system_agent::SystemAgentConfig,
-    rate_limiter: &CloudRateLimiter,
-    viewer: &SharedCard,
-    other: &SharedCard,
-    organization_id: Option<&str>,
-) -> sqlx_core::Result<Queued> {
-    let queued = queue_new_matches(
-        pool,
-        service,
-        rate_limiter,
-        viewer,
-        std::slice::from_ref(other),
-        None,
-        organization_id,
-        true,
+        Ask::Best,
     );
     Ok(queued.await?.0)
 }
 
 /// [`queue_matches`], and whether this call queued the run: false when a
-/// run already at work, or other people's open runs, stand for it. An
-/// `opened` run is one the viewer waits on ([`queue_opened_match`]).
+/// run already at work, or other people's open runs, stand for it. `ask`
+/// sets how many people the run reads and how it is leased.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn queue_new_matches(
     pool: &PgPool,
@@ -249,7 +253,7 @@ pub(super) async fn queue_new_matches(
     stale: &[SharedCard],
     room_id: Option<Uuid>,
     organization_id: Option<&str>,
-    opened: bool,
+    ask: Ask,
 ) -> sqlx_core::Result<(Queued, bool)> {
     // The viewer asked, so only declining stops them; another person's
     // card reaches the model only when they allowed AI (`crate::ai_consent`).
@@ -270,6 +274,20 @@ pub(super) async fn queue_new_matches(
     if stale.is_empty() {
         return Ok((Queued::Skipped, false));
     }
+    // Another person's run stores the pair for the viewer only when the
+    // viewer allowed AI, as they did (`finish::both_ways`).
+    let viewer_excluded = excluded.contains(&viewer.account_id);
+    if let Some(pending) = blocking_run(pool, "viewer_profile_id", &viewer.profile_id).await? {
+        return Ok((Queued::Pending(pending), false));
+    }
+    let stale = if viewer_excluded {
+        stale
+    } else {
+        not_covered(pool, viewer, stale).await?
+    };
+    if stale.is_empty() {
+        return Ok((Queued::Pending(Pending::Running), false));
+    }
     let mut tx = pool.begin().await?;
     if let Some(room_id) = room_id {
         lock_room(&mut tx, room_id).await?;
@@ -278,15 +296,14 @@ pub(super) async fn queue_new_matches(
         .bind(&viewer.profile_id)
         .execute(&mut *tx)
         .await?;
-    if let Some(pending) = blocking_run(pool, "viewer_profile_id", &viewer.profile_id).await? {
+    // Someone may have queued while this call waited for the locks.
+    if let Some(pending) = blocking_run(&mut *tx, "viewer_profile_id", &viewer.profile_id).await? {
         return Ok((Queued::Pending(pending), false));
     }
-    // Another person's run stores the pair for the viewer only when the
-    // viewer allowed AI, as they did (`finish::both_ways`).
-    let stale = if excluded.contains(&viewer.account_id) {
+    let stale = if viewer_excluded {
         stale
     } else {
-        not_covered(&mut tx, viewer, stale).await?
+        not_covered(&mut *tx, viewer, stale).await?
     };
     if stale.is_empty() {
         return Ok((Queued::Pending(Pending::Running), false));
@@ -297,8 +314,13 @@ pub(super) async fn queue_new_matches(
     if let Some(room_id) = room_id {
         rooms::announce_matching(&mut tx, room_id).await?;
     }
-    let batch = &stale[..stale.len().min(MATCH_BATCH)];
-    let run_id = runs::new_run_id(MATCH_PREFIX);
+    let batch = &stale[..stale.len().min(ask.batch())];
+    // A room's background runs list topic labels only (`Ask::Tail`).
+    let (prefix, system_prompt) = match ask {
+        Ask::Tail => (BRIEF_MATCH_PREFIX, MATCH_BRIEF_SYSTEM),
+        Ask::Best | Ask::Opened => (MATCH_PREFIX, MATCH_SYSTEM),
+    };
+    let run_id = runs::new_run_id(prefix);
     let cards: Vec<&SharedCard> = std::iter::once(viewer).chain(batch).collect();
     query(
         "INSERT INTO cloud_common_ground_match_runs
@@ -318,9 +340,9 @@ pub(super) async fn queue_new_matches(
         conversation_id: None,
         organization_id,
         prompt: prompt::match_prompt(viewer, batch),
-        system_prompt: MATCH_SYSTEM,
+        system_prompt,
     };
-    let inserted = if opened {
+    let inserted = if ask == Ask::Opened {
         runs::insert_opened(&mut tx, service, new_run).await?
     } else {
         runs::insert(&mut tx, service, new_run).await?
@@ -367,12 +389,27 @@ pub(super) async fn latest_themes(
     pool: &PgPool,
     room_id: Uuid,
 ) -> sqlx_core::Result<Option<Vec<(String, Vec<String>)>>> {
-    let row: Option<(Value,)> =
-        query_as("SELECT themes_json FROM cloud_common_ground_room_themes WHERE room_id = $1")
-            .bind(room_id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(row.and_then(|(value,)| serde_json::from_value(value).ok()))
+    Ok(latest_themes_with_age(pool, room_id)
+        .await?
+        .map(|(themes, _)| themes))
+}
+
+/// [`latest_themes`] and how long ago they were computed.
+pub(super) async fn latest_themes_with_age(
+    pool: &PgPool,
+    room_id: Uuid,
+) -> sqlx_core::Result<Option<(Vec<(String, Vec<String>)>, Duration)>> {
+    let row: Option<(Value, f64)> = query_as(
+        "SELECT themes_json, GREATEST(EXTRACT(EPOCH FROM now() - computed_at), 0)::float8
+         FROM cloud_common_ground_room_themes WHERE room_id = $1",
+    )
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|(value, age)| {
+        let themes = serde_json::from_value(value).ok()?;
+        Some((themes, Duration::from_secs_f64(age)))
+    }))
 }
 
 /// Queues a room-theme run unless one is already working for this room.
@@ -400,13 +437,18 @@ pub(super) async fn queue_themes(
     {
         return Ok(Queued::Skipped);
     }
+    // As for match runs: read the common answer without a lock, and check
+    // again under it only when about to queue.
+    if let Some(pending) = blocking_run(pool, "room_id", &room_id.to_string()).await? {
+        return Ok(Queued::Pending(pending));
+    }
     let mut tx = pool.begin().await?;
     lock_room(&mut tx, room_id).await?;
     query("SELECT pg_advisory_xact_lock(hashtext('common-ground-room:' || $1))")
         .bind(room_id.to_string())
         .execute(&mut *tx)
         .await?;
-    if let Some(pending) = blocking_run(pool, "room_id", &room_id.to_string()).await? {
+    if let Some(pending) = blocking_run(&mut *tx, "room_id", &room_id.to_string()).await? {
         return Ok(Queued::Pending(pending));
     }
     if let Some(retry_after) = charge(rate_limiter, requester).await {

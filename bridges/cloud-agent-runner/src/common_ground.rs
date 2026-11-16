@@ -2,14 +2,44 @@
 //! with no tools and no sandbox.
 //! The prompt holds redacted evidence or shared cards; the server parses the reply.
 
-use serde_json::json;
+use std::time::Duration;
 
-use crate::client::{CloudAgentRun, CloudAgentRunClient, RunnerClientError};
-use crate::model_loop::{CloudModelProvider, ModelProviderResponse, OpenAiProviderConfig};
+use kordi_omp_runtime::RuntimeError;
+use serde_json::json;
+use tokio::time::Instant;
+
+use crate::client::{CloudAgentRun, CloudAgentRunClient, ProviderAuthMaterial, RunnerClientError};
+use crate::grounding_throttle::{self, Controller};
+use crate::model_loop::{
+    CloudModelProvider, ModelLoopError, ModelProviderResponse, OpenAiProviderConfig,
+    ProviderRetryPolicy,
+};
 use crate::runtime::{CloudModelEngine, RunnerStepOutcome};
 
 pub const RUN_PREFIX: &str = "cg_";
-const TIMEOUT_SECONDS: u64 = 180;
+const MATCH_RUN_PREFIX: &str = "cg_match_";
+/// A room's background match runs, which list topic labels only.
+const BRIEF_MATCH_RUN_PREFIX: &str = "cg_match_brief_";
+/// Leaves room to wait out a few provider rate limits; the heartbeat keeps
+/// the lease alive meanwhile.
+const TIMEOUT_SECONDS: u64 = 300;
+/// The failure code for a run the provider kept rate limiting.
+pub(crate) const RATE_LIMITED: &str = "common_ground_rate_limited";
+/// OMP attempts end this long before the step's own timeout.
+const OMP_TIMEOUT_MARGIN: Duration = Duration::from_secs(10);
+/// OMP surfaces a rate limit only after its own short retries, so a busy
+/// gateway (Retry-After of about 30 s) needs a few longer waits here.
+const RATE_LIMIT_RETRIES: u32 = 3;
+const MAX_RATE_LIMIT_WAIT: Duration = Duration::from_secs(60);
+/// The first wait when the provider names no delay; it doubles each retry.
+const DEFAULT_RATE_LIMIT_WAIT: Duration = Duration::from_secs(15);
+/// A retry is skipped when less than this would be left for the attempt.
+const MIN_ATTEMPT_TIME: Duration = Duration::from_secs(30);
+/// Matching compares short shared cards, and a large room sends them in big
+/// batches, so a route's "default" thinking runs at low effort there.
+const MATCH_DEFAULT_THINKING: &str = "low";
+/// A background run only picks topic labels, so it reasons least.
+const BRIEF_MATCH_DEFAULT_THINKING: &str = "minimal";
 /// OMP sends a route's "default" thinking as high effort. On a large matching
 /// batch, gpt-5-mini then reasons past the time limit before writing any reply.
 /// Medium is what the provider uses when no effort is sent (the Rust engine).
@@ -22,6 +52,133 @@ pub(crate) fn omp_thinking(thinking: &str) -> &str {
     } else {
         thinking
     }
+}
+
+/// The effort a match run sends in place of a route's "default" thinking.
+/// Card builds and room themes keep the engine's effort (`None`).
+pub(crate) fn match_thinking(run_id: &str, requested: &str) -> Option<&'static str> {
+    if requested != "default" {
+        None
+    } else if run_id.starts_with(BRIEF_MATCH_RUN_PREFIX) {
+        Some(BRIEF_MATCH_DEFAULT_THINKING)
+    } else {
+        run_id
+            .starts_with(MATCH_RUN_PREFIX)
+            .then_some(MATCH_DEFAULT_THINKING)
+    }
+}
+
+/// The run's provider settings: its route, background retries, and the
+/// effort for its kind of run.
+pub(crate) fn run_auth(
+    material: &ProviderAuthMaterial,
+    run: &CloudAgentRun,
+    engine: CloudModelEngine,
+) -> Result<OpenAiProviderConfig, ModelLoopError> {
+    let mut auth = OpenAiProviderConfig::from_material(material)?;
+    // The route's thinking wins over the snapshot's, as in `apply_runtime_route`.
+    let requested = run
+        .runtime_route
+        .thinking
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&auth.thinking)
+        .to_string();
+    auth.apply_runtime_route(&run.runtime_route, &material.provider)?;
+    auth.retry = ProviderRetryPolicy::BACKGROUND;
+    if engine == CloudModelEngine::Omp {
+        auth.thinking = omp_thinking(&auth.thinking).to_string();
+    }
+    if let Some(thinking) = match_thinking(&run.run_id, &requested) {
+        auth.thinking = thinking.to_string();
+    }
+    Ok(auth)
+}
+
+/// Runs `attempt` with the time left before `deadline`, one call at a time
+/// within `throttle`'s limit, and retries a provider rate limit after the
+/// delay the provider names or a growing default.
+pub(crate) async fn retry_rate_limits<T, F, Fut>(
+    throttle: &Controller,
+    deadline: Instant,
+    mut attempt: F,
+) -> Result<T, RuntimeError>
+where
+    F: FnMut(Duration) -> Fut,
+    Fut: std::future::Future<Output = Result<T, RuntimeError>>,
+{
+    let mut retries = 0;
+    loop {
+        let permit = throttle.acquire().await;
+        let outcome = attempt(deadline.saturating_duration_since(Instant::now())).await;
+        drop(permit);
+        let error = match outcome {
+            Ok(value) => {
+                throttle.succeeded();
+                return Ok(value);
+            }
+            Err(error) => error,
+        };
+        let Some(wait) = rate_limit_wait(&error, retries) else {
+            return Err(error);
+        };
+        throttle.rate_limited();
+        let left = deadline.saturating_duration_since(Instant::now());
+        if retries >= RATE_LIMIT_RETRIES || left < wait + MIN_ATTEMPT_TIME {
+            return Err(error);
+        }
+        retries += 1;
+        tracing::info!(
+            retries,
+            wait_secs = wait.as_secs(),
+            "common ground run rate-limited"
+        );
+        tokio::time::sleep(wait).await;
+    }
+}
+
+/// Whether an OMP failure is the provider's rate limit.
+fn is_rate_limit(error: &RuntimeError) -> bool {
+    let reason = match error {
+        RuntimeError::Provider { reason, .. } => reason.as_str(),
+        _ => "",
+    };
+    error.diagnostic_code() == "provider_http_429" || grounding_throttle::is_rate_limit_text(reason)
+}
+
+/// The wait before retrying an OMP failure, or `None` when it is not a rate limit.
+fn rate_limit_wait(error: &RuntimeError, retries: u32) -> Option<Duration> {
+    if !is_rate_limit(error) {
+        return None;
+    }
+    let reason = match error {
+        RuntimeError::Provider { reason, .. } => reason.to_ascii_lowercase(),
+        _ => String::new(),
+    };
+    let wait = named_delay(&reason)
+        .unwrap_or_else(|| DEFAULT_RATE_LIMIT_WAIT.saturating_mul(2u32.saturating_pow(retries)));
+    Some(wait.min(MAX_RATE_LIMIT_WAIT))
+}
+
+/// A delay the provider names in its reason, such as "Please try again in
+/// 20s" or "retry after 30 seconds".
+fn named_delay(reason: &str) -> Option<Duration> {
+    let rest = ["try again in ", "retry after ", "retry-after: "]
+        .iter()
+        .find_map(|marker| reason.find(marker).map(|at| &reason[at + marker.len()..]))?;
+    let digits = rest
+        .find(|ch: char| !ch.is_ascii_digit() && ch != '.')
+        .unwrap_or(rest.len());
+    let value = rest[..digits].parse::<f64>().ok()?;
+    let millis = if rest[digits..].starts_with("ms") {
+        value
+    } else {
+        value * 1000.0
+    };
+    millis
+        .is_finite()
+        .then(|| Duration::from_millis(millis.max(0.0) as u64))
 }
 
 pub(crate) struct NoTools;
@@ -49,30 +206,77 @@ where
     C: CloudAgentRunClient + Sync,
     P: CloudModelProvider + Sync,
 {
+    generate_run(client, provider, engine, run)
+        .await
+        .map_err(|failed| failed.detail)
+}
+
+/// Why a completion failed: the detail (which may quote the provider), a
+/// safe kind for the logs, and whether the provider was still rate limiting
+/// once retries ran out.
+pub(crate) struct Failed {
+    detail: String,
+    kind: String,
+    rate_limited: bool,
+}
+
+impl From<String> for Failed {
+    fn from(detail: String) -> Self {
+        let rate_limited = grounding_throttle::is_rate_limit_text(&detail);
+        Self {
+            kind: grounding_throttle::failure_kind(&detail),
+            detail,
+            rate_limited,
+        }
+    }
+}
+
+impl From<&str> for Failed {
+    fn from(detail: &str) -> Self {
+        detail.to_string().into()
+    }
+}
+
+/// [`generate`], telling a provider rate limit apart from other failures.
+pub(crate) async fn generate_run<C, P>(
+    client: &C,
+    provider: &P,
+    engine: CloudModelEngine,
+    run: &CloudAgentRun,
+) -> Result<String, Failed>
+where
+    C: CloudAgentRunClient + Sync,
+    P: CloudModelProvider + Sync,
+{
     let material = client
         .fetch_provider_auth(&run.run_id)
         .await
         .map_err(|error| error.to_string())?;
-    let mut auth = OpenAiProviderConfig::from_material(&material).map_err(|e| e.to_string())?;
-    auth.apply_runtime_route(&run.runtime_route, &material.provider)
-        .map_err(|error| error.to_string())?;
+    let auth = run_auth(&material, run, engine).map_err(|error| error.to_string())?;
     let text = match engine {
         CloudModelEngine::Omp => {
-            auth.thinking = omp_thinking(&auth.thinking).to_string();
-            let job = crate::omp_job::Job {
-                run,
-                auth: &auth,
-                prompt: run.prompt.clone(),
-                messages: vec![],
-                resume: false,
-                tools: vec![],
-                timeout_ms: (TIMEOUT_SECONDS - 10) * 1000,
-                model_step_limit: None,
-                tool_call_limit: None,
-            };
-            let result = crate::omp_job::run(job, &NoTools, &|_| async { Ok(()) })
-                .await
-                .map_err(|error| error.to_string())?;
+            let deadline =
+                Instant::now() + Duration::from_secs(TIMEOUT_SECONDS) - OMP_TIMEOUT_MARGIN;
+            let result = retry_rate_limits(grounding_throttle::controller(), deadline, |left| {
+                let job = crate::omp_job::Job {
+                    run,
+                    auth: &auth,
+                    prompt: run.prompt.clone(),
+                    messages: vec![],
+                    resume: false,
+                    tools: vec![],
+                    timeout_ms: u64::try_from(left.as_millis()).unwrap_or(u64::MAX).max(1),
+                    model_step_limit: None,
+                    tool_call_limit: None,
+                };
+                async move { crate::omp_job::run(job, &NoTools, &|_| async { Ok(()) }).await }
+            })
+            .await
+            .map_err(|error| Failed {
+                rate_limited: is_rate_limit(&error),
+                kind: error.diagnostic_code().to_string(),
+                detail: error.to_string(),
+            })?;
             // One turn with no tools: the last reply's usage is the run's.
             if let Some(usage) = &result.usage {
                 crate::usage_meter::record_omp_message(
@@ -86,12 +290,28 @@ where
                 json!({ "role": "system", "content": run.system_prompt }),
                 json!({ "role": "user", "content": run.prompt }),
             ];
-            match provider.next_response(&auth, &messages, &[]).await {
-                Ok(ModelProviderResponse::FinalText(text)) => text,
+            let throttle = grounding_throttle::controller();
+            let permit = throttle.acquire().await;
+            let response = provider.next_response(&auth, &messages, &[]).await;
+            drop(permit);
+            match response {
+                Ok(ModelProviderResponse::FinalText(text)) => {
+                    throttle.succeeded();
+                    text
+                }
                 Ok(ModelProviderResponse::ToolCalls(_)) => {
                     return Err("unexpected tool call".into());
                 }
-                Err(error) => return Err(error.to_string()),
+                // Rate limits the provider client retried were reported to
+                // the limit as they happened (`report_rate_limits`); this
+                // is the last attempt's.
+                Err(error) => {
+                    let failed = Failed::from(error.to_string());
+                    if failed.rate_limited {
+                        throttle.rate_limited();
+                    }
+                    return Err(failed);
+                }
             }
         }
     };
@@ -113,7 +333,7 @@ where
     P: CloudModelProvider + Sync,
 {
     let run_id = run.run_id.clone();
-    let generation = generate(client, provider, engine, &run);
+    let generation = generate_run(client, provider, engine, &run);
     tokio::pin!(generation);
     let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(40));
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -133,15 +353,23 @@ where
             client.complete_run(&run.run_id, &text).await?;
             Ok(RunnerStepOutcome::Completed { run_id })
         }
-        Err(detail) => {
+        Err(failed) => {
             // The detail can quote provider errors, so only its length is logged.
-            tracing::warn!(run_id = %run.run_id, detail_len = detail.len(), "common ground run failed");
+            tracing::warn!(
+                run_id = %run.run_id,
+                kind = %failed.kind,
+                detail_len = failed.detail.len(),
+                rate_limited = failed.rate_limited,
+                "common ground run failed"
+            );
+            // The server holds the next run back only briefly after a rate limit.
+            let code = if failed.rate_limited {
+                RATE_LIMITED
+            } else {
+                "common_ground_run_failed"
+            };
             client
-                .fail_run(
-                    &run.run_id,
-                    "common_ground_run_failed",
-                    "Common ground run failed.",
-                )
+                .fail_run(&run.run_id, code, "Common ground run failed.")
                 .await?;
             Ok(RunnerStepOutcome::FailedProviderError { run_id })
         }
