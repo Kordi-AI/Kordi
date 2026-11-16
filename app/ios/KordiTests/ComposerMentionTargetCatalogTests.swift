@@ -654,6 +654,47 @@ final class ComposerMentionTargetCatalogTests: XCTestCase {
         XCTAssertFalse(direct.contains { $0.agentId == "cloud-agent:acct_room" })
     }
 
+    func testDefaultAgentTheViewerMayNotUseIsNeverOffered() {
+        // The server reports acct_contact's default agent as unavailable to
+        // this viewer: Access "Only me", or "Use my agent" off for them.
+        let participants = [
+            CloudGroupParticipant(accountId: "acct_me", displayName: "Me", avatarUrl: nil, role: "self"),
+            CloudGroupParticipant(accountId: "acct_contact", displayName: "Contact", avatarUrl: nil, role: "member"),
+        ]
+        for conversation in [
+            conversation(kind: .group, peerAccountID: "acct_contact", participants: participants),
+            conversation(kind: .person, peerAccountID: "acct_contact"),
+        ] {
+            let targets = ComposerMentionTargetCatalog.targets(
+                account: account,
+                conversation: conversation,
+                ownedAgents: [],
+                sharedAgents: [],
+                contacts: [contact(accountID: "acct_contact", name: "Contact")],
+                groupMemberDefaultAgents: [groupMemberDefaultAgent(owner: "acct_contact", ownerName: "Contact")],
+                unavailableDefaultAgentOwnerIDs: ["acct_contact", "acct_me"]
+            )
+            XCTAssertFalse(targets.contains { $0.agentId == "cloud-agent:acct_contact" })
+            // The person stays mentionable, and the owner always sees their own agent.
+            XCTAssertTrue(targets.contains { $0.kind == .person && $0.accountId == "acct_contact" })
+            XCTAssertTrue(targets.contains { $0.agentId == "cloud-agent:acct_me" })
+        }
+    }
+
+    func testDefaultAgentDirectoryReportsUnavailableOwners() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SharedAgentsURLProtocol.self]
+        let client = CloudAPIClient(
+            baseURL: URL(string: "http://127.0.0.1:17081")!,
+            session: URLSession(configuration: configuration)
+        )
+        let directory = try await client.listDefaultAgentDirectory(
+            token: "test-session",
+            ownerAccountIds: ["acct_alex", "acct_private"]
+        )
+        XCTAssertEqual(directory.unavailableOwnerIds, ["acct_private"])
+    }
+
     func testOwnerIDsIncludeGroupOnlyParticipantsAndRemoveDuplicates() {
         let conversation = conversation(
             kind: .group,
@@ -921,7 +962,11 @@ private final class SharedAgentsURLProtocol: URLProtocol {
                 ]
             }
         }
-        let payload = try! JSONSerialization.data(withJSONObject: ["agents": agents])
+        var body: [String: Any] = ["agents": agents]
+        if includeDefaults {
+            body["unavailableDefaultAgentOwnerIds"] = owners.filter { $0 == "acct_private" }
+        }
+        let payload = try! JSONSerialization.data(withJSONObject: body)
         let response = HTTPURLResponse(
             url: request.url!,
             statusCode: 200,

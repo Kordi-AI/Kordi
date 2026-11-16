@@ -317,9 +317,10 @@ pub(super) async fn claim_cloud_agent_run(
     }
 }
 
-/// The requester may not use this agent. A person's group mention of it
-/// ends at once with a final "isn't available" reply that every member
-/// sees; anything else gets the plain refusal. Either way no reason shows.
+/// The requester may not use this agent. A person's group mention of it or
+/// direct message to it ends at once with a final "isn't available" reply
+/// that everyone in the chat sees; anything else gets the plain refusal.
+/// Either way no reason shows.
 async fn refuse_unusable_agent(pool: &PgPool, mut input: ClaimRunRequest) -> Response {
     match super::runs::request_identity(pool, &input.session_id, &input.request_message_id).await {
         Ok(Some((id, _))) => input.request_message_id = id,

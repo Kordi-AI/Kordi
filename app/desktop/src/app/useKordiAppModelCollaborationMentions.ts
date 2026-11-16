@@ -39,6 +39,12 @@ export type BuildCollaborationMentionTargetsParams = {
   activeConvMentionScope: MentionScopeConversation | null | undefined;
   conversations?: Conversation[];
   sharedCloudAgents?: SharedCloudAgentSummary[];
+  /**
+   * Owners whose default agent the viewer may not use (Access "Only me", or
+   * "Use my agent" off for the viewer), as the server reports them. Their
+   * default agent is left out; the viewer's own agents never are.
+   */
+  unavailableDefaultAgentOwnerIds?: readonly string[];
 };
 
 export type SharedCloudAgentOwnerScopeConversation = MentionScopeConversation & Partial<Pick<Conversation, 'collaborationTarget'>>;
@@ -107,6 +113,25 @@ export function sharedCloudAgentOwnerIdsForMentionScope(
   return [...ids].sort();
 }
 
+/**
+ * Leaves out another person's default agent when the server says this
+ * account may not use it. The person stays mentionable, and the viewer's
+ * own agents are never left out.
+ */
+export function withoutUnavailableDefaultAgents<T extends { targetKind: string; peer: { humanId?: string | null; nodeId: string; isDefaultAgent?: boolean | null } }>(
+  candidates: readonly T[],
+  unavailableOwnerIds: readonly string[],
+  localAccountId: string | null,
+): T[] {
+  const unavailable = new Set(unavailableOwnerIds.map((id) => id.trim()).filter((id) => id && id !== localAccountId));
+  if (unavailable.size === 0) return [...candidates];
+  return candidates.filter((candidate) => (
+    candidate.targetKind !== 'agent'
+    || !candidate.peer.isDefaultAgent
+    || !unavailable.has(cleanText(candidate.peer.humanId) || cleanText(candidate.peer.nodeId))
+  ));
+}
+
 function directAgentConversationSuppressesMentions(conversation: MentionScopeConversation | null | undefined) {
   if (!conversation || conversationHasGroupMentionScope(conversation)) return false;
   const type = cleanText((conversation as Pick<Conversation, 'type'>).type).toLowerCase();
@@ -120,6 +145,7 @@ export function buildCollaborationMentionTargetsByScope({
   activeConvMentionScope,
   conversations = [],
   sharedCloudAgents = [],
+  unavailableDefaultAgentOwnerIds = [],
 }: BuildCollaborationMentionTargetsParams): CollaborationMentionTargetsByScope {
   if (!isNativeShell) return { chat: [], project: [] };
 
@@ -223,12 +249,21 @@ export function buildCollaborationMentionTargetsByScope({
       });
     }
 
-    const collaborationCandidates = filterCollaborationMentionCandidatesForHost(buildCollaborationMentionCandidates(desktopCollaborationState ?? null), activeHost);
     const activeHostAccountId = activeHost?.humanId?.trim() || activeHost?.nodeId?.trim() || null;
+    const collaborationCandidates = withoutUnavailableDefaultAgents(
+      filterCollaborationMentionCandidatesForHost(buildCollaborationMentionCandidates(desktopCollaborationState ?? null), activeHost),
+      unavailableDefaultAgentOwnerIds,
+      activeHostAccountId,
+    );
+    const unavailableOwners = new Set(unavailableDefaultAgentOwnerIds.map((id) => id.trim()).filter((id) => id !== activeHostAccountId));
     // Same-named agents are told apart by their owner row, not by text.
     const uniqueAgents = uniqueAgentMentionCandidates(
       filterCollaborationMentionCandidatesForConversation(collaborationCandidates, conversation),
-      sharedCloudAgentMentionCandidatesForConversation(sharedCloudAgents, conversation, activeHostAccountId),
+      sharedCloudAgentMentionCandidatesForConversation(
+        sharedCloudAgents.filter((agent) => !agent.isDefaultAgent || !unavailableOwners.has(agent.ownerAccountId.trim())),
+        conversation,
+        activeHostAccountId,
+      ),
       options.filter((option) => option.targetKind === 'agent').map((option) => option.value),
     );
     for (const candidate of uniqueAgents.collaboration) {

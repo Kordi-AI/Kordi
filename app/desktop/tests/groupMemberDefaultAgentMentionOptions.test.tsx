@@ -160,3 +160,56 @@ test('buildCollaborationMentionTargetsByScope lists a contact’s default agent 
   assert.equal(alexAgents[0]?.sourceHostId, 'cloud');
   assert.equal(alexAgents[0]?.runtime, 'kordi-desktop');
 });
+
+function contactAgentPeer() {
+  return {
+    endpoint: 'cloud',
+    nodeId: 'acct_alex',
+    displayName: "Alex Rivera's Kordi",
+    ownerName: 'Alex Rivera',
+    runtime: 'kordi-desktop',
+    humanId: 'acct_alex',
+    agentId: 'cloud-agent:acct_alex',
+    isDefaultAgent: true,
+    isContact: true,
+    contactRequestStatus: 'approved',
+    sharedProjects: [],
+  };
+}
+
+test('an agent the viewer may not use is never offered, while its owner stays mentionable', () => {
+  // The server reports Alex's default agent as unavailable to Bea: Access
+  // "Only me", or "Use my agent" off for Bea. Both read the same here.
+  const { state, group } = nonContactGroup();
+  state.hosts[0].visiblePeers = [contactAgentPeer()];
+  state.hosts[0].visiblePeerCount = 1;
+  const targets = buildCollaborationMentionTargetsByScope({
+    isNativeShell: true,
+    desktopCollaborationState: state,
+    desktopChatState: desktopChatState(),
+    activeConvMentionScope: group,
+    sharedCloudAgents: [defaultAgentSummary('acct_alex', 'Alex Rivera')],
+    unavailableDefaultAgentOwnerIds: ['acct_alex'],
+  });
+  for (const scope of [targets.chat, targets.project]) {
+    assert.equal(scope.some((target) => target.targetKind === 'agent' && target.humanId === 'acct_alex'), false);
+  }
+  assert.ok(targets.chat.some((target) => target.targetKind === 'person' && target.humanId === 'acct_alex'));
+  // The Facilitator and the viewer's own agent are still offered.
+  assert.deepEqual(targets.chat.filter((target) => target.targetKind === 'agent').map((target) => target.label), ['Facilitator', "Bea's Kordi"]);
+});
+
+test("the owner always sees their own agent, even when listed as unavailable to others", () => {
+  const { state, group } = nonContactGroup();
+  const targets = buildCollaborationMentionTargetsByScope({
+    isNativeShell: true,
+    desktopCollaborationState: state,
+    desktopChatState: desktopChatState(),
+    activeConvMentionScope: group,
+    sharedCloudAgents: [defaultAgentSummary('acct_alex', 'Alex Rivera')],
+    unavailableDefaultAgentOwnerIds: ['acct_bea'],
+  });
+  const agents = targets.chat.filter((target) => target.targetKind === 'agent');
+  assert.ok(agents.some((target) => target.label === "Bea's Kordi"));
+  assert.ok(agents.some((target) => target.agentId === 'cloud-agent:acct_alex'));
+});

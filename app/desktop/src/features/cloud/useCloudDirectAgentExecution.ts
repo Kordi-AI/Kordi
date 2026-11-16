@@ -1,4 +1,4 @@
-import { agentRestrictedAccountIds } from './agentRestrictions';
+import { handleDirectLeaseFailure } from './cloudDirectLeaseFailure';
 import { agentExchangeTurnIsWaiting } from './agentExchangeOutcome';
 import {
   useEffect,
@@ -247,12 +247,8 @@ export function useCloudDirectAgentExecution({
           }
 
           if (!activitySessionId) return;
-          // A person the owner stopped from using their agents gets no answer.
-          if (message.fromAccountId !== account.accountId) {
-            const sessionToken = session.token;
-            const restricted = await agentRestrictedAccountIds({ token: () => Promise.resolve(sessionToken) });
-            if (restricted.has(message.fromAccountId)) return;
-          }
+          // A person the owner stopped from using their agents is refused by
+          // the lease below, and the server ends their request visibly.
           const requestedRoute = cloudAgentRuntimeRouteForTargetCloudAgent({
                 targetCloudAgentId,
                 cloudAgentDefinitionsById,
@@ -271,10 +267,12 @@ export function useCloudDirectAgentExecution({
             ownerAccountId: account.accountId, requesterAccountId: message.fromAccountId,
             prompt, idempotencyKey: `shared:${message.messageId}:${account.accountId}`,
             runtimeRoute: requestedRoute ? { defaultModel: requestedRoute.model, defaultAuthProvider: requestedRoute.authProvider, defaultAuthChoice: requestedRoute.authChoice, thinking: requestedRoute.thinking } : undefined,
-          }).catch((error) => {
-            if (message.fromAccountId === account.accountId) rememberLocalTurn(cloudAgentFailedTurnSnapshot({ requestId: message.messageId, sessionId: runtimeSessionId, prompt, error }));
-            reportWarning('Agent execution admission failed', error); return null;
-          });
+          }).catch((error) => handleDirectLeaseFailure(error, {
+            ownRequest: message.fromAccountId === account.accountId,
+            rememberFailedTurn: (failure) => rememberLocalTurn(cloudAgentFailedTurnSnapshot({ requestId: message.messageId, sessionId: runtimeSessionId, prompt, error: failure })),
+            syncMessages,
+            reportWarning,
+          }));
           if (!lease) return;
           const token = session.token;
           const progress = createCloudSharedAgentProgress({

@@ -121,7 +121,9 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // its read-only file view and comments, and the gallery client and store) adds 33.6 kB, so it moves to 6.035 MB.
 // Quick Grounding match estimates (estimated entries, their detail screen and the slower hinted poll)
 // add 2 kB, so it moves to 6.037 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_037_000;
+// Ending refused agent requests at once and leaving agents the viewer may not use out of the mention
+// list add under 1 kB, so it moves to 6.039 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_039_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -179,7 +181,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // remaining allowance, and the on-demand companion overview 0.3 kB, so it moves to 6.028 MB.
 // The same room Gallery adds 33.5 kB there, so it moves to 6.062 MB.
 // Quick Grounding match estimates add 2 kB there too, so it moves to 6.064 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_064_000;
+// Ending refused agent requests at once and the filtered mention list add under 1 kB there too, so it
+// moves to 6.066 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_066_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
