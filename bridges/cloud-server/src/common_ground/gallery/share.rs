@@ -1,5 +1,5 @@
-//! `POST gallery`: sharing your own artifacts in a room, with a short text
-//! preview copied from text files.
+//! `POST gallery`: sharing your own artifacts in a room, with the title and
+//! a short text preview copied from their text (see [`super::copies`]).
 
 use std::sync::Arc;
 
@@ -16,89 +16,23 @@ use sqlx_postgres::Postgres;
 use uuid::Uuid;
 
 use super::artifacts::{already_shared, eligible, Artifact};
+use super::copies::{copies, readable_text, reads_text, Copies, MAX_PREVIEW_SOURCE_BYTES};
+use super::hints::{notify, Change};
 use super::MAX_ITEMS_PER_PERSON;
-use super::{load_items, member_room, notify, own_count, room_closed, Filter, Room};
+use super::{load_items, member_room, own_count, room_closed, Filter, Room};
 use crate::common_ground::{db_error, err};
 use crate::{auth::routes::CloudSession, server::ServerState};
 
 /// Artifacts one request may share.
 const MAX_SHARED_AT_ONCE: usize = 8;
 const MAX_TOPIC_CHARS: usize = 80;
-/// Text files up to this size get a preview.
-const MAX_PREVIEW_SOURCE_BYTES: usize = 256 * 1024;
-const PREVIEW_CHARS: usize = 800;
 
-/// File extensions read as text when the content type does not say.
-const TEXT_EXTENSIONS: &[&str] = &[
-    "adoc", "c", "cc", "cfg", "conf", "cpp", "cs", "css", "csv", "go", "h", "hpp", "htm", "html",
-    "ini", "java", "js", "json", "jsonl", "jsx", "kt", "log", "markdown", "md", "mdx", "mjs",
-    "php", "py", "rb", "rs", "rst", "scss", "sh", "sql", "swift", "toml", "ts", "tsv", "tsx",
-    "txt", "vue", "xml", "yaml", "yml",
-];
-
-/// Non-`text/*` content types that are text.
-const TEXT_APPLICATION_TYPES: &[&str] = &[
-    "application/json",
-    "application/ld+json",
-    "application/x-ndjson",
-    "application/xml",
-    "application/javascript",
-    "application/x-javascript",
-    "application/x-sh",
-    "application/x-yaml",
-    "application/yaml",
-    "application/toml",
-    "application/sql",
-    "application/xhtml+xml",
-];
-
-/// Whether a file is text a preview can quote: Markdown, plain text, code,
-/// CSV/TSV or JSON by its content type, or by its extension when the type
-/// is missing or generic.
-pub(in crate::common_ground) fn text_like(content_type: Option<&str>, file_name: &str) -> bool {
-    let essence = content_type
-        .unwrap_or_default()
-        .split(';')
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase();
-    if essence.starts_with("text/") || TEXT_APPLICATION_TYPES.contains(&essence.as_str()) {
-        return true;
-    }
-    if !essence.is_empty() && essence != "application/octet-stream" {
-        return false;
-    }
-    let base = file_name.rsplit(['/', '\\']).next().unwrap_or(file_name);
-    match base.rsplit_once('.') {
-        Some((stem, extension)) if !stem.is_empty() => {
-            TEXT_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
-        }
-        _ => false,
-    }
-}
-
-/// The first [`PREVIEW_CHARS`] characters of `bytes` when they are valid
-/// UTF-8 text; `None` for anything else or blank text.
-pub(in crate::common_ground) fn preview_text(bytes: &[u8]) -> Option<String> {
-    let text = std::str::from_utf8(bytes).ok()?;
-    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    // Postgres text cannot hold NUL, and text files have none.
-    if text.contains('\0') || text.trim().is_empty() {
-        return None;
-    }
-    Some(text.chars().take(PREVIEW_CHARS).collect())
-}
-
-/// The preview of a text artifact up to [`MAX_PREVIEW_SOURCE_BYTES`]: its
-/// current Kordi document text when it has one, else its bytes. A failed
-/// read gives no preview rather than failing the share.
-async fn read_preview(state: &ServerState, artifact: &Artifact) -> Option<String> {
-    if !text_like(artifact.content_type.as_deref(), &artifact.file_name)
-        || artifact
-            .size_bytes
-            .is_some_and(|size| size > MAX_PREVIEW_SOURCE_BYTES as i64)
-    {
+/// The text of a text artifact up to the preview size (see
+/// [`reads_text`] and [`readable_text`]): its current Kordi document text
+/// when it has one, else its bytes. A failed read gives no text rather
+/// than failing the share.
+async fn read_text(state: &ServerState, artifact: &Artifact) -> Option<String> {
+    if !reads_text(artifact) {
         return None;
     }
     let stored: Option<(String,)> =
@@ -108,7 +42,7 @@ async fn read_preview(state: &ServerState, artifact: &Artifact) -> Option<String
             .await
             .ok()?;
     if let Some((source,)) = stored {
-        return preview_text(source.as_bytes());
+        return readable_text(source.as_bytes()).map(str::to_string);
     }
     let bytes = crate::attachments::fetch::fetch_attachment_bytes(
         state,
@@ -117,7 +51,7 @@ async fn read_preview(state: &ServerState, artifact: &Artifact) -> Option<String
     )
     .await
     .ok()?;
-    preview_text(&bytes)
+    readable_text(&bytes).map(str::to_string)
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -173,14 +107,14 @@ enum Stored {
     Limit,
 }
 
-/// Stores the artifacts not yet in the gallery and tells the room. The
-/// member row lock serializes shares by one person in one room with each
-/// other and with leaving.
+/// Stores the artifacts not yet in the gallery and tells the room once
+/// about the ones it added. The member row lock serializes shares by one
+/// person in one room with each other and with leaving.
 async fn store(
     tx: &mut Transaction<'_, Postgres>,
     room: &Room,
     viewer: &str,
-    new: &[(Artifact, Option<String>)],
+    new: &[(Artifact, Copies)],
     topic: Option<&str>,
 ) -> sqlx_core::Result<Stored> {
     let member: Option<(i32,)> = query_as(
@@ -207,7 +141,8 @@ async fn store(
     if own_count(&mut **tx, room.room_id, viewer).await? + adding as i64 > MAX_ITEMS_PER_PERSON {
         return Ok(Stored::Limit);
     }
-    for (artifact, preview) in new {
+    let mut added = Vec::new();
+    for (artifact, copies) in new {
         let inserted: Option<(Uuid,)> = query_as(
             "INSERT INTO cloud_common_ground_room_gallery_items
                  (item_id, room_id, account_id, attachment_id, title, file_name, topic, preview)
@@ -218,16 +153,15 @@ async fn store(
         .bind(room.room_id)
         .bind(viewer)
         .bind(&artifact.attachment_id)
-        .bind(&artifact.title)
+        .bind(&copies.title)
         .bind(&artifact.file_name)
         .bind(topic)
-        .bind(preview)
+        .bind(&copies.preview)
         .fetch_optional(&mut **tx)
         .await?;
-        if let Some((item_id,)) = inserted {
-            notify(tx, room.room_id, &room.code, item_id, None).await?;
-        }
+        added.extend(inserted.map(|(item_id,)| item_id));
     }
+    notify(tx, room.room_id, &room.code, &added, Change::List, None).await?;
     Ok(Stored::Done)
 }
 
@@ -254,10 +188,12 @@ pub(in crate::common_ground) async fn share(
         Ok(parsed) => parsed,
         Err(response) => return *response,
     };
-    let found = match eligible(pool, viewer, Some(&ids), ids.len() as i64).await {
+    let mut found = match eligible(pool, viewer, Some(&ids), ids.len() as i64).await {
         Ok(found) => found,
         Err(error) => return db_error(error),
     };
+    // New items, and the hint's `itemIds`, follow the order asked.
+    found.sort_by_key(|artifact| ids.iter().position(|id| *id == artifact.attachment_id));
     if found.len() != ids.len() {
         return err(
             "common_ground_gallery_not_shareable",
@@ -273,9 +209,15 @@ pub(in crate::common_ground) async fn share(
         .into_iter()
         .filter(|artifact| !shared.contains(&artifact.attachment_id))
         .collect();
-    let previews =
-        futures_util::future::join_all(new.iter().map(|a| read_preview(&state, a))).await;
-    let new: Vec<(Artifact, Option<String>)> = new.into_iter().zip(previews).collect();
+    let texts = futures_util::future::join_all(new.iter().map(|a| read_text(&state, a))).await;
+    let new: Vec<(Artifact, Copies)> = new
+        .into_iter()
+        .zip(texts)
+        .map(|(artifact, text)| {
+            let copies = copies(&artifact, text.as_deref());
+            (artifact, copies)
+        })
+        .collect();
     let stored = async {
         let mut tx = pool.begin().await?;
         let stored = store(&mut tx, &room, viewer, &new, topic.as_deref()).await?;

@@ -22,7 +22,7 @@ async fn share_list_read_and_remove() {
     let item = body["items"][0].clone();
     let item_id = id(&item["itemId"]);
     assert_eq!(item["attachmentId"], plan.as_str());
-    assert_eq!(item["title"], "Research plan");
+    assert_eq!(item["title"], "Plan", "the heading wins over the rename");
     assert_eq!(item["fileName"], "Untitled");
     assert_eq!(item["contentType"], "text/markdown");
     assert_eq!(item["sizeBytes"], source.len());
@@ -40,7 +40,7 @@ async fn share_list_read_and_remove() {
     }
     assert_eq!(
         s.last_hint(&priya).await,
-        json!({ "code": s.code, "itemId": item_id })
+        json!({ "code": s.code, "itemId": item_id, "itemIds": [item_id], "change": "list" })
     );
     assert_eq!(
         s.hints(&priya, "common_ground.room.updated").await,
@@ -298,7 +298,7 @@ async fn leaving_removes_your_items_and_hides_your_comments() {
     assert_eq!(s.hints(&alex, UPDATED).await, before + 1);
     assert_eq!(
         s.last_hint(&alex).await,
-        json!({ "code": s.code, "itemId": her_item })
+        json!({ "code": s.code, "itemId": her_item, "itemIds": [her_item], "change": "list" })
     );
     let (_, read) = s.read(&alex_token, &item).await;
     assert_eq!(

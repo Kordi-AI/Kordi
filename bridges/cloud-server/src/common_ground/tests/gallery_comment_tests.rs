@@ -30,7 +30,7 @@ async fn comments_are_added_and_deleted_by_the_right_people() {
     assert_eq!(s.hints(&s.sam.0, UPDATED).await, before + 1);
     assert_eq!(
         s.last_hint(&s.sam.0).await,
-        json!({ "code": s.code, "itemId": item })
+        json!({ "code": s.code, "itemId": item, "itemIds": [item], "change": "item" })
     );
 
     let (status, body) = s.comment(&sam_token, &item, "Same").await;
@@ -58,7 +58,11 @@ async fn comments_are_added_and_deleted_by_the_right_people() {
     assert_eq!(status, 404, "{body}");
     assert_eq!(body["errorCode"], "common_ground_gallery_comment_not_found");
     // The author deletes their own; the sharer deletes anyone's.
+    let before = s.hints(&s.sam.0, UPDATED).await;
     assert_eq!(s.delete_comment(&priya_token, &item, &priyas).await.0, 204);
+    assert_eq!(s.hints(&s.sam.0, UPDATED).await, before + 1);
+    assert_eq!(s.last_hint(&s.sam.0).await["change"], "item");
+    assert_eq!(s.last_hint(&s.sam.0).await["itemIds"], json!([item]));
     assert_eq!(s.delete_comment(&alex_token, &item, &sams).await.0, 204);
     assert_eq!(s.delete_comment(&alex_token, &item, &sams).await.0, 404);
     let (_, read) = s.read(&priya_token, &item).await;
@@ -126,7 +130,7 @@ async fn content_serves_the_current_text_to_members_only() {
         content_type.as_deref(),
         Some("text/markdown; charset=utf-8")
     );
-    // The preview stays what was copied when it was shared.
+    // A write outside the document save path leaves the copied preview.
     let (_, read) = s.read(&priya_token, &item).await;
     assert_eq!(read["item"]["preview"], "# Plan\n\nFirst");
 
@@ -148,4 +152,40 @@ async fn content_serves_the_current_text_to_members_only() {
     assert_eq!(status, 204);
     let (status, body, _) = s.content(&priya_token, &item).await;
     assert_eq!(status, 404, "{body}");
+}
+
+#[tokio::test]
+async fn an_item_lists_its_newest_comments_oldest_first() {
+    let Some(s) = setup().await else {
+        return;
+    };
+    let plan = document(&s.pool, &s.alex.0, "Plan", "# Plan").await;
+    let item = s.share_one(&s.alex.1, &plan).await;
+    query(
+        "INSERT INTO cloud_common_ground_room_gallery_comments
+             (comment_id, item_id, account_id, body, created_at)
+         SELECT gen_random_uuid(), $1, $2, 'Comment ' || n,
+                now() - make_interval(mins => 205 - n)
+         FROM generate_series(0, 204) n",
+    )
+    .bind(item.parse::<uuid::Uuid>().unwrap())
+    .bind(&s.priya.0)
+    .execute(&s.pool)
+    .await
+    .unwrap();
+
+    let (status, read) = s.read(&s.sam.1, &item).await;
+    assert_eq!(status, 200, "{read}");
+    let bodies: Vec<&str> = read["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|comment| comment["body"].as_str().unwrap())
+        .collect();
+    assert_eq!(bodies.len(), 200);
+    assert_eq!(bodies[0], "Comment 5");
+    assert_eq!(bodies[199], "Comment 204");
+    assert_eq!(read["item"]["commentCount"], 200);
+    let (_, list) = s.list(&s.sam.1).await;
+    assert_eq!(list["items"][0]["commentCount"], 200);
 }

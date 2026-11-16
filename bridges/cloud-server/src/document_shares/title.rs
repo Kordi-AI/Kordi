@@ -4,7 +4,8 @@
 //! document has no leading level-1 heading (see
 //! [`super::render::document_title`]). The file name is unchanged. The same
 //! people who may edit the content may rename, and every member hears about
-//! it through `document.updated` with `"change": "title"`.
+//! it through `document.updated` with `"change": "title"`. A rename also
+//! refreshes the document's Grounding room gallery items.
 
 use std::sync::Arc;
 
@@ -78,6 +79,7 @@ pub(crate) async fn rename_document(
             Some(&session.account_id),
         )
         .await;
+        crate::common_ground::refresh_gallery_copies(pool, &record.attachment_id).await;
     }
     match signed_in_response(&state, &session, &record, viewer, &source).await {
         Ok(document) => Json(document).into_response(),
