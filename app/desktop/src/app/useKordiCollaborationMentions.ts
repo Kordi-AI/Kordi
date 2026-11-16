@@ -35,6 +35,8 @@ type UseKordiCollaborationMentionsArgs = {
   refreshSharedCloudAgents:
     UseCloudCollaborationStateResult['refreshSharedCloudAgents'];
   sharedCloudAgents: SharedCloudAgentSummary[];
+  /** Owners whose default agent this account may not use; never offered. */
+  unavailableDefaultAgentOwnerIds?: readonly string[];
 };
 
 export function useKordiCollaborationMentions({
@@ -47,6 +49,7 @@ export function useKordiCollaborationMentions({
   isNativeShell,
   refreshSharedCloudAgents,
   sharedCloudAgents,
+  unavailableDefaultAgentOwnerIds,
 }: UseKordiCollaborationMentionsArgs) {
   const activeConversationScope = useMemo(
     () => mentionScopeConversationForActiveConversation(
@@ -130,6 +133,7 @@ export function useKordiCollaborationMentions({
       activeConvMentionScope: activeConversationScope,
       conversations,
       sharedCloudAgents: mentionableCloudAgents,
+      unavailableDefaultAgentOwnerIds,
     }),
     [
       activeConversationScope,
@@ -138,6 +142,7 @@ export function useKordiCollaborationMentions({
       desktopChatState,
       isNativeShell,
       mentionableCloudAgents,
+      unavailableDefaultAgentOwnerIds,
     ],
   );
 

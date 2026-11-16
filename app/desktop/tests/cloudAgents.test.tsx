@@ -231,3 +231,16 @@ test('CloudAgentsClient lists creates updates and archives cloud agents with bea
     assert.equal((call.init.headers as Record<string, string>).authorization, 'Bearer token');
   }
 });
+
+test('the shared agent directory reports owners whose default agent the viewer may not use', async () => {
+  const respond = (body: unknown): typeof fetch => async () => new Response(JSON.stringify(body), { status: 200 });
+  const reported = new CloudAgentsClient({ baseUrl: 'https://cloud.example', fetchImpl: respond({
+    agents: [sharedRawAgent], unavailableDefaultAgentOwnerIds: [' acct_owner ', '', 7],
+  }) });
+  const directory = await reported.listSharedCloudAgentDirectory('token', ['acct_owner']);
+  assert.equal(directory.agents[0]?.agentId, 'cloud_agent_shared');
+  assert.deepEqual(directory.unavailableDefaultAgentOwnerIds, ['acct_owner']);
+  // An older server reports nothing, so nothing is left out.
+  const older = new CloudAgentsClient({ baseUrl: 'https://cloud.example', fetchImpl: respond({ agents: [sharedRawAgent] }) });
+  assert.equal((await older.listSharedCloudAgentDirectory('token', ['acct_owner'])).unavailableDefaultAgentOwnerIds, null);
+});

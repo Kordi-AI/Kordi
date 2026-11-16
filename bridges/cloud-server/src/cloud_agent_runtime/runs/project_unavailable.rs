@@ -1,7 +1,8 @@
 //! Ends a request that cannot run at once, with a failed reply instead of a
 //! wait with no status: a project-session request no Mac with the project can
-//! run (the cloud has no project files), or a person's group request whose
-//! mention names no agent this claim can run.
+//! run (the cloud has no project files), a person's group request whose
+//! mention names no agent this claim can run, or a person's request for an
+//! agent they may not use.
 
 use chrono::Utc;
 use sqlx_core::query_as::query_as;
@@ -87,33 +88,17 @@ pub async fn fail_unreachable_agent_request(
 
 pub const AGENT_UNREACHABLE_ERROR_CODE: &str = "agent_unreachable";
 
-/// A person's group request whose mention routes to this owner's agent, but
-/// whose agent the requester may not use ("Use my agent" off, or Access
-/// "Only me"): it ends at once with "<agent> isn't available." instead of a
-/// wait no run will end. The reply names no reason, so it shows no
-/// restriction (docs/contact-permissions.md).
+/// A person's request for this owner's agent that the requester may not use
+/// ("Use my agent" off, or Access "Only me"), in a group (the mention routes
+/// to the owner's agent) or a direct chat (the message targets it): it ends
+/// at once with "<agent> isn't available." instead of a wait no run will
+/// end. The reply names no reason, so it shows no restriction
+/// (docs/contact-permissions.md).
 pub async fn fail_refused_agent_request(
     pool: &PgPool,
     input: &ClaimRunRequest,
 ) -> RunResult<Option<CloudAgentRunResponse>> {
-    let Some(envelope) = super::envelopes::cloud_group_request_envelope_for_run(
-        pool,
-        &input.session_id,
-        &input.request_message_id,
-    )
-    .await?
-    else {
-        return Ok(None);
-    };
-    let Some(message) = envelope.message.as_ref() else {
-        return Ok(None);
-    };
-    let routes_to_owner = super::group_target::human_group_target(message, &envelope.participants)
-        .is_some_and(|target| target.owner_account_id == input.owner_account_id.trim());
-    if message.sender_kind.as_deref() == Some("agent")
-        || message.sender_account_id.trim() != input.requester_account_id.trim()
-        || !routes_to_owner
-    {
+    if !person_request_targets_owner(pool, input).await? {
         return Ok(None);
     }
     let name = agent_display_name(pool, input).await?;
@@ -130,6 +115,52 @@ pub async fn fail_refused_agent_request(
         Err(RunError::NotFound) => Ok(None),
         Err(error) => Err(error),
     }
+}
+
+/// Whether the request is a person's own message that asks for this owner's
+/// agent: a group mention that routes to it, or a direct message that
+/// targets it. Anything else is refused without a reply, so no client can
+/// post a refusal as someone else's agent.
+async fn person_request_targets_owner(pool: &PgPool, input: &ClaimRunRequest) -> RunResult<bool> {
+    let (owner, requester) = (
+        input.owner_account_id.trim(),
+        input.requester_account_id.trim(),
+    );
+    if let Some(envelope) = super::envelopes::cloud_group_request_envelope_for_run(
+        pool,
+        &input.session_id,
+        &input.request_message_id,
+    )
+    .await?
+    {
+        let Some(message) = envelope.message.as_ref() else {
+            return Ok(false);
+        };
+        let routes_to_owner =
+            super::group_target::human_group_target(message, &envelope.participants)
+                .is_some_and(|target| target.owner_account_id == owner);
+        return Ok(message.sender_kind.as_deref() != Some("agent")
+            && message.sender_account_id.trim() == requester
+            && routes_to_owner);
+    }
+    if input.session_id.trim().starts_with("session:group:") {
+        return Ok(false);
+    }
+    let row: Option<(String, Option<String>)> = query_as(
+        "SELECT m.sender_account_id, m.content #>> '{blocks,0,text}' \
+         FROM cloud_chat_messages m JOIN cloud_chat_conversations c USING(conversation_id) \
+         WHERE c.legacy_session_id=$1 AND c.kind='direct' AND m.message_id::text=$2 AND m.deleted_at IS NULL",
+    )
+    .bind(&input.session_id)
+    .bind(&input.request_message_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((sender, Some(body))) = row else {
+        return Ok(false);
+    };
+    Ok(sender.trim() == requester
+        && super::envelopes::direct_cloud_agent_target(&body)
+            .is_some_and(|target| target.owner_account_id == owner))
 }
 
 /// The agent's name as members see it: a Factory agent's name, the default

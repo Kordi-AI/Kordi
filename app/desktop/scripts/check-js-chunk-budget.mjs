@@ -121,8 +121,11 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // its read-only file view and comments, and the gallery client and store) adds 33.6 kB, so it moves to 6.035 MB.
 // Quick Grounding match estimates (estimated entries, their detail screen and the slower hinted poll)
 // add 2 kB, so it moves to 6.037 MB.
-// The reordered help tour, with its example room and that room's Gallery, adds 2.4 kB, so it moves to 6.040 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_040_000;
+// Ending refused agent requests at once and leaving agents the viewer may not use out of the mention
+// list add under 1 kB, so it moves to 6.039 MB.
+// The reordered help tour, with its example room and that room's Gallery, adds about 2.5 kB (6041.1 kB measured
+// locally; the CI build measures about 0.5 kB more), so it moves to 6.043 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_043_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -180,8 +183,11 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // remaining allowance, and the on-demand companion overview 0.3 kB, so it moves to 6.028 MB.
 // The same room Gallery adds 33.5 kB there, so it moves to 6.062 MB.
 // Quick Grounding match estimates add 2 kB there too, so it moves to 6.064 MB.
-// The same reordered help tour and its example room with a Gallery add 2.1 kB there, so it moves to 6.067 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_067_000;
+// Ending refused agent requests at once and the filtered mention list add under 1 kB there too, so it
+// moves to 6.066 MB.
+// The same reordered help tour and its example room with a Gallery add about 2.1 kB there (6067.9 kB measured
+// locally, with the same allowance for the CI build), so it moves to 6.070 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_070_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

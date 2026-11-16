@@ -99,6 +99,7 @@ export function useKordiWorkspaceState(foundation: KordiAppFoundation) {
       setCloudMessageReaction,
       refreshSharedCloudAgents,
       sharedCloudAgents,
+      unavailableDefaultAgentOwnerIds,
       cloudAgentDefinitionsById,
       cloudContacts,
       cloudSessionActivity,
@@ -258,6 +259,7 @@ export function useKordiWorkspaceState(foundation: KordiAppFoundation) {
     isNativeShell,
     refreshSharedCloudAgents,
     sharedCloudAgents,
+    unavailableDefaultAgentOwnerIds,
   });
 
   useEffect(() => {

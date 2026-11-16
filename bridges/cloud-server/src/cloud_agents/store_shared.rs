@@ -1,7 +1,8 @@
 //! The agents other accounts can see: shared agents of the owners they ask
 //! about, except owners who stopped the viewer from using their agents.
 //! On request, also the default agents of owners who share an active group
-//! chat with the viewer and left that agent open
+//! chat with the viewer and left that agent open, and the owners whose
+//! default agent the viewer may not use, so composers stop offering it
 //! (docs/contact-permissions.md).
 
 use sqlx_core::query_as::query_as;
@@ -218,4 +219,64 @@ pub async fn list_group_member_default_agent_summaries(
             }
         })
         .collect())
+}
+
+/// The owners among `owner_account_ids` whose default agent the viewer sees
+/// (an accepted contact, or a member of an active group chat with the
+/// viewer) but may not use: its Access is "Only me", the owner turned off
+/// "Use my agent" for the viewer, or either blocked the other. Composers
+/// leave that agent out of the mention list. The viewer's own and
+/// Kordi-operated accounts are never listed.
+pub async fn list_unavailable_default_agent_owner_ids(
+    pool: &PgPool,
+    owner_account_ids: &[String],
+    viewer_account_id: &str,
+) -> Result<Vec<String>, CloudAgentStoreError> {
+    let viewer = viewer_account_id.trim();
+    let owners: Vec<String> = owner_account_ids
+        .iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| {
+            !value.is_empty()
+                && value != viewer
+                && !crate::system_account::is_service_account(value)
+        })
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .take(50)
+        .collect();
+    if owners.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows: Vec<(String,)> = query_as(&format!(
+        "SELECT account.account_id
+         FROM cloud_accounts account
+         WHERE account.account_id = ANY($1)
+           AND (EXISTS (SELECT 1 FROM cloud_contacts contact
+                        WHERE contact.account_id = $2 AND contact.peer_account_id = account.account_id)
+                OR EXISTS (
+                  SELECT 1
+                  FROM cloud_chat_conversations conversation
+                  JOIN cloud_chat_conversation_members owner_member
+                    ON owner_member.conversation_id = conversation.conversation_id
+                   AND owner_member.account_id = account.account_id
+                   AND owner_member.membership_state = 'active'
+                  JOIN cloud_chat_conversation_members viewer_member
+                    ON viewer_member.conversation_id = conversation.conversation_id
+                   AND viewer_member.account_id = $2
+                   AND viewer_member.membership_state = 'active'
+                  WHERE conversation.kind = 'group'))
+           AND NOT ({usable} AND NOT cloud_accounts_blocked_either_way(account.account_id, $2))
+         ORDER BY account.account_id ASC",
+        usable = crate::agent_access::agent_usable_sql(
+            "account.account_id",
+            "$2",
+            "('cloud-agent:' || account.account_id)"
+        ),
+    ))
+    .bind(&owners)
+    .bind(viewer)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(owner,)| owner).collect())
 }

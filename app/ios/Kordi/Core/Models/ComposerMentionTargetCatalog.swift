@@ -40,7 +40,8 @@ enum ComposerMentionTargetCatalog {
         ownedAgents: [CloudAgent],
         sharedAgents: [CloudAgent],
         contacts: [CloudContact] = [],
-        groupMemberDefaultAgents: [CloudGroupMemberDefaultAgent] = []
+        groupMemberDefaultAgents: [CloudGroupMemberDefaultAgent] = [],
+        unavailableDefaultAgentOwnerIDs: Set<String> = []
     ) -> [ComposerMentionTarget] {
         let ownerAccountIDs = Set(ownerAccountIDs(
             for: conversation,
@@ -92,7 +93,9 @@ enum ComposerMentionTargetCatalog {
         }
 
         if conversation.kind != .agent {
-            var seenDefaultAgentOwners = Set<String>()
+            // A default agent this account may not use is never offered
+            // (docs/contact-permissions.md); its owner stays mentionable.
+            var seenDefaultAgentOwners = unavailableDefaultAgentOwnerIDs.subtracting([account.accountId])
             let contactAccountIDs = Set(contacts.map(\.accountId))
             // People in the owner's group chats can mention the default agent
             // without being contacts, when the server lists it as open to the

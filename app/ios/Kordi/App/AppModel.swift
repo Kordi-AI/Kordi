@@ -344,6 +344,8 @@ final class AppModel: ObservableObject {
     @Published private var ownedCloudAgents: [CloudAgent] = []
     @Published private var sharedCloudAgents: [CloudAgent] = []
     @Published private var groupMemberDefaultAgents: [CloudGroupMemberDefaultAgent] = []
+    /// Owners whose default agent this account may not use; never offered.
+    @Published private var unavailableDefaultAgentOwnerIDs = Set<String>()
     /// Bumped when another account's agents change (`agent.directory.changed`,
     /// such as a default agent's Access), so an open conversation refetches
     /// which agents its composer may offer.
@@ -810,6 +812,7 @@ final class AppModel: ObservableObject {
         ownedCloudAgents = []
         sharedCloudAgents = []
         groupMemberDefaultAgents = []
+        unavailableDefaultAgentOwnerIDs = []
         connectorsClientCache = nil
         connectorsVersion = nil
         connectorsCapabilityNeedsRetry = true
@@ -3743,7 +3746,8 @@ final class AppModel: ObservableObject {
             ownedAgents: ownedCloudAgents,
             sharedAgents: sharedCloudAgents,
             contacts: contacts,
-            groupMemberDefaultAgents: groupMemberDefaultAgents
+            groupMemberDefaultAgents: groupMemberDefaultAgents,
+            unavailableDefaultAgentOwnerIDs: unavailableDefaultAgentOwnerIDs
         )
     }
 
@@ -3766,9 +3770,10 @@ final class AppModel: ObservableObject {
                   sessionIdentity.contains(token),
                   self.account?.accountId == accountID else { return }
             replaceSharedCloudAgents(refreshedAgents, forOwnerAccountIDs: ownerAccountIDs)
-            // Co-members who are not contacts: their default agents.
-            if conversation.kind == .group {
-                let defaults = try await api.listGroupMemberDefaultAgents(
+            // Co-members who are not contacts: their default agents. Every
+            // chat with people: the default agents this account may not use.
+            if conversation.kind != .agent {
+                let directory = try await api.listDefaultAgentDirectory(
                     token: token,
                     ownerAccountIds: ownerAccountIDs
                 )
@@ -3776,8 +3781,14 @@ final class AppModel: ObservableObject {
                       sessionIdentity.contains(token),
                       self.account?.accountId == accountID else { return }
                 let refreshedOwners = Set(ownerAccountIDs)
-                let next = groupMemberDefaultAgents.filter { !refreshedOwners.contains($0.ownerAccountId) } + defaults
-                if next != groupMemberDefaultAgents { groupMemberDefaultAgents = next }
+                if conversation.kind == .group {
+                    let next = groupMemberDefaultAgents.filter { !refreshedOwners.contains($0.ownerAccountId) } + directory.agents
+                    if next != groupMemberDefaultAgents { groupMemberDefaultAgents = next }
+                }
+                if let unavailable = directory.unavailableOwnerIds {
+                    let next = unavailableDefaultAgentOwnerIDs.subtracting(refreshedOwners).union(unavailable)
+                    if next != unavailableDefaultAgentOwnerIDs { unavailableDefaultAgentOwnerIDs = next }
+                }
             }
         } catch {
             if CloudTransportErrorPolicy.isCancellation(error) || Task.isCancelled { return }
