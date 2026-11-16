@@ -134,6 +134,7 @@ export function CloudAccountSettingsDialog({
   const profileEditor = useCloudProfileEditor({ account, onUpdateProfile });
   const resetProfileEditor = profileEditor.reset;
   const openedAccountIdRef = useRef<string | null>(null);
+  const requestedTabRef = useRef<CloudAccountSettingsTabId | null>(null);
   const wasOpenRef = useRef(false);
   const hasConnectorsOverride = connectorsClientOverride !== undefined;
   const connectorsClients = useMemo(
@@ -183,10 +184,18 @@ export function CloudAccountSettingsDialog({
       return;
     }
     const accountId = account?.accountId ?? null;
-    if (wasOpenRef.current && openedAccountIdRef.current === accountId) return;
+    if (wasOpenRef.current && openedAccountIdRef.current === accountId) {
+      // A caller that asks for another tab while the dialog is open, such as the help tour, moves to it.
+      if (requestedTabRef.current === initialTab) return;
+      requestedTabRef.current = initialTab;
+      setActiveTab(initialTab);
+      if (initialTab === 'auth' || initialTab === 'notifications' || initialTab === 'appearance') setActiveSettingsSectionId(initialTab);
+      return;
+    }
 
     wasOpenRef.current = true;
     openedAccountIdRef.current = accountId;
+    requestedTabRef.current = initialTab;
     setActiveTab(initialTab);
     if (initialTab === 'auth' || initialTab === 'notifications' || initialTab === 'appearance') {
       setActiveSettingsSectionId(initialTab);

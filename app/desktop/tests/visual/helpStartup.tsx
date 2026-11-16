@@ -28,7 +28,7 @@ export function HelpStartupFixture() {
     onSessionResizeMouseDown={noop} onDetailResizeMouseDown={noop}
     workspaceHelpAvailable={auth.workspaceHelpAvailable}
     sidebar={<aside style={{ paddingTop: 300 }}><HelpEntry activeNav="contacts" setActiveNav={noop} account={{}} onOpenSession={noop} /></aside>}
-    mainContent={<section><h1>Main workspace</h1><button data-help-target="profile">Account</button></section>}
+    mainContent={<section><h1>Main workspace</h1><button data-help-target="nav-contacts">Contacts</button><button data-help-target="profile">Account</button></section>}
     authGate={loading ? <div className="app-auth-gate-overlay"><button onClick={() => setLoading(false)}>Finish loading providers</button></div>
       : auth.showAuthGate ? <div className="app-auth-gate-overlay"><h1>Connect a provider</h1><button onClick={auth.dismissAuthGate}>Skip for now</button><button onClick={() => setConnected(true)}>Connect test provider</button></div> : null}
   />;

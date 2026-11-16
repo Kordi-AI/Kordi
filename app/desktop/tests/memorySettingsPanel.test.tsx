@@ -371,3 +371,41 @@ test('account settings show Memory only when a client is available', async () =>
     ['Profile', 'Active sessions', 'Authentication', 'Notifications', 'Privacy', 'Memory', 'Usage', 'Appearance'],
   );
 });
+
+test('an open settings dialog moves to the tab a caller asks for next, as the help tour does', async () => {
+  const installed = installDom();
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const noop = () => undefined;
+  const resolved = async () => undefined;
+  const memoryClient = createPreviewMemoryClient({ latencyMs: 0 });
+  const dialog = (initialTab: 'auth' | 'memory') => (
+    <CloudAccountSettingsDialog
+      isOpen initialTab={initialTab} account={account} onClose={noop} onUpdateProfile={resolved} memoryClient={memoryClient}
+      settingsSections={settingsSections} activeSettingsSectionId="auth" setActiveSettingsSectionId={noop} authSettingsLayoutWidth={620}
+      isNativeShell={false} desktopAuthState={null} isDesktopAuthLoading={false} desktopAuthError={null} activeLoginProviderId={null}
+      selectAuthProvider={noop} openLoginFlow={noop} refreshDesktopAuth={resolved} handleSelectAuthChoice={resolved}
+      handleRemoveAuthProfile={resolved} handleLogoutProvider={resolved} themeMode="dark" setThemeMode={noop}
+    />
+  );
+  const settle = () => act(async () => { for (let index = 0; index < 6; index += 1) await new Promise((resolve) => setTimeout(resolve, 0)); });
+  try {
+    await act(async () => root.render(dialog('auth')));
+    await settle();
+    assert.equal(document.body.querySelector('[data-memory-organizer]'), null, 'opens on the requested tab');
+    await act(async () => root.render(dialog('memory')));
+    await settle();
+    assert.ok(document.body.querySelector('[data-memory-organizer]'), 'moves to Memory without closing first');
+    await act(async () => root.render(dialog('memory')));
+    await settle();
+    const authentication = Array.from(document.body.querySelectorAll('nav[aria-label="Settings"] button')).find((button) => button.textContent?.trim() === 'Authentication');
+    await act(async () => { (authentication as HTMLButtonElement).click(); });
+    await act(async () => root.render(dialog('memory')));
+    await settle();
+    assert.equal(document.body.querySelector('[data-memory-organizer]'), null, 'the same request again keeps the tab the person chose');
+  } finally {
+    await act(async () => root.unmount());
+    installed.restore();
+  }
+});

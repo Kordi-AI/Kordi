@@ -37,7 +37,7 @@ export default defineConfig({
     { name: 'webkit-emoji-picker', testMatch: ['**/emojiPickerOffline.spec.ts', '**/expressivePickerLayering.spec.ts'], use: { ...devices['Desktop Safari'] } },
     // The desktop app runs in WebKit, so the focus contract is checked there too.
     { name: 'webkit-focus', testMatch: '**/focusRing.spec.ts', use: { ...devices['Desktop Safari'] } },
-    { name: 'webkit-onboarding', testMatch: ['**/helpHub.spec.ts', '**/helpTourPlacement.spec.ts'], use: { ...devices['Desktop Safari'] } },
+    { name: 'webkit-onboarding', testMatch: ['**/helpHub.spec.ts', '**/helpTourPlacement.spec.ts', '**/helpTourSections.spec.ts'], use: { ...devices['Desktop Safari'] } },
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },

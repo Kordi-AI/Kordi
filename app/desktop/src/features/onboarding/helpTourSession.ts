@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
+import type { HelpGroundingScreen } from './helpNavigation';
 
-export type TourLocation = { target: string; groundingScreen?: 'home' | 'build' | 'card' };
+export type TourLocation = { target: string; groundingScreen?: HelpGroundingScreen };
 let location: TourLocation | null = null;
 const listeners = new Set<() => void>();
 export function setHelpTourLocation(next: TourLocation | null) {

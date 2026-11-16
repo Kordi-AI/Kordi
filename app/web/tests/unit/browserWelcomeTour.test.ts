@@ -55,9 +55,10 @@ test('the welcome link marks the same first-run progress as a desktop sign-up', 
   }
 });
 
-test('the browser tour keeps every step, with file import worded for the upload flow', () => {
-  assert.ok(helpTourSteps.every((step) => helpTourStepAvailable(step, true)), 'the browser tour shows every step');
-  assert.ok(helpTourSteps.every((step) => helpTourStepAvailable(step, false)), 'the desktop tour is unchanged');
+test('the browser tour leaves out only the Mac sources step, with file import worded for the upload flow', () => {
+  assert.deepEqual(helpTourSteps.filter((step) => !helpTourStepAvailable(step, true)).map((step) => step.target), ['grounding-device'],
+    'the browser tour shows every step a browser can use');
+  assert.ok(helpTourSteps.every((step) => helpTourStepAvailable(step, false)), 'the desktop tour shows every step');
   for (const id of ['workspace', 'grounding', 'cards', 'imports'] as const) {
     assert.equal(helpTourAvailable(id, true), true);
     assert.equal(helpTourAvailable(id, false), true);

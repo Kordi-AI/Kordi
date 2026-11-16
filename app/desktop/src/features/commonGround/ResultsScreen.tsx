@@ -105,11 +105,12 @@ function GroupsSection({ code, results, state, store, host, closed }: { code: st
   );
 }
 
-export function ResultsScreen({ code, state, store, host }: { code: string; state: CgState; store: CommonGroundStore; host: CgHost }) {
+/** `initialTab` lets the help tour open another list than the saved one. */
+export function ResultsScreen({ code, state, store, host, initialTab }: { code: string; state: CgState; store: CommonGroundStore; host: CgHost; initialTab?: CgRoomTab }) {
   const [starting, setStarting] = useState<CgGroupDraft | null>(null);
   const [copied, setCopied] = useState(false);
   // The tab is kept in the store too, so going back from a Gallery item shows the Gallery again.
-  const [savedTab, setSavedTab] = useState<CgRoomTab>(() => state.gallery.tabs[code] ?? 'people');
+  const [savedTab, setSavedTab] = useState<CgRoomTab>(() => initialTab ?? state.gallery.tabs[code] ?? 'people');
   const setTab = (next: CgRoomTab) => {
     setSavedTab(next);
     setRoomTab(store, code, next);
@@ -174,7 +175,7 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
           </CgGroup>
         </CgSection>
       ) : null}
-      <CgSegmented value={tab} onChange={setTab} label="Results" options={tabs} />
+      <CgSegmented value={tab} onChange={setTab} label="Results" options={tabs} helpTarget="grounding-room-topics" />
       {gallery && tab === 'gallery' ? (
         <GalleryTab
           code={code}
@@ -185,7 +186,7 @@ export function ResultsScreen({ code, state, store, host }: { code: string; stat
           state={state}
           store={store}
         />
-      ) : matchingEmpty || waiting ? null : <CgSection>
+      ) : matchingEmpty || waiting ? null : <CgSection helpTarget="grounding-room-people">
         <CgGroup>
           {tab === 'people'
             ? <>

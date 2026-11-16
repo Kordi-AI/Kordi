@@ -65,10 +65,12 @@ function ParticipantSpaceSessionRow({
   const preferenceSessionId = participantSpaceSessionPreferenceId(session);
   const rowUnreadCount = closed ? 0 : session.unread;
 
+  // Every row whose menu offers Export carries the tour target; the tour spotlights the first one shown.
   return (
     <button
       type="button"
       data-testid="participant-space-session-row"
+      data-help-target="chat-export"
       data-agent-session-row={session.id}
       data-session-preview={sessionPreview}
       data-session-preview-line={sessionPreview}
@@ -226,6 +228,7 @@ function ParticipantSpaceRow({
         <button
           type="button"
           data-testid="participant-space-row"
+          data-help-target={isDirectHuman ? 'chat-export' : undefined}
           data-participant-space-toggle={isDirectHuman ? undefined : 'true'}
           aria-expanded={isDirectHuman ? undefined : isExpanded}
           onClick={selectPrimarySession}

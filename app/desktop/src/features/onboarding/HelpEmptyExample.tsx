@@ -1,9 +1,11 @@
 import { useHelpTourLocation } from './helpTourSession';
 
-type Kind = 'contacts' | 'chat' | 'agents' | 'digest' | 'files' | 'memories';
-const examples: Record<Kind, { targets: string[]; title: string; lines: string[] }> = {
+type Kind = 'contacts' | 'chat' | 'agent-chats' | 'agents' | 'digest' | 'files' | 'memories';
+/** `spotlight` lists the steps that point at the example itself, standing in for a missing first row. */
+const examples: Record<Kind, { targets: string[]; spotlight?: string[]; title: string; lines: string[] }> = {
   contacts: { targets: ['nav-contacts'], title: 'Alex · Example contact', lines: ['Product designer · Interested in accessible apps', 'Open a contact to see their profile and start a conversation.'] },
-  chat: { targets: ['nav-chats'], title: 'Weekend plans · Example chat', lines: ['Alex: Shall we go for a hike on Saturday?', 'You: Yes! Let’s choose a trail.'] },
+  chat: { targets: ['nav-chats', 'chat-export'], spotlight: ['chat-export'], title: 'Weekend plans · Example chat', lines: ['Alex: Shall we go for a hike on Saturday?', 'You: Yes! Let’s choose a trail.'] },
+  'agent-chats': { targets: ['nav-agent-chats'], title: 'Trip planner · Example agent chat', lines: ['You: Find three trails near the city for Saturday.', 'Trip planner: Here are three, with distance and difficulty.'] },
   agents: { targets: ['nav-agents'], title: 'Writing assistant · Example agent', lines: ['Instructions: Help me write clear, concise drafts.', 'Choose a connected model and the tools this agent may use.'] },
   digest: { targets: ['nav-digest'], title: 'Your day · Example overview', lines: ['10:00 · Review the app design', 'Next step · Send feedback on the navigation draft'] },
   files: { targets: ['settings-memory', 'memory-import-files', 'memory-import-run'], title: 'AGENTS.md · Example file', lines: ['Use TypeScript for app code.', 'Keep explanations short and include a concrete example.'] },
@@ -15,7 +17,7 @@ export function HelpEmptyExample({ kind }: { kind: Kind }) {
   const tour = useHelpTourLocation();
   const example = examples[kind];
   if (!tour || !example.targets.includes(tour.target)) return null;
-  return <aside className="help-empty-example" data-help-demo={kind} aria-label={example.title}>
+  return <aside className="help-empty-example" data-help-demo={kind} data-help-target={example.spotlight?.includes(tour.target) ? tour.target : undefined} aria-label={example.title}>
     <span className="help-example-badge">Example data · Only in this tour</span>
     <strong>{example.title}</strong>
     {example.lines.map((line) => <p key={line}>{line}</p>)}
