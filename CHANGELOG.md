@@ -4,6 +4,99 @@ This file records notable user-facing changes to Kordi for macOS and iOS.
 
 ## [Unreleased]
 
+## [0.0.2-beta.10] - 2026-11-16
+
+### Added
+
+- Added a Gallery to Grounding rooms: share your own documents and files with
+  the room, and others open them, comment, and add or message you ([#2574],
+  [#2582]).
+- Added large Grounding rooms: everyone appears in one ranked list right away,
+  quick estimates fill in as matches finish, and the person you open is matched
+  first ([#2546], [#2554]).
+- Added Ask to join for groups listed in a Grounding room, which the group's
+  owners and admins approve or decline ([#2540]).
+- Added inviting people you met in Grounding into your groups; they join after
+  they accept in Contacts › Requests ([#2558]).
+- Added Facilitator actions in groups: it can turn a discussion into a poll, a
+  time to meet, a Memory draft, a task handoff, or a group document ([#2498]).
+- Added Facilitator to the group @ menu, including room groups, and a direct
+  request to it always gets a reply ([#2535]).
+- Added Export to the chat menus in the sidebar, which saves a session's full
+  history, including its background sessions, as one file ([#2564]).
+- Added cards with previews, search, and a list view to the Artifacts tab, and
+  a side panel viewer for every file type ([#2522]).
+- Added a Slack channel picker to connector settings on Mac and iPhone
+  ([#2517]).
+- Added up to three categories for each memory ([#2473]).
+- Added mentioning another group member's agent when that person is not a
+  contact ([#2538]).
+
+### Changed
+
+- The System agent is now the Facilitator, with a new bird avatar, and room
+  intros and joined lines come from it too ([#2535], [#2491]).
+- Group intros no longer introduce invited people before they join, and never
+  guess anyone's pronouns ([#2535], [#2575]).
+- Kordi Support is now KordiSpot, with a new avatar ([#2553]).
+- The help tour is one gradual 30-step walkthrough that ends with rooms, the
+  Gallery, and session export ([#2580]).
+- Grounding rooms open on their people and match by themselves, results reach
+  both people, and matches update after a card is rebuilt ([#2524]).
+- Closing a group keeps its history for everyone, read-only, instead of
+  deleting it ([#2561]).
+- The Factory page has one filter menu beside search for your library and
+  Community skills ([#2563]).
+- The Factory composer buttons now match chat, and the context tooltip no
+  longer shows a cache hit rate ([#2572]).
+- A request to an agent you may not use now ends with a reply that the agent
+  isn't available instead of waiting forever, and such agents are no longer
+  offered in the mention list ([#2575]).
+- Agents now wait at most two hours for an answer to a question, then continue
+  with what they know ([#2496]).
+- A background session on Mac now stops only when someone stops it, and its row
+  says why it stopped ([#2549]).
+- The iPhone composer is a compact glass input, and the microphone turns into
+  Send while you type ([#2489]).
+- The iPhone has a Warm Ivory theme, native chat search, and smoother pull to
+  refresh ([#2499]).
+- Provider sign-in follows your workspace colors, and the browser page after
+  sign-in or Connect matches kordi.ai and names the connector ([#2494],
+  [#2534]).
+- "Notifications are off" in Digest now offers Allow or Open System Settings
+  ([#2556]).
+- The web app loads group history in pages and jumps to old pinned messages
+  ([#2502]).
+
+### Fixed
+
+- Fixed restarting after an update opening a second Kordi in the Dock
+  ([#2479]).
+- Fixed apps not reconnecting and catching up after the live connection dropped
+  ([#2480]).
+- Fixed group messages that could fail to send, and slow chats, when many
+  people were active at once ([#2485], [#2490], [#2493], [#2495]).
+- Fixed the iPhone showing Account unavailable for an AI account managed on the
+  Mac, and chats stuck on a removed account ([#2486]).
+- Fixed uploaded profile photos missing from document People cards and from
+  your own entries in Grounding ([#2487], [#2505]).
+- Fixed connectors that needed a new sign-in not asking for one ([#2501]).
+- Fixed agent replies losing earlier text from the same turn ([#2517]).
+- Fixed duplicate or vanishing "Waiting for" rows when an agent asks someone in
+  a group ([#2547]).
+- Fixed background sessions started from a group being unable to save a
+  document to it ([#2550]).
+- Fixed Grounding card builds that stayed in progress forever ([#2539]).
+- Fixed Grounding link builds failing without saying why, for example when
+  LinkedIn needs sign-in ([#2532]).
+- Fixed an Agent Chats unread badge that never cleared ([#2526]).
+- Fixed repeated files and old titles in a contact's shared files ([#2529]).
+- Fixed Daily calendars flashing between syncing and access off ([#2543]).
+- Fixed Factory Build asking for a provider when your account is saved in your
+  Kordi account ([#2567]).
+- Fixed Factory drafts picking up instruction files from your home folder, and
+  new drafts now start from your installed skills ([#2570]).
+
 ## [0.0.2-beta.9] - 2026-11-10
 
 ### Added
@@ -951,7 +1044,8 @@ which were built but never released.
 This release is the comparison baseline for beta.8. See the
 [beta.7 release notes] for its packaged artifacts and release details.
 
-[Unreleased]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta9...HEAD
+[Unreleased]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta10...HEAD
+[0.0.2-beta.10]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta9...V0.0.2.beta10
 [0.0.2-beta.9]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta8...V0.0.2.beta9
 [0.0.2-beta.8]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta7...V0.0.2.beta8
 [0.0.2-beta.7]: https://github.com/Kordi-AI/Kordi/compare/V0.0.2.beta6...V0.0.2.beta7
@@ -1384,3 +1478,51 @@ This release is the comparison baseline for beta.8. See the
 [#2466]: https://github.com/Kordi-AI/Kordi/pull/2466
 [#2469]: https://github.com/Kordi-AI/Kordi/pull/2469
 [#2470]: https://github.com/Kordi-AI/Kordi/pull/2470
+[#2473]: https://github.com/Kordi-AI/Kordi/pull/2473
+[#2479]: https://github.com/Kordi-AI/Kordi/pull/2479
+[#2480]: https://github.com/Kordi-AI/Kordi/pull/2480
+[#2485]: https://github.com/Kordi-AI/Kordi/pull/2485
+[#2486]: https://github.com/Kordi-AI/Kordi/pull/2486
+[#2487]: https://github.com/Kordi-AI/Kordi/pull/2487
+[#2489]: https://github.com/Kordi-AI/Kordi/pull/2489
+[#2490]: https://github.com/Kordi-AI/Kordi/pull/2490
+[#2491]: https://github.com/Kordi-AI/Kordi/pull/2491
+[#2493]: https://github.com/Kordi-AI/Kordi/pull/2493
+[#2494]: https://github.com/Kordi-AI/Kordi/pull/2494
+[#2495]: https://github.com/Kordi-AI/Kordi/pull/2495
+[#2496]: https://github.com/Kordi-AI/Kordi/pull/2496
+[#2498]: https://github.com/Kordi-AI/Kordi/pull/2498
+[#2499]: https://github.com/Kordi-AI/Kordi/pull/2499
+[#2501]: https://github.com/Kordi-AI/Kordi/pull/2501
+[#2502]: https://github.com/Kordi-AI/Kordi/pull/2502
+[#2505]: https://github.com/Kordi-AI/Kordi/pull/2505
+[#2517]: https://github.com/Kordi-AI/Kordi/pull/2517
+[#2522]: https://github.com/Kordi-AI/Kordi/pull/2522
+[#2524]: https://github.com/Kordi-AI/Kordi/pull/2524
+[#2526]: https://github.com/Kordi-AI/Kordi/pull/2526
+[#2529]: https://github.com/Kordi-AI/Kordi/pull/2529
+[#2532]: https://github.com/Kordi-AI/Kordi/pull/2532
+[#2534]: https://github.com/Kordi-AI/Kordi/pull/2534
+[#2535]: https://github.com/Kordi-AI/Kordi/pull/2535
+[#2538]: https://github.com/Kordi-AI/Kordi/pull/2538
+[#2539]: https://github.com/Kordi-AI/Kordi/pull/2539
+[#2540]: https://github.com/Kordi-AI/Kordi/pull/2540
+[#2543]: https://github.com/Kordi-AI/Kordi/pull/2543
+[#2546]: https://github.com/Kordi-AI/Kordi/pull/2546
+[#2547]: https://github.com/Kordi-AI/Kordi/pull/2547
+[#2549]: https://github.com/Kordi-AI/Kordi/pull/2549
+[#2550]: https://github.com/Kordi-AI/Kordi/pull/2550
+[#2553]: https://github.com/Kordi-AI/Kordi/pull/2553
+[#2554]: https://github.com/Kordi-AI/Kordi/pull/2554
+[#2556]: https://github.com/Kordi-AI/Kordi/pull/2556
+[#2558]: https://github.com/Kordi-AI/Kordi/pull/2558
+[#2561]: https://github.com/Kordi-AI/Kordi/pull/2561
+[#2563]: https://github.com/Kordi-AI/Kordi/pull/2563
+[#2564]: https://github.com/Kordi-AI/Kordi/pull/2564
+[#2567]: https://github.com/Kordi-AI/Kordi/pull/2567
+[#2570]: https://github.com/Kordi-AI/Kordi/pull/2570
+[#2572]: https://github.com/Kordi-AI/Kordi/pull/2572
+[#2574]: https://github.com/Kordi-AI/Kordi/pull/2574
+[#2575]: https://github.com/Kordi-AI/Kordi/pull/2575
+[#2580]: https://github.com/Kordi-AI/Kordi/pull/2580
+[#2582]: https://github.com/Kordi-AI/Kordi/pull/2582

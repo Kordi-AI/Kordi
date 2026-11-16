@@ -40,6 +40,32 @@ export type WhatsNewRuntime = {
 };
 
 const CURATED_RELEASE_HIGHLIGHTS: Readonly<Record<string, readonly WhatsNewHighlight[]>> = {
+  '0.0.2-beta.10': [
+    {
+      category: 'Grounding',
+      title: 'Rooms for big events',
+      detail: 'Everyone shows at once. Ask to join groups and share work in the Gallery.',
+      kind: 'collaboration',
+    },
+    {
+      category: 'Groups',
+      title: 'Meet the Facilitator',
+      detail: 'Mention it in a group for a poll, a time to meet, or a task handoff.',
+      kind: 'collaboration',
+    },
+    {
+      category: 'Chats',
+      title: 'Artifacts and Export',
+      detail: 'Browse files as cards, open any type, and save a whole session.',
+      kind: 'general',
+    },
+    {
+      category: 'Help',
+      title: 'A guided tour and KordiSpot',
+      detail: 'Walk through Kordi step by step, and ask KordiSpot when you are stuck.',
+      kind: 'general',
+    },
+  ],
   '0.0.2-beta.9': [
     {
       category: 'Agents',
