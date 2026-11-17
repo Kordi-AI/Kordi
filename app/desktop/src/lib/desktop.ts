@@ -811,7 +811,7 @@ export type DesktopChatMessageRoute = {
 };
 
 export async function fetchDesktopChatSessionActiveTurn(sessionId: string) {
-  return isNativeDesktopShell() ? invokeDesktop<DesktopChatTurnSnapshot | null>('desktop_chat_session_active_turn', { sessionId }) : null;
+  return isBrowserAppRuntime() ? null : invokeDesktop<DesktopChatTurnSnapshot | null>('desktop_chat_session_active_turn', { sessionId });
 }
 
 export async function startDesktopChatMessage(
