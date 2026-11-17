@@ -84,3 +84,18 @@ test('evidence remains data; no behavior or privilege side effects', () => {
   assert.deepEqual(result.results[0].evidence, payload.items[0].evidence);
   assert.equal(result.summary.total, 1);
 });
+
+
+test('review regressions: sparse evidence, sparse items, schema parity and Unicode', () => {
+  const sparseEvidence = [{ id: 'hole', lawChaos: 0, goodEvil: 0, evidence: new Array(1) }];
+  assert.throws(() => assess({ scope: 'agent_decision', items: sparseEvidence }), TypeError);
+  assert.throws(() => assess({ scope: 'agent_decision', items: new Array(1) }), TypeError);
+  assert.throws(() => assess({ scope: 'fictional', items: [{ id: 'a', unexpected: 1 }] }), TypeError);
+  assert.throws(() => assess({ scope: 'fictional', items: [{ id: 'a' }], surprise: true }), TypeError);
+  const input = { scope: 'fictional', items: [{ id: 'emoji', lawChaos: 0, goodEvil: 0,
+    evidence: ['🙂'.repeat(500)] }] };
+  assert.equal(assess(input).results[0].status, 'SCORED');
+  input.items[0].evidence[0] += '🙂';
+  assert.throws(() => assess(input), TypeError);
+  assert.equal(assess({ scope: 'fictional', items: [{ id: 'no-data', evidence: [] }] }).results[0].status, 'UNKNOWN');
+});
