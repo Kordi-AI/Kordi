@@ -1,4 +1,5 @@
 import { isModelUnavailableForSignIn } from '@/features/chat/modelAvailability';
+import { withProviderDefaultModels } from '@/features/cloud/providerModels';
 import { ACCOUNT_UNAVAILABLE_LABEL, isAccountAuthChoice } from '@/features/cloud/routeAccountChoice';
 import { fallbackComposerThinkingValue } from './composerThinking';
 
@@ -25,6 +26,8 @@ export type ComposerModelOption = {
   provider?: string;
   providerLabel?: string;
   thinkingLevels?: string[];
+  /** The model its provider opens on when nothing chose one (see `providerDefaultModel`). */
+  providerDefault?: boolean;
 };
 
 export type ComposerModelSelection = {
@@ -195,6 +198,25 @@ export function composerModelsForProvider(providerId: string, modelOptions: read
   return modelOptions.filter((option) => !option.provider || normalizeComposerProviderId(option.provider) === normalized);
 }
 
+/**
+ * A provider's default model among `modelOptions`: the marked default in the
+ * account's own namespace, else any marked default of the provider's family. A list
+ * nobody marked is marked here, without a catalog.
+ */
+export function defaultComposerModelOption(
+  providerId: string,
+  modelOptions: readonly ComposerModelOption[],
+  accountProviderId = providerId,
+): ComposerModelOption | null {
+  const offered = composerModelsForProvider(providerId, modelOptions);
+  const marked = offered.some((option) => option.providerDefault) ? offered : withProviderDefaultModels(offered);
+  const namespace = `${accountProviderId.trim().toLowerCase()}/`;
+  return marked.find((option) => option.providerDefault && option.value.toLowerCase().startsWith(namespace))
+    ?? marked.find((option) => option.providerDefault)
+    ?? marked[0]
+    ?? null;
+}
+
 /** A usable account of the same provider, the active one first. */
 export function sameProviderComposerAccount(
   providerId: string | null | undefined,
@@ -307,7 +329,8 @@ export function resolveComposerRoutePick({
   const offered = composerModelsForProvider(account.providerId, modelOptions);
   const offeredModel = offered.length === 0 || offered.some((option) => option.value === requestedModel)
     ? requestedModel
-    : (offered.find((option) => modelIdOf(option.value) === modelIdOf(requestedModel)) ?? offered[0]).value;
+    : (offered.find((option) => modelIdOf(option.value) === modelIdOf(requestedModel))
+      ?? defaultComposerModelOption(account.providerId, offered) ?? offered[0]).value;
   const model = availableModelForAccount(account, modelInAccountNamespace(offeredModel, account.providerId, modelOptions),
     pick.type === 'provider' ? offered : [], modelOptions);
   const modelOption = modelOptions.find((option) => option.value === model);

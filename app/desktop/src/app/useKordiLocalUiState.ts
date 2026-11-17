@@ -18,6 +18,16 @@ function getSystemThemeMode(): ResolvedThemeMode {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
+/**
+ * The composer before anything selects a model: no model and the model's own
+ * effort, until a session route, this Mac's session, or a hosted account's
+ * default model fills it in.
+ */
+export const initialComposerSelections: Readonly<Record<ComposerScope, { mode: string; model: string; thinking: string }>> = {
+  chat: { mode: 'Send as Me', model: '', thinking: 'default' },
+  project: { mode: 'Post update', model: '', thinking: 'high' },
+};
+
 export function useKordiLocalUiState(activeNav: NavId = 'agent-chats') {
   const [activeContactGroup, setActiveContactGroup] = useState<ContactClass>('my-agents');
   const [activeContactId, setActiveContactId] = useState('my-core-agent');
@@ -71,10 +81,9 @@ export function useKordiLocalUiState(activeNav: NavId = 'agent-chats') {
   const [desktopSessionRenameDraft, setDesktopSessionRenameDraft] = useState('');
   const [isEditingDesktopSessionTitle, setIsEditingDesktopSessionTitle] = useState(false);
 
-  const [composerSelections, setComposerSelections] = useState<Record<ComposerScope, { mode: string; model: string; thinking: string }>>({
-    chat: { mode: 'Send as Me', model: 'GPT-5.4', thinking: 'xhigh' },
-    project: { mode: 'Post update', model: 'GPT-5.4', thinking: 'high' },
-  });
+  const [composerSelections, setComposerSelections] = useState<Record<ComposerScope, { mode: string; model: string; thinking: string }>>(
+    initialComposerSelections,
+  );
   const [composerDrafts, setComposerDrafts] = useState<ComposerDraftState>(
     () => readStoredComposerDrafts(),
   );

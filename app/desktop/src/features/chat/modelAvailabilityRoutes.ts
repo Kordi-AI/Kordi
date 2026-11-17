@@ -1,4 +1,5 @@
 import { CHATGPT_MODEL_ORDER, isChatGptCatalogProvider } from '@/features/cloud/chatgptModelCatalog';
+import { isOfferedProviderModel } from '@/features/cloud/providerModels';
 import {
   authChoiceFromProviderOption, composerModelsForProvider, composerProviderOptionUsable, matchingComposerAccountOption,
   modelInAccountNamespace, normalizeComposerProviderId, resolveComposerRoutePick,
@@ -48,10 +49,12 @@ export function rememberModelCatalog(options: readonly ComposerModelOption[]) {
 
 /**
  * The models a sign-in may fall back to, in catalog order: the picker's list
- * for the provider, else the ChatGPT order for an OpenAI sign-in.
+ * for the provider, else the ChatGPT order for an OpenAI sign-in. A ChatGPT,
+ * OpenAI or Claude sign-in only ever falls back to a model Kordi offers.
  */
 function fallbackCandidates(provider: string, options: readonly ComposerModelOption[]): ComposerModelOption[] {
-  const listed = composerModelsForProvider(provider, options).filter((option) => option.provider);
+  const listed = composerModelsForProvider(provider, options).filter((option) => option.provider
+    && isOfferedProviderModel(option.provider, modelAvailabilityModelId(option.value)));
   if (listed.length > 0) return listed;
   if (!isChatGptCatalogProvider(provider)) return [];
   return CHATGPT_MODEL_ORDER.map((id) => ({ value: `${provider}/${id}`, label: id, provider: normalizeComposerProviderId(provider) }));
