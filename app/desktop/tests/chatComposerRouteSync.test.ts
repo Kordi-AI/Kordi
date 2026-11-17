@@ -9,7 +9,7 @@ const oldSelection: ComposerSelectionState = {
   project: { mode: 'agent', model: 'ollama/llama3', thinking: 'off' },
 };
 const hostedDefault = {
-  model: 'openai-codex/gpt-5.5',
+  model: 'openai-codex/gpt-6.2-sol',
   authProvider: 'openai-codex',
   authChoice: 'cloud-login:saved',
   thinking: 'high',
@@ -17,7 +17,7 @@ const hostedDefault = {
 
 test('a new hosted chat displays the valid default route model and settles without a selection loop', () => {
   const updated = chatComposerSelectionForRoute(oldSelection, null, hostedDefault);
-  assert.equal(updated.chat.model, 'openai-codex/gpt-5.5');
+  assert.equal(updated.chat.model, 'openai-codex/gpt-6.2-sol');
   assert.equal(updated.chat.thinking, 'high');
   assert.equal(updated.project, oldSelection.project);
   assert.equal(chatComposerSelectionForRoute(updated, null, hostedDefault), updated);

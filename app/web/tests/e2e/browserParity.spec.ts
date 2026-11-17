@@ -125,3 +125,63 @@ test('the shared companion Chat action opens a separate browser Agent composer',
   await expect(controls.getByRole('button', { name: 'Chat', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('textbox', { name: /Send your message|Ask the agent/ })).toHaveCount(2);
 });
+
+/** An Agent Chat with no stored route and only this hosted account; returns the model and effort controls. */
+async function openRoutelessAgentChat(page: Page, baseURL: string, snapshot: { provider: string; authChoice: string; modelHint: string | null }) {
+  const fixture = await installChatFixture(page, baseURL);
+  await page.route('**/v1/cloud/agent-provider-auth/snapshots?*', route => route.fulfill({ json: { snapshots: [{
+    snapshotId: `synthetic-${snapshot.provider}`, label: 'Work', createdAt: '2026-11-05T12:00:00Z', revokedAt: null, ...snapshot,
+  }] } }));
+  const sessionId = `session:self-agent:synthetic-${snapshot.provider}-default`;
+  fixture.conversation.kind = 'ai';
+  fixture.conversation.legacy_session_id = sessionId;
+  fixture.conversation.members = [fixture.conversation.members[0]];
+  fixture.messages[0].sender_account_id = account.accountId;
+  await page.goto(`/app/agent-chats/${encodeURIComponent(sessionId)}`);
+  return {
+    model: page.getByRole('button', { name: /^Select model, current / }),
+    effort: page.getByRole('button', { name: /^Adjust effort, current / }),
+    menu: page.getByRole('dialog', { name: 'Select model' }),
+  };
+}
+
+const rowNamed = (name: string) => new RegExp(`^${name.replace(/\./g, '\\.')}`);
+
+test('a hosted Agent Chat with no stored route shows the ChatGPT default and offers only the ChatGPT models Kordi lists', async ({ page, baseURL }) => {
+  // The account stores GPT-5.4, which Kordi no longer offers: it opens with the default.
+  const { model, effort, menu } = await openRoutelessAgentChat(page, baseURL!, { provider: 'openai-codex', authChoice: 'cloud-login:synthetic', modelHint: 'gpt-5.4' });
+  await expect(model).toHaveAccessibleName('Select model, current GPT-6.2 Sol');
+  await expect(effort).toHaveAccessibleName('Adjust effort, current Default');
+  await model.click();
+  await expect(menu.getByRole('button', { name: /^Default/ })).toContainText('GPT-6.2 Sol');
+  await menu.getByRole('button', { name: /^More models/ }).click();
+  const offered = ['GPT-6.2 Sol', 'GPT-6.2 Astra', 'GPT-6.1 Terra', 'GPT-6.1 Sol', 'GPT-6 Astra', 'GPT-6 Sol', 'GPT-6 Luna',
+    'GPT-5.6 Sol', 'GPT-5.6 Terra', 'GPT-5.6 Luna'];
+  await expect(menu.locator('.app-model-picker-list .app-model-picker-row'))
+    .toHaveText(offered.map(name => new RegExp(`^${name.replace(/\./g, '\\.')}ChatGPT$`)));
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'New session', exact: true }).click();
+  await page.locator('.app-chat-create-list-item').filter({ hasText: 'My agent' }).first().click();
+  await expect(page).toHaveURL(/\/app\/agent-chats\/session%3Aagent%3A/);
+  await expect(model).toHaveAccessibleName('Select model, current GPT-6.2 Sol');
+});
+
+test('a hosted Claude account alone opens on Claude Sonnet 5.5 and offers only the four current Claude models', async ({ page, baseURL }) => {
+  // The account stores an older Claude model, which Kordi no longer offers: it opens with the default.
+  const { model, effort, menu } = await openRoutelessAgentChat(page, baseURL!, { provider: 'anthropic', authChoice: 'cloud-api-key:synthetic-claude', modelHint: 'claude-opus-4-8' });
+  await expect(model).toHaveAccessibleName('Select model, current Claude Sonnet 5.5');
+  await expect(effort).toHaveAccessibleName('Adjust effort, current Default');
+  await model.click();
+  await expect(menu.getByRole('button', { name: /^Default/ })).toContainText('Claude Sonnet 5.5');
+  await expect(menu.getByRole('button', { name: /^More models/ })).toHaveCount(0);
+  await expect(menu.locator('.app-model-picker-list .app-model-picker-row'))
+    .toHaveText(['Claude Sonnet 5.5', 'Claude Opus 5.5', 'Claude Fable 5.2', 'Claude Haiku 5.5'].map(rowNamed));
+});
+
+test('a hosted Google account alone opens on the Google catalog default, and the Default row agrees', async ({ page, baseURL }) => {
+  const { model, effort, menu } = await openRoutelessAgentChat(page, baseURL!, { provider: 'google', authChoice: 'cloud-api-key:synthetic-google', modelHint: null });
+  await expect(model).toHaveAccessibleName('Select model, current Gemini 3.1 Pro Preview');
+  await expect(effort).toHaveAccessibleName('Adjust effort, current Default');
+  await model.click();
+  await expect(menu.getByRole('button', { name: /^Default/ })).toContainText('Gemini 3.1 Pro Preview');
+});

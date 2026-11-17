@@ -332,7 +332,7 @@ test('a session routed to a removed account opens its route on the signed-in acc
   await expect(session.getByRole('status')).toContainText('Account unavailable');
   await expect(session.getByRole('button', { name: 'Send' })).toBeDisabled();
   await expect(session.getByRole('button', { name: 'Test route' })).toBeDisabled();
-  await expect(routePicker(page)).toHaveAccessibleName('Select model, current GPT-5.5, Account unavailable');
+  await expect(routePicker(page)).toHaveAccessibleName('Select model, current GPT-6.2 Sol, Account unavailable');
   await routePicker(page).click();
   await page.locator('.app-model-picker-account').click();
   // The picker offers the ChatGPT accounts in place of the removed one; nothing applies until one is chosen.
@@ -344,7 +344,7 @@ test('a session routed to a removed account opens its route on the signed-in acc
   await expect(page.locator('.app-model-picker')).toHaveCount(0);
   await expect(session.getByRole('status')).toHaveCount(0);
   await expect(session.getByRole('button', { name: 'Send' })).toBeEnabled();
-  await expect(routePicker(page)).toHaveAccessibleName('Select model, current GPT-5.5');
+  await expect(routePicker(page)).toHaveAccessibleName('Select model, current GPT-6.2 Sol');
 });
 
 test('a session routed to a removed account with no account of its provider stays unavailable and blocks send until another account is chosen', async ({ page }) => {
@@ -361,13 +361,13 @@ test('a session routed to a removed account with no account of its provider stay
   await expect(accounts).toContainText('No signed-in account for Claude.');
   await expect(accounts.locator('.app-model-picker-row')).toHaveCount(0);
   await accounts.getByRole('button', { name: 'Back to models' }).click();
-  // The first GPT-5.5 row is the ChatGPT model; picking it asks for a ChatGPT account.
-  await page.getByRole('dialog', { name: 'Select model' }).getByRole('button', { name: /^GPT-5\.5/ }).first().click();
+  // The first GPT-6.2 Sol row is the ChatGPT model; picking it asks for a ChatGPT account.
+  await page.getByRole('dialog', { name: 'Select model' }).getByRole('button', { name: /^GPT-6\.2 Sol/ }).first().click();
   await expect(session.getByRole('button', { name: 'Send' })).toBeDisabled();
   await changeAccount(page, /^ChatGPT\s*Work/);
   await expect(session.getByRole('status')).toHaveCount(0);
   await expect(session.getByRole('button', { name: 'Send' })).toBeEnabled();
-  await expect(routePicker(page)).toHaveAccessibleName('Select model, current GPT-5.5');
+  await expect(routePicker(page)).toHaveAccessibleName('Select model, current GPT-6.2 Sol');
 });
 
 test('the composer identifies saved accounts by name and provider', async ({ page }) => {

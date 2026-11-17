@@ -15,6 +15,7 @@ import {
 } from '../src/features/chat/hostedComposerOptions';
 import { composerRouteDecision } from '../src/features/chat/useHostedComposerRouting';
 import { preferredModelValueForProviderFromOptions } from '../src/features/chat/useComposerViewModel';
+import { CHATGPT_DEFAULT_MODEL, CHATGPT_MODEL_ORDER } from '../src/features/cloud/chatgptModelCatalog';
 import { hostedAccountsFromSnapshots } from '../src/features/cloud/hostedAccounts';
 import { setHostedAccountChoices, setLocalAccountChoices } from '../src/features/cloud/hostedAccountRegistry';
 import { isHostedOnlyAccountChoice } from '../src/features/cloud/routeAccountChoice';
@@ -99,8 +100,9 @@ test('a cloud-only connected account satisfies the chat gate and keeps its saved
 test('a hosted account offers its stored model plus its catalog models; Custom API offers only its own model', () => {
   assert.deepEqual(account('bai').models, ['deepseek-chat']);
   assert.deepEqual(account('Research').models, entry('cerebras').models);
-  assert.equal(account('Team').models[0], 'gpt-6.1-sol', 'the newest ChatGPT model leads the stored one');
-  assert.deepEqual(new Set(account('Team').models), new Set(['gpt-5.5', ...entry('openai-codex').models]));
+  // Team stores GPT-5.5, which Kordi no longer offers for ChatGPT: it lists only the ten and opens with the default.
+  assert.equal(account('Team').model, null);
+  assert.deepEqual(account('Team').models, [...CHATGPT_MODEL_ORDER]);
   const models = hostedModelOptions(accounts);
   assert.ok(models.some((option) => option.value === 'custom/deepseek-chat'));
   assert.ok(models.some((option) => option.value === `cerebras/${cerebrasDefault}`));
@@ -109,14 +111,17 @@ test('a hosted account offers its stored model plus its catalog models; Custom A
 });
 
 test('hosted model options carry the OMP catalog thinking levels for each model', () => {
-  const claude = hostedRouteAccounts(hostedAccountsFromSnapshots([snapshot('cloud-api-key:claude', 'Claude', 'anthropic', 'claude-sonnet-5')]), catalog);
+  const claude = hostedRouteAccounts(hostedAccountsFromSnapshots([snapshot('cloud-api-key:claude', 'Claude', 'anthropic', 'claude-fable-5-2')]), catalog);
   const models = hostedModelOptions([...accounts, ...claude, { ...account('Lab'), providerId: 'cerebras', models: ['not-in-catalog'] }], catalog);
   const levels = (value: string) => models.find((option) => option.value === value)?.thinkingLevels;
   const full = ['low', 'medium', 'high', 'xhigh', 'max'];
-  assert.deepEqual(levels('openai-codex/gpt-6.1-sol'), full, 'a newer point release uses its family levels');
+  assert.deepEqual(levels('openai-codex/gpt-6.2-sol'), full, 'a newer point release uses its family levels');
+  assert.deepEqual(levels('openai-codex/gpt-6.2-astra'), full);
+  assert.deepEqual(levels('openai-codex/gpt-6.1-terra'), full);
   assert.deepEqual(levels('openai-codex/gpt-6-sol'), full);
-  assert.deepEqual(levels('openai-codex/gpt-5.5'), ['low', 'medium', 'high', 'xhigh']);
-  assert.deepEqual(levels('anthropic/claude-sonnet-5'), full);
+  assert.equal(levels('openai-codex/gpt-5.5'), undefined, 'a model Kordi no longer offers is not listed');
+  assert.deepEqual(levels('anthropic/claude-fable-5-2'), full);
+  assert.equal(levels('anthropic/claude-sonnet-5'), undefined, 'an older Claude model is not listed');
   assert.deepEqual(levels('cerebras/not-in-catalog'), ['off', 'low', 'medium', 'high'], 'an unknown model keeps the generic list');
   assert.deepEqual(levels('custom/deepseek-chat'), ['off']);
   assert.deepEqual(hostedModelOptions(accounts).find((option) => option.value === 'openai-codex/gpt-6-sol')?.thinkingLevels, ['off', 'low', 'medium', 'high'], 'without a catalog the generic list stays');
@@ -125,7 +130,8 @@ test('hosted model options carry the OMP catalog thinking levels for each model'
 test('choosing a hosted account applies its Kordi Cloud route; its stored model or the catalog default', () => {
   assert.deepEqual(hostedRouteForChoice(account('bai')), { model: 'custom/deepseek-chat', authProvider: 'custom', authChoice: 'cloud-api-key:bai', thinking: null });
   assert.deepEqual(hostedRouteForChoice(account('Research'), { catalog }), { model: `cerebras/${cerebrasDefault}`, authProvider: 'cerebras', authChoice: 'cloud-api-key:research', thinking: null });
-  assert.equal(hostedRouteForChoice(account('Team'), { model: 'openai-codex/not-a-model' })?.model, 'openai-codex/gpt-5.5');
+  assert.equal(hostedRouteForChoice(account('Team'), { model: 'openai-codex/not-a-model' })?.model, `openai-codex/${CHATGPT_DEFAULT_MODEL}`,
+    'a stored model Kordi no longer offers gives way to the default');
   assert.equal(hostedRouteForChoice(account('Old laptop')), null, 'an account that needs reconnecting cannot run');
   for (const label of ['bai', 'Research', 'Team']) assert.equal(routeRunsOnKordiCloud(hostedRouteForChoice(account(label), { catalog })), true, label);
 });
@@ -171,10 +177,10 @@ test('a custom route runs on its hosted account and never falls back to another 
   const route = (selectedModel: string, hosted = accounts) => resolveDefaultCloudAgentRuntimeRoute({
     activeLoginProviderId: 'openai',
     authOptions: [openAiAuth, ...hostedAuthOptions(hosted, selectedModel === 'custom/qwen-plus' ? 'cloud-api-key:lab' : null)],
-    chatModelOptions: [{ value: 'openai/gpt-5.5', label: 'gpt-5.5', provider: 'openai' }, ...hostedModelOptions(hosted)],
+    chatModelOptions: [{ value: 'openai/gpt-6-sol', label: 'gpt-6-sol', provider: 'openai' }, ...hostedModelOptions(hosted)],
     desktopAuthState: openAiState,
     isNativeShell: true,
-    preferredModelValueForProvider: () => 'openai/gpt-5.5',
+    preferredModelValueForProvider: () => 'openai/gpt-6-sol',
     resolveComposerProviderId: (_, model) => model.split('/')[0] ?? 'openai',
     selectedModel,
     selectedThinking: 'off',
@@ -183,9 +189,9 @@ test('a custom route runs on its hosted account and never falls back to another 
   assert.equal(route('custom/deepseek-chat')?.authChoice, 'cloud-api-key:bai');
   assert.equal(route(`cerebras/${cerebrasDefault}`)?.authChoice, 'cloud-api-key:research', 'a provider with only hosted accounts');
   assert.equal(route('custom/deepseek-chat', []), null, 'without a hosted account there is no route, not an OpenAI one');
-  assert.equal(route('openai/gpt-5.5')?.authProvider, 'openai');
+  assert.equal(route('openai/gpt-6-sol')?.authProvider, 'openai');
   assert.equal(routeRunsOnKordiCloud(route('custom/qwen-plus')), true, 'the hosted account runs on Kordi Cloud');
-  assert.equal(routeRunsOnKordiCloud(route('openai/gpt-5.5')), false, 'the local account keeps the local runtime');
+  assert.equal(routeRunsOnKordiCloud(route('openai/gpt-6-sol')), false, 'the local account keeps the local runtime');
 });
 
 test('a new chat with a legacy OpenAI model resolves the saved ChatGPT account and a compatible model', () => {
@@ -204,9 +210,10 @@ test('a new chat with a legacy OpenAI model resolves the saved ChatGPT account a
     selectedModel,
     selectedThinking: 'medium',
   });
-  for (const selectedModel of ['openai/gpt-5.6-sol', 'openai/gpt-5.5', 'openai-codex/gpt-5.5']) {
+  // A model Kordi no longer offers for ChatGPT resolves to the account's default model.
+  for (const [selectedModel, model] of [['openai/gpt-5.6-sol', 'gpt-5.6-sol'], ['openai/gpt-5.5', CHATGPT_DEFAULT_MODEL], ['openai-codex/gpt-5.5', CHATGPT_DEFAULT_MODEL]]) {
     const route = resolve(selectedModel);
-    assert.deepEqual(route, { model: `openai-codex/${selectedModel.split('/')[1]}`, authProvider: 'openai-codex', authChoice: team.authChoice, thinking: 'medium' });
+    assert.deepEqual(route, { model: `openai-codex/${model}`, authProvider: 'openai-codex', authChoice: team.authChoice, thinking: 'medium' });
     assert.equal(routeRunsOnKordiCloud(route), true);
     assert.equal(shouldUseNoProviderSelfAgentShortcut({
       activeConversationUsesCollaborationRouting: false,
@@ -215,7 +222,7 @@ test('a new chat with a legacy OpenAI model resolves the saved ChatGPT account a
       hasAnyDesktopAuth: routeRunsOnKordiCloud(route),
     }), false, 'a new hosted chat must reach dispatch instead of emitting No provider configured');
   }
-  assert.equal(resolve('openai/unavailable-model')?.model, 'openai-codex/gpt-6.1-sol', 'a stale model uses this hosted provider’s available default');
+  assert.equal(resolve('openai/unavailable-model')?.model, `openai-codex/${CHATGPT_DEFAULT_MODEL}`, 'a stale model uses this hosted provider’s available default');
   assert.equal(resolve('openai/gpt-5.5', []), null, 'no route without a saved account');
   assert.equal(resolve('openai-codex/gpt-5.5', [openAiAuth, ...authOptions], openAiState)?.authChoice, team.authChoice, 'an active hosted choice wins over local auth');
 });

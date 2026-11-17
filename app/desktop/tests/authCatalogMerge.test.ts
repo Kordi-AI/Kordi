@@ -10,7 +10,7 @@ import {
   withKnownLoginMethods,
   type OmpCatalog,
 } from '../src/kordi-app/auth/ompCatalog';
-import { orderChatGptModels } from '../src/features/cloud/chatgptModelCatalog';
+import { CHATGPT_DEFAULT_MODEL, CHATGPT_MODEL_ORDER } from '../src/features/cloud/chatgptModelCatalog';
 import { BUNDLED_CATALOG_FALLBACK_NOTICE, CATALOG_UNAVAILABLE_NOTICE, loadAuthOmpCatalog } from '../src/kordi-app/auth/useAuthOmpCatalog';
 import type { CloudProviderAuthSnapshot } from '../src/features/cloud/cloudAgentRuntimeTypes';
 import type { DesktopAuthOption, DesktopAuthProvider, DesktopAuthState } from '../src/kordi-app/types';
@@ -76,7 +76,7 @@ test('every pinned provider with a model appears, plus Custom API and the local 
   assert.equal(providers.some((provider) => provider.id === 'openai-codex'), false);
 });
 
-test('one OpenAI row spans ChatGPT sign-in and API keys with per-method OMP models', () => {
+test('one OpenAI row spans ChatGPT sign-in and API keys, each offering the ChatGPT models Kordi lists', () => {
   const state = authState([
     localProvider({ id: 'openai-codex', label: 'ChatGPT', supportsOAuth: true, configured: true, options: [savedOption('Work', 'OAuth', 'work')] }),
     localProvider({ id: 'openai', label: 'OpenAI API', configured: true, options: [savedOption('Billing key', 'API key', 'billing')] }),
@@ -86,12 +86,11 @@ test('one OpenAI row spans ChatGPT sign-in and API keys with per-method OMP mode
   assert.equal(openAi?.label, 'OpenAI');
   assert.deepEqual(openAi?.methods.map((method) => [method.mode, method.providerId]), [['oauth', 'openai-codex'], ['api-key', 'openai']]);
   assert.deepEqual(openAi?.methods.map((method) => method.options.map((option) => option.label)), [['Work'], ['Billing key']]);
-  const pinnedModels = (id: string) => orderChatGptModels(['gpt-6.1-sol', ...pinnedPayload.providers.find((entry) => entry.id === id)?.models ?? []]);
-  const codexModels = pinnedModels('openai-codex');
-  const apiModels = pinnedModels('openai');
-  assert.deepEqual(openAi?.methods[0].modelIds, codexModels);
-  assert.deepEqual(openAi?.methods[1].modelIds, apiModels);
-  assert.notDeepEqual(codexModels, apiModels);
+  // The pinned catalog lists other OpenAI models; only Kordi's ChatGPT set is offered, in its order.
+  assert.ok(pinnedPayload.providers.find((entry) => entry.id === 'openai')?.models.includes('gpt-5.5'));
+  assert.deepEqual(openAi?.methods[0].modelIds, [...CHATGPT_MODEL_ORDER]);
+  assert.deepEqual(openAi?.methods[1].modelIds, [...CHATGPT_MODEL_ORDER]);
+  assert.deepEqual(openAi?.methods.map((method) => method.defaultModelId), [CHATGPT_DEFAULT_MODEL, CHATGPT_DEFAULT_MODEL]);
 });
 
 test('an overlapping provider takes its name, models, and auth policy from OMP', () => {
