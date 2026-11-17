@@ -5,9 +5,18 @@ import { ErrorLine } from '@/components/ui/ErrorLine';
 import type { Conversation } from '@/kordi-app/types';
 import { remoteProjectCatalogId } from '@/features/canonical/sessionResolver';
 import { ChatProjectPicker } from './ChatProjectPicker';
-import { canChooseChatProject, projectForChat, useChatProjects } from './chatProjects';
+import { canChooseChatProject, isCloudAgentChat, projectForChat, useChatProjects } from './chatProjects';
+import { CloudChatWorkspaceRow } from './CloudChatWorkspaceRow';
 import type { ChatWorkspaceSelection, GitWorkspace } from './gitWorkspace';
 import { locateRemoteProject, useRemoteProjectSession } from './remoteProjectCatalog';
+
+/** The composer's workspace row. Cloud agent chats keep a grayed row; the controls hide themselves for chats that have no project and cannot choose one. */
+export function ChatWorkspaceRow({ conversation, disabled }: { conversation: Conversation; disabled: boolean }) {
+  const projects = useChatProjects();
+  if (projects?.WorkspaceRow) return <projects.WorkspaceRow conversation={conversation} disabled={disabled} />;
+  return isCloudAgentChat(conversation) ? <CloudChatWorkspaceRow sessionId={conversation.id} />
+    : <ChatWorkspaceControls conversation={conversation} disabled={disabled} />;
+}
 
 export function ChatWorkspaceControls({ conversation, disabled }: { conversation: Conversation; disabled: boolean }) {
   const projects = useChatProjects();

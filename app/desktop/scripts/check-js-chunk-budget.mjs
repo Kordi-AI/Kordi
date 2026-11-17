@@ -189,7 +189,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The same reordered help tour and its example room with a Gallery add about 2.1 kB there (6067.9 kB measured
 // locally, with the same allowance for the CI build), so it moves to 6.070 MB.
 // The Beta 10 What's New entry adds about 0.6 kB there too (6068.5 kB measured locally), so it moves to 6.071 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_071_000;
+// Projects in the browser app (the account's Mac project catalog, the composer project picker and
+// its assign command) add 10 kB to the web app only, so it moves to 6.081 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_081_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
