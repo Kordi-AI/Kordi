@@ -191,7 +191,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The Beta 10 What's New entry adds about 0.6 kB there too (6068.5 kB measured locally), so it moves to 6.071 MB.
 // Projects in the browser app (the account's Mac project catalog, the composer project picker and
 // its assign command) add 10 kB to the web app only, so it moves to 6.081 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_081_000;
+// One default-model rule for every provider and the exact ChatGPT and Claude sets add about 2 kB there
+// (6080.5 kB measured locally, the CI build runs slightly larger), so it moves to 6.084 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_084_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
