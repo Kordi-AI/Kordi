@@ -1,3 +1,4 @@
+import { providerDefaultModel } from '@/features/cloud/providerModels';
 import { CUSTOM_MODEL_REQUIRED, CUSTOM_PROVIDER_ID } from './customApiAccount';
 import { isLocalProvider, type AuthDisplayProvider } from './model';
 
@@ -23,7 +24,7 @@ export function routeAccounts(provider: AuthDisplayProvider): RouteAccount[] {
     const preferred = provider.preferredModel?.startsWith(`${method.providerId}/`)
       ? provider.preferredModel.slice(method.providerId.length + 1) : '';
     const fallback = modelIds.includes(preferred) ? preferred
-      : defaultModelId && modelIds.includes(defaultModelId) ? defaultModelId : modelIds[0] ?? '';
+      : providerDefaultModel(method.providerId, modelIds, defaultModelId) ?? '';
     return method.options.filter((option) => option.profileId).map((option) => {
       const modelHint = option.modelHint && (!modelIds.length || modelIds.includes(option.modelHint)) ? option.modelHint : null;
       return {

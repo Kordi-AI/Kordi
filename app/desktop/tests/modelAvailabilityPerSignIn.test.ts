@@ -129,7 +129,7 @@ test('a run on a refused default model uses the best available model in catalog 
   assert.equal(routeWithAvailableModel(route), route);
   recordModelUnavailable(personal);
   // Before the picker has listed models, the ChatGPT order applies.
-  assert.deepEqual(routeWithAvailableModel(route), { ...route, model: 'openai-codex/gpt-6-astra' });
+  assert.deepEqual(routeWithAvailableModel(route), { ...route, model: 'openai-codex/gpt-6.2-sol' });
   rememberModelCatalog([modelOptions[0], modelOptions[2], modelOptions[1]]);
   assert.deepEqual(routeWithAvailableModel(route), { ...route, model: 'openai-codex/gpt-6-sol' });
   // Another sign-in keeps its model.
