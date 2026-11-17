@@ -127,3 +127,13 @@ html.kordi-browser-shell .kordi-app.app-browser-viewport {
     transition: none;
   }
 }
+
+/* Projects of an offline Mac stay listed in the browser picker but cannot be chosen. */
+.chat-project-option:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.chat-project-option:disabled:not([aria-pressed="true"]):hover {
+  background: transparent;
+}
