@@ -1,6 +1,6 @@
 import { fetchGitWorkspace } from '@/features/projects/gitWorkspace';
 import { useMemo } from 'react';
-import { ChatProjectsProvider } from '@/features/projects/ChatProjectsProvider';
+import { ShellChatProjects } from '@/features/projects/ShellChatProjects';
 import { type ChatProjects } from '@/features/projects/chatProjects';
 import { createDesktopProject, createDesktopProjectFromFolder } from '@/lib/desktop';
 
@@ -31,11 +31,11 @@ export function assembleKordiShellSlots(args: KordiShellArgs) {
 
   const projects = chatProjects(args.sidebar);
   return {
-    sidebar: <ChatProjectsProvider value={projects}>{assembleSidebarSlot(args.sidebar)}</ChatProjectsProvider>,
-    mainContent: <ChatProjectsProvider value={projects}>{assembleMainContentSlot({
+    sidebar: <ShellChatProjects value={projects}>{assembleSidebarSlot(args.sidebar)}</ShellChatProjects>,
+    mainContent: <ShellChatProjects value={projects}>{assembleMainContentSlot({
       ...args.mainContent,
       rightDetailRail,
-    })}</ChatProjectsProvider>,
+    })}</ShellChatProjects>,
     rightDetailRail,
     ...assembleOverlaySlots(args.overlay),
   };
@@ -48,11 +48,11 @@ export function useKordiShellSlots(args: KordiShellArgs) {
     [args.rightDetail],
   );
   const sidebar = useMemo(
-    () => <ChatProjectsProvider value={projects}>{assembleSidebarSlot(args.sidebar)}</ChatProjectsProvider>,
+    () => <ShellChatProjects value={projects}>{assembleSidebarSlot(args.sidebar)}</ShellChatProjects>,
     [args.sidebar, projects],
   );
   const mainContent = useMemo(
-    () => <ChatProjectsProvider value={projects}>{assembleMainContentSlot({ ...args.mainContent, rightDetailRail })}</ChatProjectsProvider>,
+    () => <ShellChatProjects value={projects}>{assembleMainContentSlot({ ...args.mainContent, rightDetailRail })}</ShellChatProjects>,
     [args.mainContent, rightDetailRail, projects],
   );
   const overlays = useMemo(
