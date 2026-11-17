@@ -22,8 +22,11 @@ export type WorkerCommand = RunRequest | {
 } | { schemaVersion: 1; type: 'cancel'; runId: string; attemptId: string };
 
 export class RuntimeError extends Error {
-  /** The provider's own error text. The Kordi host cleans it before showing it. */
-  constructor(public code: string, message: string, public providerReason?: string) { super(message); }
+  /**
+   * The provider's own error text, which the Kordi host cleans before showing
+   * it, and when a usage limit resets, in epoch milliseconds.
+   */
+  constructor(public code: string, message: string, public providerReason?: string, public limitResetsAt?: number) { super(message); }
 }
 const invalid = () => new RuntimeError('invalid_request', 'Invalid OMP runtime request.');
 export function parseCommand(line: string): WorkerCommand {

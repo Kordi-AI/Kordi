@@ -1,10 +1,10 @@
 use std::fmt;
 
 /// Public wording comes from a fixed classification, and `Display` is only
-/// that wording: servers classify it and other people may see it. A provider
-/// failure also carries the provider's own reason, already cleaned by
-/// `provider_reason`, which `with_provider_reason` adds for the account owner.
-/// Logs use only `diagnostic_code`.
+/// that wording, plus the reset time of a usage limit: servers classify it and
+/// other people may see it. A provider failure also carries the provider's own
+/// reason, already cleaned by `provider_reason`, which `with_provider_reason`
+/// adds for the account owner. Logs use only `diagnostic_code`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum RuntimeError {
     InvalidRequest,
@@ -16,12 +16,18 @@ pub enum RuntimeError {
     UnexpectedExit,
     Callback,
     Worker(String),
-    /// A provider failure with its cleaned reason.
+    /// A provider failure with its cleaned reason, and when a usage limit
+    /// resets, in epoch milliseconds.
     Provider {
         code: String,
         reason: String,
+        resets_at_ms: Option<i64>,
     },
 }
+
+const USAGE_LIMIT: &str = "provider_usage_limit";
+/// 2100-01-01 UTC: a later reset time is not plausible.
+const MAX_RESET_MS: i64 = 4_102_444_800_000;
 
 impl fmt::Display for RuntimeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -36,6 +42,17 @@ impl fmt::Display for RuntimeError {
             Self::Cancelled => "The agent request was cancelled.",
             Self::UnexpectedExit => "The agent stopped before completing this request. Try again.",
             Self::Callback => "A tool or extension could not complete this request. Try again.",
+            Self::Provider {
+                code,
+                resets_at_ms: Some(resets_at),
+                ..
+            } if code == USAGE_LIMIT => {
+                return write!(
+                    formatter,
+                    "This account reached its usage limit. It resets on {}.",
+                    crate::reset_time::utc_reset_time(*resets_at)
+                );
+            }
             Self::Worker(code) | Self::Provider { code, .. } => worker_message(code),
         };
         formatter.write_str(message)
@@ -54,9 +71,14 @@ impl RuntimeError {
         }
     }
 
-    /// A worker error frame: an unexpected code becomes `worker_error`, and
-    /// only a provider failure keeps the provider's cleaned reason.
-    pub(crate) fn from_worker_frame(code: String, raw_reason: Option<&str>) -> Self {
+    /// A worker error frame: an unexpected code becomes `worker_error`, only
+    /// a provider failure keeps the provider's cleaned reason, and only a
+    /// usage limit keeps a plausible reset time.
+    pub(crate) fn from_worker_frame(
+        code: String,
+        raw_reason: Option<String>,
+        limit_resets_at: Option<i64>,
+    ) -> Self {
         let code = if code.len() <= 64
             && code
                 .chars()
@@ -68,10 +90,16 @@ impl RuntimeError {
         };
         let reason = code
             .starts_with("provider_")
-            .then(|| raw_reason.and_then(crate::provider_reason))
+            .then(|| raw_reason.as_deref().and_then(crate::provider_reason))
             .flatten();
+        let resets_at_ms = limit_resets_at
+            .filter(|resets_at| code == USAGE_LIMIT && (1..MAX_RESET_MS).contains(resets_at));
         match reason {
-            Some(reason) => Self::Provider { code, reason },
+            Some(reason) => Self::Provider {
+                code,
+                reason,
+                resets_at_ms,
+            },
             None => Self::Worker(code),
         }
     }
@@ -155,6 +183,9 @@ fn worker_message(code: &str) -> &'static str {
             "The provider rejected this request. Check the selected model and settings, then try again."
         }
         "provider_http_429" => "The provider is busy or rate-limited. Try again shortly.",
+        USAGE_LIMIT => {
+            "This account reached its usage limit. Wait for it to reset or choose another model."
+        }
         "provider_http_5xx" => "The provider is temporarily unavailable. Try again shortly.",
         "provider_model_unavailable" => {
             "The selected model is unavailable for this account. Choose another model."
