@@ -9,8 +9,8 @@ const unavailable = () => Promise.reject(new Error('Projects are managed in Kord
 export function useBrowserChatProjects(enabled: boolean): ChatProjects | null {
   const catalog = useBrowserProjectCatalog(enabled);
   return useMemo(() => (enabled ? {
-    // The sidebar lists Projects only when some Mac publishes one.
-    enabled: catalog.groups.length > 0,
+    // The sidebar always has its Projects section, as on the Mac, even before a Mac publishes one.
+    enabled: true,
     projects: catalog.groups.map(({ project }) => ({ id: project.id, name: project.name, sessions: project.sessions.map((id) => ({ id })) })),
     assign: unavailable,
     create: unavailable,

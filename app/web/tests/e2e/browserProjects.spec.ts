@@ -107,10 +107,12 @@ test('an offline Mac keeps its projects listed but unavailable, and the server r
   await expect(menu.getByText('Open Kordi on the project Mac and try again.', { exact: true })).toBeVisible();
 });
 
-test('without a Mac project the sidebar has no Projects section and the composer has no project row', async ({ page, baseURL }) => {
+test('without a Mac project the sidebar still has its Projects section and the picker asks to open Kordi on the Mac', async ({ page, baseURL }) => {
   await installProjectFixture(page, baseURL!, []);
   await page.goto(`/app/agent-chats/${encodeURIComponent(sessionId)}`);
-  await expect(page.getByRole('textbox', { name: /Ask your agent/ })).toBeVisible();
-  await expect(page.locator('.chat-project-session-list').getByRole('button', { name: 'Projects', exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('Chat workspace')).toHaveCount(0);
+  const sidebar = page.locator('.chat-project-session-list');
+  await expect(sidebar.getByRole('button', { name: 'Projects', exact: true })).toBeVisible();
+  await expect(sidebar.getByRole('button', { name: 'New project', exact: true })).toHaveCount(0);
+  await page.getByLabel('Chat workspace').getByRole('button', { name: 'Choose project', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Choose project' }).getByText('Open Kordi on your Mac to use its projects here.')).toBeVisible();
 });

@@ -50,8 +50,7 @@ export function BrowserChatWorkspaceRow({ conversation, disabled }: { conversati
     };
   }, [open]);
 
-  // Nothing to choose until a Mac publishes a project.
-  if (!group && !(choosable && catalog.groups.length > 0)) return null;
+  if (!choosable && !group) return null;
   const deviceLabel = device ? (device.online ? device.name : `${device.name} · Offline`) : '';
   const assign = async (key: string, deviceId: string, projectId: string | null) => {
     setBusyId(key); setError(null);
@@ -99,8 +98,8 @@ export function BrowserChatWorkspaceRow({ conversation, disabled }: { conversati
           : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
         buttons[next]?.focus();
       }}>
-      <div className="chat-project-search"><Search size={13} aria-hidden="true" />
-        <input ref={search} aria-label="Search projects" placeholder="Search projects" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
+      {picker.hasProjects ? <div className="chat-project-search"><Search size={13} aria-hidden="true" />
+        <input ref={search} aria-label="Search projects" placeholder="Search projects" value={query} onChange={(event) => setQuery(event.target.value)} /></div> : null}
       <div className="chat-project-options">
         {picker.noProjectDeviceId ? <button data-project-option type="button" disabled={busy} className="chat-project-option"
           onClick={() => void assign('none', picker.noProjectDeviceId!, null)}>{optionIcon('none', <X size={13} aria-hidden="true" />)}<span>No project</span></button> : null}
@@ -112,7 +111,9 @@ export function BrowserChatWorkspaceRow({ conversation, disabled }: { conversati
             {optionIcon(project.id, <Folder size={13} aria-hidden="true" />)}<span>{project.name}</span>{selected ? <Check size={13} aria-hidden="true" /> : null}
           </button>)}
         </div>)}
-        {!picker.sections.length ? <p className="chat-project-empty">No matching projects</p> : null}
+        {!catalog.loaded ? <p className="chat-project-empty">Loading…</p>
+          : !picker.hasProjects ? <p className="chat-project-empty">Open Kordi on your Mac to use its projects here.</p>
+            : !picker.sections.length ? <p className="chat-project-empty">No matching projects</p> : null}
       </div>
       {error ?? catalog.error ? <ErrorLine className="m-0 p-2">{error ?? catalog.error}</ErrorLine> : null}
     </div>, document.body) : null}
