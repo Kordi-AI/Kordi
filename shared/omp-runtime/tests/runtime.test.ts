@@ -254,3 +254,22 @@ test('explicit provider continuation preserves completed tools without adding a 
   expect(requests).toHaveLength(1);
   expect(result.contextMessages.filter(message=>message.role==='user')).toHaveLength(1);
 }, 20000);
+
+test('an account usage limit fails at once with the provider message and its reset time', async () => {
+  const { request } = await fixture(() => { throw Error('unexpected request'); });
+  let calls = 0;
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch() {
+    calls += 1;
+    return Response.json({ type: 'error', error: { type: 'rate_limit_error', message: "This request would exceed your account's rate limit. Please try again later." },
+      request_id: 'req_011CZfixture0000000000000' }, { status: 429, headers: { 'retry-after': '10920' } });
+  }});
+  cleanup.push(() => server.stop(true));
+  request.model = { provider: 'anthropic', id: 'claude-sonnet-4-5', api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${server.port}` };
+  const before = Date.now();
+  const error = await runTurn(request, { event: () => {}, tool: async () => { throw Error('unexpected tool'); } }, new AbortController().signal).catch(caught => caught);
+  expect(error).toMatchObject({ code: 'provider_usage_limit',
+    providerReason: "This request would exceed your account's rate limit. Please try again later. (rate_limit_error)" });
+  expect(error.limitResetsAt).toBeGreaterThanOrEqual(before + 10_920_000);
+  expect(error.limitResetsAt).toBeLessThanOrEqual(Date.now() + 10_920_000);
+  expect(calls).toBe(1);
+}, 20000);
