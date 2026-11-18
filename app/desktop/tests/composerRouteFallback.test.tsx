@@ -252,7 +252,7 @@ async function renderMainRouting({
 }) {
   const restore = installDom();
   const root = createRoot(document.getElementById('root')!);
-  const saves: Array<{ model?: string | null; thinking?: string | null; authProvider?: string | null; authChoice?: string | null }> = [];
+  const saves: Array<{ model?: string | null; thinking?: string | null; authProvider?: string | null; authChoice?: string | null; options?: unknown }> = [];
   const route = { model: 'openai-codex/gpt-6-sol', authProvider: 'openai-codex', authChoice: storedChoice, thinking: 'max' };
   const host = {
     id: 'cloud', displayName: 'Kordi', ownerName: 'Me', serverUrl: '', activeAgentId: 'agent',
@@ -267,8 +267,8 @@ async function renderMainRouting({
     routing = useChatCollaborationRouting({
       shared: {
         desktopChatState: null, modelOptions, providerOptions: options,
-        updateRouting: (_host, _agent, model, _fallback, thinking, authProvider, authChoice) => {
-          saves.push({ model, thinking, authProvider, authChoice });
+        updateRouting: (_host, _agent, model, _fallback, thinking, authProvider, authChoice, _fallbackAuthProvider, _fallbackAuthChoice, _target, options) => {
+          saves.push({ model, thinking, authProvider, authChoice, options });
           return save();
         },
       },
@@ -337,4 +337,21 @@ test('an explicit replacement rolls back on failure and is not retried in a loop
     await harness.rerender();
     assert.equal(harness.saves.length, 1);
   } finally { await harness.cleanup(); }
+});
+
+test('the automatic account fallback saves silently, while an owner pick shows its notice', async () => {
+  const pick = { providerOption: workAccount, model: 'openai-codex/gpt-6-sol', thinking: 'high' };
+  const automatic = await renderMainRouting({ storedChoice: 'cloud-login:removed', options: [workAccount], listsLoaded: true });
+  try {
+    await act(async () => { await automatic.routing().main.saveCompactRoute(pick, { origin: 'automatic' }); });
+    assert.deepEqual(automatic.saves.map((save) => save.options), [{ origin: 'automatic' }]);
+    assert.equal(automatic.routing().main.notice, null);
+  } finally { await automatic.cleanup(); }
+
+  const owner = await renderMainRouting({ storedChoice: 'cloud-login:removed', options: [workAccount], listsLoaded: true });
+  try {
+    await act(async () => { await owner.routing().main.saveCompactRoute(pick); });
+    assert.deepEqual(owner.saves.map((save) => save.options), [undefined]);
+    assert.ok(owner.routing().main.notice);
+  } finally { await owner.cleanup(); }
 });
