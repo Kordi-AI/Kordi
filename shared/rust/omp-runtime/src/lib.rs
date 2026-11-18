@@ -5,6 +5,7 @@
 mod error;
 mod protocol;
 mod provider_reason;
+mod reset_time;
 mod supervisor_helpers;
 mod violation;
 mod warm_pool;
@@ -467,7 +468,8 @@ impl OmpRuntime {
                     sequence,
                     code,
                     _message: _,
-                    provider_reason: raw_reason,
+                    provider_reason: reason,
+                    limit_resets_at: resets_at,
                 } => {
                     check_frame(
                         request,
@@ -478,7 +480,7 @@ impl OmpRuntime {
                         sequence,
                         &mut last_sequence,
                     )?;
-                    return Err(RuntimeError::from_worker_frame(code, raw_reason.as_deref()));
+                    return Err(RuntimeError::from_worker_frame(code, reason, resets_at));
                 }
             }
         }
