@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { providerErrorCode, providerReasonText } from '../src/runtime';
+import { providerErrorCode, providerReasonText, providerRetryHintMs, usageLimitResetsAt } from '../src/runtime';
+
+const claudeUsageLimit = '429 {"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed your account\'s rate limit. Please try again later."},"request_id":"req_011CZfixture0000000000000"} retry-after-ms=10920000';
 
 test('provider errors expose only fixed classifications and HTTP status', () => {
   expect(providerErrorCode({ errorStatus: 401, errorMessage: 'secret bearer credential' })).toBe('provider_http_401');
@@ -21,4 +23,66 @@ test('the provider reason keeps one line for the host to clean', () => {
   expect(providerReasonText('   ')).toBeUndefined();
   expect(providerReasonText(undefined)).toBeUndefined();
   expect(providerReasonText('x'.repeat(5000))?.length).toBe(2000);
+});
+
+test('a Claude account usage limit reads as the provider message and resets after the hint', () => {
+  const now = 1_794_870_120_000;
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: claudeUsageLimit })).toBe('provider_usage_limit');
+  expect(providerErrorCode({ errorMessage: claudeUsageLimit })).toBe('provider_usage_limit');
+  expect(providerReasonText(claudeUsageLimit)).toBe("This request would exceed your account's rate limit. Please try again later. (rate_limit_error)");
+  expect(providerRetryHintMs(claudeUsageLimit)).toBe(10_920_000);
+  expect(usageLimitResetsAt(claudeUsageLimit, now)).toBe(now + 10_920_000);
+});
+
+test('a ChatGPT usage limit without a hint has no reset time', () => {
+  const message = 'You have hit your ChatGPT usage limit (plus plan). Try again in ~158 min.';
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: message })).toBe('provider_usage_limit');
+  expect(providerReasonText(message)).toBe(message);
+  expect(usageLimitResetsAt(message)).toBeUndefined();
+});
+
+test('short throttles stay retryable rate limits', () => {
+  const perMinute = '429 {"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed your account\'s rate limit of 50 requests per minute."}} retry-after-ms=2000';
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: perMinute })).toBe('provider_http_429');
+  expect(providerReasonText(perMinute)).toBe("This request would exceed your account's rate limit of 50 requests per minute. (rate_limit_error)");
+  expect(providerReasonText('Rate limit reached for requests per minute retry-after-ms=2000')).toBe('Rate limit reached for requests per minute');
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: 'Rate limit reached for requests retry-after-ms=2000' })).toBe('provider_http_429');
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: 'You exceeded your current quota, please check your plan and billing details.' })).toBe('provider_http_429');
+  expect(providerErrorCode({ errorMessage: 'Codex error event: Codex is at capacity, please try again later (code=turn_rate_limit_exceeded)' })).toBe('provider_http_429');
+  expect(usageLimitResetsAt('Rate limit reached retry-after-ms=0')).toBeUndefined();
+  expect(usageLimitResetsAt(`Usage limit retry-after-ms=${32 * 24 * 60 * 60_000}`)).toBeUndefined();
+});
+
+test('a server error is never a usage limit', () => {
+  expect(providerErrorCode({ errorStatus: 500, errorMessage: claudeUsageLimit })).toBe('provider_http_500');
+  expect(providerErrorCode({ errorStatus: 500, errorMessage: 'You have hit your usage limit.' })).toBe('provider_http_500');
+});
+
+test('text with braces that is not a JSON error body stays as written', () => {
+  expect(providerReasonText('Invalid value for {temperature} in request')).toBe('Invalid value for {temperature} in request');
+  expect(providerReasonText('400 {"code":"model_not_found"}')).toBe('400 {"code":"model_not_found"}');
+  expect(providerReasonText('500 {"error":"Upstream failed","request_id":"req_1"}')).toBe('Upstream failed');
+  expect(providerReasonText('404 {"error":{"message":"The model does not exist.","type":"invalid_request_error","code":"model_not_found"}}'))
+    .toBe('The model does not exist. (code=model_not_found)');
+});
+
+test('a short wait or a per-minute cap is a throttle even with account wording', () => {
+  const body = '{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed your account\'s rate limit. Please try again later."}}';
+  const shortWait = `429 ${body} retry-after-ms=3000`;
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: shortWait })).toBe('provider_http_429');
+  expect(usageLimitResetsAt(shortWait)).toBeUndefined();
+  expect(usageLimitResetsAt('Usage limit retry-after-ms=299999')).toBeUndefined();
+  const perMin = 'Rate limit reached on requests per min (RPM). Please try again in 20s. retry-after-ms=400000';
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: perMin })).toBe('provider_http_429');
+});
+
+test('a request ID does not turn a usage limit into a connection failure', () => {
+  const message = claudeUsageLimit.replace('req_011CZfixture0000000000000', 'req_011CZaTlSq9EcOnNfixture00');
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: message })).toBe('provider_usage_limit');
+});
+
+test('a JSON body on a later line does not replace the first line', () => {
+  const message = 'Local model emitted malformed tool-call JSON (HTTP 500).\n500 {"error":{"message":"Failed to parse","type":"server_error"}}';
+  expect(providerReasonText(message)).toBe('Local model emitted malformed tool-call JSON (HTTP 500).');
+  expect(providerReasonText('429 {\n  "error": { "message": "Slow down.", "type": "rate_limit_error" }\n}')).toBe('Slow down. (rate_limit_error)');
 });

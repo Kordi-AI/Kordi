@@ -484,3 +484,13 @@ fn omp_is_default_and_bad_cloud_engine_configuration_fails_closed() {
     );
     assert!(cloud_model_engine_from_setting("other").is_err());
 }
+
+#[test]
+fn an_account_usage_limit_is_a_generic_provider_failure() {
+    for message in [
+        "provider error: This account reached its usage limit. It resets on Nov 16 at 14:01 UTC.",
+        "provider error: This account reached its usage limit. Wait for it to reset or choose another model.",
+    ] {
+        assert_eq!(model_failure_code(message), "model_provider_error", "{message}");
+    }
+}

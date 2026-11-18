@@ -169,6 +169,9 @@ mod tests {
         assert!(can_use_fallback(&RuntimeError::Worker(
             "provider_http_429".into()
         )));
+        assert!(can_use_fallback(&RuntimeError::Worker(
+            "provider_usage_limit".into()
+        )));
         assert!(!can_use_fallback(&RuntimeError::Cancelled));
         assert!(!can_use_fallback(&RuntimeError::Callback));
     }
