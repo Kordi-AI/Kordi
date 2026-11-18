@@ -1,6 +1,7 @@
 import type { DesktopChatMessageRoute } from '@/lib/desktop';
 import type { CanonicalSessionMessage } from '@/kordi-app/types';
 import { canonicalJsonValuesEqual } from '@/features/canonical/canonicalEquality';
+import { humanIdentityAccountId } from '@/features/safety/serviceAccounts';
 
 import type { CloudMessage } from './authClient';
 import type { CloudAgentDefinition } from './cloudAgents';
@@ -229,6 +230,14 @@ export function cloudAgentRuntimeRouteAfterModelChange(
   });
 }
 
+// Each member's model route is their own, so another member's change in a
+// shared session never applies to this owner's route.
+function isOwnModelChangeMessage(message: CanonicalSessionMessage, accountId: string): boolean {
+  const senderAccountId = humanIdentityAccountId(message.senderIdentityId);
+  if (senderAccountId) return senderAccountId === accountId;
+  return message.senderRole !== 'person' && message.senderRole !== 'external-agent';
+}
+
 export function applyCloudAgentModelChangeMessages(
   current: Record<string, DesktopChatMessageRoute>,
   accountId: string | null | undefined,
@@ -236,14 +245,17 @@ export function applyCloudAgentModelChangeMessages(
   localExecutionRoute?: DesktopChatMessageRoute | null,
   mirroredRoutes: readonly SessionRuntimeRouteRecord[] = [],
 ): Record<string, DesktopChatMessageRoute> {
-  if (!cleanText(accountId) || (!messages?.length && !mirroredRoutes.length)) return current;
+  const localAccountId = cleanText(accountId);
+  if (!localAccountId || (!messages?.length && !mirroredRoutes.length)) return current;
 
   // A person's own request records the route it ran on; a later model change
   // wins. Records apply in session order, so a model-only change keeps the
   // account an earlier request recorded for the same provider.
   const records = [...mirroredRoutes];
   for (const message of messages ?? []) {
-    const route = message.messageKind === CLOUD_AGENT_MODEL_CHANGE_MESSAGE_KIND
+    const modelChange = message.messageKind === CLOUD_AGENT_MODEL_CHANGE_MESSAGE_KIND;
+    if (modelChange && !isOwnModelChangeMessage(message, localAccountId)) continue;
+    const route = modelChange
       ? runtimeRouteFromUnknown(message.content) ?? cloudAgentRuntimeRouteChangeFromBody(message.contentText)
       : canonicalAgentRequestRuntimeRoute(message);
     if (!route?.model) continue;

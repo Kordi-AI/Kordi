@@ -1,5 +1,9 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 
+import {
+  composerSelectionIsAutomatic,
+  type ComposerSelectionOptions,
+} from '@/features/chat/composerSelectionOrigin';
 import type { CloudAgentRuntimeRouteChangeInput } from '@/features/cloud/cloudAgentRuntime';
 import {
   cloudCollaborationConversationId,
@@ -105,6 +109,7 @@ export function useKordiCollaborationNavigationActions({
       _fallbackAuthProvider?: string | null,
       _fallbackAuthChoice?: string | null,
       targetSessionIdOverride?: string | null,
+      options?: ComposerSelectionOptions,
     ) => {
       if (!isCloudCollaborationHostId(hostId)) {
         await unsupportedAction(
@@ -136,6 +141,8 @@ export function useKordiCollaborationNavigationActions({
         authProvider: defaultAuthProvider,
         authChoice: defaultAuthChoice,
         thinking,
+        // A change the person did not make records the route without a notice.
+        ...(composerSelectionIsAutomatic(options) ? { synchronizationOnly: true } : {}),
       });
       setDesktopChatError(null);
     },

@@ -7,6 +7,7 @@ import {
   canonicalAvatarImageUrl,
   generatedAvatarPreviewUrl,
 } from '@/features/cloud/canonicalAvatar';
+import { cloudDefaultAgentAvatarSeed } from '@/features/canonical/avatarIdentity';
 import {
   DEFAULT_LOCAL_AGENT_AVATAR_SEED,
   getLocalAgentAvatar,
@@ -134,8 +135,10 @@ export function getIdentityAvatarKey(kind: IdentityAvatarKind, seed: string, ava
 export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, avatarKey, className, cornerRadius = '17%', generatedClassName, presenceStatus, presenceLabel }: IdentityAvatarProps) {
   const activeLocalProfileIdentity = useActiveLocalProfileIdentity();
   const localAgentAvatar = useLocalAgentAvatar();
+  // An account's default agent id draws that agent's server default avatar; local overrides stay keyed by the given seed.
+  const defaultAgentSeed = kind === 'agent' ? cloudDefaultAgentAvatarSeed(seed) : null;
   // Every seed that names the user's own agent renders the account's agent avatar.
-  const isOwnAgent = kind === 'agent' && !isSelf && isLocalAgentAvatarSeed(seed, localAgentAvatar);
+  const isOwnAgent = kind === 'agent' && !isSelf && isLocalAgentAvatarSeed(defaultAgentSeed ?? seed, localAgentAvatar);
   const { fallbackLabel, normalizedSeed, resolvedImageUrl: identityImageUrl } = resolveIdentityAvatarPresentation({
     kind,
     seed: isOwnAgent ? localAgentAvatar.seed : seed,
@@ -152,7 +155,7 @@ export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, ava
         kind === 'agent'
           ? AGENT_CANONICAL_AVATAR_STYLE
           : HUMAN_CANONICAL_AVATAR_STYLE,
-        normalizedSeed,
+        isOwnAgent ? normalizedSeed : defaultAgentSeed ?? normalizedSeed,
       )
     : null;
   // The account snapshot is the source of truth for the user's own agent; row props can be stale.

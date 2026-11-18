@@ -29,7 +29,7 @@ import {
 import {
   cloudGroupSessionPreparationSignature,
 } from './cloudGroupSessionPolicy';
-import { cloudGroupAgentAvatarsByAccount } from './cloudGroupIdentity';
+import { cloudGroupAgentAvatarsByAccount, cloudGroupParticipantWithAgentAvatar } from './cloudGroupIdentity';
 import { compareCloudGroupParticipants } from './cloudGroupParticipantTypes';
 import { loadSession } from './session';
 import type {
@@ -160,6 +160,7 @@ export async function applyCloudGroupSessionControl({
                 kordiId: account.kordiId,
                 displayName: account.displayName,
                 avatarUrl: canonicalAvatarImageSource(account.avatar),
+                defaultAgent: account.defaultAgent ?? null,
                 nodeId: account.nodeId,
                 isContact: false,
                 isSelf: true,
@@ -187,7 +188,12 @@ export async function applyCloudGroupSessionControl({
   const identityIdByAccount = new Map<string, string>();
   let nextState: CanonicalSessionState | null = canonicalState;
   for (const participant of participantByAccount.values()) {
-    const request = cloudGroupIdentityRequest(participant, account, localHumanIdentityId);
+    const stored = (nextState ?? canonicalState).identities.find((identity) => identity.id === `human:${participant.accountId}`);
+    const request = cloudGroupIdentityRequest(
+      cloudGroupParticipantWithAgentAvatar(participant, profileCache.get(participant.accountId), stored),
+      account,
+      localHumanIdentityId,
+    );
     identityIdByAccount.set(participant.accountId, request.id ?? '');
     const identity = await persistence.upsertCanonicalIdentityFast(request);
     nextState = stateOps.upsertIdentity(nextState, identity);

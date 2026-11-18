@@ -16,6 +16,11 @@ import {
   CHAT_COMPOSER_TEXTAREA_SELECTOR,
   focusComposerTextarea,
 } from '@/features/chat/composerController.shared';
+import type { ComposerConfigTargetOverride } from '@/features/chat/composerController.types';
+import {
+  composerSelectionIsAutomatic,
+  type ComposerSelectionOptions,
+} from '@/features/chat/composerSelectionOrigin';
 import {
   fallbackComposerThinkingValue,
   type ComposerModelOption,
@@ -69,6 +74,7 @@ type UseChatCollaborationRoutingInput = {
       fallbackAuthProvider?: string | null,
       fallbackAuthChoice?: string | null,
       targetSessionIdOverride?: string | null,
+      options?: ComposerSelectionOptions,
     ) => Promise<void>;
   };
   main: RoutingTargetInput & {
@@ -83,6 +89,8 @@ type UseChatCollaborationRoutingInput = {
       scope: 'chat',
       type: 'model' | 'thinking',
       value: string,
+      configTargetOverride?: ComposerConfigTargetOverride,
+      selectionOptions?: ComposerSelectionOptions,
     ) => void | boolean | Promise<void | boolean>;
   };
   companion: RoutingTargetInput & {
@@ -207,6 +215,7 @@ export function useChatCollaborationRouting({
     setNotice,
     setError,
     targetSessionId,
+    options,
   }: {
     agent: LocalCollaborationAgentRoutingOption | null;
     key: string | null;
@@ -215,10 +224,13 @@ export function useChatCollaborationRouting({
     setNotice: Dispatch<SetStateAction<string | null>>;
     setError: Dispatch<SetStateAction<string | null>>;
     targetSessionId?: string | null;
+    options?: ComposerSelectionOptions;
   }) => {
     if (!agent || !key) return false;
+    // The person did not make an automatic change, so it shows them no notice.
+    const automatic = composerSelectionIsAutomatic(options);
     if (isBusy) {
-      setNotice("Stop the running task before changing this session's model or thinking level.");
+      if (!automatic) setNotice("Stop the running task before changing this session's model or thinking level.");
       return false;
     }
 
@@ -266,10 +278,11 @@ export function useChatCollaborationRouting({
       routing.fallbackAuthProvider,
       routing.fallbackAuthChoice,
       targetSessionId,
+      options,
     ).then(() => {
       // A Kordi Cloud session route now holds the pick itself.
       settle(!isCloudCollaborationHostId(agent.hostId));
-      setNotice(notice);
+      if (!automatic) setNotice(notice);
       return true;
     }, (error) => {
       settle(false);
@@ -282,7 +295,7 @@ export function useChatCollaborationRouting({
     });
   };
 
-  const updateMain = ({ selectorType, ...patch }: RoutingPatch) => {
+  const updateMain = ({ selectorType, ...patch }: RoutingPatch, options?: ComposerSelectionOptions) => {
     if (selectorType && main.openSelector?.scope === 'chat'
       && main.openSelector.type === selectorType) {
       main.toggleSelector('chat', selectorType);
@@ -298,6 +311,7 @@ export function useChatCollaborationRouting({
       targetSessionId: main.conversation?.canonicalSessionId
         ?? main.conversation?.id
         ?? null,
+      options,
     });
   };
 
@@ -319,7 +333,10 @@ export function useChatCollaborationRouting({
     });
   };
 
-  const saveCompactMainRoute = (input: CompactComposerModelMenuSaveInput) => {
+  const saveCompactMainRoute = (
+    input: CompactComposerModelMenuSaveInput,
+    options?: ComposerSelectionOptions,
+  ) => {
     if (main.enabled && mainAgent) {
       return updateMain({
         defaultModel: input.model,
@@ -332,7 +349,7 @@ export function useChatCollaborationRouting({
         fallbackAuthProvider: mainAgent.fallbackAuthProvider ?? null,
         fallbackAuthChoice: mainAgent.fallbackAuthChoice ?? null,
         thinking: input.thinking,
-      });
+      }, options);
     }
 
     return (async () => {
@@ -340,10 +357,10 @@ export function useChatCollaborationRouting({
         if (await main.selectComposerProviderChoice('chat', input.providerOption) === false) return false;
       }
       if (input.model !== main.composerSelection.model) {
-        if (await main.selectComposerValue('chat', 'model', input.model) === false) return false;
+        if (await main.selectComposerValue('chat', 'model', input.model, undefined, options) === false) return false;
       }
       if (input.thinking !== main.composerSelection.thinking) {
-        if (await main.selectComposerValue('chat', 'thinking', input.thinking) === false) return false;
+        if (await main.selectComposerValue('chat', 'thinking', input.thinking, undefined, options) === false) return false;
       }
     })();
   };
