@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { CloudAuthClient, type CloudSyncResponse } from '../src/features/cloud/authClient';
 import { buildCloudAuthError, CloudAuthError } from '../src/features/cloud/cloudAuthError';
 import { syncCloudDiffOnce } from '../src/features/cloud/cloudDiffSync';
-import { chatSyncCursorExpired } from '../src/features/cloud/cloudSyncCursorProgress';
+import { chatSyncCursorExpired, chatSyncMirrorMissingConversation } from '../src/features/cloud/cloudSyncCursorProgress';
 import { conversation, message } from './helpers/chatSyncCanonicalFixtures';
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) => new Response(
@@ -123,4 +123,59 @@ test('a catch-up that hears the cursor expired asks for the reload', async () =>
   assert.equal(result.fallbackRequired, true);
   assert.equal(result.cursor, 'cursor-A');
   assert.deepEqual(commits, []);
+});
+
+const unknownConversation = 'CHAT_SYNC_UNKNOWN_CONVERSATION: Chat sync event references an unknown conversation';
+
+function chatResponse(bootstrap: boolean): CloudSyncResponse {
+  return {
+    cursor: 'cursor-B', hasMore: false, events: [],
+    chat: { bootstrap, protocolVersion: 2, nextCursor: 'cursor-B', lastStreamSeq: 6, conversations: [], messages: [], events: [] },
+  };
+}
+
+function rejectedCommitInput(message: string, response: CloudSyncResponse) {
+  return {
+    ...diffInput(() => 'cursor-A', async () => response, []),
+    commitResponse: async () => { throw new Error(message); },
+  };
+}
+
+test('a batch naming a conversation the local mirror does not hold asks for the reload and keeps the cursor', async () => {
+  const input = rejectedCommitInput(unknownConversation, chatResponse(false));
+  const result = await syncCloudDiffOnce(input);
+  assert.equal(result.fallbackRequired, true);
+  assert.equal(result.hasMore, false);
+  assert.equal(result.cursor, 'cursor-A');
+  assert.equal(result.messagesByPeer, input.messagesByPeer, 'inputs pass through unchanged');
+});
+
+test('a bootstrap the local mirror still rejects is not answered with another reload', async () => {
+  await assert.rejects(
+    syncCloudDiffOnce(rejectedCommitInput(unknownConversation, chatResponse(true))),
+    { message: unknownConversation },
+  );
+});
+
+test('other local apply failures are not masked as a reload', async () => {
+  for (const message of ['CLIENT_UPDATE_REQUIRED: unknown critical event x', 'database is locked']) {
+    await assert.rejects(syncCloudDiffOnce(rejectedCommitInput(message, chatResponse(false))), { message });
+  }
+});
+
+test('a committed batch advances to the next cursor', async () => {
+  const commits: string[] = [];
+  const result = await syncCloudDiffOnce(diffInput(() => 'cursor-A', async () => chatResponse(false), commits));
+  assert.equal(result.fallbackRequired, false);
+  assert.equal(result.cursor, 'cursor-B');
+  assert.deepEqual(commits, ['cursor-B']);
+});
+
+test('only the coded local mirror error means a missing conversation', () => {
+  assert.equal(chatSyncMirrorMissingConversation(new Error(unknownConversation)), true);
+  assert.equal(chatSyncMirrorMissingConversation(new Error('CLIENT_UPDATE_REQUIRED: unknown critical event x')), false);
+  assert.equal(chatSyncMirrorMissingConversation(new Error('Chat sync event references an unknown conversation')), false);
+  assert.equal(chatSyncMirrorMissingConversation(unknownConversation), false);
+  assert.equal(chatSyncMirrorMissingConversation({ message: unknownConversation }), false);
+  assert.equal(chatSyncMirrorMissingConversation(null), false);
 });
