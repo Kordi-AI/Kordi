@@ -197,7 +197,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // its assign command) add 10 kB to the web app only, so it moves to 6.081 MB.
 // One default-model rule for every provider and the exact ChatGPT and Claude sets add about 2 kB there
 // (6080.5 kB measured locally, the CI build runs slightly larger), so it moves to 6.084 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_084_000;
+// The connector callback page and its hand-off to the starting tab add about 6 kB to the web app only
+// (6086.7 kB measured locally), so it moves to 6.090 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_090_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;
