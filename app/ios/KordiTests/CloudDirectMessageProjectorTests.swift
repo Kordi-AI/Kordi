@@ -937,33 +937,33 @@ final class CloudDirectMessageProjectorTests: XCTestCase {
     }
 
     func testOnlyTheAgentOwnerReadsWhyAReplyFailed() throws {
-        let shared = try agentResponse(
-            requestId: "msg_request",
-            text: "Pebble couldn't reply.",
-            deliveryState: "failed",
-            failureCode: "provider_auth_rejected"
-        )
-        XCTAssertEqual(
-            CloudMessageCodec.viewerText(shared, viewerOwnsAgent: true, agentName: "Pebble"),
-            "Your AI provider connection expired. [Reconnect](kordi://settings/authentication)"
-        )
-        XCTAssertEqual(CloudMessageCodec.viewerText(shared, viewerOwnsAgent: false, agentName: "Pebble"), "Pebble couldn't reply.")
-        let model = try agentResponse(requestId: "msg_request", text: "Pebble couldn't reply.", deliveryState: "failed", failureCode: "model_unavailable")
+        func reply(_ text: String, _ code: String?) throws -> String { try agentResponse(requestId: "msg_request", text: text, deliveryState: "failed", failureCode: code) }
+        let shared = try reply("Pebble couldn't reply.", "provider_auth_rejected")
+        XCTAssertEqual(CloudMessageCodec.viewerText(shared, viewerOwnsAgent: true, agentName: "Pebble"), "Your AI provider connection expired. [Reconnect](kordi://settings/authentication)")
+        let model = try reply("Pebble couldn't reply.", "model_unavailable")
         XCTAssertEqual(CloudMessageCodec.viewerText(model, viewerOwnsAgent: true, agentName: "Pebble"), "This model isn't available with your AI provider account. Choose another model.")
-        XCTAssertEqual(CloudMessageCodec.viewerText(model, viewerOwnsAgent: false, agentName: "Pebble"), "Pebble couldn't reply.")
-
+        // The Mac's two provider codes leave the owner the stored line, as `failed` did.
+        let detailed = "The provider sign-in needs attention. Provider response: 401 https://x.test"
+        for code in ["provider_sign_in_failed", "provider_call_failed"] {
+            XCTAssertEqual(CloudMessageCodec.viewerText(try reply(detailed, code), viewerOwnsAgent: true, agentName: "Pebble"), detailed, code)
+        }
+        // Other members read a short reason from the code alone, never the stored text.
+        let (reconnect, modelService) = ("Bea needs to reconnect their model.", "The model service didn't respond. Try again.")
+        for (code, line) in [("missing_provider_auth", "Bea hasn't connected a model yet."), ("provider_auth_rejected", reconnect),
+                             ("hosted_credentials_unavailable", reconnect), ("provider_sign_in_failed", reconnect),
+                             ("model_unavailable", "Bea needs to choose another model."), ("model_provider_error", modelService),
+                             ("provider_call_failed", modelService), ("sandbox_error", "Pebble couldn't reply."), ("failed", "Pebble couldn't reply."),
+                             ("agent_unreachable", "Pebble couldn't reply."), ("made_up", "Pebble couldn't reply."), (nil, "Pebble couldn't reply.")] as [(String?, String)] {
+            XCTAssertEqual(CloudMessageCodec.viewerText(try reply(detailed, code), viewerOwnsAgent: false, agentName: "Pebble", ownerName: " Bea  Okafor "), line, code ?? "none")
+        }
+        for unknown in [nil, "", "  ", "You"] {
+            XCTAssertEqual(CloudMessageCodec.viewerText(shared, viewerOwnsAgent: false, agentName: "Pebble", ownerName: unknown), "The owner needs to reconnect their model.")
+        }
         // A line older builds stored without a code.
-        let legacy = try agentResponse(
-            requestId: "msg_request",
-            text: "Sign in again to use this account.",
-            deliveryState: "failed"
-        )
-        XCTAssertEqual(
-            CloudMessageCodec.viewerText(legacy, viewerOwnsAgent: false, agentName: "Pebble"),
-            "Pebble couldn't reply."
-        )
+        let legacy = try reply("Sign in again to use this account.", nil)
+        XCTAssertEqual(CloudMessageCodec.viewerText(legacy, viewerOwnsAgent: false, agentName: "Pebble", ownerName: "Bea"), "Pebble couldn't reply.")
+        XCTAssertEqual(CloudMessageCodec.viewerText(legacy, viewerOwnsAgent: false, agentName: nil, ownerName: "Bea"), "The agent couldn't reply.")
         XCTAssertFalse(CloudMessageCodec.viewerText(legacy, viewerOwnsAgent: true, agentName: "Pebble").contains("Sign in"))
-
         let complete = try agentResponse(requestId: "msg_request", text: "Hello", deliveryState: "complete")
         XCTAssertEqual(CloudMessageCodec.viewerText(complete, viewerOwnsAgent: false, agentName: "Pebble"), "Hello")
     }

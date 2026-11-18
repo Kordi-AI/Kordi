@@ -337,7 +337,7 @@ export function mapCollaborationConversationToViewModel(
           tools: localTurn?.tools ?? [],
           completed: responseCancelled || responseFailed || !isLiveAgentReply,
           succeeded: responseCancelled || responseFailed ? false : !isLiveAgentReply ? (localTurn?.succeeded ?? true) : false,
-          error: responseFailed ? cloudAgentViewerFailureText({ error: localTurn?.error || displayText || 'Message failed', failureCode: message.failureCode, viewerOwnsAgent: isLocalAgentResponse || isSupportContact, agentName: responseSender }) : localTurn?.error ?? null,
+          error: responseFailed ? cloudAgentViewerFailureText({ error: localTurn?.error || displayText || 'Message failed', failureCode: message.failureCode, viewerOwnsAgent: isLocalAgentResponse || isSupportContact, agentName: responseSender, ownerName: remoteHumanSourceLabel }) : localTurn?.error ?? null,
           replyToMessageId,
           pendingCollaborationAgentRequest: isLiveAgentReply && requestId ? {
             conversationId: conversation.id,

@@ -359,8 +359,9 @@ export function mapCanonicalMessage(
     ? cancelledTurnContent(displayText, cancelledByRole ? `Request canceled by ${cancelledByRole}.` : displayText.trim() || 'Request canceled.')
     : null;
   const rawErrorText = stringValue(content.error) ?? (noProviderFailure ? rawDisplayText : null) ?? 'Message failed';
+  const agentOwnerName = (identity?.kind === 'agent' && identity.ownerIdentityId ? identityById.get(identity.ownerIdentityId)?.displayName : null) ?? stringValue(content.senderOwnerName);
   const agentTurnErrorText = failed ? canonicalAgentTurnErrorText({ message, failureCode: content.failureCode, storedError: rawErrorText,
-    legacyCollaborationFailure: legacyCollaborationAgentFailure, viewerOwnsAgent: role === 'owned-agent', agentName: sender }) : null;
+    legacyCollaborationFailure: legacyCollaborationAgentFailure, viewerOwnsAgent: role === 'owned-agent', agentName: sender, ownerName: agentOwnerName }) : null;
   const sourceHumanIdentity = identity?.kind === 'agent' && identity.ownerIdentityId
     ? identityById.get(identity.ownerIdentityId)
     : identity;
