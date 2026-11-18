@@ -130,7 +130,9 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // row from the browser projects change, add about 2 kB (6044.5 kB measured in the CI build), so it moves to 6.047 MB.
 // One avatar rule for agents (the profile seed, then the account's default agent seed, on message rows,
 // group members and contacts) adds 2.4 kB (6047.1 kB measured in the CI build), so it moves to 6.049 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_049_000;
+// A short reason for other members when an agent can't reply (one fixed line per failure code and the Mac's
+// two provider failure codes) adds 2.3 kB (6049.5 kB measured with the CI build settings), so it moves to 6.052 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_052_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
