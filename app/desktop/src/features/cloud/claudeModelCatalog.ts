@@ -1,11 +1,12 @@
-// Claude opens on Sonnet 5.5 when the owner has not chosen a model. The
-// pinned OMP catalog names Opus 5.5 as Anthropic's default and lists its
-// models alphabetically, so Kordi sets its own default and lists the current
-// models first.
+// Kordi offers the four current Claude models for the Anthropic provider,
+// Sonnet 5.5 first as the default. The pinned OMP catalog lists older, dated
+// and preview models alphabetically and names Opus 5.5 as Anthropic's
+// default, so only these ids are offered. Claude through other providers
+// (Bedrock, Vertex, OpenRouter and so on) keeps those providers' lists.
 
 export const CLAUDE_DEFAULT_MODEL = 'claude-sonnet-5-5';
 
-/** Current Claude models in the order the picker lists them, the default first. */
+/** The Claude models Kordi offers, in the order the picker lists them, the default first. */
 export const CLAUDE_MODEL_ORDER = [
   CLAUDE_DEFAULT_MODEL,
   'claude-opus-5-5',
@@ -13,20 +14,19 @@ export const CLAUDE_MODEL_ORDER = [
   'claude-haiku-5-5',
 ] as const;
 
-/** Ranked models first in picker order; the rest keep their order after them. */
-export function orderClaudeModels(models: readonly string[]): string[] {
-  const rank = (model: string) => {
-    const index = (CLAUDE_MODEL_ORDER as readonly string[]).indexOf(model);
-    return index < 0 ? CLAUDE_MODEL_ORDER.length : index;
-  };
-  return [...new Set(models)]
-    .map((model, position) => ({ model, position }))
-    .sort((left, right) => rank(left.model) - rank(right.model) || left.position - right.position)
-    .map(({ model }) => model);
+/** True for a model id Kordi offers for the Anthropic provider. */
+export function isOfferedClaudeModel(modelId: string) {
+  return (CLAUDE_MODEL_ORDER as readonly string[]).includes(modelId.trim().toLowerCase());
 }
 
-/** A Claude catalog entry with the current models first and Sonnet 5.5 as its default; other entries, or a catalog without it, stay as they are. */
+/** The offered Claude models among `models`, in picker order; any other model is dropped. */
+export function orderClaudeModels(models: readonly string[]): string[] {
+  const offered = new Set(models.map((model) => model.trim().toLowerCase()));
+  return CLAUDE_MODEL_ORDER.filter((model) => offered.has(model));
+}
+
+/** The Anthropic catalog entry lists exactly the offered models, Sonnet 5.5 as its default; other entries stay as they are. */
 export function withClaudeModelCatalog<T extends { id: string; models: string[]; defaultModel?: string | null }>(entry: T): T {
-  if (entry.id !== 'anthropic' || !entry.models.includes(CLAUDE_DEFAULT_MODEL)) return entry;
-  return { ...entry, models: orderClaudeModels(entry.models), defaultModel: CLAUDE_DEFAULT_MODEL };
+  if (entry.id !== 'anthropic' || entry.models.length === 0) return entry;
+  return { ...entry, models: [...CLAUDE_MODEL_ORDER], defaultModel: CLAUDE_DEFAULT_MODEL };
 }

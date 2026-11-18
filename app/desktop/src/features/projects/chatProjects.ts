@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, type ComponentType } from 'react';
 import type { ChatWorkspaceSelection, GitWorkspace } from './gitWorkspace';
 import type { Conversation } from '@/kordi-app/types';
 import { isLocalDraftChatConversationId } from '@/features/chat/draftSessions';
@@ -18,6 +18,8 @@ export type ChatProjects = {
   gitWorkspace?: (root: string, workspaceRoot?: string, workspaceId?: string) => Promise<GitWorkspace | null>;
   assign: (sessionId: string, root: string, workspace?: ChatWorkspaceSelection) => Promise<void>;
   create: (sessionId: string, name: string, folder: string) => Promise<void>;
+  /** Replaces the composer's workspace row, for a runtime without local project folders. */
+  WorkspaceRow?: ComponentType<{ conversation: Conversation; disabled: boolean }>;
 };
 
 export const ChatProjectsContext = createContext<ChatProjects | null>(null);

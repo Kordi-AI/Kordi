@@ -1,7 +1,7 @@
 import { modelDisplayName } from '@/lib/modelDisplayName';
 import { conversationChatKindLabel } from '@/features/chat/sessionKindLabels';
 import type { ComposerModelOption, ComposerProviderOption } from '@/kordi-app/components';
-import { matchingComposerAccountOption } from '@/kordi-app/components/composerModelSelection';
+import { defaultComposerModelOption, matchingComposerAccountOption } from '@/kordi-app/components/composerModelSelection';
 import { ACCOUNT_UNAVAILABLE_LABEL, isAccountAuthChoice } from '@/features/cloud/routeAccountChoice';
 import type { Conversation, ConversationParticipant, Message } from '@/kordi-app/types';
 import type { TranscriptDensityMode } from '@/kordi-app/components/transcript';
@@ -420,9 +420,9 @@ export function authChoiceFromProviderOption(option: ComposerProviderOption) {
   return option.value.includes('::') ? option.value.split('::').slice(1).join('::') : null;
 }
 
-export function firstModelForProvider(providerId: string, modelOptions?: ComposerModelOption[]) {
-  const normalized = normalizeRoutingProviderId(providerId);
-  return modelOptions?.find((option) => normalizeRoutingProviderId(option.provider ?? '') === normalized)?.value ?? null;
+/** The model a provider's account opens on: its provider's default model (see `providerDefaultModel`). */
+export function defaultModelForProvider(providerId: string, modelOptions?: ComposerModelOption[]) {
+  return modelOptions ? defaultComposerModelOption(providerId, modelOptions)?.value ?? null : null;
 }
 
 export function collaborationAuthDisplayName(authProvider?: string | null, authChoice?: string | null, providerOptions?: ComposerProviderOption[]) {

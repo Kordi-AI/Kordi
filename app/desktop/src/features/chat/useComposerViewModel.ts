@@ -10,7 +10,8 @@ import {
 } from '@/kordi-app/auth/model';
 import type { OmpCatalogEntry } from '@/kordi-app/auth/ompCatalog';
 import type { ComposerAuthOption, ComposerModelOption, ComposerProviderOption } from '@/kordi-app/components';
-import { CLAUDE_DEFAULT_MODEL } from '@/features/cloud/claudeModelCatalog';
+import { defaultComposerModelOption } from '@/kordi-app/components/composerModelSelection';
+import { isOfferedProviderModel, withOfferedModelOptions, withProviderDefaultModels } from '@/features/cloud/providerModels';
 import { useHostedAccounts } from '@/features/cloud/hostedAccounts';
 import { catalogModelThinkingLevels } from '@/features/cloud/modelThinkingLevels';
 import { setLocalAccountChoices, setLocalProviderIds } from '@/features/cloud/hostedAccountRegistry';
@@ -82,6 +83,10 @@ function inferLocalThinkingLevels(providerId: string, modelId: string) {
   return ['off'];
 }
 
+function optionModelId(value: string) {
+  return value.slice(value.indexOf('/') + 1);
+}
+
 type UseComposerViewModelArgs = {
   isNativeShell: boolean;
   desktopAuthState: DesktopAuthState | null;
@@ -137,26 +142,13 @@ export function preferredModelValueForProviderFromOptions(
       return normalizedValueModel === normalizedPreferredModel
         || option.label.trim().toLowerCase() === normalizedPreferredModel;
     });
-    if (exactRuntimeMatch) return exactRuntimeMatch.value;
-  }
-  // Claude opens on Sonnet 5.5, else the previous Sonnet. Labels are display
-  // names ("Claude Sonnet 5.5"), so Claude models match by exact model id.
-  if (modelProviderId === 'anthropic') {
-    for (const modelId of [CLAUDE_DEFAULT_MODEL, 'claude-sonnet-5']) {
-      const match = providerModels.find((option) => option.value === `anthropic/${modelId}`);
-      if (match) return match.value;
+    // A runtime default Kordi no longer offers (an older ChatGPT or Claude model) is never preferred.
+    if (exactRuntimeMatch && isOfferedProviderModel(modelProviderId, optionModelId(exactRuntimeMatch.value))) {
+      return exactRuntimeMatch.value;
     }
   }
-  const preferredNeedles = modelProviderId === 'openai'
-    ? ['gpt-6.1-sol', 'gpt-6-1-sol', 'gpt-5.6-sol', 'gpt-5-6-sol', 'gpt-5.5', 'gpt-5.4', 'gpt-5']
-    : [];
-
-  for (const needle of preferredNeedles) {
-    const match = providerModels.find((option) => option.label.toLowerCase().includes(needle));
-    if (match) return match.value;
-  }
-
-  return savedLocalModelValue ?? providerModels[0]?.value ?? null;
+  // Otherwise the provider's default model (see `providerDefaultModel`).
+  return savedLocalModelValue ?? defaultComposerModelOption(modelProviderId, providerModels, providerId)?.value ?? null;
 }
 
 export function useComposerViewModel({
@@ -195,7 +187,8 @@ export function useComposerViewModel({
       return [];
     }
 
-    const options: ComposerModelOption[] = (desktopChatState?.modelOptions ?? []).map((option) => ({
+    // This Mac's ChatGPT, OpenAI and Claude models are limited to the ones Kordi offers.
+    const options: ComposerModelOption[] = withOfferedModelOptions(desktopChatState?.modelOptions ?? []).map((option) => ({
       value: option.value,
       label: option.label,
       detail: option.detail,
@@ -242,7 +235,11 @@ export function useComposerViewModel({
       if (!options.some((existing) => existing.value === option.value)) options.push(option);
     }
 
-    return options.map((option) => ({ ...option, label: modelDisplayName(option.value, option.label) }));
+    // Each provider's default model is marked once here, for the picker's Default row and every default route.
+    return withProviderDefaultModels(
+      options.map((option) => ({ ...option, label: modelDisplayName(option.value, option.label) })),
+      hostedState.catalog,
+    );
   }, [authDisplayProviders, browserApp, composerSelections.chat.model, composerSelections.project.model, desktopChatState?.modelOptions, hostedAccounts, hostedState.catalog, isNativeShell]);
 
   const composerProviderOptions = useMemo<ComposerProviderOption[]>(() => {

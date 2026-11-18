@@ -11,7 +11,7 @@ the same navigation, conversation controls, settings, and visual design.
 | `src/main.tsx` and `index.html` | Browser entry point |
 | `src/auth/` | Browser runtime selection and cookie-session transport |
 | `src/app/` | Browser navigation, history, workspace scope, and hosted titles |
-| `src/runtime/` | Browser storage, canonical projections, uploads, downloads, and recording |
+| `src/runtime/` | Browser storage, canonical projections, uploads, downloads, recording, and the account's Mac project catalog |
 | `src/styles/` | Browser shell adaptations |
 | `tests/unit/` | Browser runtime and isolation tests |
 | `tests/e2e/` | Full application tests with explicitly synthetic API fixtures |

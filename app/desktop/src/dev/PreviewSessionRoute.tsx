@@ -18,7 +18,7 @@ type Route = { model: string; thinking: string; authProvider: string | null; aut
  * gate: a route that names a removed account shows "Account unavailable", and
  * the saved accounts of the Kordi account are listed as route choices.
  */
-export function PreviewSessionRoute({ providers, initialAuthChoice, initialAuthProvider = 'openai-codex', initialModel = 'openai-codex/gpt-5.5', loadSnapshots }: {
+export function PreviewSessionRoute({ providers, initialAuthChoice, initialAuthProvider = 'openai-codex', initialModel = 'openai-codex/gpt-6.2-sol', loadSnapshots }: {
   providers: DesktopAuthProvider[];
   initialAuthChoice: string;
   initialAuthProvider?: string;
@@ -51,8 +51,8 @@ export function PreviewSessionRoute({ providers, initialAuthChoice, initialAuthP
     ...hostedProviderOptions(hostedAccounts, routeRunsOnKordiCloud(route) ? route.authChoice : null),
   ];
   const modelOptions = [
-    { value: 'openai-codex/gpt-5.5', label: 'gpt-5.5', provider: 'openai-codex' },
-    { value: 'openai/gpt-5.5', label: 'gpt-5.5', provider: 'openai' },
+    { value: 'openai-codex/gpt-6.2-sol', label: 'gpt-6.2-sol', provider: 'openai-codex' },
+    { value: 'openai/gpt-6.2-sol', label: 'gpt-6.2-sol', provider: 'openai' },
     ...hostedModelOptions(hostedAccounts),
   ];
   const unavailable = isRouteAccountUnavailable(route, providerOptions);

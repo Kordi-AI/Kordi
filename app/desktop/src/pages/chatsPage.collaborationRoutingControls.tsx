@@ -15,7 +15,7 @@ import type { DesktopCollaborationAgentRouting } from '@/kordi-app/types';
 import { cn } from '@/lib/utils';
 import {
   authChoiceFromProviderOption,
-  firstModelForProvider,
+  defaultModelForProvider,
 } from '@/pages/chatsPage.model';
 import type { ChatsPageRuntime } from '@/pages/chatsPage.types';
 
@@ -170,7 +170,7 @@ export function CollaborationRoutingControls({
           });
         }}
         onSelectProviderChoice={(_scope, option) => {
-          const nextModel = firstModelForProvider(option.providerId, modelOptions);
+          const nextModel = defaultModelForProvider(option.providerId, modelOptions);
           if (!nextModel) return;
           return actions.onUpdate({
             defaultModel: nextModel,

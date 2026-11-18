@@ -8,7 +8,7 @@ import { composerThinkingLevelsIncludingCurrent } from './composerThinking';
 import { isModelUnavailableForSignIn, useModelAvailabilityVersion } from '@/features/chat/modelAvailability';
 import { rememberModelCatalog } from '@/features/chat/modelAvailabilityRoutes';
 import {
-  authChoiceFromProviderOption, composerModelsForProvider, composerProviderOptionUsable, normalizeComposerProviderId,
+  authChoiceFromProviderOption, composerModelsForProvider, composerProviderOptionUsable, defaultComposerModelOption, normalizeComposerProviderId,
   providerDisplayLabel, resolveComposerModelSelection, resolveComposerRoutePick,
   type ComposerModelOption, type ComposerProviderOption, type ComposerRoute, type ComposerRoutePick,
 } from './composerModelSelection';
@@ -66,8 +66,11 @@ export function ModelEffortPicker({ selection, providerOptions, modelOptions, on
   const refused = (option: ComposerModelOption) => Boolean(account && option.provider
     && normalizeComposerProviderId(option.provider) === normalizeComposerProviderId(account.providerId)
     && isModelUnavailableForSignIn({ provider: account.providerId, authChoice: authChoiceFromProviderOption(account) ?? '', model: option.value }));
-  const providerModels = composerModelsForProvider(account?.providerId ?? resolved.selectedProviderValue, modelOptions);
-  const defaultModel = providerModels.find((option) => !refused(option)) ?? providerModels[0];
+  const defaultProviderId = account?.providerId ?? resolved.selectedProviderValue;
+  const providerModels = composerModelsForProvider(defaultProviderId, modelOptions);
+  // The provider's default model; when this sign-in refused it, the first model it has not refused.
+  const usableModels = providerModels.filter((option) => !refused(option));
+  const defaultModel = defaultComposerModelOption(defaultProviderId, usableModels.length > 0 ? usableModels : providerModels);
   const requestedModel = modelOptions.find((option) => option.value === accountModel);
   // Picking a model, or recovering a removed account, asks only for an account of that provider.
   // Otherwise the account row lists every connected account, and choosing one of another

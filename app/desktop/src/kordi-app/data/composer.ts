@@ -1,12 +1,7 @@
-export const composerModelOptions = [
-  'GPT-5.6-Luna',
-  'GPT-5.6-Sol',
-  'GPT-5.6-Terra',
-  'GPT-5.5',
-  'GPT-5.4-Mini',
-  'GPT-5.4',
-  'GPT-5.3-Codex-Spark',
-] as const;
+import { CHATGPT_MODEL_ORDER } from '@/features/cloud/chatgptModelCatalog';
+
+/** The models a composer lists before any account provides its own. */
+export const composerModelOptions = CHATGPT_MODEL_ORDER;
 
 export const composerModeOptions = {
   chat: ['Send as Me', 'Send as Research Agent', 'Delegate to Research Agent', 'Internal note'],

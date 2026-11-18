@@ -1,6 +1,7 @@
 import { canonicalCloudProviderId } from '@/features/cloud/providerAuthSnapshot';
 import { withChatGptModelCatalog } from '@/features/cloud/chatgptModelCatalog';
 import { withClaudeModelCatalog } from '@/features/cloud/claudeModelCatalog';
+import { providerDefaultModel } from '@/features/cloud/providerModels';
 import { DEVICE_ACTIVE_CHOICES } from '@/features/cloud/routeAccountChoice';
 import type { CloudProviderAuthSnapshot } from '@/features/cloud/cloudAgentRuntimeTypes';
 import type { OmpLoginKind, OmpLoginSpec } from '@/features/cloud/providerLogin';
@@ -171,8 +172,7 @@ function preferredCatalogModel(providerId: string, preferredModel: string | null
   const modelId = modelProvider === providerId || (providerId === 'openai-codex' && modelProvider === 'openai')
     ? modelParts.join('/') : '';
   if (modelId && entry.models.includes(modelId)) return `${providerId}/${modelId}`;
-  const fallback = entry.defaultModel && entry.models.includes(entry.defaultModel)
-    ? entry.defaultModel : entry.models[0];
+  const fallback = providerDefaultModel(providerId, entry.models, entry.defaultModel);
   return fallback ? `${providerId}/${fallback}` : null;
 }
 
