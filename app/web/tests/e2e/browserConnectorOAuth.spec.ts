@@ -28,7 +28,27 @@ async function openConnectors(page: Page) {
   await page.getByRole('button', { name: 'Connectors', exact: true }).click();
 }
 
-test('browser Connectors finishes a Google Calendar grant through the callback page', async ({ page, baseURL }) => {
+function callbackTarget(redirectAfter: string): string {
+  return `${redirectAfter}#kordi_connector=${base64UrlJson({
+    completionCode: COMPLETION_CODE, provider: 'google_calendar', grant: 'read', status: 'pending',
+  })}`;
+}
+
+test('browser Connectors finishes a Google Calendar grant through the callback page', async ({ page, baseURL, browserName }) => {
+  // Playwright's WebKit process crashes on the macOS 15 CI image when a page
+  // opens a window. Chromium covers the real provider window; WebKit records
+  // the provider URL and loads the callback in a second page of the same
+  // context, which exercises the same callback page and channel.
+  const providerWindow = browserName !== 'webkit';
+  if (!providerWindow) {
+    await page.addInitScript(() => {
+      const record = (url: string) => { (window as unknown as { syntheticProviderUrl?: string }).syntheticProviderUrl = url; };
+      window.open = ((url?: string | URL) => {
+        if (url) record(String(url));
+        return { closed: false, opener: null, close() { this.closed = true; }, location: { replace: record } };
+      }) as unknown as typeof window.open;
+    });
+  }
   await installApiFixture(page, baseURL!, true);
   const errors: string[] = [];
   page.on('pageerror', error => { if (!isCancelledFixtureRequest(error.message)) errors.push(error.message); });
@@ -67,15 +87,10 @@ test('browser Connectors finishes a Google Calendar grant through the callback p
   // The server's OAuth callback redirects the provider window to `redirectAfter`
   // with the pending grant in the fragment. WebKit cannot fulfill a redirect
   // status, so the synthetic provider page redirects by script.
-  await page.context().route(`${PROVIDER_CONSENT}**`, route => {
-    const target = `${redirectAfter}#kordi_connector=${base64UrlJson({
-      completionCode: COMPLETION_CODE, provider: 'google_calendar', grant: 'read', status: 'pending',
-    })}`;
-    return route.fulfill({
-      status: 200, contentType: 'text/html',
-      body: `<!doctype html><title>Synthetic provider</title><script>location.replace(${JSON.stringify(target)})</script>`,
-    });
-  });
+  await page.context().route(`${PROVIDER_CONSENT}**`, route => route.fulfill({
+    status: 200, contentType: 'text/html',
+    body: `<!doctype html><title>Synthetic provider</title><script>location.replace(${JSON.stringify(callbackTarget(redirectAfter))})</script>`,
+  }));
   const popupUrls: string[] = [];
   const popupApiRequests: string[] = [];
   let popup: Page | null = null;
@@ -93,13 +108,35 @@ test('browser Connectors finishes a Google Calendar grant through the callback p
   await page.getByRole('button', { name: 'Connect Google Calendar', exact: true }).click();
   await page.getByRole('button', { name: 'Continue to Google', exact: true }).click();
 
-  await expect(page.getByRole('button', { name: 'Disconnect Google Calendar', exact: true })).toBeVisible();
-  expect(completions).toEqual([COMPLETION_CODE]);
-  // The callback page relays the result, drops the fragment, and closes itself.
-  await expect.poll(() => (popup as Page | null)?.isClosed() ?? false).toBe(true);
-  expect(popupUrls.some(url => url.includes('#kordi_connector='))).toBe(true);
-  expect(popupUrls.at(-1)).toBe(redirectAfter);
-  expect(popupApiRequests).toEqual([]);
+  const connectedInKordi = async () => {
+    await expect(page.getByRole('button', { name: 'Disconnect Google Calendar', exact: true })).toBeVisible();
+    expect(completions).toEqual([COMPLETION_CODE]);
+  };
+  if (providerWindow) {
+    await connectedInKordi();
+    // The callback page relays the result, drops the fragment, and closes itself.
+    await expect.poll(() => (popup as Page | null)?.isClosed() ?? false).toBe(true);
+    expect(popupUrls.some(url => url.includes('#kordi_connector='))).toBe(true);
+    expect(popupUrls.at(-1)).toBe(redirectAfter);
+    expect(popupApiRequests).toEqual([]);
+  } else {
+    await expect.poll(() => page.evaluate(() => (window as unknown as { syntheticProviderUrl?: string }).syntheticProviderUrl))
+      .toBe(`${PROVIDER_CONSENT}?state=synthetic_state`);
+    const callback = await page.context().newPage();
+    const callbackApiRequests: string[] = [];
+    callback.on('request', request => {
+      const url = new URL(request.url());
+      if (/^\/v[12]\//.test(url.pathname)) callbackApiRequests.push(url.pathname);
+    });
+    await callback.goto(callbackTarget(redirectAfter));
+    await connectedInKordi();
+    // The callback page relays the result and drops the fragment. Only a
+    // window that a page opened can close itself, so this one stays open.
+    await expect(callback.getByRole('status')).toContainText('Connected');
+    expect(callback.url()).toBe(redirectAfter);
+    expect(callbackApiRequests).toEqual([]);
+    await callback.close();
+  }
 
   await page.getByRole('button', { name: 'Back to connectors', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Google Calendar, Connected · Read only', exact: true })).toBeVisible();
