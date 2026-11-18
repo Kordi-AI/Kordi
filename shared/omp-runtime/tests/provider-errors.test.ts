@@ -65,3 +65,24 @@ test('text with braces that is not a JSON error body stays as written', () => {
   expect(providerReasonText('404 {"error":{"message":"The model does not exist.","type":"invalid_request_error","code":"model_not_found"}}'))
     .toBe('The model does not exist. (code=model_not_found)');
 });
+
+test('a short wait or a per-minute cap is a throttle even with account wording', () => {
+  const body = '{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed your account\'s rate limit. Please try again later."}}';
+  const shortWait = `429 ${body} retry-after-ms=3000`;
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: shortWait })).toBe('provider_http_429');
+  expect(usageLimitResetsAt(shortWait)).toBeUndefined();
+  expect(usageLimitResetsAt('Usage limit retry-after-ms=299999')).toBeUndefined();
+  const perMin = 'Rate limit reached on requests per min (RPM). Please try again in 20s. retry-after-ms=400000';
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: perMin })).toBe('provider_http_429');
+});
+
+test('a request ID does not turn a usage limit into a connection failure', () => {
+  const message = claudeUsageLimit.replace('req_011CZfixture0000000000000', 'req_011CZaTlSq9EcOnNfixture00');
+  expect(providerErrorCode({ errorStatus: 429, errorMessage: message })).toBe('provider_usage_limit');
+});
+
+test('a JSON body on a later line does not replace the first line', () => {
+  const message = 'Local model emitted malformed tool-call JSON (HTTP 500).\n500 {"error":{"message":"Failed to parse","type":"server_error"}}';
+  expect(providerReasonText(message)).toBe('Local model emitted malformed tool-call JSON (HTTP 500).');
+  expect(providerReasonText('429 {\n  "error": { "message": "Slow down.", "type": "rate_limit_error" }\n}')).toBe('Slow down. (rate_limit_error)');
+});

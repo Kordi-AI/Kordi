@@ -243,9 +243,10 @@ export function providerErrorCode(error: { errorStatus?: number; errorMessage?: 
   if (/model.*(?:not found|not supported|does not exist|unavailable|not allowed)|unsupported.*model/i.test(message)) return 'provider_model_unavailable';
   if (/invalid.*(?:tool|schema)|(?:tool|schema).*invalid/i.test(message)) return 'provider_tool_schema';
   if (/unsupported.*(?:parameter|value)|unknown.*parameter|unrecognized.*parameter/i.test(message)) return 'provider_unsupported_parameter';
+  // Before the TLS and connection checks: a request ID in the body can contain their keywords.
+  if (isUsageLimit(error.errorStatus, message)) return 'provider_usage_limit';
   if (/certificate|TLS|SSL/i.test(message)) return 'provider_tls';
   if (/fetch failed|unable to connect|connection refused|network|ENOTFOUND|ECONN/i.test(message)) return 'provider_connection';
-  if (isUsageLimit(error.errorStatus, message)) return 'provider_usage_limit';
   if (Number.isInteger(error.errorStatus) && error.errorStatus! >= 400 && error.errorStatus! <= 599) return `provider_http_${error.errorStatus}`;
   // Stream error events (Codex) carry no HTTP status.
   if (/rate.?limit|too many requests|at capacity/i.test(message)) return 'provider_http_429';
@@ -262,9 +263,12 @@ const USAGE_LIMIT_MAX_WAIT_MS = 31 * 24 * 60 * 60_000;
  */
 function isUsageLimit(status: number | undefined, message: string) {
   if (status !== undefined && ![429, 402, 403].includes(status)) return false;
-  if ((providerRetryHintMs(message) ?? 0) >= USAGE_LIMIT_MIN_WAIT_MS) return true;
-  return /usage.?limit|usage_limit_reached|out of (?:extra )?usage|\baccount(?:'s)?\b[^\n]{0,80}\brate.?limit/i.test(message)
-    && !/\bper[- ]?(?:second|minute)\b/i.test(message);
+  // A per-minute or per-second cap is a throttle, whatever wait comes with it.
+  if (/\bper[- ]?(?:sec(?:ond)?|min(?:ute)?)\b|\b(?:rpm|tpm)\b/i.test(message)) return false;
+  // When the provider names a wait, its length decides.
+  const wait = providerRetryHintMs(message);
+  if (wait !== undefined && wait > 0) return wait >= USAGE_LIMIT_MIN_WAIT_MS;
+  return /usage.?limit|usage_limit_reached|out of (?:extra )?usage|\baccount(?:'s)?\b[^\n]{0,80}\brate.?limit/i.test(message);
 }
 
 /** The SDK's `retry-after-ms=<n>` hint on a provider error, in milliseconds. */
@@ -277,13 +281,13 @@ export function providerRetryHintMs(errorMessage: unknown) {
 /** When a usage limit resets, in epoch milliseconds, from the provider's retry hint. */
 export function usageLimitResetsAt(errorMessage: unknown, now = Date.now()) {
   const wait = providerRetryHintMs(errorMessage);
-  return wait !== undefined && wait > 0 && wait <= USAGE_LIMIT_MAX_WAIT_MS ? Math.trunc(now + wait) : undefined;
+  return wait !== undefined && wait >= USAGE_LIMIT_MIN_WAIT_MS && wait <= USAGE_LIMIT_MAX_WAIT_MS ? Math.trunc(now + wait) : undefined;
 }
 
 /**
  * The provider's own words, size-capped: the message of a JSON error body
- * when there is one, else the first line. The Kordi host removes credentials
- * and IDs before display.
+ * that starts on the first line, else the first line. The Kordi host removes
+ * credentials and IDs before display.
  */
 export function providerReasonText(errorMessage: unknown) {
   if (typeof errorMessage !== 'string') return undefined;
@@ -296,7 +300,9 @@ export function providerReasonText(errorMessage: unknown) {
 function errorBodyMessage(text: string) {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return undefined;
+  const lineEnd = text.search(/\r?\n/u);
+  // A body on a later line follows wording the SDK chose to put first.
+  if (start < 0 || end <= start || (lineEnd >= 0 && start > lineEnd)) return undefined;
   let body: any;
   try { body = JSON.parse(text.slice(start, end + 1)); } catch { return undefined; }
   const error = body?.error;
