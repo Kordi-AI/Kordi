@@ -128,7 +128,9 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // The Beta 10 What's New entry adds about 0.6 kB (6041.7 kB measured locally), so it moves to 6.044 MB.
 // One default-model rule for every provider and the exact ChatGPT and Claude sets, with the shared project
 // row from the browser projects change, add about 2 kB (6044.5 kB measured in the CI build), so it moves to 6.047 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_047_000;
+// One avatar rule for agents (the profile seed, then the account's default agent seed, on message rows,
+// group members and contacts) adds 2.4 kB (6047.1 kB measured in the CI build), so it moves to 6.049 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_049_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.

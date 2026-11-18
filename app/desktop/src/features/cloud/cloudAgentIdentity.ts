@@ -3,10 +3,11 @@ import {
   parseGeneratedAvatarMarker,
   type CanonicalAvatarMutation,
 } from './canonicalAvatar';
+import { cloudDefaultAgentAvatarSeed } from '@/features/canonical/avatarIdentity';
 import type { CanonicalIdentity, CanonicalSessionMessage } from '@/kordi-app/types';
 import type { CloudAccount } from './authClient';
 import { cloudAvatarImageUrl } from './avatar';
-import { defaultAgentDisplayName } from '@/lib/identityLabels';
+import { defaultAgentDisplayName, isValidAvatarSeed } from '@/lib/identityLabels';
 
 const LEGACY_DEFAULT_AGENT_PROFILE_MIGRATION_KEY = 'kordi.defaultAgentProfile.migratedAccount.v1';
 
@@ -72,6 +73,22 @@ export function cloudAgentId(
     : id;
 }
 
+/**
+ * An agent's generated avatar seed: the profile's seed when valid, then the server
+ * default seed of an account's default agent, then the agent id.
+ */
+export function cloudAgentAvatarSeed(input: {
+  agentId?: string | null;
+  ownerAccountId?: string | null;
+  profileSeed?: string | null;
+}): string {
+  const profileSeed = input.profileSeed?.trim();
+  if (profileSeed && isValidAvatarSeed(profileSeed)) return profileSeed;
+  const owner = input.ownerAccountId?.trim() ?? '';
+  return cloudDefaultAgentAvatarSeed(cloudAgentId(input.agentId, owner))
+    ?? (input.agentId?.trim() || `cloud-agent:${owner}`);
+}
+
 export function cloudAgentCanonicalIdentityId(
   agentId: string | null | undefined,
   ownerAccountId: string,
@@ -125,7 +142,11 @@ export function cloudCanonicalDefaultAgentContactFields(identity: CanonicalIdent
     targetCloudAgentOwnerAccountId: accountId,
     targetCloudAgentOwnerName: identity.displayName || accountId,
     targetCloudAgentAvatarUrl: text('defaultAgentAvatarUrl'),
-    targetCloudAgentAvatarSeed: text('defaultAgentAvatarSeed') ?? defaultCloudAgentId(accountId),
+    targetCloudAgentAvatarSeed: cloudAgentAvatarSeed({
+      agentId: text('defaultAgentId'),
+      ownerAccountId: accountId,
+      profileSeed: text('defaultAgentAvatarSeed'),
+    }),
   };
 }
 

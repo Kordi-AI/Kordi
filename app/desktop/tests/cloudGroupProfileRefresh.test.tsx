@@ -149,7 +149,11 @@ test("a collaborator's open group redraws the owner's agent on the next director
         assert.deepEqual(fetched, [PRIYA]);
         assert.match(src(), new RegExp(`/v1/avatars/${CANONICAL_AVATAR_RENDERER_VERSION}/kordi-birds/bird-robin-color-coral\\.png\\?v=2$`));
         assert.equal(profileCacheRef.current.get(PRIYA)?.defaultAgent?.avatar.seed, 'bird-robin-color-coral');
-        assert.deepEqual(upserts.map((request) => request.id), [`agent:cloud-agent:cloud-agent:${PRIYA}`], "Priya's own picture is unchanged");
+        // Her member identity records the new bird for her agent; her own picture is unchanged.
+        assert.deepEqual(upserts.map((request) => request.id), [`agent:cloud-agent:cloud-agent:${PRIYA}`, `human:${PRIYA}`]);
+        const priyaBefore = initialState.identities.find((identity) => identity.id === `human:${PRIYA}`);
+        assert.equal(upserts[1].profileImageUrl, priyaBefore?.profileImageUrl, "Priya's own picture is unchanged");
+        assert.equal((upserts[1].metadata as Record<string, unknown>).defaultAgentAvatarSeed, 'bird-robin-color-coral');
         // The next agent reply in that group reuses the prepared data, now with the new bird.
         const group = preparationCacheRef.current.entries.get(GROUP);
         assert.equal(group?.agentAvatarByAccount.get(PRIYA)?.agentAvatarUrl, picked.defaultAgent?.avatarUrl);
@@ -255,7 +259,8 @@ test('an older profile response that arrives after a newer one is dropped', asyn
     older.resolve(priyaProfile('bird-robin-color-coral', 2));
     assert.deepEqual(await first, [], 'the older response writes nothing');
 
-    assert.deepEqual(writes.map((request) => request.id), [PRIYA_AGENT_IDENTITY]);
+    assert.deepEqual(writes.map((request) => request.id), [PRIYA_AGENT_IDENTITY, `human:${PRIYA}`]);
+    assert.equal((writes[1].metadata as Record<string, unknown>).defaultAgentAvatarSeed, 'bird-owl-ink-paper');
     assert.match(fixture.agentImage(), /\/kordi-birds\/bird-owl-ink-paper\.png\?v=3$/);
     assert.equal(fixture.profileCache.get(PRIYA)?.defaultAgent?.avatar.seed, 'bird-owl-ink-paper');
     assert.match(fixture.preparationCache.get(GROUP)?.agentAvatarByAccount.get(PRIYA)?.agentAvatarUrl ?? '', /bird-owl-ink-paper/);
@@ -286,7 +291,11 @@ test('a newer profile response applies after an older write in flight, and again
     release();
     await Promise.all([first, second]);
 
-    assert.deepEqual(writes.map((request) => request.profileImageUrl?.match(/bird-robin|default-agent/u)?.[0]), ['bird-robin', 'default-agent']);
+    const agentWrites = writes.filter((request) => request.id === PRIYA_AGENT_IDENTITY);
+    assert.deepEqual(agentWrites.map((request) => request.profileImageUrl?.match(/bird-robin|default-agent/u)?.[0]), ['bird-robin', 'default-agent']);
+    // The superseded fetch stops before its member write; the newer one records the newer profile.
+    assert.deepEqual(writes.map((request) => request.id), [PRIYA_AGENT_IDENTITY, PRIYA_AGENT_IDENTITY, `human:${PRIYA}`]);
+    assert.match(String((writes[2].metadata as Record<string, unknown>).defaultAgentAvatarUrl), /\/thumbs\/default-agent-[^?]+\?version=3$/u);
     assert.match(fixture.agentImage(), new RegExp(`/kordi-birds/default-agent-${PRIYA}\\.png$`));
     assert.equal(fixture.profileCache.get(PRIYA)?.defaultAgent?.avatar.version, 3);
   }, /bird-robin/u);
