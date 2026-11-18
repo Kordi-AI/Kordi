@@ -102,6 +102,10 @@ Extensions communicate with Kordi via stdin/stdout JSON protocol. They can:
 - **Register commands** — slash commands (e.g., `/mycommand`)
 - **Hook events** — intercept session start, input, tool calls, etc.
 
+### Working example
+
+See the optional [D&D alignment example](../examples/dnd-alignment/README.md) for a dependency-free CommonJS extension with a custom tool, a slash command, strict input validation, and tests against the shipped plugin host. It is loaded explicitly and does not change default agent behavior or add a desktop UI.
+
 ### Example Extension Structure
 
 ```
