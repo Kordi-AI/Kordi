@@ -67,4 +67,9 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "common ground room gallery",
         "0207_common_ground_room_gallery.sql"
     ),
+    migration!(
+        208,
+        "common ground gallery preview block ids",
+        "0208_common_ground_gallery_preview_block_ids.sql"
+    ),
 ];
