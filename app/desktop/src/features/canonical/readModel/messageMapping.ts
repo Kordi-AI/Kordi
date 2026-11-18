@@ -11,6 +11,7 @@ import { canonicalAgentTurnErrorText } from './agentFailureText';
 import { cloudAgentStoredReplyHasRunOutput, isCloudAgentStoredNoProviderReply, isFailedReplyTextOnlyItsError } from '@/features/cloud/cloudAgentReplyText';
 import { cloudDirectMessageDisplayText, parseCloudDirectMessageEnvelope } from '@/features/cloud/cloudDirectMessages';
 import { cloudGroupAgentConversationId } from '@/features/cloud/cloudGroupMessages';
+import { canonicalAgentSenderAvatar } from '@/features/cloud/cloudAgentAvatar';
 import { storedVoiceMessage, withoutVoiceAttachment } from '@/features/cloud/cloudVoiceMessage';
 import { normalizeFacilitatorCard } from '@/features/cloud/facilitatorCard';
 import { normalizeGroupJoinRequestCard } from '@/features/cloud/groupJoinRequest';
@@ -33,7 +34,6 @@ import { systemNoticeSender } from './systemNotice';
 import { isInternalCloudAgentControlMessage, isPlaceholderSessionTitleNotice, isSynchronizationOnlyCloudGroupTitleNotice, RETIRED_BY_RETRY_CONTENT_KEY } from './messageVisibility';
 
 export { ownerScopedAgentName } from './agentMessagePresentation';
-
 export { canonicalAttachments } from './attachmentMapping';
 export { isProcessingPlaceholderText,stripOutreachContextEnvelope };
 
@@ -159,7 +159,7 @@ export function processingAgentMessage(
     sender: ownerScopedAgentName(target, identityById, profileHumanIdentityId) ?? target.displayName,
     senderType: 'agent',
     senderProfileImageUrl: target.profileImageUrl ?? null,
-    senderAvatarSeed: target.avatarKey ?? null,
+    senderAvatarSeed: canonicalIdentityAvatarSeed(target) ?? target.avatarKey ?? null,
     isOwnMessage: false,
     showSenderMeta: role === 'external-agent',
     text: '',
@@ -200,7 +200,7 @@ export function cancelledCollaborationAgentDelegationMessage(
     sender: ownerScopedAgentName(target, identityById, profileHumanIdentityId) ?? target.displayName,
     senderType: 'agent',
     senderProfileImageUrl: target.profileImageUrl ?? null,
-    senderAvatarSeed: target.avatarKey ?? null,
+    senderAvatarSeed: canonicalIdentityAvatarSeed(target) ?? target.avatarKey ?? null,
     isOwnMessage: false,
     showSenderMeta: role === 'external-agent',
     text: '',
@@ -246,7 +246,7 @@ export function mapCanonicalMessage(
   const identity = identityById.get(message.senderIdentityId);
   const role = canonicalMessageRole(message, identity, profileHumanIdentityId);
   const messageKind = message.messageKind; const isAgentTurn = messageKind === 'agent-turn' || role === 'owned-agent' || role === 'external-agent';
-  const completed = canonicalMessageIsComplete(message, content);
+  const completed = canonicalMessageIsComplete(message, content); const senderAvatar = canonicalAgentSenderAvatar({ identity, senderIdentityId: message.senderIdentityId, ownerAccountId: stringValue(content.senderOwnerAccountId), identityById });
   const deliveryState = isAgentTurn && !completed && contentRecord(content.execution).phase === 'queued'
     ? 'queued'
     : stringValue(content.deliveryState)?.trim().toLowerCase();
@@ -400,8 +400,8 @@ export function mapCanonicalMessage(
     senderOwnerName: agentPresentation.senderOwnerName,
     senderIdentityId: message.senderIdentityId,
     senderType: isAgentTurn || identity?.kind === 'agent' ? 'agent' : 'human',
-    senderProfileImageUrl: identity?.profileImageUrl ?? null,
-    senderAvatarSeed: canonicalIdentityAvatarSeed(identity),
+    senderProfileImageUrl: senderAvatar.imageUrl,
+    senderAvatarSeed: senderAvatar.seed,
     isOwnMessage,
     showSenderMeta: role === 'person' || role === 'external-agent', ...systemNoticeSender(messageKind, identity, planCard, isOwnMessage, identityById, Boolean(facilitatorCard)),
     text: isAgentTurn ? '' : displayText,

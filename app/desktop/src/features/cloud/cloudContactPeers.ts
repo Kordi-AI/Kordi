@@ -3,6 +3,7 @@ import type { Contact, DesktopCollaborationPeer } from '@/kordi-app/types';
 import type { CloudAccount } from './authClient';
 import { cloudAvatarImageUrl } from './avatar';
 import { canonicalAvatarImageSource } from './canonicalAvatar';
+import { cloudAgentAvatarSeed } from './cloudAgentAvatar';
 import { CLOUD_HOST_SENTINEL } from './cloudContactMapping';
 import { defaultAgentDisplayName } from '@/lib/identityLabels';
 
@@ -76,7 +77,11 @@ export function cloudContactToAgentPeer(contact: Contact): DesktopCollaborationP
     contactRequestStatus: 'accepted',
     contactRequestDirection: 'outgoing',
     profileImageUrl: contact.targetCloudAgentAvatarUrl ?? null,
-    avatarSeed: contact.targetCloudAgentAvatarSeed ?? contact.targetCloudAgentId ?? `cloud-agent:${accountId}`,
+    avatarSeed: cloudAgentAvatarSeed({
+      agentId: contact.targetCloudAgentId,
+      ownerAccountId: accountId,
+      profileSeed: contact.targetCloudAgentAvatarSeed,
+    }),
   };
 }
 
@@ -87,7 +92,11 @@ export function cloudSelfContact(account: CloudAccount): Contact {
   const agentAvatarUrl = account.defaultAgent
     ? cloudAvatarImageUrl(canonicalAvatarImageSource(account.defaultAgent.avatar))
     : null;
-  const agentAvatarSeed = account.defaultAgent?.avatar.seed?.trim() || agentId;
+  const agentAvatarSeed = cloudAgentAvatarSeed({
+    agentId,
+    ownerAccountId: account.accountId,
+    profileSeed: account.defaultAgent?.avatar.seed,
+  });
   return {
     id: `cloud:${account.accountId}`,
     name: displayName,
