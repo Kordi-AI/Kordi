@@ -102,6 +102,8 @@ struct SessionDetailView: View {
     private var statusText: String {
         switch currentConversation.kind {
         case .person:
+            // A deleted account has no presence to show.
+            if currentConversation.peerAccountDeleted { return "" }
             return currentConversation.representsKordiSupport
                 ? "Official Kordi support"
                 : ContactPresencePresentation.label(

@@ -53,7 +53,7 @@ enum MessageAuthorIdentity {
                 ?? conversation.displayName.nonEmpty
                 ?? message.authorName,
             source: participant?.avatarUrl?.nonEmpty ?? conversation.avatarSource?.nonEmpty,
-            seed: participant?.accountId.nonEmpty ?? conversation.peerAccountId.nonEmpty
+            seed: participant?.accountId.nonEmpty ?? conversation.peerAvatarSeed
         )
     }
 

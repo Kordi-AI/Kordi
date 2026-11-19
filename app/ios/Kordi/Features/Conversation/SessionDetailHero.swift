@@ -66,7 +66,7 @@ struct SessionProfileHero<Actions: View>: View {
                 imageSource: conversation.avatarSource,
                 kind: conversation.kind,
                 size: avatarSize,
-                seed: conversation.agentId ?? conversation.peerAccountId
+                seed: conversation.peerAccountDeleted ? conversation.avatarSeed : conversation.agentId ?? conversation.peerAccountId
             )
         }
     }

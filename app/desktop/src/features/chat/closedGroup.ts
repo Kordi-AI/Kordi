@@ -13,6 +13,15 @@ export const GROUP_CLOSED_ERROR_CODE = 'group_closed';
 
 export const GROUP_CLOSED_SEND_FAILURE = 'This group was closed.';
 
+/**
+ * A direct chat is closed only when the other person's account was deleted.
+ * Its metadata carries the closed time and this flag, and it reads that way
+ * instead of as a closed group.
+ */
+export const PEER_ACCOUNT_DELETED_METADATA_KEY = 'peerAccountDeleted';
+
+export const PEER_ACCOUNT_DELETED_LINE = 'This account was deleted.';
+
 function metadataRecord(metadata: unknown): Record<string, unknown> {
   return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
     ? metadata as Record<string, unknown>
@@ -27,6 +36,17 @@ export function closedAtFromMetadata(metadata: unknown): string | null {
 
 export function isClosedConversation(conversation: { metadata?: unknown } | null | undefined): boolean {
   return Boolean(conversation && closedAtFromMetadata(conversation.metadata));
+}
+
+/** A closed direct chat whose other person deleted their account. */
+export function isDeletedAccountConversation(conversation: { metadata?: unknown } | null | undefined): boolean {
+  return isClosedConversation(conversation)
+    && metadataRecord(conversation?.metadata)[PEER_ACCOUNT_DELETED_METADATA_KEY] === true;
+}
+
+/** Copies `metadata` closed at `closedAt` because the other person's account was deleted. */
+export function metadataWithDeletedPeerAccount(metadata: unknown, closedAt: string): Record<string, unknown> {
+  return { ...metadataWithClosedAt(metadata, closedAt), [PEER_ACCOUNT_DELETED_METADATA_KEY]: true };
 }
 
 function metadataGroupSpaceId(metadata: unknown) {

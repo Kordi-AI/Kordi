@@ -2586,9 +2586,16 @@ actor CloudAPIClient {
             $0.accountId != viewerAccountId && $0.membershipState == "active"
                 && !KordiSystemIdentity.isServiceAccount($0.accountId)
         }
-        let peerAccountId = message.senderAccountId != viewerAccountId
+        // A kept direct conversation stays the chat with the deleted account its
+        // session id names, and the stand-in speaks for that account, so both
+        // sides' messages stay keyed by the same peer.
+        let deletedPeer = KordiDeletedAccount.peerAccountId(in: conversation, viewerAccountId: viewerAccountId)
+        let senderAccountId = deletedPeer.map {
+            KordiDeletedAccount.isStandIn(message.senderAccountId) ? $0 : message.senderAccountId
+        } ?? message.senderAccountId
+        let peerAccountId = deletedPeer ?? (message.senderAccountId != viewerAccountId
             ? message.senderAccountId
-            : otherMembers.first?.accountId ?? viewerAccountId
+            : otherMembers.first?.accountId ?? viewerAccountId)
         let readByAccountIds = otherMembers
             .filter { $0.lastReadSequence >= message.conversationSequence }
             .map(\.accountId)
@@ -2603,7 +2610,7 @@ actor CloudAPIClient {
         return CloudMessageDTO(
             messageId: message.id,
             clientMessageId: message.clientMessageId,
-            fromAccountId: message.senderAccountId,
+            fromAccountId: senderAccountId,
             toAccountId: outgoing ? peerAccountId : viewerAccountId,
             body: message.deletedAt == nil ? message.content.body : "",
             createdAt: createdAt,
@@ -3122,7 +3129,19 @@ actor CloudAPIClient {
         fallback: String
     ) async throws {
         let request = try makeRequest(path: path, method: method, token: token, query: query, body: bodyData)
-        _ = try await validatedData(for: request, fallback: fallback)
+        do {
+            _ = try await validatedData(for: request, fallback: fallback)
+        } catch let error as CloudAPIError {
+            throw keptDirectRefusal(error, path: path)
+        }
+    }
+
+    /// A refused write to a direct conversation kept after the other account
+    /// was deleted says so, instead of the closed group's wording.
+    private func keptDirectRefusal(_ error: CloudAPIError, path: String) -> CloudAPIError {
+        guard error.code == GroupClosedState.errorCode,
+              let conversationId = KordiDeletedAccount.conversationId(inRequestPath: path) else { return error }
+        return KordiDeletedAccount.refusal(error, in: chatConversationsById[conversationId])
     }
 
     private func perform<Response: Decodable>(
@@ -3142,7 +3161,7 @@ actor CloudAPIClient {
                 throw CloudAPIError(code: "invalid_response", message: "Kordi Cloud returned an unexpected response.", statusCode: 0)
             }
         } catch let error as CloudAPIError {
-            throw error
+            throw keptDirectRefusal(error, path: path)
         } catch {
             if CloudTransportErrorPolicy.isCancellation(error) {
                 throw CancellationError()

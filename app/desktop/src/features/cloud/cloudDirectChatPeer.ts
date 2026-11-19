@@ -1,4 +1,5 @@
 import type { Contact, Conversation, ConversationParticipant } from '@/kordi-app/types';
+import { isDeletedAccountConversation } from '@/features/chat/closedGroup';
 import { cloudConversationKindFromConversationId, cloudPeerAccountIdFromConversationId } from '@/features/collaboration/conversationIds';
 
 const DIRECT_PERSON_SESSION_PREFIX = 'session:direct-person:';
@@ -15,6 +16,18 @@ export function cloudDirectChatPeerAccountId(conversation: Pick<Conversation, 'i
   if (!sessionId.startsWith(DIRECT_PERSON_SESSION_PREFIX)) return null;
   const others = sessionId.slice(DIRECT_PERSON_SESSION_PREFIX.length).split(':').filter((id) => id && id !== self);
   return others.length === 1 ? others[0] : null;
+}
+
+/**
+ * The account whose profile the Info tab of a person chat shows, or null. A
+ * chat kept with a deleted account has no profile to load: its Info tab keeps
+ * the plain overview.
+ */
+export function cloudPersonInfoPeerAccountId(
+  conversation: Pick<Conversation, 'id' | 'type' | 'canonicalSessionId' | 'metadata'>,
+  selfAccountId: string,
+): string | null {
+  return isDeletedAccountConversation(conversation) ? null : cloudDirectChatPeerAccountId(conversation, selfAccountId);
 }
 
 /** The chat's participant for the other account, as the chat header and transcript hand it to the profile popover. */

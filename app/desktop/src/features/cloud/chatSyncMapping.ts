@@ -3,7 +3,8 @@ import type { MessagePlanCard } from '@/kordi-app/types/message';
 import { normalizeFacilitatorCard } from './facilitatorCard';
 import { groupJoinRequestFromChatContent } from './groupJoinRequest';
 import { normalizePlanCardSnapshot } from './planCardSnapshot';
-import { isBuiltInAccountId, isSystemAccountId, isSystemAgentAccountId, KORDI_SYSTEM_NOTICE_KIND } from '@/features/systemAgent/systemAgentIdentity';
+import { isBuiltInAccountId, isSystemAccountId, isSystemAgentAccountId, KORDI_DELETED_ACCOUNT_ID, KORDI_SYSTEM_NOTICE_KIND } from '@/features/systemAgent/systemAgentIdentity';
+import { deletedDirectPeerAccountId } from './cloudDeletedDirectCatalog';
 import { normalizedLivePhoto } from '@/features/chat/livePhotos';
 import type { CloudMessage, CloudMessageAttachment, CloudVoiceMessage, SendCloudMessageAttachmentInput } from './authClient';
 import type { ChatSyncConversation, ChatSyncMessage } from './chatSyncTypes';
@@ -366,6 +367,9 @@ export function conversationPeer(
   viewerAccountId: string,
   senderAccountId: string,
 ): string {
+  // A kept direct conversation stays the chat with the deleted account its session id names.
+  const deletedPeer = deletedDirectPeerAccountId(conversation, viewerAccountId);
+  if (deletedPeer) return deletedPeer;
   if (senderAccountId !== viewerAccountId && !isSystemAccountId(senderAccountId)) return senderAccountId;
   return conversation.members
     .find((member) => member.account_id !== viewerAccountId && member.membership_state === 'active' && !isBuiltInAccountId(member.account_id))
@@ -400,9 +404,12 @@ export function cloudMessageFromChatSync(
     ?? message.created_at;
   const text = textFromChatContent(message.content);
   const body = groupMessageBody(message, conversation, text) ?? text;
+  // In a kept direct conversation the stand-in speaks for the deleted peer, so every
+  // reader that keys a chat by its messages' accounts finds the same chat.
+  const standInForPeer = message.sender_account_id === KORDI_DELETED_ACCOUNT_ID && !outgoing;
   return {
     messageId: message.id,
-    fromAccountId: message.sender_account_id,
+    fromAccountId: standInForPeer ? peerAccountId : message.sender_account_id,
     toAccountId: outgoing ? peerAccountId : viewerAccountId,
     body,
     createdAt,

@@ -116,55 +116,51 @@ enum CloudConversationCatalog {
             .filter { !discoveredAgentIds.contains($0.agentId) && !isKordiSupport(agent: $0) }
             .map { defaultConversation(for: $0, account: account) }
 
-        let people = contacts.map { contact in
+        // A kept direct conversation replaces its contact's chat, including one
+        // from a contact entry whose removal has not arrived yet.
+        let keptDirectByPeer = KordiDeletedAccount.keptDirectConversations(
+            in: visibleCanonicalConversations,
+            viewerAccountId: account.accountId
+        )
+        let contactPeople = contacts.filter { keptDirectByPeer[$0.accountId] == nil }.map { contact in
             let isSupport = KordiSupportIdentity.matches(name: contact.displayName, seed: contact.accountId)
             let sessionId = isSupport
                 ? supportCanonicalConversation.flatMap { $0.legacySessionId?.nonEmpty ?? $0.id.nonEmpty }
                     ?? KordiSupportIdentity.sessionId(for: account.accountId)
                 : directPersonSessionId(account.accountId, contact.accountId)
-            let candidates = isSupport
-                ? allMessages
-                : visibleMessagesByPeer[contact.accountId, default: []]
-            let matching = candidates.filter { message in
-                guard !CloudMessageCodec.isAgentControl(message.body),
-                      !groupWireMessageIds.contains(message.messageId) else { return false }
-                guard let sourceSessionId = message.sessionId?.nonEmpty else { return true }
-                return sourceSessionId == sessionId
-            }
-            let latest = matching.max { parseCloudDate($0.createdAt) < parseCloudDate($1.createdAt) }
-            let canonical = canonicalConversationsBySessionId[sessionId]
-            let unreadMessages = matching.filter {
-                messageIsUnread(
-                    $0,
-                    conversation: canonical,
-                    accountId: account.accountId,
-                    allowSelfAuthoredAgent: false
-                )
-            }
-            return ConversationSummary(
-                id: "person:\(contact.accountId)",
-                kind: .person,
+            return personConversation(
+                account: account,
                 peerAccountId: contact.accountId,
-                agentId: nil,
-                ownerDisplayName: contact.preferredName,
                 displayName: contact.preferredName,
-                lastMessage: latest.map { CloudMessageCodec.previewText($0) } ?? "Start a conversation",
-                lastAttachment: previewAttachment(latest),
-                lastActivityAt: latest.map { parseCloudDate($0.createdAt) } ?? parseCloudDate(contact.createdAt),
-                unreadCount: Set(unreadMessages.map(\.messageId)).count,
                 avatarSource: contact.avatarUrl.nonEmpty,
-                agentActivity: nil,
                 sessionId: sessionId,
-                unreadMentionCount: unreadMentionMessageIDs(
-                    unreadMessages,
-                    accountId: account.accountId
-                ).count,
-                lastReadSequence: lastReadSequence(
-                    in: canonical,
-                    accountId: account.accountId
-                )
-            )
+                candidates: isSupport ? allMessages : visibleMessagesByPeer[contact.accountId, default: []],
+                groupWireMessageIds: groupWireMessageIds,
+                canonical: canonicalConversationsBySessionId[sessionId],
+                emptyPreview: "Start a conversation",
+                emptyActivityAt: parseCloudDate(contact.createdAt)
+            ).summary
         }
+        // Named and drawn as the Deleted account; a conversation nobody wrote in is not listed.
+        let keptPeople = keptDirectByPeer.sorted { $0.key < $1.key }.compactMap { peer, conversation -> ConversationSummary? in
+            let built = personConversation(
+                account: account,
+                peerAccountId: peer,
+                displayName: KordiDeletedAccount.displayName,
+                avatarSource: nil,
+                sessionId: conversation.legacySessionId?.nonEmpty ?? directPersonSessionId(account.accountId, peer),
+                candidates: visibleMessagesByPeer[peer, default: []],
+                groupWireMessageIds: groupWireMessageIds,
+                canonical: conversation,
+                emptyPreview: "",
+                emptyActivityAt: parseCloudDate(conversation.updatedAt)
+            )
+            guard built.messageCount > 0 || conversation.latestMessageSequence > 0 else { return nil }
+            var summary = built.summary
+            summary.peerAccountDeleted = true
+            return summary
+        }
+        let people = contactPeople + keptPeople
 
         var uniqueById: [String: ConversationSummary] = [:]
         for conversation in groups + agents + people {
@@ -179,6 +175,60 @@ enum CloudConversationCatalog {
                 $0.lastActivityAt == $1.lastActivityAt && $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
             )
         }
+    }
+
+    /// A person chat from the messages of its direct session, with how many it holds.
+    private static func personConversation(
+        account: CloudAccount,
+        peerAccountId: String,
+        displayName: String,
+        avatarSource: String?,
+        sessionId: String,
+        candidates: [CloudMessageDTO],
+        groupWireMessageIds: Set<String>,
+        canonical: CloudChatConversation?,
+        emptyPreview: String,
+        emptyActivityAt: Date
+    ) -> (summary: ConversationSummary, messageCount: Int) {
+        let matching = candidates.filter { message in
+            guard !CloudMessageCodec.isAgentControl(message.body),
+                  !groupWireMessageIds.contains(message.messageId) else { return false }
+            guard let sourceSessionId = message.sessionId?.nonEmpty else { return true }
+            return sourceSessionId == sessionId
+        }
+        let latest = matching.max { parseCloudDate($0.createdAt) < parseCloudDate($1.createdAt) }
+        let unreadMessages = matching.filter {
+            messageIsUnread(
+                $0,
+                conversation: canonical,
+                accountId: account.accountId,
+                allowSelfAuthoredAgent: false
+            )
+        }
+        let summary = ConversationSummary(
+            id: "person:\(peerAccountId)",
+            kind: .person,
+            peerAccountId: peerAccountId,
+            agentId: nil,
+            ownerDisplayName: displayName,
+            displayName: displayName,
+            lastMessage: latest.map { CloudMessageCodec.previewText($0) } ?? emptyPreview,
+            lastAttachment: previewAttachment(latest),
+            lastActivityAt: latest.map { parseCloudDate($0.createdAt) } ?? emptyActivityAt,
+            unreadCount: Set(unreadMessages.map(\.messageId)).count,
+            avatarSource: avatarSource,
+            agentActivity: nil,
+            sessionId: sessionId,
+            unreadMentionCount: unreadMentionMessageIDs(
+                unreadMessages,
+                accountId: account.accountId
+            ).count,
+            lastReadSequence: lastReadSequence(
+                in: canonical,
+                accountId: account.accountId
+            )
+        )
+        return (summary, matching.count)
     }
 
     private static func groupConversations(

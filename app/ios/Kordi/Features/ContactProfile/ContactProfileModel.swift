@@ -328,6 +328,8 @@ enum ContactProfileAvailability {
 
 extension AppModel {
     func makeContactProfileModel(for subject: ContactProfileSubject) -> ContactProfileModel {
+        // A deleted account and its stand-in have no profile to request.
+        if isDeletedAccount(subject.accountId) { return ContactProfileModel(loader: nil) }
         if isPreviewMode {
             let profile = ContactProfilePreviewData.profile(for: subject)
             return ContactProfileModel { profile }
@@ -360,6 +362,13 @@ extension AppModel {
                 await self.refreshWorkspace(showSyncActivity: false)
             }
         )
+    }
+
+    /// The Deleted account stand-in, or an account deleted while this one kept its chat.
+    func isDeletedAccount(_ accountId: String) -> Bool {
+        KordiDeletedAccount.isStandIn(accountId) || (conversations + archivedConversations).contains {
+            $0.peerAccountDeleted && $0.peerAccountId == accountId
+        }
     }
 
     /// The direct chat with an account, existing or new.

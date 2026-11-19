@@ -2,9 +2,11 @@
 //! (docs/development/account-deletion.md):
 //!
 //! - A conversation with no other active person is deleted.
-//! - A direct conversation loses every message, and the other person is
-//!   removed from it, so their devices drop it. The empty row stays only so
-//!   that removal can reach their devices through the sync stream.
+//! - A direct conversation follows [`DirectConversations`]. `Empty`: it
+//!   loses every message, and the other person is removed from it, so their
+//!   devices drop it. The empty row stays only so that removal can reach
+//!   their devices through the sync stream. `Keep`: it is kept like a group
+//!   below, then closed, since nobody is left to write to.
 //! - Any other conversation is kept. A group the person owned passes to the
 //!   longest-standing admin, else the longest-standing active member. Their
 //!   messages move to the Deleted account stand-in, which joins as a member
@@ -27,20 +29,43 @@ use crate::deleted_account::{DELETED_ACCOUNT_ID, DELETED_DISPLAY_NAME};
 /// that way.
 const MAX_ANNOUNCED_MESSAGES: i64 = 200;
 
+/// What happens to a direct conversation that another person is still in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DirectConversations {
+    /// Every message, plan card and call goes, and the other person is
+    /// removed. A person deleting their own account gets this.
+    Empty,
+    /// The other person keeps it, read-only: the deleted person's messages
+    /// stay from the stand-in, scrubbed like a group's, and the conversation
+    /// is closed with the stand-in as the closer.
+    Keep,
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ConversationRemoval {
     pub deleted: usize,
+    /// Direct conversations emptied ([`DirectConversations::Empty`]).
     pub direct: usize,
+    /// Direct conversations kept ([`DirectConversations::Keep`]).
+    pub direct_kept: usize,
     pub kept: usize,
     pub transferred: usize,
 }
 
-type ConversationRow = (Uuid, String, Option<String>, Option<String>, i64);
+type ConversationRow = (
+    Uuid,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    i64,
+);
 
 pub async fn remove_account_from_conversations(
     transaction: &mut Transaction<'_, Postgres>,
     account_id: &str,
     removed_attachments: &HashSet<String>,
+    direct_conversations: DirectConversations,
 ) -> Result<ConversationRemoval, StoreError> {
     crate::deleted_account::ensure_account(transaction).await?;
     let service = crate::system_account::service_account_ids();
@@ -59,7 +84,7 @@ pub async fn remove_account_from_conversations(
     // Every conversation they belong to or wrote in, with how many other
     // people are still active in it.
     let conversations: Vec<ConversationRow> = query_as(
-        "SELECT c.conversation_id, c.kind, me.role, me.membership_state, \
+        "SELECT c.conversation_id, c.kind, c.legacy_session_id, me.role, me.membership_state, \
                 (SELECT COUNT(*) FROM cloud_chat_conversation_members other \
                  WHERE other.conversation_id = c.conversation_id AND other.account_id <> $1 \
                    AND other.membership_state = 'active' \
@@ -80,25 +105,31 @@ pub async fn remove_account_from_conversations(
 
     let mut outcome = ConversationRemoval::default();
     let mut deleted = Vec::new();
-    let scrub = AccountScrub {
+    let scrub = |direct| AccountScrub {
         account_id,
         replacement_id: DELETED_ACCOUNT_ID,
         replacement_name: DELETED_DISPLAY_NAME,
         removed_attachments,
+        direct,
     };
-    for (conversation_id, kind, role, state, others) in conversations {
+    for (conversation_id, kind, session_id, role, state, others) in conversations {
+        let direct = kind == "direct";
         if others == 0 {
             deleted.push(conversation_id);
-        } else if kind == "direct" {
+        } else if direct && direct_conversations == DirectConversations::Empty {
             empty_direct_conversation(transaction, conversation_id, account_id).await?;
             outcome.direct += 1;
         } else {
             let owner = role.as_deref() == Some("owner") && state.as_deref() == Some("active");
-            if owner && hand_over(transaction, conversation_id, account_id).await? {
-                outcome.transferred += 1;
+            let handed_over = owner && hand_over(transaction, conversation_id, account_id).await?;
+            keep_conversation(transaction, conversation_id, account_id, &scrub(direct)).await?;
+            if direct {
+                close_kept_direct(transaction, conversation_id, session_id).await?;
+                outcome.direct_kept += 1;
+            } else {
+                outcome.transferred += usize::from(handed_over);
+                outcome.kept += 1;
             }
-            keep_conversation(transaction, conversation_id, account_id, &scrub).await?;
-            outcome.kept += 1;
         }
     }
     if !deleted.is_empty() {
@@ -215,6 +246,24 @@ async fn empty_direct_conversation(
     Ok(())
 }
 
+/// Closes a kept direct conversation, as a group is closed: its history
+/// stays readable, and new messages, reactions, calls, plan cards and agent
+/// runs are refused with `group_closed`, so nothing is written to a person
+/// who is gone. The stand-in is the closer, which tells clients why.
+async fn close_kept_direct(
+    transaction: &mut Transaction<'_, Postgres>,
+    conversation_id: Uuid,
+    session_id: Option<String>,
+) -> Result<(), StoreError> {
+    super::dissolve::close_conversations(
+        transaction,
+        &[(conversation_id, session_id)],
+        DELETED_ACCOUNT_ID,
+    )
+    .await
+    .map(|_| ())
+}
+
 /// Passes the conversation to the longest-standing admin, else the
 /// longest-standing active member. Returns whether it changed hands.
 async fn hand_over(
@@ -305,17 +354,20 @@ async fn keep_conversation(
     .into_iter()
     .map(|(id,)| id)
     .collect();
-    // Group envelopes name every participant, so each one is read; other
-    // content only when it names the account.
+    // Encoded envelopes can name the account without showing its id (group
+    // envelopes name every participant), so each one is read; other content
+    // only when it names the account.
     let stored: Vec<(Uuid, Value)> = query_as(
         "SELECT message_id, content FROM cloud_chat_messages \
          WHERE conversation_id = $1 \
-           AND (strpos(content::text, 'kordi-cloud-group:') > 0 \
+           AND (EXISTS (SELECT 1 FROM UNNEST($4::TEXT[]) AS envelope(prefix) \
+                        WHERE strpos(content::text, envelope.prefix) > 0) \
                 OR strpos(content::text, $2) > 0 OR sender_account_id = $3)",
     )
     .bind(conversation_id)
     .bind(account_id)
     .bind(DELETED_ACCOUNT_ID)
+    .bind(scrub.envelope_prefixes())
     .fetch_all(&mut **transaction)
     .await?;
     let mut ids = Vec::new();

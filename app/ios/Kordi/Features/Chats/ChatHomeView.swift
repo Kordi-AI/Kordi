@@ -1811,8 +1811,13 @@ private struct ClosedChatDeleteConfirmation: ViewModifier {
                 Task { if await model.deleteClosedChat(presented) { onDeleted(presented) } }
             }
             Button("Cancel", role: .cancel) { target = nil }
-        } message: { _ in
-            Text("It leaves your chat list. Others keep it.")
+        } message: { presented in
+            // Nobody else is left in a chat with a deleted account.
+            if case .channel(let conversation) = presented, conversation.kind == .person {
+                Text("It leaves your chat list.")
+            } else {
+                Text("It leaves your chat list. Others keep it.")
+            }
         }
     }
 }

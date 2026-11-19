@@ -2,6 +2,7 @@ import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
 import { cachedSessionSnapshot } from './session';
 import type { CloudMessage, CloudSessionTitle, CloudSyncResponse, SendCloudMessageOptions, UpdateCloudSessionTitleInput } from './authClient';
 import { ChatSyncConversationClient } from './chatSyncConversationClient';
+import { withDeletedDirectRefusals } from './cloudDeletedDirectCatalog';
 import { ChatSyncState, type ChatSyncRequest } from './chatSyncState';
 import { ChatSyncSyncClient } from './chatSyncSyncClient';
 import type { ChatSyncBootstrapResponse, ChatSyncConversation, ChatSyncConversationInput, ChatSyncMessage } from './chatSyncTypes';
@@ -20,7 +21,7 @@ export class ChatSyncClient {
 
   constructor(options: ChatSyncClientOptions) {
     this.state = new ChatSyncState(
-      options.request,
+      withDeletedDirectRefusals(options.request, (conversationId) => this.state.conversationById.get(conversationId)),
       options.getActiveAccountId,
       options.setActiveAccountId,
       options.errorStatus,

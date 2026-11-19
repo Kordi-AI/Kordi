@@ -49,6 +49,11 @@ export function isSystemAccountId(accountId: string | null | undefined): boolean
   return accountId?.trim() === KORDI_SYSTEM_ACCOUNT_ID;
 }
 
+/** The server-managed stand-in for every deleted person (docs/development/account-deletion.md). Kept
+ * messages of a deleted person come from it; it is only ever a member who left, never a contact. */
+export const KORDI_DELETED_ACCOUNT_ID = 'acct_kordi_deleted';
+export const KORDI_DELETED_ACCOUNT_NAME = 'Deleted account';
+
 /** The System agent or the system account: server-managed members a client never lists or removes. */
 export function isBuiltInAccountId(accountId: string | null | undefined): boolean {
   return isSystemAgentAccountId(accountId) || isSystemAccountId(accountId);

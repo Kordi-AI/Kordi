@@ -1,4 +1,4 @@
-import { isClosedConversation, isClosedParticipantSpace } from '@/features/chat/closedGroup';
+import { isClosedConversation, isClosedParticipantSpace, isDeletedAccountConversation } from '@/features/chat/closedGroup';
 import type { ParticipantSpaceViewModel } from '@/kordi-app/types';
 import { ClosedConversationBar } from '@/pages/ClosedConversationBar';
 
@@ -20,12 +20,14 @@ export function closedConversationComposer(
   },
 ) {
   if (!isClosedConversation(conversation)) return null;
+  const peerAccountDeleted = isDeletedAccountConversation(conversation);
   const space = session.participantSpaces.find((candidate) => candidate.id === conversation.participantSpaceId);
   return (
     <ClosedConversationBar
       sessionId={conversation.canonicalSessionId ?? conversation.id}
       sessionName={conversation.name}
-      groupClosed={!space || isClosedParticipantSpace(space)}
+      groupClosed={!peerAccountDeleted && (!space || isClosedParticipantSpace(space))}
+      peerAccountDeleted={peerAccountDeleted}
       onDelete={session.onDeleteChatSession}
     />
   );

@@ -60,28 +60,27 @@ pub(super) async fn delete_account(
     if let Err(response) = require_unchanged(&mut tx, &session.account_id, &account).await {
         return *response;
     }
-    let deletion =
-        match crate::account_deletion::delete_in_transaction(&mut tx, &session.account_id).await {
-            Ok(deletion) => deletion,
-            Err(error) => {
-                eprintln!("[account-deletion] Could not delete an account: {error}");
-                return *server_error();
-            }
-        };
     let proof_kind = match proof {
         Proof::Password => "password",
         Proof::EmailCode { .. } => "email_code",
         Proof::RecentSignIn => "recent_sign_in",
     };
-    let mut metadata = deletion.audit_metadata();
-    metadata["proof"] = serde_json::Value::from(proof_kind);
-    // The record keeps counts only: no account, device, name or email.
-    if write_audit_in_transaction(&mut tx, "account.deleted", metadata)
-        .await
-        .is_err()
+    // A person deleting their own account empties their direct
+    // conversations; the audit record keeps counts only.
+    let deletion = match crate::account_deletion::delete_and_record(
+        &mut tx,
+        &session.account_id,
+        crate::account_deletion::DirectConversations::Empty,
+        proof_kind,
+    )
+    .await
     {
-        return *server_error();
-    }
+        Ok(deletion) => deletion,
+        Err(error) => {
+            eprintln!("[account-deletion] Could not delete an account: {error}");
+            return *server_error();
+        }
+    };
     if tx.commit().await.is_err() {
         return *server_error();
     }
@@ -104,24 +103,5 @@ async fn require_unchanged(
             StatusCode::CONFLICT,
         ));
     }
-    Ok(())
-}
-
-async fn write_audit_in_transaction(
-    tx: &mut sqlx_core::transaction::Transaction<'_, sqlx_postgres::Postgres>,
-    event_type: &str,
-    metadata: serde_json::Value,
-) -> Result<(), sqlx_core::Error> {
-    query(
-        "INSERT INTO cloud_audit_events \
-         (event_id, account_id, device_id, event_type, metadata_json, created_at) \
-         VALUES ($1, NULL, NULL, $2, $3, $4)",
-    )
-    .bind(format!("evt_{}", uuid::Uuid::new_v4().simple()))
-    .bind(event_type)
-    .bind(metadata.to_string())
-    .bind(Utc::now().to_rfc3339())
-    .execute(&mut **tx)
-    .await?;
     Ok(())
 }

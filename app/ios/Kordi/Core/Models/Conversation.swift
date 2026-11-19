@@ -111,6 +111,9 @@ struct ConversationSummary: Identifiable, Hashable {
     var personalAgentId: String? = nil
     /// The team organization of a group; nil for personal conversations.
     var organizationName: String? = nil
+    /// A person chat kept after the other account was deleted
+    /// (`KordiDeletedAccount`): read-only, named and drawn as the Deleted account.
+    var peerAccountDeleted = false
 
     init(
         id: String,
@@ -166,6 +169,22 @@ struct ConversationSummary: Identifiable, Hashable {
         self.isLocalDraft = isLocalDraft
         self.subsessionId = subsessionId
         self.organizationName = organizationName
+    }
+
+    /// The seed of the other side's generated avatar. A kept chat with a
+    /// deleted account draws the stand-in's, the same for every deleted
+    /// account, never one from the deleted id.
+    var peerAvatarSeed: String? {
+        peerAccountDeleted ? KordiDeletedAccount.accountId : peerAccountId.nonEmpty
+    }
+
+    /// A person someone can be picked from in a people list; never a chat kept
+    /// with a deleted account, which is no contact.
+    var isPickablePerson: Bool { kind == .person && !peerAccountDeleted }
+
+    /// The seed of this chat's own generated avatar.
+    var avatarSeed: String {
+        peerAccountDeleted ? KordiDeletedAccount.accountId : agentId?.nonEmpty ?? peerAccountId.nonEmpty ?? sessionId
     }
 
     var remotePeerAccountIds: [String] {
@@ -241,7 +260,8 @@ enum ConversationAuthorProfileResolver {
         guard message.author == .person,
               !KordiSystemIdentity.isSystemNotice(message),
               message.messageKind != KordiSystemAgentIdentity.messageKind else { return nil }
-        if currentConversation.kind == .person { return currentConversation }
+        // A deleted account has no profile to open.
+        if currentConversation.kind == .person { return currentConversation.peerAccountDeleted ? nil : currentConversation }
         guard currentConversation.kind == .group else { return nil }
 
         let matches = currentConversation.groupParticipants.filter { participant in
@@ -267,11 +287,12 @@ enum ConversationAuthorProfileResolver {
     ) -> ConversationSummary? {
         guard currentConversation.kind == .group,
               participant.accountId.nonEmpty != nil,
-              participant.accountId != selfAccountID else { return nil }
+              participant.accountId != selfAccountID,
+              !KordiDeletedAccount.isStandIn(participant.accountId) else { return nil }
         if let existing = conversations.first(where: { conversation in
             conversation.kind == .person && conversation.peerAccountId == participant.accountId
         }) {
-            return existing
+            return existing.peerAccountDeleted ? nil : existing
         }
         guard let selfAccountID = selfAccountID?.nonEmpty else { return nil }
 
