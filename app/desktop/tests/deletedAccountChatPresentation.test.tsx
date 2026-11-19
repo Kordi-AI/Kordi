@@ -24,10 +24,12 @@ import { baseSidebarProps } from './helpers/workspaceSidebarParticipantSpacesFix
 
 const openProfile = () => {};
 
-/** The neutral placeholder: a flat muted square with the generic person glyph, and no picture or request. */
+/** The neutral placeholder: a flat muted square with nothing inside, named "Deleted account", and no picture or request. */
 function assertStandInPlaceholder(markup: string) {
-  assert.match(markup, /aria-label="Deleted account avatar"[^>]*data-avatar-state="placeholder"/);
-  assert.match(markup, /lucide-user-round/);
+  assert.match(markup, /role="img" aria-label="Deleted account"[^>]*data-avatar-state="placeholder"/);
+  assert.match(markup, /data-avatar-state="placeholder"[^>]*><span class="block h-full w-full bg-slate-200 dark:bg-slate-700" aria-hidden="true"><\/span><\/div>/);
+  // The square holds only that empty span: no glyph or icon.
+  assert.doesNotMatch(markup, /lucide-/, 'no glyph inside the square');
   assert.doesNotMatch(markup, new RegExp(`/avatars/[^"]*${STAND_IN}`), 'no avatar URL is built for the stand-in');
   assert.doesNotMatch(markup, /<img/);
 }
@@ -81,7 +83,7 @@ test('the Info tab, group tiles and every stand-in seed draw the placeholder, wh
     activeConversationUsesCollaboration: true, activeCollaborationAwaitingReply: false, isCollaborationSyncing: false,
     artifacts: [], activeArtifactId: null, onSelectArtifact: () => {},
   }));
-  assertStandInPlaceholder(info.slice(info.indexOf('aria-label="Deleted account avatar"') - 400));
+  assertStandInPlaceholder(info.slice(info.indexOf('aria-label="Deleted account"') - 400));
 
   // A picture the server still lists for the stand-in, and the agent it does not have, are ignored too.
   for (const [kind, seed] of [['human', STAND_IN], ['human', `human:${STAND_IN}`], ['agent', `cloud-agent:${STAND_IN}`]] as const) {
@@ -107,7 +109,7 @@ test('the Info tab, group tiles and every stand-in seed draw the placeholder, wh
   assert.doesNotMatch(tile, new RegExp(`/avatars/[^"]*${STAND_IN}`));
   const viewer = renderToStaticMarkup(createElement(IdentityAvatar, { kind: 'human', seed: viewerAccount.avatar.seed, isSelf: true, name: 'Rowan Sample' }));
   assert.ok(viewer.includes(viewerUrl));
-  assert.doesNotMatch(viewer, /placeholder|lucide-user-round/);
+  assert.doesNotMatch(viewer, /placeholder|aria-label="Deleted account"/);
   const agent = renderToStaticMarkup(createElement(IdentityAvatar, { kind: 'agent', seed: 'cloud-agent:acct_lee', name: "Lee's Kordi" }));
   assert.ok(agent.includes(generatedAvatarPreviewUrl(AGENT_CANONICAL_AVATAR_STYLE, 'default-agent-acct_lee') ?? 'missing'));
 });

@@ -1,5 +1,4 @@
 import { useState, useSyncExternalStore } from 'react';
-import { UserRound } from 'lucide-react';
 
 import { Avatar } from '@/components/ui/avatar';
 import {
@@ -9,7 +8,7 @@ import {
   generatedAvatarPreviewUrl,
 } from '@/features/cloud/canonicalAvatar';
 import { cloudDefaultAgentAvatarSeed } from '@/features/canonical/avatarIdentity';
-import { isDeletedAccountAvatarSeed } from '@/features/systemAgent/systemAgentIdentity';
+import { isDeletedAccountAvatarSeed, KORDI_DELETED_ACCOUNT_NAME } from '@/features/systemAgent/systemAgentIdentity';
 import {
   DEFAULT_LOCAL_AGENT_AVATAR_SEED,
   getLocalAgentAvatar,
@@ -137,8 +136,9 @@ export function getIdentityAvatarKey(kind: IdentityAvatarKind, seed: string, ava
 export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, avatarKey, className, cornerRadius = '17%', generatedClassName, presenceStatus, presenceLabel }: IdentityAvatarProps) {
   const activeLocalProfileIdentity = useActiveLocalProfileIdentity();
   const localAgentAvatar = useLocalAgentAvatar();
-  // The stand-in for a deleted account is no person: it is drawn as the neutral placeholder, never
-  // as a generated or uploaded picture that could match someone's, and nothing is fetched for it.
+  // The stand-in for a deleted account is no person: it is drawn as the flat neutral placeholder
+  // with nothing inside, never as a generated or uploaded picture that could match someone's, and
+  // nothing is fetched for it. Its accessible name is "Deleted account".
   const standIn = !isSelf && isDeletedAccountAvatarSeed(seed);
   // An account's default agent id draws that agent's server default avatar; local overrides stay keyed by the given seed.
   const defaultAgentSeed = kind === 'agent' ? cloudDefaultAgentAvatarSeed(seed) : null;
@@ -199,7 +199,9 @@ export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, ava
       : needsNativeProxy && remoteAvatar.status === 'failed'
         ? 'failed'
         : 'fallback';
-  const label = name?.trim() ? `${name} avatar` : `${kind === 'agent' ? 'Agent' : 'Human'} avatar`;
+  const label = standIn
+    ? KORDI_DELETED_ACCOUNT_NAME
+    : name?.trim() ? `${name} avatar` : `${kind === 'agent' ? 'Agent' : 'Human'} avatar`;
 
   const normalizedPresenceStatus = presenceStatus?.trim().toLowerCase() === 'online' ? 'online' : presenceStatus ? 'offline' : null;
   const resolvedPresenceLabel = presenceLabel?.trim()
@@ -210,15 +212,14 @@ export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, ava
       <Avatar
         className="h-full w-full rounded-[17%] bg-transparent"
         style={{ borderRadius: cornerRadius }}
+        role={standIn ? 'img' : undefined}
         aria-label={label}
         aria-description={resolvedPresenceLabel ?? undefined}
         data-avatar-kind={kind}
         data-avatar-state={avatarState}
       >
         {standIn ? (
-          <span className="grid h-full w-full place-items-center bg-slate-200 text-[var(--utility-muted-text)] dark:bg-slate-700" aria-hidden="true">
-            <UserRound className="h-[58%] w-[58%]" strokeWidth={1.8} />
-          </span>
+          <span className="block h-full w-full bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
         ) : visibleImageUrl ? null : isRemoteImagePending ? (
           <span
             className="block h-full w-full bg-slate-300/55 dark:bg-slate-700/55"
