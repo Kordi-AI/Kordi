@@ -375,7 +375,7 @@ test('the row shows its last message with the stand-in avatar, not as a closed g
   const spaces = buildParticipantSpaces([view]);
   assert.equal(spaces[0]?.kind, 'direct-human');
   assert.equal(spaces[0]?.title, 'Deleted account');
-  assert.equal(spaces[0]?.avatarStack[0]?.seed, `cloud-agent:${STAND_IN}`, 'one neutral avatar for every deleted account');
+  assert.equal(spaces[0]?.avatarStack[0]?.seed, STAND_IN, 'one neutral avatar for every deleted account');
   assert.equal(spaces[0]?.avatarStack[0]?.imageUrl, null);
   assert.equal(isClosedParticipantSpace(spaces[0]), false);
   const markup = renderToStaticMarkup(createElement(WorkspaceSidebar, baseSidebarProps({

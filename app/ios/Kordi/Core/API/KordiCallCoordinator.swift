@@ -301,6 +301,7 @@ final class KordiCallCoordinator: NSObject, ObservableObject {
 
     func configure(model: AppModel) {
         self.model = model
+        model.prepareCallsForAccountTeardown = { [weak self] in await self?.prepareForAccountTeardown() }
         if let pendingVoIPToken {
             Task { await model.registerVoIPPushToken(pendingVoIPToken) }
         }

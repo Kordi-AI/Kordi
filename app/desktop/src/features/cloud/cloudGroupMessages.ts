@@ -352,7 +352,7 @@ export function cloudGroupAdminAccountIds(
   return [...new Set([
     cleanText(envelope.createdByAccountId),
     ...envelope.participants
-      .filter((participant) => participant.role === 'admin')
+      .filter((participant) => participant.role === 'admin' || participant.role === 'owner')
       .map((participant) => cleanText(participant.accountId)),
   ].filter(Boolean))];
 }

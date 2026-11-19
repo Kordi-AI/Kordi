@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 
 import { formatSessionIdSubtitle } from '@/app/viewModels/helpers';
 import { isCloudAgentRuntimeSessionId } from '@/features/cloud/cloudAgentMessages';
+import { isDeletedAccountConversation } from '@/features/chat/closedGroup';
 import { LOCAL_DRAFT_CHAT_CONVERSATION_ID } from '@/features/chat/draftSessions';
 import { scrollTranscriptToBottom } from '@/features/chat/transcriptNavigation';
 import { isKordiSupportConversation } from '@/features/support/supportIdentity';
@@ -49,9 +50,11 @@ export function isGenericChatHeaderSubtitle(value: string): boolean {
 }
 
 export function chatHeaderSubtitle(
-  conversation: Pick<Conversation, 'subtitle'>,
+  conversation: Pick<Conversation, 'subtitle' | 'metadata'>,
   contactPresence?: string | null,
 ): string | null {
+  // A chat kept with a deleted account has no presence and no status line.
+  if (isDeletedAccountConversation(conversation)) return null;
   if (contactPresence) return contactPresence;
   const formatted = formatSessionIdSubtitle(conversation.subtitle).trim();
   if (!formatted || isGenericChatHeaderSubtitle(formatted)) return null;

@@ -7,8 +7,10 @@
 //! [`crate::chat_sync::store::remove_account_from_conversations`] describes,
 //! then the account row, which cascades to its uploads, avatars, memories,
 //! connectors, agents, devices, sessions, contacts and organizations. Object
-//! keys are queued in the same transaction. [`delete_and_record`] adds the
-//! audit event. [`after_commit`] logs every device out, tells contacts, and
+//! keys are queued in the same transaction, and so are the hashes of the
+//! account's live credentials ([`credentials`]), so a client presenting one
+//! later is told `account_deleted`. [`delete_and_record`] adds the audit
+//! event. [`after_commit`] logs every device out, tells contacts, and
 //! starts deleting the queued objects.
 //!
 //! The self-serve route and the operator command ([`operator`]) both run
@@ -28,8 +30,11 @@ use crate::chat_sync::store::ConversationRemoval;
 pub use crate::chat_sync::store::DirectConversations;
 use crate::server::ServerState;
 
+pub mod credentials;
 pub mod objects;
 pub mod operator;
+#[cfg(test)]
+pub(crate) mod reregistration_fixture;
 #[cfg(test)]
 mod tests;
 
@@ -42,6 +47,8 @@ pub struct Deletion {
     pub queued_objects: usize,
     /// Apple tokens left for the revocation retry queue.
     pub queued_apple_tokens: u64,
+    /// Live credentials listed as deleted ([`credentials`]).
+    pub credentials: credentials::Recorded,
 }
 
 impl Deletion {
@@ -181,6 +188,8 @@ pub async fn delete_in_transaction(
     let queued_objects = objects::queue(tx, &keys).await?;
     let queued_apple_tokens =
         crate::auth::oauth::apple::revocations::queue_unrevoked(tx, account_id).await?;
+    // Before the credentials go with the account row.
+    let credentials = credentials::record_in_transaction(tx, account_id).await?;
 
     let deleted = query("DELETE FROM cloud_accounts WHERE account_id = $1")
         .bind(account_id)
@@ -195,6 +204,7 @@ pub async fn delete_in_transaction(
         conversations,
         queued_objects,
         queued_apple_tokens,
+        credentials,
     })
 }
 
@@ -260,17 +270,20 @@ async fn release_shared_rows(
     .bind(account_id)
     .execute(&mut **tx)
     .await?;
-    // A waitlist request under any of the account's emails.
-    query(
-        "DELETE FROM cloud_access_waitlist WHERE lower(email) IN ( \
-           SELECT lower(primary_email) FROM cloud_accounts \
-           WHERE account_id = $1 AND primary_email IS NOT NULL \
-           UNION SELECT lower(email) FROM cloud_account_identities \
-           WHERE account_id = $1 AND email IS NOT NULL)",
-    )
-    .bind(account_id)
-    .execute(&mut **tx)
-    .await?;
+    // A waitlist request and pending sign-up codes under any of the
+    // account's emails.
+    for table in ["cloud_access_waitlist", "cloud_signup_email_codes"] {
+        query(&format!(
+            "DELETE FROM {table} WHERE lower(email) IN ( \
+               SELECT lower(primary_email) FROM cloud_accounts \
+               WHERE account_id = $1 AND primary_email IS NOT NULL \
+               UNION SELECT lower(email) FROM cloud_account_identities \
+               WHERE account_id = $1 AND email IS NOT NULL)"
+        ))
+        .bind(account_id)
+        .execute(&mut **tx)
+        .await?;
+    }
     for sql in [
         "DELETE FROM cloud_agent_omp_state WHERE owner_account_id = $1",
         "DELETE FROM cloud_connector_audit WHERE account_id = $1",

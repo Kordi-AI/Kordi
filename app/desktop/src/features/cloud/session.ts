@@ -6,6 +6,7 @@
 import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
 import { BrowserSessionBackend } from '@web/auth/browserSessionBackend';
 import { withBrowserSession } from '@web/auth/browserSessionTransport';
+import { signalAccountDeleted } from './accountDeletedSignal';
 
 export type StoredSession = {
   token: string;
@@ -210,6 +211,13 @@ export function refreshSession(session: StoredSession): Promise<StoredSession | 
     })
     .catch(async (error: unknown) => {
       const code = refreshErrorCode(error);
+      if (code === 'account_deleted') {
+        // The account is gone: its session ends and its local data is erased.
+        const handled = revision === sessionRevision
+          && await signalAccountDeleted({ token: session.token, accountId: session.accountId });
+        if (!handled && revision === sessionRevision) await clearSessionAndNotifySignedOut();
+        return null;
+      }
       if (code === 'invalid_grant' || code === 'not_signed_in') {
         if (revision === sessionRevision) await clearSessionAndNotifySignedOut();
         return null;

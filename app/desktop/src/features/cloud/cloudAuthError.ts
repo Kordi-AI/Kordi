@@ -1,4 +1,5 @@
 import { signalAiConsentRequired } from '@/features/aiConsent/aiConsentSignal';
+import { signalAccountDeleted } from './accountDeletedSignal';
 
 export type CloudAuthErrorCode =
   | 'invalid_email'
@@ -15,6 +16,7 @@ export type CloudAuthErrorCode =
   | 'invalid_avatar_version'
   | 'avatar_conflict'
   | 'invalid_session'
+  | 'account_deleted'
   | 'browser_account_changed'
   | 'invalid_session_id'
   | 'invalid_attachment'
@@ -62,6 +64,8 @@ export type CloudAuthErrorCode =
   | 'invalid_website'
   | 'invalid_birthday'
   | 'ai_consent_required'
+  // Account security: proof for a sensitive change such as deleting the account.
+  | 'current_password_required' | 'reauthentication_required' | 'invalid_current_password' | 'account_changed'
   // Blocks and reports.
   | 'self_block' | 'cannot_block_service' | 'self_report' | 'invalid_report' | 'invalid_report_evidence' | 'report_conflict' | 'report_too_large'
   // Browser sign-in (authorization code with PKCE).
@@ -158,7 +162,7 @@ const SERVER_ERROR_CODES = new Set<CloudAuthErrorCode>([
   'email_missing', 'email_already_verified',
   'invalid_email', 'weak_password', 'email_in_use', 'invalid_credentials',
   'invalid_avatar', 'invalid_avatar_seed', 'invalid_avatar_version', 'avatar_conflict',
-  'invalid_session', 'invalid_session_id', 'browser_account_changed',
+  'invalid_session', 'account_deleted', 'invalid_session_id', 'browser_account_changed',
   'invalid_attachment', 'invalid_provider_auth_snapshot', 'provider_auth_not_configured',
   'provider_auth_snapshot_not_found', 'oauth_not_configured', 'oauth_email_requires_sign_in',
   'requester_mismatch',
@@ -172,6 +176,7 @@ const SERVER_ERROR_CODES = new Set<CloudAuthErrorCode>([
   'not_a_group_member', 'not_a_participant', 'device_review_required',
   'invalid_kordi_id', 'kordi_id_taken', 'kordi_id_change_locked', 'invalid_about', 'invalid_location',
   'invalid_time_zone', 'invalid_website', 'invalid_birthday', 'ai_consent_required',
+  'current_password_required', 'reauthentication_required', 'invalid_current_password', 'account_changed',
   'self_block', 'cannot_block_service', 'self_report', 'invalid_report', 'invalid_report_evidence', 'report_conflict', 'report_too_large',
 ]);
 
@@ -184,11 +189,25 @@ export function cloudOAuthCallbackError(code: string | null, message: string): C
   return new CloudAuthError(isErrorCode(code) ? code : 'unknown', message, 0);
 }
 
+/** The bearer credential of a request's headers, if it has one. */
+export function bearerCredential(headers: HeadersInit | undefined): string | null {
+  if (!headers) return null;
+  let value = '';
+  try { value = new Headers(headers).get('authorization') ?? ''; } catch { return null; }
+  return /^Bearer\s+(.+)$/i.exec(value)?.[1]?.trim() || null;
+}
+
+/**
+ * `requestHeaders` are the failed request's headers. A `401 account_deleted`
+ * answer to a request that carried a credential reports that credential's
+ * account as deleted, so its session ends and its local data is erased.
+ */
 export function buildCloudAuthError(
   status: number,
   body: unknown,
   fallbackMessage: string,
   retryAfter?: string | null,
+  requestHeaders?: HeadersInit,
 ): CloudAuthError {
   const data = (body as ServerErrorBody) ?? {};
   const serverCode = data.errorCode ?? (typeof data.error === 'string' ? data.error : data.error?.code);
@@ -200,6 +219,8 @@ export function buildCloudAuthError(
     : fallbackMessage;
   // The account turned AI models off; the consent store shows the "AI models are off" prompt.
   if (code === 'ai_consent_required') signalAiConsentRequired();
+  const deletedCredential = code === 'account_deleted' && status === 401 ? bearerCredential(requestHeaders) : null;
+  if (deletedCredential) void signalAccountDeleted({ token: deletedCredential });
   const retryAfterSeconds = parseRetryAfterSeconds(retryAfter) ?? bodyRetryAfterSeconds(data);
   return new CloudAuthError(code, message, status, retryAfterSeconds, {
     serverCode: typeof serverCode === 'string' ? serverCode : undefined,

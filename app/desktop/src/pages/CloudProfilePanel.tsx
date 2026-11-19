@@ -8,6 +8,7 @@ import { EditableIdentityAvatar } from '@/kordi-app/components/EditableIdentityA
 import { CloudAccountEmailRow } from '@/kordi-app/cloud/CloudAccountEmailRow';
 import { CloudProfileFieldRow } from '@/kordi-app/cloud/CloudProfileFieldRow';
 import { openOrganizationJoinDialog } from '@/features/organizations/organizationJoinPrompt';
+import { CloudDeleteAccountRow } from '@/features/cloud/CloudDeleteAccountRow';
 import type {
   CloudAccount,
   CloudAccountEmailVerificationInput,
@@ -246,6 +247,7 @@ export function CloudProfilePanel({
               </Button>
             )}
           />
+          <CloudDeleteAccountRow />
         </SettingsSection>
       ) : null}
       {kordiIdDialog === 'confirm' ? (

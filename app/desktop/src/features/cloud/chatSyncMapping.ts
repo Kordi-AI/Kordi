@@ -3,7 +3,7 @@ import type { MessagePlanCard } from '@/kordi-app/types/message';
 import { normalizeFacilitatorCard } from './facilitatorCard';
 import { groupJoinRequestFromChatContent } from './groupJoinRequest';
 import { normalizePlanCardSnapshot } from './planCardSnapshot';
-import { isBuiltInAccountId, isSystemAccountId, isSystemAgentAccountId, KORDI_DELETED_ACCOUNT_ID, KORDI_SYSTEM_NOTICE_KIND } from '@/features/systemAgent/systemAgentIdentity';
+import { isBuiltInAccountId, isSystemAccountId, isSystemAgentAccountId, KORDI_DELETED_ACCOUNT_ID, KORDI_DELETED_ACCOUNT_NAME, KORDI_SYSTEM_NOTICE_KIND } from '@/features/systemAgent/systemAgentIdentity';
 import { deletedDirectPeerAccountId } from './cloudDeletedDirectCatalog';
 import { normalizedLivePhoto } from '@/features/chat/livePhotos';
 import type { CloudMessage, CloudMessageAttachment, CloudVoiceMessage, SendCloudMessageAttachmentInput } from './authClient';
@@ -201,6 +201,32 @@ function recordValue(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function groupMemberParticipant(member: ChatSyncConversation['members'][number]): CloudGroupParticipant {
+  return {
+    accountId: member.account_id,
+    displayName: member.display_name?.trim() || member.account_id,
+    avatarUrl: member.avatar_url?.trim() || null,
+    agentId: member.default_agent_id?.trim() || `cloud-agent:${member.account_id}`,
+    agentDisplayName: member.default_agent_display_name?.trim() || 'Kordi',
+    agentAvatarUrl: member.default_agent_avatar_url?.trim() || null,
+    role: member.role,
+    joinedAt: member.joined_at,
+  };
+}
+
+/**
+ * Only the people the conversation lists as active members, in their current roles. A member
+ * who left, or a deleted account whose row is gone, stays out even when a stale copy names them.
+ */
+function activeGroupParticipants(participants: CloudGroupParticipant[], conversation: ChatSyncConversation) {
+  const active = new Map(conversation.members.filter((member) => member.membership_state === 'active').map((member) => [member.account_id, member]));
+  if (active.size === 0) return participants;
+  return participants.flatMap((participant) => {
+    const member = active.get(participant.accountId);
+    return member ? [{ ...participant, role: member.role }] : [];
+  });
+}
+
 function groupMessageBody(
   message: ChatSyncMessage,
   conversation: ChatSyncConversation,
@@ -220,6 +246,9 @@ function groupMessageBody(
           groupId,
           groupSpaceId: envelope.groupSpaceId ?? conversation.group_space_id ?? null,
           groupTitle: envelope.groupTitle ?? conversation.group_title ?? null,
+          // The conversation's current creator: the stand-in once the creator's account is deleted.
+          createdByAccountId: conversation.created_by_account_id?.trim() || envelope.createdByAccountId,
+          participants: activeGroupParticipants(envelope.participants, conversation),
           message: { ...envelope.message, createdAtMs },
         })
       : null;
@@ -227,24 +256,17 @@ function groupMessageBody(
 
   const participants: CloudGroupParticipant[] = conversation.members
     .filter((member) => member.membership_state === 'active')
-    .map((member) => ({
-      accountId: member.account_id,
-      displayName: member.display_name?.trim() || member.account_id,
-      avatarUrl: member.avatar_url?.trim() || null,
-      agentId: member.default_agent_id?.trim() || `cloud-agent:${member.account_id}`,
-      agentDisplayName: member.default_agent_display_name?.trim() || 'Kordi',
-      agentAvatarUrl: member.default_agent_avatar_url?.trim() || null,
-      role: member.role,
-      joinedAt: member.joined_at,
-    }));
+    .map(groupMemberParticipant);
+  // A sender who left is still listed, by name; the stand-in is such a member.
+  const senderMember = conversation.members.find((member) => member.account_id === message.sender_account_id);
   const actor = participants.find(
     (participant) => participant.accountId === message.sender_account_id,
-  ) ?? {
+  ) ?? (senderMember ? groupMemberParticipant(senderMember) : {
     accountId: message.sender_account_id,
-    displayName: message.sender_account_id,
+    displayName: message.sender_account_id === KORDI_DELETED_ACCOUNT_ID ? KORDI_DELETED_ACCOUNT_NAME : message.sender_account_id,
     avatarUrl: null,
     role: 'person',
-  };
+  });
   const groupId = conversation.legacy_session_id?.trim() || conversation.id.trim();
   if (!isCloudGroupSessionId(groupId) || participants.length === 0) return null;
   const agentResponse = parseCloudAgentResponse(text);

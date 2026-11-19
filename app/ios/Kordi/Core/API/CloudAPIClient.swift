@@ -10,6 +10,10 @@ struct CloudAPIError: LocalizedError, Equatable {
     var reason: String? = nil
     /// The server's `Retry-After` delay in seconds, when it sent one.
     var retryAfterSeconds: Int? = nil
+    /// Set only for an error read from a Kordi Cloud HTTP response. Errors
+    /// the app makes up itself and transport failures leave it false, so
+    /// they can never end the session (`ServerSessionEnd`).
+    var fromServer = false
 
     var errorDescription: String? { message }
 }
@@ -437,6 +441,13 @@ actor CloudAPIClient {
             resetChatCache()
         }
         activeAccountId = accountId
+    }
+
+    /// Drops the account and its chat state without the logout request, for
+    /// a session the server already ended.
+    func forgetActiveAccount() {
+        activeAccountId = nil
+        resetChatCache()
     }
 
     private func resetChatCache() {
@@ -3212,7 +3223,8 @@ actor CloudAPIClient {
                 reason: server?.reason,
                 retryAfterSeconds: http.value(forHTTPHeaderField: "Retry-After")
                     .flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-                    .flatMap { $0 >= 0 ? $0 : nil }
+                    .flatMap { $0 >= 0 ? $0 : nil },
+                fromServer: server?.errorCode != nil
             )
         }
     }

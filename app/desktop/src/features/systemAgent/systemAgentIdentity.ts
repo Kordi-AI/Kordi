@@ -54,6 +54,13 @@ export function isSystemAccountId(accountId: string | null | undefined): boolean
 export const KORDI_DELETED_ACCOUNT_ID = 'acct_kordi_deleted';
 export const KORDI_DELETED_ACCOUNT_NAME = 'Deleted account';
 
+/** A message from the stand-in, by its sender identity or avatar seed: it has no profile to open. */
+export function isDeletedAccountSender(message: { senderIdentityId?: string | null; senderAvatarSeed?: string | null }): boolean {
+  const identityId = message.senderIdentityId?.trim() ?? '';
+  return identityId === KORDI_DELETED_ACCOUNT_ID || identityId === `human:${KORDI_DELETED_ACCOUNT_ID}`
+    || message.senderAvatarSeed?.trim() === KORDI_DELETED_ACCOUNT_ID;
+}
+
 /** The System agent or the system account: server-managed members a client never lists or removes. */
 export function isBuiltInAccountId(accountId: string | null | undefined): boolean {
   return isSystemAgentAccountId(accountId) || isSystemAccountId(accountId);

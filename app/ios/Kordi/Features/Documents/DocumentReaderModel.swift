@@ -333,6 +333,14 @@ final class DocumentReaderModel: ObservableObject {
 
     // MARK: Public reader identity
 
+    /// The reader key and name belong to whoever uses this iPhone, not to an
+    /// account, so every sign-out forgets them and a later account starts
+    /// with its own.
+    static func forgetReaderIdentity(in defaults: UserDefaults) {
+        defaults.removeObject(forKey: readerKeyDefaultsKey)
+        defaults.removeObject(forKey: readerNameDefaultsKey)
+    }
+
     var storedReaderName: String? { defaults.string(forKey: Self.readerNameDefaultsKey)?.nonEmpty }
 
     func saveReaderName(_ name: String) {

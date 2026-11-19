@@ -12,11 +12,25 @@
 //! A kept direct conversation also holds direct-message and agent-response
 //! envelopes, and its messages can name the deleted person's agent as their
 //! target; [`AccountScrub::direct`] reads those too.
+//!
+//! A quote, forward or thread reference (`messageAction.source`) names its
+//! source message's sender only by a label. A reference whose
+//! `sourceMessageId` is one of the deleted account's messages
+//! ([`AccountScrub::quoted_messages`]) gets the stand-in's name as its
+//! label; its text preview is free text and stays.
+//!
+//! Session ids (`session:…`) are never rewritten: a kept direct
+//! conversation keeps its session id, which names the deleted account, so a
+//! reference to it must keep naming it to lead back to the same chat.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde_json::{Map, Value};
+use sqlx_core::query_as::query_as;
+use sqlx_core::transaction::Transaction;
+use sqlx_postgres::Postgres;
+use uuid::Uuid;
 
 use super::CLOUD_GROUP_PREFIX;
 
@@ -76,6 +90,14 @@ const IDENTITY_KEYS: &[&str] = &[
 
 const ATTACHMENT_KEYS: &[&str] = &["attachmentId", "attachment_id"];
 
+/// The message a quote, forward or thread reference points at, and the
+/// label it shows for that message's sender.
+const SOURCE_MESSAGE_KEY: &str = "sourceMessageId";
+const SOURCE_SENDER_KEYS: &[&str] = &["senderLabel"];
+
+/// Session ids keep the account id they name; see the module notes.
+const SESSION_ID_PREFIX: &str = "session:";
+
 pub(in crate::chat_sync::store) struct AccountScrub<'a> {
     pub account_id: &'a str,
     pub replacement_id: &'a str,
@@ -85,6 +107,10 @@ pub(in crate::chat_sync::store) struct AccountScrub<'a> {
     /// agent-response envelopes, and renames an agent target owned by the
     /// account.
     pub direct: bool,
+    /// Ids of the account's messages in the conversation (message id, client
+    /// message id, and the id inside its envelope); a reference to one of
+    /// them shows the stand-in as sender.
+    pub quoted_messages: &'a HashSet<String>,
 }
 
 impl AccountScrub<'_> {
@@ -103,6 +129,53 @@ impl AccountScrub<'_> {
             prefixes.extend_from_slice(DIRECT_ENVELOPE_PREFIXES);
         }
         prefixes
+    }
+
+    /// Every id the messages `message_ids` go by: the stored id, the
+    /// client's id, and the id inside a group envelope. A quote, forward or
+    /// thread reference names its source by one of them.
+    pub async fn message_ids(
+        transaction: &mut Transaction<'_, Postgres>,
+        message_ids: &BTreeSet<Uuid>,
+    ) -> Result<HashSet<String>, sqlx_core::Error> {
+        let ids: Vec<Uuid> = message_ids.iter().copied().collect();
+        let rows: Vec<(Uuid, Uuid, Value)> = query_as(
+            "SELECT message_id, client_message_id, content FROM cloud_chat_messages \
+             WHERE message_id = ANY($1)",
+        )
+        .bind(&ids)
+        .fetch_all(&mut **transaction)
+        .await?;
+        let mut quoted = HashSet::new();
+        for (message_id, client_message_id, content) in rows {
+            quoted.insert(message_id.to_string());
+            quoted.insert(client_message_id.to_string());
+            quoted.extend(Self::envelope_message_id(&content));
+        }
+        Ok(quoted)
+    }
+
+    /// The id a group envelope in `content` gives its message, which a
+    /// reference may use instead of the stored message id.
+    pub fn envelope_message_id(content: &Value) -> Option<String> {
+        let blocks = content.get("blocks")?.as_array()?;
+        blocks.iter().find_map(|block| {
+            let encoded = block
+                .get("text")?
+                .as_str()?
+                .strip_prefix(CLOUD_GROUP_PREFIX)?;
+            let envelope: Value = URL_SAFE_NO_PAD
+                .decode(encoded)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok())?;
+            envelope
+                .get("message")?
+                .get("id")?
+                .as_str()
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+        })
     }
 
     fn value(&self, value: &mut Value) {
@@ -134,6 +207,9 @@ impl AccountScrub<'_> {
             }
             let bytes = serde_json::to_vec(&envelope).ok()?;
             return Some(format!("{prefix}{}", URL_SAFE_NO_PAD.encode(bytes)));
+        }
+        if text.starts_with(SESSION_ID_PREFIX) {
+            return None;
         }
         text.contains(self.account_id)
             .then(|| text.replace(self.account_id, self.replacement_id))
@@ -180,6 +256,19 @@ impl AccountScrub<'_> {
                 object.remove(*key);
             }
         }
+        let quotes_account = object
+            .get(SOURCE_MESSAGE_KEY)
+            .and_then(Value::as_str)
+            .is_some_and(|id| self.quoted_messages.contains(id.trim()));
+        if quotes_account {
+            for key in SOURCE_SENDER_KEYS {
+                if let Some(value) = object.get_mut(*key) {
+                    if value.is_string() {
+                        *value = Value::String(self.replacement_name.to_string());
+                    }
+                }
+            }
+        }
         let targets_account = object
             .get(TARGET_OWNER_KEY)
             .and_then(Value::as_str)
@@ -203,136 +292,4 @@ impl AccountScrub<'_> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    fn envelope(value: &Value) -> String {
-        format!(
-            "{CLOUD_GROUP_PREFIX}{}",
-            URL_SAFE_NO_PAD.encode(serde_json::to_vec(value).unwrap())
-        )
-    }
-
-    fn decode(text: &str) -> Value {
-        let encoded = text.strip_prefix(CLOUD_GROUP_PREFIX).unwrap();
-        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(encoded).unwrap()).unwrap()
-    }
-
-    #[test]
-    fn group_envelopes_lose_the_deleted_identity() {
-        let removed = HashSet::from(["att_gone".to_string()]);
-        let scrub = AccountScrub {
-            account_id: "acct_gone",
-            replacement_id: "acct_kordi_deleted",
-            replacement_name: "Deleted account",
-            removed_attachments: &removed,
-            direct: false,
-        };
-        let inner = json!({
-            "kind": "message",
-            "actor": {"accountId": "acct_gone", "displayName": "Dana Doe", "avatarUrl": "https://example.test/a.png"},
-            "participants": [
-                {"accountId": "acct_gone", "displayName": "Dana Doe"},
-                {"accountId": "acct_kept", "displayName": "Kim"}
-            ],
-            "message": {
-                "senderKind": "agent",
-                "senderAccountId": "acct_gone",
-                "senderAgentId": "cloud-agent:acct_gone",
-                "senderOwnerName": "Dana Doe",
-                "senderDisplayName": "Dana's Kordi"
-            }
-        });
-        let mut content = json!({
-            "blocks": [{"type": "text", "text": envelope(&inner)}],
-            "legacy_attachments": [
-                {"attachmentId": "att_gone", "name": "Dana passport.jpg"},
-                {"attachmentId": "att_kept", "name": "Plan.pdf"}
-            ]
-        });
-        assert!(scrub.scrub(&mut content));
-        let text = content["blocks"][0]["text"].as_str().unwrap();
-        let decoded = decode(text);
-        assert!(!decoded.to_string().contains("Dana"), "{decoded}");
-        assert!(!decoded.to_string().contains("acct_gone"), "{decoded}");
-        assert_eq!(decoded["participants"].as_array().unwrap().len(), 1);
-        assert_eq!(decoded["actor"]["accountId"], "acct_kordi_deleted");
-        assert_eq!(decoded["actor"]["displayName"], "Deleted account");
-        assert!(decoded["actor"].get("avatarUrl").is_none());
-        assert_eq!(
-            decoded["message"]["senderAgentId"],
-            "cloud-agent:acct_kordi_deleted"
-        );
-        let attachments = content["legacy_attachments"].as_array().unwrap();
-        assert_eq!(attachments.len(), 1);
-        assert_eq!(attachments[0]["attachmentId"], "att_kept");
-    }
-
-    #[test]
-    fn content_without_the_account_is_unchanged() {
-        let removed = HashSet::new();
-        let scrub = AccountScrub {
-            account_id: "acct_gone",
-            replacement_id: "acct_kordi_deleted",
-            replacement_name: "Deleted account",
-            removed_attachments: &removed,
-            direct: false,
-        };
-        let mut content = json!({"blocks": [{"type": "text", "text": "See you at 5"}]});
-        assert!(!scrub.scrub(&mut content));
-    }
-
-    #[test]
-    fn direct_envelopes_lose_the_deleted_identity_only_in_a_direct_scrub() {
-        let removed = HashSet::new();
-        let prefix = "kordi-cloud-message:";
-        let inner = json!({
-            "schemaVersion": 1,
-            "kind": "message",
-            "text": "@Dana's Kordi can you check?",
-            "mentions": [{"accountId": "acct_gone", "displayName": "Dana Doe"}],
-            "targetCloudAgentId": "agent_gone",
-            "targetCloudAgentName": "Dana's Kordi",
-            "targetCloudAgentOwnerAccountId": "acct_gone",
-            "targetCloudAgentOwnerName": "Dana Doe"
-        });
-        let encoded = format!(
-            "{prefix}{}",
-            URL_SAFE_NO_PAD.encode(serde_json::to_vec(&inner).unwrap())
-        );
-        let content = json!({"blocks": [{"type": "text", "text": encoded}]});
-        let mut scrub = AccountScrub {
-            account_id: "acct_gone",
-            replacement_id: "acct_kordi_deleted",
-            replacement_name: "Deleted account",
-            removed_attachments: &removed,
-            direct: false,
-        };
-        assert!(
-            !scrub.scrub(&mut content.clone()),
-            "groups read group envelopes only"
-        );
-
-        scrub.direct = true;
-        let mut scrubbed = content.clone();
-        assert!(scrub.scrub(&mut scrubbed));
-        let text = scrubbed["blocks"][0]["text"].as_str().unwrap();
-        let decoded: Value = serde_json::from_slice(
-            &URL_SAFE_NO_PAD
-                .decode(text.strip_prefix(prefix).unwrap())
-                .unwrap(),
-        )
-        .unwrap();
-        assert_eq!(decoded["mentions"][0]["accountId"], "acct_kordi_deleted");
-        assert_eq!(decoded["mentions"][0]["displayName"], "Deleted account");
-        assert_eq!(
-            decoded["targetCloudAgentOwnerAccountId"],
-            "acct_kordi_deleted"
-        );
-        assert_eq!(decoded["targetCloudAgentOwnerName"], "Deleted account");
-        assert_eq!(decoded["targetCloudAgentName"], "Deleted account");
-        // Free text is not rewritten, as in groups.
-        assert_eq!(decoded["text"], "@Dana's Kordi can you check?");
-    }
-}
+mod tests;

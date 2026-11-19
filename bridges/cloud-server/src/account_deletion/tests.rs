@@ -14,8 +14,10 @@ use crate::chat_sync::models::SendMessageRequest;
 use crate::chat_sync::store;
 use crate::deleted_account::DELETED_ACCOUNT_ID;
 
+mod credentials;
 mod direct;
 mod operator;
+mod quotes;
 
 async fn pool() -> Option<PgPool> {
     let url = std::env::var("DATABASE_URL").ok()?;

@@ -316,7 +316,9 @@ export async function refreshAppSession(
   });
   if (status === 0) throw new Error('network_error');
   if (status < 200 || status >= 300) {
-    throw new Error(oauthErrorCode(body) === 'invalid_grant' ? 'invalid_grant' : 'refresh_failed');
+    if (oauthErrorCode(body) !== 'invalid_grant') throw new Error('refresh_failed');
+    const deleted = (body as { errorCode?: unknown } | null)?.errorCode === 'account_deleted';
+    throw new Error(deleted ? 'account_deleted' : 'invalid_grant');
   }
   const result = tokenResult((body ?? {}), { clientId, tokenEndpoint }, now());
   if (!result) throw new Error('refresh_failed');

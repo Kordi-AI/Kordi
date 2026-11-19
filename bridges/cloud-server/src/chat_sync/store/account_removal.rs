@@ -105,12 +105,14 @@ pub async fn remove_account_from_conversations(
 
     let mut outcome = ConversationRemoval::default();
     let mut deleted = Vec::new();
+    let no_quotes = HashSet::new();
     let scrub = |direct| AccountScrub {
         account_id,
         replacement_id: DELETED_ACCOUNT_ID,
         replacement_name: DELETED_DISPLAY_NAME,
         removed_attachments,
         direct,
+        quoted_messages: &no_quotes,
     };
     for (conversation_id, kind, session_id, role, state, others) in conversations {
         let direct = kind == "direct";
@@ -354,6 +356,13 @@ async fn keep_conversation(
     .into_iter()
     .map(|(id,)| id)
     .collect();
+    // References to their messages name them only by a label, so every id
+    // those messages go by is collected first.
+    let quoted = AccountScrub::message_ids(transaction, &changed).await?;
+    let scrub = AccountScrub {
+        quoted_messages: &quoted,
+        ..*scrub
+    };
     // Encoded envelopes can name the account without showing its id (group
     // envelopes name every participant), so each one is read; other content
     // only when it names the account.

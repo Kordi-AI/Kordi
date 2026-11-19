@@ -142,7 +142,7 @@ export function useDesktopAgentReadiness({
             // An expired or revoked session settles once: sign-in shows and
             // this loop stops until the person signs in again.
             reportWarning('[desktop-runtime] readiness stopped: session rejected', error);
-            if (await endRejectedCloudSession(attempt.token).catch(() => false)) return;
+            if (await endRejectedCloudSession(attempt.token, error).catch(() => false)) return;
             failures = 0;
             schedule(DESKTOP_READINESS_INTERVAL_MS);
             return;

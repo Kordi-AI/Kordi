@@ -11,7 +11,10 @@ takes the same proof as the other [account security](account-security.md)
 changes: `currentPassword` when the account has a password, otherwise
 `verificationId` and `verificationCode` from `POST /password/code`, or a
 sign-in within the last ten minutes. It answers `204`, and every session and
-token of the account stops working at once.
+token of the account stops working at once; a web page that called it with
+its session cookie also gets both web session cookies cleared. From then on
+every credential of the account is answered with `account_deleted`; see
+[For clients](#for-clients).
 
 ```json
 { "currentPassword": "…" }
@@ -51,7 +54,21 @@ identifies the deleted person.
   to them), are kept from the stand-in.
 - Other people's digests built from their messages are cleared and rebuilt
   without them, synced copies of emptied direct conversations are deleted,
-  and access waitlist requests under any of their emails are removed.
+  and access waitlist requests and pending sign-up codes under any of their
+  emails are removed.
+- Quote, forward and thread references (`messageAction.source`) in kept
+  conversations that point at one of their messages, by its stored id, its
+  client id or the id inside its group envelope, show **Deleted account** as
+  `senderLabel`. The reference's `textPreview` is free text and stays, and
+  its `sourceSessionId` is never rewritten: no `session:…` id is, so a
+  reference into a kept direct conversation still names the deleted account
+  like the conversation's own session id does, and jump-to-message keeps
+  working.
+
+Signing up again with the same email, or signing in with the same Google,
+GitHub or Apple account, creates a new account with a new id. Nothing of the
+deleted account is reachable from it: no contacts, conversations, memories,
+devices or organizations.
 
 Remaining members get `membership.updated` for each kept conversation and
 `message.updated` for up to 200 of its newest changed messages; older
@@ -163,6 +180,89 @@ should match it:
 - It is never a contact, so it is in no people picker, group invitation list,
   mention list or Grounding surface.
 
+## For clients
+
+Without help, a deleted account looks exactly like a sign-out elsewhere: its
+sessions are gone, so requests get `401` and sockets close. Clients must tell
+the two apart, because a deleted account's local data has to be erased while
+a sign-out keeps it. The server therefore answers credentials of a deleted
+account with the code `account_deleted`:
+
+| Where | Deleted account | Signed out, revoked or expired |
+| --- | --- | --- |
+| Any API request with `Authorization: Bearer kordi_cs_…` (an app session, a browser sign-in's access token), including `GET /v1/cloud/auth/me`, `POST /v2/chat/realtime/ticket` and `POST /v1/cloud/documents/:id/collab/ticket` | `401`, `{"errorCode": "account_deleted", "message": "This account was deleted."}` | `401`, `errorCode: "invalid_session"` |
+| Any request with the web session cookie, including `GET /v1/cloud/auth/web/session` and the cookie path of the ticket routes | `401`, `{"error": "account_deleted", "errorCode": "account_deleted", …}` | `401`, `errorCode: "login_required"` |
+| `POST /v1/cloud/auth/app/token` with `grant_type=refresh_token` | `400`, `{"error": "invalid_grant", "error_description": "This account was deleted.", "errorCode": "account_deleted", "message": …}` | `400`, `error` and `errorCode` both `invalid_grant` |
+| `GET /v1/cloud/ws?token=…` (legacy gateway upgrade) | `401` with the bearer body above | `401` without a body |
+| A WebSocket closed because the account is gone: chat realtime (`/v2/chat/realtime`), the legacy gateway (`/v1/cloud/ws`) and document editing (`/v1/cloud/documents/:id/collab`) | close code `4410`, reason `account_deleted` | unchanged: no code (realtime and gateway) or `4403` (document editing) |
+
+The refresh answer keeps the RFC 6749 shape: `error` stays `invalid_grant`,
+so OAuth clients that only read `error` still sign out. Clients read
+`errorCode` to learn why; never parse `error_description` or `message`.
+
+A socket learns of the deletion from the database signal that a removed
+session or device sends (migration 0175), or from its periodic recheck, and
+then checks that the account row is gone before it chooses `4410`. A
+reconnecting client asks for a ticket first, and the ticket routes already
+answer `account_deleted`, so it never needs the socket to tell it.
+
+How the server knows: the deletion transaction lists, in
+`cloud_deleted_account_credentials` (migration 0208,
+[`account_deletion::credentials`](../../bridges/cloud-server/src/account_deletion/credentials.rs)),
+the SHA-256 of each of the account's credentials that still worked: unrevoked,
+unexpired session tokens on authorized devices (app bearer tokens, browser
+sign-in access tokens and web session cookies, all `cloud_refresh_tokens`
+rows), and refresh tokens of unrevoked browser sign-ins that were not
+rotated, or were rotated within the 60-second reuse grace. A row holds only
+the hash, its kind (`session` or `refresh`) and its expiry: when the
+credential would have expired anyway, at most 30 days after the deletion. It
+names no account, device, email or person. A credential that was already
+signed out, revoked or expired keeps its old answer. Only a rejected
+credential pays for the lookup, and an hourly sweep deletes expired rows.
+Both deletion paths list them, since both run `delete_in_transaction`; an
+operator's dry run rolls them back with everything else.
+
+What a client must do on `account_deleted` from any request, or a `4410`
+close from any socket:
+
+1. Stop every retry and refresh loop, and do not call the logout or revoke
+   routes (they would only answer `401` again).
+2. End the local session: remove the stored token and browser sign-in.
+3. Erase the account's local data.
+4. Show the sign-in screen.
+
+A plain `invalid_session` or `login_required` keeps today's behaviour: sign
+out and keep the account's local data, so signing in again restores it. A
+client holding a browser sign-in first tries one refresh on
+`invalid_session`, and signs out only if that refresh is refused too; a
+refresh answered with `account_deleted` erases as above.
+
+The apps do this as follows:
+
+- **iPhone.** Any `account_deleted` (in `errorCode`, `error_code`, `reason`
+  or `error`, never `error_description`) or a `4410` close ends every retry
+  loop, wipes the account's local data and shows the sign-in screen. Delete
+  account in Profile runs `POST /delete` and then the same wipe.
+- **Mac.** Profile > Session has **Delete account**. Its dialog states
+  what is deleted, asks for the proof the server needs (the current
+  password; else an emailed code with resend; nothing after a sign-in within
+  ten minutes; otherwise it asks the person to sign in again), and confirms
+  once more before `POST /delete`. After the `204`, and on any
+  `account_deleted` or `4410`, the app clears the keychain session without
+  calling logout, marks the account's folder `APP_DATA_DIR/accounts/<hash>/`
+  for removal through the `cloud_account_storage_mark_for_removal` command,
+  stops the account's running local agent turns with the `signed_out` stop
+  reason, clears the account's local storage keys, and shows the sign-in
+  screen. The folder is in use while the app runs, so marked folders are
+  removed at the next start, before any account folder is opened. A `401` on
+  the realtime ticket now ends the session at once instead of waiting for the
+  15-second `/me` poll.
+- **Web.** The same Profile row and dialog. After the `204` (whose response
+  already cleared the cookies) the page does not call the logout route; on
+  any `account_deleted` or `4410` it erases the account's IndexedDB chat
+  store and local storage keys and goes to the site's sign-in page without a
+  `next` parameter.
+
 ## Operator command
 
 ```sh
@@ -228,12 +328,16 @@ server does, so it is run where the server's environment is available:
    rows that point at the account's attachments, sandboxes or personal
    organization, deletes records that have no foreign key
    (`cloud_audit_events`, `cloud_agent_omp_state`, `cloud_connector_audit`,
-   `cloud_connector_removal_requests`), queues object-store keys in
+   `cloud_connector_removal_requests`), deletes waitlist requests and pending
+   sign-up codes under the account's emails, queues object-store keys in
    `cloud_object_deletions`, moves Apple tokens that could not be revoked to
-   `cloud_apple_token_revocations` for a retry worker, deletes the account row, and writes the
-   `account.deleted` audit event with counts only.
-3. After commit every device's live connections are closed, contacts' devices
-   are told the contact is gone, and queued objects are deleted. A failed
+   `cloud_apple_token_revocations` for a retry worker, lists the hashes of
+   the account's live credentials in `cloud_deleted_account_credentials`,
+   deletes the account row, and writes the `account.deleted` audit event with
+   counts only.
+3. After commit every device's live connections are closed (with close
+   code `4410`), contacts' devices are told the contact is gone, and queued
+   objects are deleted. A failed
    object delete stays queued and is retried with backoff by a background
    worker; a missing object counts as deleted.
 

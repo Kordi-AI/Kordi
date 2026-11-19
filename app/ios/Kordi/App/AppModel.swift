@@ -387,6 +387,16 @@ final class AppModel: ObservableObject {
     private let previewMode: Bool
     private let previewLaunchFlow: Bool
     private let previewHistoryLoadDelay: Duration
+    /// Defaults a sign-out and an account wipe clear.
+    let localDefaults: UserDefaults
+    /// Removes the account's delivered and scheduled notifications at sign-out.
+    let removeAccountNotifications: @MainActor () async -> Void
+    /// Ends calls before a deleted account is torn down; the call coordinator sets it.
+    var prepareCallsForAccountTeardown: (@MainActor () async -> Void)?
+    /// The teardown after the server ended the session; one runs at a time.
+    var serverSessionEndTask: Task<Void, Never>?
+    /// The running teardown also wipes the account, because it was deleted.
+    var serverSessionEndWipesAccount = false
 
     var isPreviewMode: Bool { previewMode }
 
@@ -398,6 +408,8 @@ final class AppModel: ObservableObject {
         sendQueue: ConversationSendQueue? = nil,
         wireCache: CloudWireCache = CloudWireCache(),
         sessionRuntimeRouteStore: SessionRuntimeRouteStore = SessionRuntimeRouteStore(),
+        localDefaults: UserDefaults = .standard,
+        removeAccountNotifications: @escaping @MainActor () async -> Void = AccountNotificationCleanup.removeAll,
         previewMode: Bool = KordiPreviewModePersistence.resolve(
             arguments: ProcessInfo.processInfo.arguments,
             launchRequested: KordiPreviewModePersistence.launchRequested(by: ProcessInfo.processInfo.arguments)
@@ -415,6 +427,8 @@ final class AppModel: ObservableObject {
         self.conversationSendQueue = sendQueue ?? ConversationSendQueue()
         self.wireCache = wireCache
         self.sessionRuntimeRouteStore = sessionRuntimeRouteStore
+        self.localDefaults = localDefaults
+        self.removeAccountNotifications = removeAccountNotifications
         self.presencePublisher = CloudPresencePublisher(api: api)
         self.previewMode = previewMode
         self.previewLaunchFlow = previewLaunchFlow
@@ -504,6 +518,11 @@ final class AppModel: ObservableObject {
         } catch {
             if CloudTransportErrorPolicy.isCancellation(error) || Task.isCancelled { return }
             presencePublisher.stop()
+            if let end = ServerSessionEnd(error) {
+                // The server refused the stored session: clear what a sign-out clears.
+                await endStoredSession(end, showsNotice: false)
+                return
+            }
             if await keepsBrowserSession(afterLaunchFailure: error) { errorMessage = userFacing(error, fallback: "Could not reach Kordi Cloud.") }
             else { await discardStoredSession(); try? shareCredentialStore.delete() }
             token = nil
@@ -732,14 +751,18 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// `accountDeleted` skips the logout calls: the server already ended every session.
-    func signOut(accountDeleted: Bool = false) async {
+    /// `accountDeleted` and `sessionEnded` skip the calls that need the
+    /// session (offline presence, Nearby withdrawal, revoke and logout): the
+    /// server already ended it.
+    func signOut(accountDeleted: Bool = false, sessionEnded: Bool = false) async {
+        let endedByServer = accountDeleted || sessionEnded
         digestWarmup.reset()
         let endedBrowserSignIn = await browserSignIn.endForSignOut()
         let oldToken = token
         let oldAccountId = account?.accountId
-        if let oldToken { await CommonGroundNearbyLocator.shared.signOut(api: api, token: accountDeleted ? nil : oldToken) }
-        if let oldToken, !accountDeleted {
+        // Nearby stops even without a token, for example after a refused launch.
+        await CommonGroundNearbyLocator.shared.signOut(api: api, token: endedByServer ? nil : oldToken)
+        if let oldToken, !endedByServer {
             await presencePublisher.stopAndPublishOffline(token: oldToken)
         } else {
             presencePublisher.stop()
@@ -866,11 +889,47 @@ final class AppModel: ObservableObject {
         pendingAgentContextByMessageId = [:]
         if let oldAccountId { cache?.clear(accountId: oldAccountId) }
         if let oldAccountId { await wireCache.clear(accountId: oldAccountId) }
+        DocumentReaderModel.forgetReaderIdentity(in: localDefaults)
         try? keychain.deleteToken()
         if !previewMode { try? shareCredentialStore.delete() }
         phase = .signedOut
         await DigestCalendarService.clearReminders()
-        if !accountDeleted { await endSignIn(token: oldToken, browserSignIn: endedBrowserSignIn) }
+        await removeAccountNotifications()
+        if endedByServer {
+            await api.forgetActiveAccount()
+        } else {
+            await endSignIn(token: oldToken, browserSignIn: endedBrowserSignIn)
+        }
+    }
+
+    /// The access token requests use now; nil when signed out.
+    var sessionToken: String? { token }
+
+    /// Whether `token` belongs to the current sign-in, including tokens a
+    /// browser sign-in rotated out.
+    func isCurrentSignIn(_ token: String?) -> Bool {
+        sessionIdentity.contains(token)
+    }
+
+    /// Stops everything that retries with the session token: the sync loop,
+    /// realtime, presence, the media library sync and the sign-in refresh.
+    func stopSessionRetries() {
+        cloudSyncTask?.cancel()
+        cloudSyncTask = nil
+        cloudRealtimeTask?.cancel()
+        cloudRealtimeTask = nil
+        presencePublisher.stop()
+        expressiveMediaSyncTask?.cancel()
+        expressiveMediaSyncTask = nil
+        expressiveMediaSyncTaskID = nil
+        browserSignIn.cancelScheduledRefresh()
+    }
+
+    /// Removes every account's cached conversations, messages and sync
+    /// snapshot, for a phone with nobody signed in.
+    func clearCachedAccounts() async {
+        cache?.clearAll()
+        await wireCache.clearAll()
     }
 
     /// Returns whether this request applied a current account/contact directory.
@@ -1023,6 +1082,11 @@ final class AppModel: ObservableObject {
         } catch {
             if CloudTransportErrorPolicy.isCancellation(error) || Task.isCancelled { return false }
             guard sessionIdentity.contains(token), self.account?.accountId == account.accountId else { return false }
+            if let end = ServerSessionEnd(error) {
+                // The session handler signs out instead of a banner that keeps the session.
+                endSession(end, token: token)
+                return false
+            }
             await rebuildConversationCatalog()
             recordCloudConnectionFailure(error)
             messageSyncState = .offline
@@ -7094,6 +7158,13 @@ final class AppModel: ObservableObject {
             // a partially received batch.
             state.nextCursor = cloudSyncCursor
             state.pendingEvents.removeAll(keepingCapacity: true)
+            if let end = ServerSessionEnd(error) {
+                endSession(end, token: token)
+                // A deleted account stops here. A signed-out session waits for
+                // the handler to sign out (which cancels this loop) or to adopt
+                // a refreshed token.
+                return end == .accountDeleted ? .stop : .idle
+            }
             recordCloudConnectionFailure(error)
             // The next foreground poll retries, after any Retry-After the server
             // sent. User-triggered actions surface their own network errors.
@@ -7150,7 +7221,8 @@ final class AppModel: ObservableObject {
                     if let call = frame.call { self?.applyCallSnapshot(call) }
                     self?.scheduleRealtimeSyncWake()
                 },
-                resyncRequired: { [weak self] _ in self?.scheduleRealtimeSyncWake() }
+                resyncRequired: { [weak self] _ in self?.scheduleRealtimeSyncWake() },
+                sessionEnded: { [weak self] end in _ = self?.endSession(end, token: token) }
             ))
         }
     }

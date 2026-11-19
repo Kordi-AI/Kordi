@@ -20,6 +20,7 @@ import {
   cloudGroupParticipantWithAgentAvatar,
 } from './cloudGroupIdentity';
 import { cloudGroupParticipantsWithProfiles, type CloudGroupParticipant } from './cloudGroupMessages';
+import { isMissingCloudProfileError, rememberMissingCloudProfile } from './cloudMissingProfiles';
 import { loadSession } from './session';
 
 /** Collects a burst of directory events into one refresh. */
@@ -187,7 +188,8 @@ export type CloudGroupProfileRefreshInput = {
 /**
  * Refetches the changed members that group sessions loaded, then redraws their rows and
  * refreshes the prepared groups that hold them. Accounts no group loaded are skipped; a failed
- * fetch keeps the cached profile. A response is dropped once a newer fetch for its account has
+ * fetch keeps the cached profile, unless the account is gone: it leaves the cache, so it is not
+ * asked for again. A response is dropped once a newer fetch for its account has
  * started or the gate has closed; one already applying finishes the write in flight, then stops.
  */
 export async function refreshCloudGroupProfiles(input: CloudGroupProfileRefreshInput): Promise<string[]> {
@@ -201,7 +203,11 @@ export async function refreshCloudGroupProfiles(input: CloudGroupProfileRefreshI
     let profile: CloudPublicProfile;
     try {
       profile = await client.getProfile(input.token, accountId);
-    } catch {
+    } catch (error) {
+      if (isMissingCloudProfileError(error) && turn.isOpen()) {
+        rememberMissingCloudProfile(account.accountId, accountId);
+        profileCache.delete(accountId);
+      }
       return;
     }
     await turn.applyInTurn(async () => {

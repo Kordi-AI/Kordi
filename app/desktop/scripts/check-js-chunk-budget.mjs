@@ -135,7 +135,12 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // Keeping direct chats with deleted accounts (finding them in chat sync and dropping them on removal, the read-only
 // chat row, its one composer line and the deleted-account refusal wording) adds 5.3 kB (6054.2 kB measured locally),
 // so it moves to 6.057 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_057_000;
+// Deleting an account from Profile (the Delete account row, and its dialog, proof step and account security client
+// in an 8.2 kB chunk loaded when the dialog first opens), erasing a deleted account's local data on `account_deleted`
+// or a 4410 close, and the kept-chat fixes after a deletion (the list avatar, no presence or calls, a plain sender
+// avatar, member reconciliation and the owner taking over a group) add 15.2 kB (6069.4 kB measured locally), so it
+// moves to 6.072 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_072_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -206,7 +211,8 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // (6086.7 kB measured locally), so it moves to 6.090 MB.
 // The same short reason for members adds 2.3 kB there too (6091.4 kB measured in the CI build), so it moves to 6.094 MB.
 // The same direct chats with deleted accounts add 5.3 kB there too (6095.9 kB measured locally), so it moves to 6.099 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_099_000;
+// The same account deletion and kept-chat fixes add 16.8 kB there (6112.7 kB measured locally), so it moves to 6.116 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_116_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

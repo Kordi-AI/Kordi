@@ -28,8 +28,9 @@ export function withDeletedAccountPresentation<T extends Conversation>(
     [conversation.identity?.remoteAgentId?.trim(), `cloud-agent:${KORDI_DELETED_ACCOUNT_ID}`],
   ].filter((entry): entry is [string, string] => Boolean(entry[0])));
   const neutral = (seed: string | null | undefined) => (seed && peerSeeds.get(seed)) ?? seed;
-  // Chat list avatars draw from the agent id first; the account id stays, since it keys the chat.
-  const identity = viewModel.identity && { ...viewModel.identity, remoteAgentId: neutral(viewModel.identity.remoteAgentId) ?? '' };
+  // The stand-in has no agent. A chat list row draws a person from their agent id first, so
+  // with none it draws the stand-in's own avatar seed. The account id stays: it keys the chat.
+  const identity = viewModel.identity && { ...viewModel.identity, remoteAgentId: null };
   const collaborationTarget = viewModel.collaborationTarget
     && { ...viewModel.collaborationTarget, agentId: neutral(viewModel.collaborationTarget.agentId) };
   return {

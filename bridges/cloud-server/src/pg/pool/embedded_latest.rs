@@ -67,4 +67,9 @@ pub(super) const LATEST_MIGRATIONS: &[EmbeddedMigration] = &[
         "common ground room gallery",
         "0207_common_ground_room_gallery.sql"
     ),
+    migration!(
+        208,
+        "deleted account credentials",
+        "0208_deleted_account_credentials.sql"
+    ),
 ];

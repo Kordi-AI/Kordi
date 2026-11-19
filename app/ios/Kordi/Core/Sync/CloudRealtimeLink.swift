@@ -64,6 +64,14 @@ final class CloudRealtimeLink {
         var event: @MainActor (CloudRealtimeServerFrame) -> Void
         /// The server will close this socket; catch up from the saved cursor.
         var resyncRequired: @MainActor (_ reason: String?) -> Void
+        /// The server ended the sign-in: the ticket was refused with a
+        /// session error, or the socket closed with the account-deleted code.
+        var sessionEnded: @MainActor (ServerSessionEnd) -> Void = { _ in }
+    }
+
+    /// The socket closed with the account-deleted code.
+    struct SessionEndedByServer: Error {
+        let end: ServerSessionEnd
     }
 
     static let heartbeatInterval: Duration = .seconds(25)
@@ -110,6 +118,13 @@ final class CloudRealtimeLink {
                 try await connect(try await session.ticket(), session)
             } catch {
                 if Task.isCancelled { return }
+                if let end = (error as? SessionEndedByServer)?.end ?? ServerSessionEnd(error) {
+                    session.sessionEnded(end)
+                    // A deleted account never comes back. A signed-out session
+                    // keeps backing off until the model signs out (which
+                    // cancels this task) or replaces the token.
+                    if end == .accountDeleted { return }
+                }
                 retryAfter = CloudRetryAfter.delay(for: error)
             }
             policy.connectionClosed()
@@ -128,6 +143,22 @@ final class CloudRealtimeLink {
         lastReceivedSequence = session.readSequence()
         socket.resume()
         defer { socket.cancel(with: .goingAway, reason: nil) }
+        do {
+            try await exchange(over: socket, connection, session)
+        } catch {
+            // Read the server's close code before the deferred cancel replaces it.
+            if let end = ServerSessionEnd(realtimeCloseCode: socket.closeCode.rawValue) {
+                throw SessionEndedByServer(end: end)
+            }
+            throw error
+        }
+    }
+
+    private func exchange(
+        over socket: URLSessionWebSocketTask,
+        _ connection: CloudChatRealtimeConnection,
+        _ session: Session
+    ) async throws {
         try await Self.send(CloudRealtimeConnectFrame(deviceId: connection.deviceId, cursor: session.cursor()), over: socket)
         policy.connectionOpened()
         lastFrameAt = .now

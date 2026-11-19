@@ -1,6 +1,7 @@
 //! `POST /v1/cloud/account/security/delete`: delete the signed-in account
 //! (docs/development/account-deletion.md). Needs the same proof as other
-//! security changes. Answers `204`; every session of the account ends.
+//! security changes. Answers `204`; every session of the account ends, and a
+//! web page's session cookies are cleared.
 
 use super::proof::{check_proof, consume_proof, Proof, ProofRequest};
 use super::*;
@@ -9,6 +10,7 @@ pub(super) async fn delete_account(
     State(state): State<Arc<ServerState>>,
     Extension(session): Extension<CloudSession>,
     Extension(rate_limiter): Extension<Arc<CloudRateLimiter>>,
+    headers: HeaderMap,
     Json(request): Json<ProofRequest>,
 ) -> Response {
     let caller = Caller {
@@ -85,7 +87,15 @@ pub(super) async fn delete_account(
         return *server_error();
     }
     crate::account_deletion::after_commit(state.clone(), session.account_id.clone(), deletion);
-    StatusCode::NO_CONTENT.into_response()
+    let deleted = StatusCode::NO_CONTENT.into_response();
+    // A web page authenticated by its cookie loses the cookie with the
+    // account; an app's bearer request has no cookie to clear.
+    let cookie_caller = !headers.contains_key(axum::http::header::AUTHORIZATION)
+        && super::super::web_session_handlers::cookie_value(&headers, WEB_SESSION_COOKIE).is_some();
+    if cookie_caller {
+        return super::super::web_session_handlers::with_cookies(deleted, None);
+    }
+    deleted
 }
 
 /// Locks the account and refuses when its password or email changed since

@@ -6,6 +6,7 @@ import { applyChatSyncCursorEvent, chatSyncCursorEventTouches } from './chatSync
 import { ACCOUNT_HINT_EVENT_TYPES } from './accountHintEvents';
 import { requireCloudSessionVisibility } from './cloudSessionListClient';
 import { chatSyncCursorExpired } from './cloudSyncCursorProgress';
+import { endCloudSessionIfUnauthorized } from './cloudSessionRejection';
 import type { ChatSyncBootstrapResponse, ChatSyncConversation, ChatSyncEvent, ChatSyncMessage, ChatSyncPreferences, ChatSyncSyncResponse } from './chatSyncTypes';
 
 export class ChatSyncSyncClient {
@@ -207,11 +208,12 @@ export class ChatSyncSyncClient {
     device_id: string;
     expires_at: string;
   }> {
-    return this.state.send(
+    // A refused ticket ends the session now rather than at the next profile check.
+    return this.state.send<{ ticket: string; device_id: string; expires_at: string }>(
       '/v2/chat/realtime/ticket',
       { method: 'POST', headers: { authorization: `Bearer ${token}` } },
       'Could not open reliable realtime delivery.',
-    );
+    ).catch((error: unknown) => { endCloudSessionIfUnauthorized(token, error); throw error; });
   }
 
   private chatBootstrapEvents(bootstrap: ChatSyncBootstrapResponse): CloudSyncEvent[] {

@@ -1,3 +1,4 @@
+import { KORDI_DELETED_ACCOUNT_ID } from '@/features/systemAgent/systemAgentIdentity';
 import type { CloudMessage, CloudSyncEvent } from './authClient';
 import { normalizeFacilitatorCard } from './facilitatorCard';
 import { normalizeGroupJoinRequestCard } from './groupJoinRequest';
@@ -241,6 +242,13 @@ export function applyCloudSyncEventsToMessagesByPeer(
       const peerId = messagePeerId(accountId, message, event.peerAccountId);
       if (!peerId) continue;
       const indexed = indexedPeerMessages(peerId);
+      // A deleted account's group message now comes from the stand-in, as the server sent it:
+      // it moves out of the deleted account's list, so no stale copy of it stays behind.
+      if (message.fromAccountId === KORDI_DELETED_ACCOUNT_ID && !indexed.has(message.messageId)) {
+        for (const otherPeerId of new Set([...Object.keys(currentMessagesByPeer), ...indexedMessagesByPeer.keys()])) {
+          if (otherPeerId !== peerId && indexedPeerMessages(otherPeerId).delete(message.messageId)) changedPeerIds.add(otherPeerId);
+        }
+      }
       const existing = indexed.get(message.messageId);
       const merged = existing
         ? mergeCloudMessageMonotonicState(existing, message, {

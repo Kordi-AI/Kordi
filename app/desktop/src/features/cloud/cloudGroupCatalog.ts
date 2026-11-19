@@ -19,8 +19,11 @@ export function cloudGroupCatalogRow(conversation: ChatSyncConversation, account
       joinedAt: member.joined_at,
     }));
   if (!participants.some(member => member.accountId === accountId)) return null;
+  // A creator who is no longer active (the stand-in once their account is deleted) hands the
+  // group to its owner, who then speaks for this snapshot.
   const actor = participants.find(member => member.accountId === conversation.created_by_account_id)
-    ?? participants.find(member => member.role === 'owner' || member.role === 'admin')
+    ?? participants.find(member => member.role === 'owner')
+    ?? participants.find(member => member.role === 'admin')
     ?? participants[0];
   const envelope: CloudGroupControlEnvelope = {
     kind: 'group-invite',

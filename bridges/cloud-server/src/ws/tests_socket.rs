@@ -164,3 +164,60 @@ async fn a_session_found_gone_closes_at_the_next_check() {
         "the check finds the session gone and closes"
     );
 }
+
+/// The code and reason of the close frame that ends the socket, if any.
+async fn close_frame(socket: &mut Socket) -> Option<(u16, String)> {
+    loop {
+        match tokio::time::timeout(Duration::from_secs(5), socket.next())
+            .await
+            .expect("the gateway closes the socket")
+        {
+            Some(Ok(Message::Close(frame))) => {
+                return frame.map(|frame| (u16::from(frame.code), frame.reason.to_string()))
+            }
+            Some(Ok(_)) => {}
+            None | Some(Err(_)) => return None,
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_deleted_account_closes_the_gateway_with_4410() {
+    let Some(mut harness) = open().await else {
+        return;
+    };
+    // The deletion lists the session's hash, as the route does.
+    let mut tx = harness.pool.begin().await.unwrap();
+    crate::account_deletion::credentials::record_in_transaction(&mut tx, &harness.account_id)
+        .await
+        .unwrap();
+    query("DELETE FROM cloud_accounts WHERE account_id = $1")
+        .bind(&harness.account_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    harness
+        .state
+        .session_signals()
+        .publish(signal(&harness, SignalKind::Revoked));
+    assert_eq!(
+        close_frame(&mut harness.socket).await,
+        Some((4410, "account_deleted".to_string()))
+    );
+}
+
+#[tokio::test]
+async fn a_sign_out_still_closes_without_a_code() {
+    let Some(mut harness) = open().await else {
+        return;
+    };
+    crate::auth::session::revoke_session(&harness.pool, &harness.session.token_id)
+        .await
+        .unwrap();
+    harness
+        .state
+        .session_signals()
+        .publish(signal(&harness, SignalKind::Revoked));
+    assert_eq!(close_frame(&mut harness.socket).await, None);
+}

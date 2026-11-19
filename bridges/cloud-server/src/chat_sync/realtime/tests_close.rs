@@ -13,7 +13,7 @@ use super::frames::SendError;
 use super::retry::{FAILURE_GRACE, FAILURE_GRACE_SPREAD};
 use super::session::{GuardStep, SessionCheck, SessionGuard};
 
-const ALL_REASONS: [CloseReason; 14] = [
+const ALL_REASONS: [CloseReason; 15] = [
     CloseReason::ClientClosed,
     CloseReason::ClientGone,
     CloseReason::HeartbeatTimeout,
@@ -27,6 +27,7 @@ const ALL_REASONS: [CloseReason; 14] = [
     CloseReason::DatabaseUnavailable,
     CloseReason::ServerError,
     CloseReason::SessionEnded,
+    CloseReason::AccountDeleted,
     CloseReason::LegacyTicketLifetime,
 ];
 

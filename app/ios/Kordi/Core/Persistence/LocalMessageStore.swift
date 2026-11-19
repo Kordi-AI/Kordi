@@ -667,6 +667,21 @@ final class LocalMessageStore {
         }
     }
 
+    /// Removes every account's cached conversations and messages.
+    func clearAll() {
+        do {
+            try context.fetch(FetchDescriptor<CachedConversationRecord>()).forEach(context.delete)
+            try context.fetch(FetchDescriptor<CachedMessageRecord>()).forEach(context.delete)
+            try context.fetch(FetchDescriptor<CachedMessagePageRecord>()).forEach(context.delete)
+            try context.save()
+            conversationFingerprints = [:]
+            messageFingerprints = [:]
+            messageHasEarlier = [:]
+        } catch {
+            context.rollback()
+        }
+    }
+
     private func purgeLegacyRecords() {
         do {
             let legacyScope = ""

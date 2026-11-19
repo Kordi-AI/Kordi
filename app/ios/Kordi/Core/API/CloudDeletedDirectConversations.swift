@@ -117,7 +117,8 @@ enum KordiDeletedAccount {
             message: closedLine,
             statusCode: error.statusCode,
             reason: error.reason,
-            retryAfterSeconds: error.retryAfterSeconds
+            retryAfterSeconds: error.retryAfterSeconds,
+            fromServer: error.fromServer
         )
     }
 }

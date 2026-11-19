@@ -59,7 +59,9 @@ extension AppModel {
             scheduleBrowserSessionRefresh(expiresAt: next.expiresAt)
             return next.accessToken
         case .rejected:
-            throw CloudAPIError(code: "invalid_session", message: "Your session expired. Sign in again.", statusCode: 401)
+            throw ServerSessionEnd.signedOut.launchError
+        case .accountDeleted:
+            throw ServerSessionEnd.accountDeleted.launchError
         case .unavailable:
             guard let current = await browserSignIn.store.credential(), current.expiresAt > Date() else {
                 throw CloudAPIError(code: "network_error", message: "Could not reach the server.", statusCode: 0)
@@ -79,6 +81,9 @@ extension AppModel {
         return !Self.sessionEnded(by: error)
     }
 
+    /// Only for keeping a browser sign-in after a failed launch. It also
+    /// matches the app's own 401s, so it never drives a sign-out of a
+    /// running session; `ServerSessionEnd` does.
     nonisolated static func sessionEnded(by error: Error) -> Bool {
         guard let error = error as? CloudAPIError else { return false }
         return error.statusCode == 401 || ["invalid_session", "account_missing"].contains(error.code)
@@ -145,7 +150,8 @@ extension AppModel {
 
     /// Refreshes a browser sign-in token that expires within the refresh
     /// margin and adopts it, or adopts a token background work already
-    /// refreshed. A refused refresh signs out.
+    /// refreshed. A refused refresh ends the session through the session
+    /// handler, without server calls that would fail.
     func refreshBrowserSessionIfNeeded() async {
         guard !isPreviewMode else { return }
         switch await browserSignIn.store.refresh(ifExpiringWithin: AppSignInController.refreshMargin) {
@@ -153,12 +159,56 @@ extension AppModel {
             applyRefreshedSession(token: credential.accessToken, expiresAt: credential.expiresAtText, accountId: credential.accountId)
             scheduleBrowserSessionRefresh(expiresAt: credential.expiresAt)
         case .rejected:
-            await signOut()
-            errorMessage = "Your session expired. Sign in again."
+            await endRefusedBrowserSession(.signedOut)
+        case .accountDeleted:
+            await endRefusedBrowserSession(.accountDeleted)
         case .unavailable:
             scheduleBrowserSessionRetry()
         case .notBrowserSession:
             break
+        }
+    }
+
+    /// Ends a session whose browser sign-in refresh the server refused: the
+    /// running session through the handler, one kept on the sign-in screen
+    /// directly. During launch, `start()` handles the same answer.
+    private func endRefusedBrowserSession(_ end: ServerSessionEnd) async {
+        if let teardown = endSession(end, token: sessionToken, confirmed: true) {
+            await teardown.value
+        } else if phase == .signedOut {
+            await endStoredSession(end, showsNotice: true)
+        }
+    }
+
+    enum BrowserSessionRecheck: Equatable {
+        /// No browser sign-in is stored.
+        case notBrowserSession
+        /// The refresh worked, or got no answer: keep the session.
+        case kept
+        case ended
+        case accountDeleted
+    }
+
+    /// After the API refused the token in use: a browser sign-in whose access
+    /// token only expired refreshes once and stays; one the server ended does
+    /// not. A refresh without an answer keeps the session and retries later.
+    func recheckBrowserSession(afterRejected token: String) async -> BrowserSessionRecheck {
+        guard await browserSignIn.store.credential() != nil else { return .notBrowserSession }
+        switch await browserSignIn.store.refresh(ifExpiringWithin: .greatestFiniteMagnitude) {
+        case .current(let credential), .refreshed(let credential):
+            guard credential.accessToken != token else { return .ended }
+            applyRefreshedSession(token: credential.accessToken, expiresAt: credential.expiresAtText, accountId: credential.accountId)
+            scheduleBrowserSessionRefresh(expiresAt: credential.expiresAt)
+            return .kept
+        case .rejected:
+            return .ended
+        case .accountDeleted:
+            return .accountDeleted
+        case .unavailable:
+            scheduleBrowserSessionRetry()
+            return .kept
+        case .notBrowserSession:
+            return .notBrowserSession
         }
     }
 

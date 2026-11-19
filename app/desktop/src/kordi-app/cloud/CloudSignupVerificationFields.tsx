@@ -7,7 +7,8 @@ export function CloudSignupVerificationFields({
   busy: boolean;
   resendSeconds: number;
   onResend: () => void;
-  onChangeEmail: () => void;
+  /** Omitted where the address cannot change, such as confirming a deletion. */
+  onChangeEmail?: () => void;
   changeEmailLabel?: string;
   children: ReactNode;
 }) {
@@ -21,7 +22,7 @@ export function CloudSignupVerificationFields({
         <button type="button" disabled={busy || resendSeconds > 0} onClick={onResend}>
           {resendSeconds > 0 ? `Resend in ${resendSeconds}s` : 'Resend code'}
         </button>
-        <button type="button" disabled={busy} onClick={onChangeEmail}>{changeEmailLabel}</button>
+        {onChangeEmail ? <button type="button" disabled={busy} onClick={onChangeEmail}>{changeEmailLabel}</button> : null}
       </div>
     </div>
   );
