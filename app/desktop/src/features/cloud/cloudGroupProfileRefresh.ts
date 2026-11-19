@@ -17,6 +17,7 @@ import {
   cloudGroupAgentAvatarsByAccount,
   cloudGroupAgentProfileImageUrl,
   cloudGroupIdentityRequest,
+  cloudGroupParticipantWithAgentAvatar,
 } from './cloudGroupIdentity';
 import { cloudGroupParticipantsWithProfiles, type CloudGroupParticipant } from './cloudGroupMessages';
 import { loadSession } from './session';
@@ -79,8 +80,13 @@ export function cloudGroupProfileIdentityRefreshes(input: {
     .filter(([identity, request]) => changes(identity, request))
     .map(([, request]) => request);
   if (participant) {
-    const request = cloudGroupIdentityRequest(participant, account, localHumanIdentityId);
-    if (changes(identities.find((identity) => identity.id === request.id), request)) requests.push(request);
+    const stored = identities.find((identity) => identity.id === `human:${participant.accountId}`);
+    const request = cloudGroupIdentityRequest(
+      cloudGroupParticipantWithAgentAvatar(participant, profile, stored),
+      account,
+      localHumanIdentityId,
+    );
+    if (changes(stored, request)) requests.push(request);
   }
   return requests;
 }

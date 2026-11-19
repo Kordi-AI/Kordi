@@ -164,6 +164,12 @@ Routes under `/v1/cloud/connectors`:
   `{ "completionCode", "provider", "grant", "status": "pending" }`. Errors keep
   the `kordi_connector_error` and `kordi_connector_error_code` fragment. Without
   a redirect target the page says "Return to Kordi to finish connecting."
+
+  The Mac app passes a loopback `redirectAfter`. The browser application passes
+  its own entry page, `/app/?connectorFlow=<flow id>`, which does not start the
+  application there: it removes the fragment from the address bar and relays it
+  over the `kordi-connector-oauth` BroadcastChannel to the tab that started the
+  flow, and that tab finishes the grant with `POST /oauth/complete`.
 - `POST /oauth/complete` with `{ "completionCode" }`, signed in. Takes the
   pending grant out (one use), requires it to belong to the signed-in account,
   then stores the secret and granted scopes, marks `status`, turns

@@ -162,7 +162,8 @@ enum CloudDirectMessageProjector {
             text: CloudMessageCodec.viewerText(
                 message.body,
                 viewerOwnsAgent: message.fromAccountId == ownAccountId,
-                agentName: author == .agent ? authorName : nil
+                agentName: author == .agent ? authorName : nil,
+                ownerName: cardAgent?.ownerName ?? agentOwnerName
             ),
             createdAt: createdAt ?? parseCloudDate(message.createdAt),
             editedAt: message.editedAt.map(parseCloudDate),

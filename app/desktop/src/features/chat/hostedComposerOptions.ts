@@ -1,7 +1,8 @@
 import { canonicalCloudProviderId } from '@/features/cloud/providerAuthSnapshot';
-import { isChatGptCatalogProvider, isHiddenChatGptModel, orderChatGptModels } from '@/features/cloud/chatgptModelCatalog';
-import { orderClaudeModels } from '@/features/cloud/claudeModelCatalog';
 import { catalogModelThinkingLevels } from '@/features/cloud/modelThinkingLevels';
+import {
+  catalogDefaultModel, isOfferedProviderModel, offeredModelOrder, orderOfferedModels, providerDefaultModel, withProviderDefaultModels,
+} from '@/features/cloud/providerModels';
 import { routeRunsOnKordiCloud } from '@/features/cloud/cloudAgentRuntimeRoute';
 import type { HostedAccount } from '@/features/cloud/hostedAccounts';
 import { DEVICE_ACTIVE_CHOICES, hasHostedOnlyPrefix } from '@/features/cloud/routeAccountChoice';
@@ -19,6 +20,8 @@ export const CUSTOM_ROUTE_PROVIDER = 'custom';
 export const SAVED_ACCOUNT_METHOD_LABEL = 'Saved account';
 export const RECONNECT_ACCOUNT_REASON = 'Account needs reconnecting';
 const fallbackThinkingLevels = ['off', 'low', 'medium', 'high'];
+/** A model without a controllable effort runs at its own default only. */
+const noEffortLevels = ['off'];
 
 export function isCustomRouteModel(model: string) {
   return model.trim().startsWith(`${CUSTOM_ROUTE_PROVIDER}/`);
@@ -55,32 +58,38 @@ export function hostedRouteAccounts(
     const entry = catalog.find((item) => item.id === providerId);
     const custom = providerId === CUSTOM_ROUTE_PROVIDER;
     const models = custom ? [] : entry?.models ?? [];
-    const chatGpt = isChatGptCatalogProvider(providerId);
-    const model = chatGpt && account.model && isHiddenChatGptModel(account.model) ? null : account.model;
+    // A ChatGPT or Claude account whose stored model Kordi no longer offers opens with the default.
+    const limited = Boolean(offeredModelOrder(providerId));
+    const model = !limited ? account.model
+      : account.model && isOfferedProviderModel(providerId, account.model) ? account.model.trim().toLowerCase() : null;
     const offeredModels = [...new Set([model, ...models].filter((item): item is string => Boolean(item)))];
     return {
       ...account,
       model,
       providerId,
       providerLabel: custom ? 'Custom API' : providerShortName(ompProviderName(providerId, entry)),
-      models: chatGpt ? orderChatGptModels(offeredModels)
-        : providerId === 'anthropic' ? orderClaudeModels(offeredModels)
-        : offeredModels,
+      models: orderOfferedModels(providerId, offeredModels),
     };
   });
 }
 
-/** The model a hosted account opens with: its stored model, else its provider's default. */
+/** The model a hosted account opens with: its stored model while it still lists it, else its provider's default. */
 function accountDefaultModel(account: HostedRouteAccount, catalog?: OmpCatalogEntry[]) {
-  const entry = catalog?.find((item) => item.id === account.providerId);
-  const preferred = entry?.defaultModel && account.models.includes(entry.defaultModel) ? entry.defaultModel : null;
-  return account.model ?? preferred ?? account.models[0] ?? null;
+  const stored = account.model && account.models.includes(account.model) ? account.model : null;
+  return stored ?? providerDefaultModel(account.providerId, account.models, catalogDefaultModel(catalog, account.providerId));
 }
 
-/** Custom API takes no effort; other models use the catalog's efforts, else the generic list. */
+/**
+ * Custom API takes no effort. Other models use the catalog's efforts; a model
+ * the catalog lists without any takes none, and one it does not know gets the
+ * generic list.
+ */
 function hostedThinkingLevels(providerId: string, model: string, catalog?: OmpCatalogEntry[]) {
-  if (providerId === CUSTOM_ROUTE_PROVIDER) return ['off'];
-  return catalogModelThinkingLevels(catalog, providerId, model) ?? fallbackThinkingLevels;
+  if (providerId === CUSTOM_ROUTE_PROVIDER) return [...noEffortLevels];
+  const levels = catalogModelThinkingLevels(catalog, providerId, model);
+  if (levels) return levels;
+  const listed = catalog?.find((entry) => entry.id === providerId)?.models.some((item) => item.toLowerCase() === model.toLowerCase());
+  return listed ? [...noEffortLevels] : fallbackThinkingLevels;
 }
 
 export function hostedModelOptions(accounts: HostedRouteAccount[], catalog?: OmpCatalogEntry[]): ComposerModelOption[] {
@@ -97,7 +106,7 @@ export function hostedModelOptions(accounts: HostedRouteAccount[], catalog?: Omp
       });
     }
   }
-  return options;
+  return withProviderDefaultModels(options, catalog);
 }
 
 /** One entry per hosted account under its provider; one that needs reconnecting stays listed but off. */

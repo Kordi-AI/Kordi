@@ -1,6 +1,8 @@
 // How the cloud connectors client opens a provider's sign-in page and waits
 // for the result, plus the timeout and cancellation helpers it uses.
 
+import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
+
 import { ConnectorFlowCanceledError } from './connectorsErrors';
 
 const MINUTE = 60_000;
@@ -23,12 +25,23 @@ export type ConnectorOAuthHandoff = {
 };
 
 /**
+ * The browser application's handoff, which receives the callback on one of its
+ * own pages. Null in the desktop shell and in other browser builds.
+ */
+function browserAppHandoff(): Promise<ConnectorOAuthHandoff> | null {
+  if (import.meta.env?.VITE_KORDI_WEB_APP !== '1' || !isBrowserAppRuntime()) return null;
+  return import('@web/runtime/browserConnectorOAuth').then((module) => module.browserConnectorOAuthHandoff);
+}
+
+/**
  * Same handoff as cloud sign-in: a one-use loopback listener in the desktop
  * shell receives the redirect, and the provider page opens in the system
  * browser. Outside the shell the page opens in a new tab and the client polls.
  */
 export const desktopConnectorOAuthHandoff: ConnectorOAuthHandoff = {
   async prepare() {
+    const browserApp = browserAppHandoff();
+    if (browserApp) return (await browserApp).prepare();
     const desktop = await import('@/lib/desktop');
     const loopback = await desktop.prepareDesktopCloudOAuthLoopback();
     if (!loopback) return null;
@@ -42,6 +55,8 @@ export const desktopConnectorOAuthHandoff: ConnectorOAuthHandoff = {
     };
   },
   async open(url) {
+    const browserApp = browserAppHandoff();
+    if (browserApp) return (await browserApp).open(url);
     const desktop = await import('@/lib/desktop');
     if (desktop.isNativeDesktopShell()) {
       await desktop.openDesktopExternalUrl(url);

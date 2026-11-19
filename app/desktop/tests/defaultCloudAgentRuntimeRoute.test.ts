@@ -209,3 +209,49 @@ test('browser default route keeps a hosted account and never uses native saved c
   assert.notEqual(nativeOnly?.authChoice, 'local-active-api-key');
   assert.notEqual(nativeOnly?.authChoice, 'profile-1');
 });
+
+test('a browser chat with no stored route shows and sends the hosted account default model at its default effort', async () => {
+  const { initialComposerSelections } = await import('../src/app/useKordiLocalUiState');
+  const { chatComposerSelectionForRoute } = await import('../src/app/useCloudAgentRuntimeRouteSync');
+  const { hostedAuthOptions, hostedModelOptions, hostedRouteAccounts } = await import('../src/features/chat/hostedComposerOptions');
+  const { routeForSendWithoutLocalProvider } = await import('../src/features/chat/messageActions/noProviderRoute');
+  const { preferredModelValueForProviderFromOptions } = await import('../src/features/chat/useComposerViewModel');
+  const { loadPinnedOmpCatalog } = await import('../src/kordi-app/auth/ompCatalog');
+  const { composerModelChipLabels, modelDisplayName } = await import('../src/lib/modelDisplayName');
+
+  // Nothing has chosen a model yet: no GPT-5.4 and no forced effort.
+  assert.deepEqual(initialComposerSelections.chat, { mode: 'Send as Me', model: '', thinking: 'default' });
+  assert.equal(initialComposerSelections.project.model, '');
+  assert.equal(composerModelChipLabels({ model: initialComposerSelections.chat.model, thinking: initialComposerSelections.chat.thinking, hasProvider: true }).model, 'Default');
+
+  const { providers: catalog } = await loadPinnedOmpCatalog();
+  const accounts = hostedRouteAccounts([{ authChoice: 'cloud-login:work', label: 'Work', provider: 'openai-codex', model: null, needsReconnect: false }], catalog, new Set());
+  const chatModelOptions = hostedModelOptions(accounts, catalog).map((option) => ({ ...option, label: modelDisplayName(option.value, option.label) }));
+  const args = {
+    activeLoginProviderId: null,
+    authOptions: hostedAuthOptions(accounts, null),
+    chatModelOptions,
+    desktopAuthState: null,
+    isNativeShell: false,
+    browserApp: true,
+    preferredModelValueForProvider: (providerId: string) => preferredModelValueForProviderFromOptions(providerId, chatModelOptions, []),
+    resolveComposerProviderId: () => 'openai',
+  };
+  const route = resolveDefaultCloudAgentRuntimeRoute({ ...args, selectedModel: initialComposerSelections.chat.model, selectedThinking: initialComposerSelections.chat.thinking });
+  assert.deepEqual(route, { model: 'openai-codex/gpt-6.2-sol', authProvider: 'openai-codex', authChoice: 'cloud-login:work', thinking: 'default' });
+
+  // The composer shows that route, and showing it settles: the next default is the same route.
+  const shown = chatComposerSelectionForRoute(initialComposerSelections, null, route);
+  assert.deepEqual(shown.chat, { mode: 'Send as Me', model: 'openai-codex/gpt-6.2-sol', thinking: 'default' });
+  assert.deepEqual(composerModelChipLabels({ model: shown.chat.model, modelLabel: 'GPT-6.2 Sol', thinking: shown.chat.thinking, hasProvider: true }), { model: '6.2 Sol', effort: 'Default' });
+  const settled = resolveDefaultCloudAgentRuntimeRoute({ ...args, selectedModel: shown.chat.model, selectedThinking: shown.chat.thinking });
+  assert.deepEqual(settled, route);
+  assert.equal(chatComposerSelectionForRoute(shown, null, settled), shown);
+
+  // A first send from that chat runs the same model at its default effort.
+  assert.deepEqual(await routeForSendWithoutLocalProvider(route, shown.chat), route);
+
+  // On the Mac, a composer with no model still waits for this Mac's session.
+  assert.equal(resolveDefaultCloudAgentRuntimeRoute({ ...args, isNativeShell: true, browserApp: false,
+    selectedModel: initialComposerSelections.chat.model, selectedThinking: initialComposerSelections.chat.thinking }), null);
+});

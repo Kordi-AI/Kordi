@@ -138,13 +138,17 @@ where
     }
 }
 
-/// Whether an OMP failure is the provider's rate limit.
+/// Whether an OMP failure is the provider's rate limit. An account usage
+/// limit counts as one too.
 fn is_rate_limit(error: &RuntimeError) -> bool {
     let reason = match error {
         RuntimeError::Provider { reason, .. } => reason.as_str(),
         _ => "",
     };
-    error.diagnostic_code() == "provider_http_429" || grounding_throttle::is_rate_limit_text(reason)
+    matches!(
+        error.diagnostic_code(),
+        "provider_http_429" | "provider_usage_limit"
+    ) || grounding_throttle::is_rate_limit_text(reason)
 }
 
 /// The wait before retrying an OMP failure, or `None` when it is not a rate limit.

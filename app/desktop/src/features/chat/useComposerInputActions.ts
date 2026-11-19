@@ -4,6 +4,7 @@ export { desktopChatStateAfterConfigUpdate, composerConfigTargetSessionId } from
 import { importLivePhotos } from '@/features/chat/importLivePhotos';
 import { useCallback, useRef } from 'react';
 
+import { isOfferedChatGptModel } from '@/features/cloud/chatgptModelCatalog';
 import { isHostedOnlyAccountChoice } from '@/features/cloud/routeAccountChoice';
 import { registeredAccountChoices } from '@/features/cloud/hostedAccountRegistry';
 import { useHostedComposerRouting } from './useHostedComposerRouting';
@@ -315,10 +316,10 @@ export function useComposerInputActions({
       setOpenComposerSelector(null);
       return;
     }
-    const currentModelValue = currentSelection.model.toLowerCase();
+    const currentModelId = currentSelection.model.slice(currentSelection.model.indexOf('/') + 1);
     const shouldSwitchModelForAuth = normalizedProviderId !== currentProviderId
       || providerId === 'openai-codex'
-      || (providerId === 'openai' && currentProviderId === 'openai' && currentModelValue.includes('gpt-5.5'));
+      || (providerId === 'openai' && currentProviderId === 'openai' && !isOfferedChatGptModel(currentModelId));
     if (shouldSwitchModelForAuth && nextModelValue && nextModelValue !== currentSelection.model) {
       await selectComposerValue(scope, 'model', nextModelValue, configTargetOverride);
       return;

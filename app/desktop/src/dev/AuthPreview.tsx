@@ -88,7 +88,7 @@ function createPreviewCloudSources(onNotice: (notice: string) => void): PreviewC
 }
 
 const previewHostedSnapshots: CloudProviderAuthSnapshot[] = [
-  { snapshotId: 'snap_preview_team', provider: 'openai-codex', authChoice: 'cloud-login:preview-team', label: 'Team', modelHint: 'gpt-5.5', createdAt: '2026-01-01T00:00:00Z', revokedAt: null },
+  { snapshotId: 'snap_preview_team', provider: 'openai-codex', authChoice: 'cloud-login:preview-team', label: 'Team', modelHint: 'gpt-6-sol', createdAt: '2026-01-01T00:00:00Z', revokedAt: null },
   { snapshotId: 'snap_preview_research', provider: 'cerebras', authChoice: 'cloud-api-key:preview-research', label: 'Research', modelHint: null, createdAt: '2026-01-01T00:00:00Z', revokedAt: null },
   { snapshotId: 'snap_preview_gateway', provider: 'custom', authChoice: 'cloud-api-key:preview-gateway', label: 'Gateway', modelHint: 'deepseek-chat', createdAt: '2026-01-01T00:00:00Z', revokedAt: null },
   { snapshotId: 'snap_preview_old', provider: 'openai-codex', authChoice: 'cloud-login:preview-old', label: 'Old laptop', modelHint: null, createdAt: '2026-01-01T00:00:00Z', revokedAt: null, status: 'needs-reconnect' },

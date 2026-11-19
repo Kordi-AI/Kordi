@@ -227,10 +227,29 @@ mod retry_and_effort {
     }
 
     #[tokio::test(start_paused = true)]
+    async fn an_account_usage_limit_backs_off_like_a_rate_limit() {
+        let (result, count, elapsed) = attempts(
+            Duration::from_secs(290),
+            vec![
+                RuntimeError::Worker("provider_usage_limit".into()),
+                RuntimeError::Provider {
+                    code: "provider_usage_limit".into(),
+                    reason: "You have hit your ChatGPT usage limit (plus plan).".into(),
+                    resets_at_ms: Some(1_794_870_120_000),
+                },
+            ],
+        )
+        .await;
+        assert_eq!((result, count), (Ok(()), 3));
+        assert_eq!(elapsed, Duration::from_secs(15 + 30));
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn a_named_delay_is_honored_up_to_sixty_seconds() {
         let provider = |reason: &str| RuntimeError::Provider {
             code: "provider_http_429".into(),
             reason: reason.into(),
+            resets_at_ms: None,
         };
         let (result, count, elapsed) = attempts(
             Duration::from_secs(290),

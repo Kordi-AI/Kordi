@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { AttachmentItem, ComposerConfigTargetOverride } from '@/features/chat/composerController.types';
+import type { ComposerSelectionOptions } from '@/features/chat/composerSelectionOrigin';
 import type { CompactComposerModelMenuSaveInput } from '@/kordi-app/components';
 import type { Conversation, DesktopChatContextWindowStatus } from '@/kordi-app/types';
 import type {
@@ -24,7 +25,11 @@ type MainComposerCollaborationRouting = {
   agentSelectorOpen: boolean;
   onSelectAgent: (agentId: string) => void;
   onUpdate: (patch: CollaborationRoutingPatch) => void | boolean | Promise<void | boolean>;
-  onSaveCompact: (input: CompactComposerModelMenuSaveInput) => void | boolean | Promise<void | boolean>;
+  /** An automatic origin, such as the account fallback, saves without a visible notice. */
+  onSaveCompact: (
+    input: CompactComposerModelMenuSaveInput,
+    options?: ComposerSelectionOptions,
+  ) => void | boolean | Promise<void | boolean>;
   /** A send or turn is running, so a route change would be refused. */
   busy: boolean;
   defaultThinkingForModel: (

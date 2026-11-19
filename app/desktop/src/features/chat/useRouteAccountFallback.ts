@@ -8,6 +8,7 @@ import {
 } from '@/kordi-app/components/composerModelSelection';
 import { registeredAccountChoices } from '@/features/cloud/hostedAccountRegistry';
 import { composerSendGate, useAccountListsLoaded, type ComposerSendGate, type ComposerSendGateInput } from './composerSendGate';
+import type { ComposerSelectionOptions } from './composerSelectionOrigin';
 
 export type RouteAccountFallbackInput = ComposerSendGateInput & {
   selection: ComposerModelSelection & { thinking?: string | null };
@@ -53,8 +54,8 @@ export function shouldApplyRouteAccountFallback(key: string, appliedKeys: Set<st
   return true;
 }
 
-/** Saves a complete route, as a pick in the route menu does. */
-export type ApplyFallbackRoute = (route: ComposerRoute) => unknown;
+/** Saves a complete route, as a pick in the route menu does, but marked automatic. */
+export type ApplyFallbackRoute = (route: ComposerRoute, options?: ComposerSelectionOptions) => unknown;
 
 /**
  * Moves a route off an unavailable account onto the clear replacement, once
@@ -84,8 +85,9 @@ export function useRouteAccountFallback({
     const timer = setTimeout(() => {
       const current = latest.current.route;
       if (!current || !shouldApplyRouteAccountFallback(key, appliedRef.current)) return;
-      // A refused save, for example while a turn starts, may try again on the next decision.
-      void Promise.resolve(latest.current.applyRoute(current)).then((applied) => {
+      // The owner did not make this change, so it records silently. A refused
+      // save, for example while a turn starts, may try again on the next decision.
+      void Promise.resolve(latest.current.applyRoute(current, { origin: 'automatic' })).then((applied) => {
         if (applied === false) appliedRef.current.delete(key);
       }, () => { appliedRef.current.delete(key); });
     }, settleMs);

@@ -111,10 +111,10 @@ function agentRowAvatar(markup: string) {
 
 afterEach(() => setLocalAgentAvatar(null));
 
-test('an id-only avatar seed for the default host agent renders an empty tile', () => {
+test('an id-only avatar seed for the default host agent draws its server default bird', () => {
   const row = agentRowAvatar(renderAgentRail(factoryAgent({ avatarSeed: defaultHostAgent.id })));
-  assert.match(row, /data-avatar-state="fallback"/);
-  assert.doesNotMatch(row, /<img/);
+  assert.match(row, /data-avatar-state="ready"/);
+  assert.match(row, /<img[^>]+src="[^"]*\/v1\/avatars\/preview\/kordi-birds\/default-agent-acct_x\.png"/);
 });
 
 test('the Factory rail shows the own agent avatar for the default host agent', async () => {

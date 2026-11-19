@@ -17,7 +17,8 @@ import {
   latestCloudAgentRuntimeRouteChangeBeforeRequest,
   modelFromAgentModelChangeNotice,
 } from '../src/features/cloud/cloudAgentRuntime';
-import type { DesktopAuthState } from '../src/kordi-app/types';
+import type { CanonicalSessionMessage, DesktopAuthState } from '../src/kordi-app/types';
+import type { DesktopChatMessageRoute } from '../src/lib/desktop';
 
 test('explicit cloud sessions keep independent runtime route identities for the same peer', () => {
   for (const suffix of ['one', 'two']) {
@@ -367,4 +368,61 @@ test('a same-family route without a sign-in does not borrow the local sign-in', 
     { model: 'openai/gpt-5.6-sol' },
     { model: 'openai-codex/gpt-5.6-sol', authProvider: 'openai-codex', authChoice: 'cloud-login:work' },
   ), { model: 'openai/gpt-5.6-sol', authProvider: 'openai', thinking: 'high' });
+});
+
+// Each group member has their own agent and route; their rows share one session.
+const groupSessionId = 'session:group:shared-room';
+const groupRuntimeSessionId = cloudAgentRuntimeSessionId('acct_me', groupSessionId) ?? '';
+const myRoute = {
+  model: 'openai-codex/gpt-6.1-sol', authProvider: 'openai-codex', authChoice: 'cloud-login:mine', thinking: 'high',
+};
+const theirRoute = {
+  model: 'anthropic/claude-fable-5', authProvider: 'anthropic', authChoice: 'cloud-login:theirs', thinking: 'max',
+};
+
+function modelChangeRow(
+  id: string, sequenceNum: number, sender: Pick<CanonicalSessionMessage, 'senderRole' | 'senderIdentityId'>,
+  route: DesktopChatMessageRoute, sessionId = groupSessionId, sourceTransport = 'cloud-group',
+): CanonicalSessionMessage {
+  return {
+    id, sessionId, ...sender, messageKind: 'agent-model-change', contentText: `Model: ${route.model}`,
+    content: { agentRuntimeRoute: route }, status: 'complete',
+    sequenceNum, createdAtMs: sequenceNum, updatedAtMs: sequenceNum, sourceTransport,
+  };
+}
+
+const groupHistory = [
+  modelChangeRow('my-change', 1, { senderRole: 'user', senderIdentityId: 'human:acct_me' }, myRoute),
+  modelChangeRow('their-change', 2, { senderRole: 'person', senderIdentityId: 'human:acct_other' }, theirRoute),
+];
+
+test('another member\'s later model change in a group keeps this owner\'s route', () => {
+  assert.deepEqual(applyCloudAgentModelChangeMessages({}, 'acct_me', groupHistory)[groupRuntimeSessionId], myRoute);
+});
+
+test('another member\'s model change alone records no route for the session', () => {
+  const current: Record<string, DesktopChatMessageRoute> = {};
+  assert.equal(applyCloudAgentModelChangeMessages(current, 'acct_me', [groupHistory[1]]), current);
+});
+
+test('the owner\'s own change applies even when it is mirrored with the person role', () => {
+  // A change made on the owner's other device can arrive labelled as a person's row.
+  const history = [modelChangeRow('my-other-device', 1, { senderRole: 'person', senderIdentityId: 'human:acct_me' }, myRoute)];
+  assert.deepEqual(applyCloudAgentModelChangeMessages({}, 'acct_me', history)[groupRuntimeSessionId], myRoute);
+});
+
+test('the owner\'s own self-agent model change still applies', () => {
+  const sessionId = 'session:self-agent:own-change';
+  const runtimeSessionId = cloudAgentRuntimeSessionId('acct_me', sessionId) ?? '';
+  const history = [modelChangeRow(
+    'self-change', 1, { senderRole: 'system', senderIdentityId: 'agent:cloud-self:acct_me' },
+    myRoute, sessionId, 'cloud-self-agent',
+  )];
+  assert.deepEqual(applyCloudAgentModelChangeMessages({}, 'acct_me', history)[runtimeSessionId], myRoute);
+});
+
+test('a route already replaced by another member\'s change returns to the owner\'s own', () => {
+  const contaminated = { [groupRuntimeSessionId]: theirRoute };
+  const next = applySynchronizedCloudAgentRuntimeRoutes(contaminated, 'acct_me', groupHistory, []);
+  assert.deepEqual(next[groupRuntimeSessionId], myRoute);
 });

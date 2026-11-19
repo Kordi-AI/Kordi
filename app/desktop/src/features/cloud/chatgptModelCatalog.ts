@@ -1,8 +1,12 @@
-// ChatGPT models in the order the picker lists them, newest first. The pinned
-// OMP catalog lists them alphabetically, may not know the newest one yet, and
-// includes internal "daybreak" ids that the picker never offers.
+// The ChatGPT models Kordi offers, in the order the picker lists them, newest
+// first; the first is the default. The pinned OMP catalog lists more models
+// alphabetically, may not know the newest ones yet, and includes internal
+// "daybreak" ids, so only these ids are offered for ChatGPT and OpenAI.
 
 export const CHATGPT_MODEL_ORDER = [
+  'gpt-6.2-sol',
+  'gpt-6.2-astra',
+  'gpt-6.1-terra',
   'gpt-6.1-sol',
   'gpt-6-astra',
   'gpt-6-sol',
@@ -17,32 +21,26 @@ export const CHATGPT_DEFAULT_MODEL = CHATGPT_MODEL_ORDER[0];
 const chatGptProviderIds = new Set(['openai', 'openai-codex']);
 
 export function isChatGptCatalogProvider(providerId: string) {
-  return chatGptProviderIds.has(providerId);
+  return chatGptProviderIds.has(providerId.trim().toLowerCase());
 }
 
-export function isHiddenChatGptModel(modelId: string) {
-  return modelId.toLowerCase().includes('daybreak');
+function chatGptModelRank(modelId: string) {
+  return (CHATGPT_MODEL_ORDER as readonly string[]).indexOf(modelId.trim().toLowerCase());
 }
 
-/** Ranked models first in picker order; unranked ones keep their order after them. Daybreak ids are dropped. */
+/** True for a model id Kordi offers for ChatGPT and OpenAI. */
+export function isOfferedChatGptModel(modelId: string) {
+  return chatGptModelRank(modelId) >= 0;
+}
+
+/** The offered ChatGPT models among `models`, in picker order; any other model is dropped. */
 export function orderChatGptModels(models: readonly string[]): string[] {
-  const rank = (model: string) => {
-    const index = (CHATGPT_MODEL_ORDER as readonly string[]).indexOf(model.toLowerCase());
-    return index < 0 ? CHATGPT_MODEL_ORDER.length : index;
-  };
-  return [...new Set(models)]
-    .filter((model) => !isHiddenChatGptModel(model))
-    .map((model, position) => ({ model, position }))
-    .sort((left, right) => rank(left.model) - rank(right.model) || left.position - right.position)
-    .map(({ model }) => model);
+  const offered = new Set(models.map((model) => model.trim().toLowerCase()));
+  return CHATGPT_MODEL_ORDER.filter((model) => offered.has(model));
 }
 
-/** A catalog entry with the ChatGPT order, the newest model and default, and no daybreak ids. */
+/** A ChatGPT catalog entry lists exactly the offered models, the first as its default. */
 export function withChatGptModelCatalog<T extends { id: string; models: string[]; defaultModel?: string | null }>(entry: T): T {
   if (!isChatGptCatalogProvider(entry.id) || entry.models.length === 0) return entry;
-  const models = orderChatGptModels([CHATGPT_DEFAULT_MODEL, ...entry.models]);
-  const defaultModel = entry.id === 'openai-codex' || !entry.defaultModel || isHiddenChatGptModel(entry.defaultModel)
-    ? CHATGPT_DEFAULT_MODEL
-    : entry.defaultModel;
-  return { ...entry, models, defaultModel };
+  return { ...entry, models: [...CHATGPT_MODEL_ORDER], defaultModel: CHATGPT_DEFAULT_MODEL };
 }
