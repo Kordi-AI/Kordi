@@ -17,6 +17,21 @@ const messages: Message[] = [
     text: 'I can select part of this sentence, including a range that wraps onto another line. The highlighted characters should match exactly what I copy.',
   },
   {
+    // A reply streamed as ordered segments, the way a running agent delivers one.
+    id: 'selection-review-turn', role: 'owned-agent', sender: 'Assistant', time: '14:52', text: '',
+    turn: {
+      id: 'selection-review-turn', sessionId: 'text-selection-review', prompt: '', status: 'complete', message: '',
+      assistantText: 'This reply arrived in ordered segments. Its words can be selected and copied like any other message.',
+      thinkingText: '', completed: true, succeeded: true,
+      tools: [{ id: 'selection-review-tool', name: 'read', arguments: 'notes.md', liveOutput: '', status: 'completed', isError: false }],
+      segments: [
+        { id: 'selection-review-commentary', kind: 'text', text: 'Reading the sample notes before answering.' },
+        { id: 'selection-review-tool-segment', kind: 'tool', toolId: 'selection-review-tool' },
+        { id: 'selection-review-answer', kind: 'text', text: 'This reply arrived in ordered segments. Its words can be selected and copied like any other message.' },
+      ],
+    },
+  },
+  {
     id: 'selection-review-markdown', role: 'agent', sender: 'Assistant', time: '14:53',
     text: '### A formatted example\n\nSelect from **bold text** into regular text, or across these list items:\n\n- Review the first draft carefully.\n- Compare the results with the next draft.\n\nInline `sample code` is selectable too.',
   },
