@@ -10,17 +10,11 @@ import { notifyProactiveRunRequests } from '@/features/proactive/proactiveRunHin
 import { mergePinHistory, type CloudPinHistoryEvent } from './cloudPinHistory';
 import type { CloudArtifactActivity, CloudMessage, CloudSessionForkSummary, CloudSessionPin, CloudSessionTitle, CloudSyncEvent as AuthCloudSyncEvent, CloudSyncResponse, CloudTaskActivity } from './authClient';
 import { applyCloudAgentSyncEvents, type CloudAgentDefinition } from './cloudAgents';
-import {
-  applyCloudSyncEventsToMessagesByPeer,
-  cloudSyncEventSessionId,
-} from './cloudDiffSyncMessages';
+import { applyCloudSyncEventsToMessagesByPeer, cloudSyncEventSessionId } from './cloudDiffSyncMessages';
 import { EMPTY_CLOUD_SESSION_ACTIVITY, mergeCloudSessionActivity, normalizeCloudSessionActivitySnapshot, type CloudSessionActivityStore } from './cloudSessionActivity';
-import { chatSyncCursorExpired, cloudSyncCursorRequiresFallback } from './cloudSyncCursorProgress';
+import { chatSyncCursorExpired, chatSyncMirrorMissingConversation, cloudSyncCursorRequiresFallback } from './cloudSyncCursorProgress';
 
-export {
-  applyCloudSyncEventsToMessagesByPeer,
-  removeCloudSessionMessages,
-} from './cloudDiffSyncMessages';
+export { applyCloudSyncEventsToMessagesByPeer, removeCloudSessionMessages } from './cloudDiffSyncMessages';
 
 export {
   cloudMessageAttachmentsEqual,
@@ -444,17 +438,17 @@ export async function syncCloudDiffOnce(input: SyncCloudDiffOnceInput): Promise<
   const initialPinnedSessionIds = new Set(input.pinnedSessionIds ?? []);
   const initialMutedSessionIds = new Set(input.mutedSessionIds ?? []);
   const initialPinnedGroupSpaceIds = new Set(input.pinnedGroupSpaceIds ?? []);
+  // Inputs pass through unchanged and the cursor is kept; the caller reloads from a bootstrap.
+  const fallback = (): SyncCloudDiffOnceResult => ({ messagesByPeer: input.messagesByPeer, sessionActivity: input.sessionActivity ?? EMPTY_CLOUD_SESSION_ACTIVITY, sessionForksById: input.sessionForksById ?? {}, sessionPinsById: input.sessionPinsById ?? {}, sessionTitlesById: input.sessionTitlesById ?? {}, cloudAgentsById: input.cloudAgentsById ?? {}, hiddenSessionIds: initialHiddenSessionIds, deletedSessionIds: initialDeletedSessionIds, unreadSessionIds: initialUnreadSessionIds, pinnedSessionIds: initialPinnedSessionIds, mutedSessionIds: initialMutedSessionIds, pinnedGroupSpaceIds: initialPinnedGroupSpaceIds, cursor: previousCursor, fallbackRequired: true, hasMore: false });
   try {
     response = await input.fetchEvents(previousCursor);
   } catch (error) {
     if (!chatSyncCursorExpired(error)) throw error; // Kept cursor: the caller retries the catch-up from it.
-    return { messagesByPeer: input.messagesByPeer, sessionActivity: input.sessionActivity ?? EMPTY_CLOUD_SESSION_ACTIVITY, sessionForksById: input.sessionForksById ?? {}, sessionPinsById: input.sessionPinsById ?? {}, sessionTitlesById: input.sessionTitlesById ?? {}, cloudAgentsById: input.cloudAgentsById ?? {}, hiddenSessionIds: initialHiddenSessionIds, deletedSessionIds: initialDeletedSessionIds, unreadSessionIds: initialUnreadSessionIds, pinnedSessionIds: initialPinnedSessionIds, mutedSessionIds: initialMutedSessionIds, pinnedGroupSpaceIds: initialPinnedGroupSpaceIds, cursor: previousCursor, fallbackRequired: true, hasMore: false };
+    return fallback();
   }
 
   const nextCursor = normalizeCursor(response.cursor);
-  if (cloudSyncCursorRequiresFallback(previousCursor, nextCursor, Boolean(response.hasMore))) {
-    return { messagesByPeer: input.messagesByPeer, sessionActivity: input.sessionActivity ?? EMPTY_CLOUD_SESSION_ACTIVITY, sessionForksById: input.sessionForksById ?? {}, sessionPinsById: input.sessionPinsById ?? {}, sessionTitlesById: input.sessionTitlesById ?? {}, cloudAgentsById: input.cloudAgentsById ?? {}, hiddenSessionIds: initialHiddenSessionIds, deletedSessionIds: initialDeletedSessionIds, unreadSessionIds: initialUnreadSessionIds, pinnedSessionIds: initialPinnedSessionIds, mutedSessionIds: initialMutedSessionIds, pinnedGroupSpaceIds: initialPinnedGroupSpaceIds, cursor: previousCursor, fallbackRequired: true, hasMore: false };
-  }
+  if (cloudSyncCursorRequiresFallback(previousCursor, nextCursor, Boolean(response.hasMore))) return fallback();
 
   const events = response.events ?? [];
   const visibility = applyCloudSyncEventsToSessionVisibility(input.accountId, {
@@ -487,7 +481,13 @@ export async function syncCloudDiffOnce(input: SyncCloudDiffOnceInput): Promise<
   const sessionTitlesById = applyCloudSyncEventsToSessionTitles(input.sessionTitlesById ?? {}, events);
   const cloudAgentsById = applyCloudAgentSyncEvents(input.cloudAgentsById ?? {}, events);
   if (input.commitResponse) {
-    await input.commitResponse(response);
+    try {
+      await input.commitResponse(response);
+    } catch (error) {
+      // Nothing was committed. A bootstrap restores the missing conversation; a failed bootstrap stays fatal.
+      if (response.chat?.bootstrap || !chatSyncMirrorMissingConversation(error)) throw error;
+      return fallback();
+    }
   } else if (!input.shouldSaveCursor || input.shouldSaveCursor()) {
     saveCloudSyncCursor(input.accountId, nextCursor, storage);
   }
