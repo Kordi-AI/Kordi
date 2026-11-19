@@ -450,6 +450,9 @@ mod common_ground_tests;
 #[path = "runtime_connector_tests.rs"]
 mod connector_tests;
 #[cfg(test)]
+#[path = "runtime_failure_code_tests.rs"]
+mod failure_code_tests;
+#[cfg(test)]
 #[path = "runtime_import_tests.rs"]
 mod import_tests;
 #[cfg(test)]
@@ -461,38 +464,3 @@ mod tests;
 #[cfg(test)]
 #[path = "runtime_tool_only_reply_tests.rs"]
 mod tool_only_reply_tests;
-
-#[cfg(test)]
-mod failure_code_tests {
-    #[test]
-    fn rejected_sign_ins_are_reported_as_reconnectable() {
-        let code = super::model_failure_code;
-        assert_eq!(
-            code("provider error: The provider sign-in needs attention. Reconnect this account."),
-            "provider_auth_rejected"
-        );
-        assert_eq!(
-            code("provider error: 401 Unauthorized"),
-            "provider_auth_rejected"
-        );
-        assert_eq!(
-            code("provider error: The provider is busy or rate-limited."),
-            "model_provider_error"
-        );
-    }
-
-    #[test]
-    fn refused_models_are_reported_as_unavailable() {
-        let code = super::model_failure_code;
-        assert_eq!(
-            code(
-                "provider error: The selected model is unavailable for this account. Choose another model."
-            ),
-            "model_unavailable"
-        );
-        assert_eq!(
-            code("provider error: 400 {\"code\":\"model_not_found\"}"),
-            "model_unavailable"
-        );
-    }
-}
