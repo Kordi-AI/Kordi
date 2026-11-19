@@ -1,7 +1,9 @@
-import type { UpsertCanonicalIdentityRequest } from '@/kordi-app/types';
+import type { CanonicalIdentity, UpsertCanonicalIdentityRequest } from '@/kordi-app/types';
+import { isValidAvatarSeed } from '@/lib/identityLabels';
 
 import { cloudAvatarImageUrl, cloudAvatarSeedForAccount } from './avatar';
 import type { CloudAccount, CloudPublicProfile } from './authClient';
+import { cloudAgentAvatarSeed } from './cloudAgentAvatar';
 import { cloudAgentId } from './cloudAgentIdentity';
 import { CLOUD_HOST_SENTINEL } from './cloudContactMapping';
 import type { CloudGroupParticipant } from './cloudGroupMessages';
@@ -32,7 +34,11 @@ export function cloudGroupIdentityRequest(
       defaultAgentId: participant.agentId ?? `cloud-agent:${participant.accountId}`,
       defaultAgentDisplayName: participant.agentDisplayName ?? 'Kordi',
       defaultAgentAvatarUrl: participant.agentAvatarUrl ?? null,
-      defaultAgentAvatarSeed: participant.agentAvatarSeed ?? participant.agentId ?? `cloud-agent:${participant.accountId}`,
+      defaultAgentAvatarSeed: cloudAgentAvatarSeed({
+        agentId: participant.agentId,
+        ownerAccountId: participant.accountId,
+        profileSeed: participant.agentAvatarSeed,
+      }),
     },
   };
 }
@@ -40,6 +46,44 @@ export function cloudGroupIdentityRequest(
 export type CloudGroupAgentAvatar = Pick<CloudGroupParticipant, 'accountId' | 'agentId' | 'agentAvatarUrl'>;
 
 const MAX_AGENT_AVATAR_URL_LENGTH = 256 * 1024;
+
+function boundedAgentAvatarUrl(value: string | null | undefined) {
+  const url = value?.trim();
+  return url && url.length <= MAX_AGENT_AVATAR_URL_LENGTH ? url : null;
+}
+
+/**
+ * The member with their default agent's avatar restored: from the public profile when it
+ * has a default agent, otherwise from what the member's stored identity already holds, so
+ * a group message that carries no agent avatar never erases it.
+ */
+export function cloudGroupParticipantWithAgentAvatar(
+  participant: CloudGroupParticipant,
+  profile?: Pick<CloudPublicProfile, 'accountId' | 'defaultAgent'> | null,
+  stored?: CanonicalIdentity | null,
+): CloudGroupParticipant {
+  const agent = profile?.accountId === participant.accountId ? profile.defaultAgent : null;
+  if (agent) {
+    const seed = agent.avatar.seed?.trim();
+    return {
+      ...participant,
+      agentAvatarUrl: boundedAgentAvatarUrl(agent.avatarUrl),
+      agentAvatarSeed: seed && isValidAvatarSeed(seed) ? seed : participant.agentAvatarSeed,
+    };
+  }
+  const metadata = stored?.id === `human:${participant.accountId}` && stored.metadata
+    && typeof stored.metadata === 'object' && !Array.isArray(stored.metadata)
+    ? stored.metadata as Record<string, unknown>
+    : null;
+  if (!metadata) return participant;
+  const storedUrl = typeof metadata.defaultAgentAvatarUrl === 'string' ? boundedAgentAvatarUrl(metadata.defaultAgentAvatarUrl) : null;
+  const storedSeed = typeof metadata.defaultAgentAvatarSeed === 'string' ? metadata.defaultAgentAvatarSeed.trim() : '';
+  return {
+    ...participant,
+    agentAvatarUrl: storedUrl ?? participant.agentAvatarUrl,
+    agentAvatarSeed: isValidAvatarSeed(storedSeed) ? storedSeed : participant.agentAvatarSeed,
+  };
+}
 
 /**
  * Each member's default agent picture. The participant snapshot carries no agent fields, so

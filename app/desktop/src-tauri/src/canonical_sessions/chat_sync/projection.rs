@@ -149,7 +149,10 @@ pub(super) fn merge_conversation_projection(
         .optional()
         .map_err(|error| error.to_string())?;
     let Some(stored) = stored else {
-        return Err("Chat sync event references an unknown conversation".to_string());
+        return Err(
+            "CHAT_SYNC_UNKNOWN_CONVERSATION: Chat sync event references an unknown conversation"
+                .to_string(),
+        );
     };
     let mut snapshot: Value = serde_json::from_str(&stored).map_err(|error| error.to_string())?;
     let object = snapshot

@@ -156,4 +156,45 @@ mod tests {
         assert_eq!(shared["text"], "The agent couldn't reply.");
         assert_eq!(shared["failureCode"], "model_unavailable");
     }
+
+    #[test]
+    fn a_shared_reply_is_the_neutral_line_for_every_run_error_code() {
+        for code in [
+            "missing_provider_auth",
+            "provider_auth_not_configured",
+            "provider_auth_rejected",
+            "credential_expired",
+            "model_unavailable",
+            "model_provider_error",
+            "sandbox_error",
+            "sandbox_backend_error",
+            "missing_sandbox",
+            "tool_error",
+            "run_attempts_exhausted",
+            "pool_worker_run_failed",
+            "runner_crashed",
+            "",
+        ] {
+            let body = encode_failed_cloud_agent_response_body("msg_request", code, false, true);
+            let value = reply(&body);
+            assert_eq!(value["text"], "The agent couldn't reply.", "{code:?}");
+            let keys: std::collections::BTreeSet<&str> = value
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect();
+            assert!(keys.contains("failureCode"), "{code:?}");
+            // Nothing from the run's error text can reach the reply: the
+            // whole encoded body carries only the neutral line and the code.
+            let decoded = value.to_string().to_lowercase();
+            let text = value["text"].as_str().unwrap().to_lowercase();
+            for needle in ["provider", "http", "://", "snapshot", "model"] {
+                assert!(!text.contains(needle), "{code:?}: {needle}");
+            }
+            for needle in ["://", "snapshot", "sandbox failed", "cloud fallback"] {
+                assert!(!decoded.contains(needle), "{code:?}: {needle}");
+            }
+        }
+    }
 }

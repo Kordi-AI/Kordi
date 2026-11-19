@@ -80,7 +80,7 @@ export function TurnProgress({ turn, trailing, renderTool, legacyAnswer }: {
         {turn.thinkingText ? <ActivityGroup tools={[]} label="Reasoning" thinkingText={turn.thinkingText} renderTool={renderTool} stateKey={`turn:${turn.id}:reasoning`} /> : null}
         <div className="app-turn-trajectory">
           {groups.filter(group => live || group !== last || group.kind !== 'text').map(group => <div key={group.id}>
-            {group.kind === 'text' ? <div className="app-turn-commentary"><MarkdownContent text={group.text} /></div>
+            {group.kind === 'text' ? <div className="app-turn-commentary"><MarkdownContent text={group.text} copySurface="message" /></div>
               : <ActivityGroup tools={group.tools} unavailable={group.unavailable} stateKey={`turn:${turn.id}:${group.id}`}
                   label={live && group.tools.some(progressToolIsActive) ? `${group.tools.length + group.unavailable} ${group.tools.length + group.unavailable === 1 ? 'tool' : 'tools'}` : settledProgressLabel(group.tools, group.unavailable)}
                   renderTool={renderTool} />}
@@ -89,10 +89,10 @@ export function TurnProgress({ turn, trailing, renderTool, legacyAnswer }: {
       </> : <div className="app-turn-progress">
         {turn.thinkingText ? <div className="app-turn-reasoning"><div className="app-turn-progress-details"><MarkdownContent text={turn.thinkingText} tone="muted" className="app-transcript-thinking-markdown" /></div></div> : null}
         {turn.tools.map(renderTool)}
-        {live && ordered ? groups.map(group => group.kind === 'text' ? <div key={group.id} className="app-turn-commentary"><MarkdownContent text={group.text} /></div> : null) : null}
+        {live && ordered ? groups.map(group => group.kind === 'text' ? <div key={group.id} className="app-turn-commentary"><MarkdownContent text={group.text} copySurface="message" /></div> : null) : null}
       </div>}
     </ProgressDisclosure>
-    {!live && last?.kind === 'text' ? <div className="app-turn-commentary"><MarkdownContent text={last.text} /></div> : null}
+    {!live && last?.kind === 'text' ? <div className="app-turn-commentary"><MarkdownContent text={last.text} copySurface="message" /></div> : null}
     {!ordered ? legacyAnswer : null}
   </div>;
 }
