@@ -31,7 +31,7 @@ export function cloudGroupMessageRuntimeFields(candidate: Record<string, unknown
   voiceMessage?: (MessageVoiceDraft & { mediaId?: string | null }) | null;
   structuredContent?: Record<string, unknown> | null;
   forkSnapshot?: boolean;
-  /** Why a failed agent reply failed; only the agent's owner renders the reason. */
+  /** Why a failed agent reply failed; each viewer renders its own line from it. */
   failureCode?: CloudAgentFailureCode;
 } {
   const structuredContent = candidate.structuredContent;

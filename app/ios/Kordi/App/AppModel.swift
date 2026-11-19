@@ -6660,7 +6660,7 @@ final class AppModel: ObservableObject {
             authorName: cardAgent?.authorName ?? (author == .me ? "You" : KordiSystemIdentity.directAuthorName(
                 messageKind: messageKind, fromAccountId: message.fromAccountId, fallback: conversation.displayName)),
             senderOwnerName: cardAgent?.ownerName,
-            text: CloudMessageCodec.viewerText(message.body, viewerOwnsAgent: message.fromAccountId == ownAccountId, agentName: nil),
+            text: CloudMessageCodec.viewerText(message.body, viewerOwnsAgent: message.fromAccountId == ownAccountId, agentName: nil, ownerName: cardAgent?.ownerName),
             createdAt: parseCloudDate(message.createdAt),
             editedAt: message.editedAt.map(parseCloudDate),
             cloudMessageVersion: message.version,
@@ -6864,13 +6864,13 @@ final class AppModel: ObservableObject {
                     : fromFacilitator ? KordiSystemAgentIdentity.displayName
                     : author == .agent ? agentName : payload.senderDisplayName?.nonEmpty ?? participantNames[payload.senderAccountId] ?? "Participant",
                 senderOwnerName: author == .agent && !fromFacilitator ? (payload.senderAccountId == ownAccountId ? "You" : ownerName) : nil,
-                // Only the agent's owner reads why a reply failed.
+                // The owner reads why a reply failed; other members read a short reason from its code.
                 text: author == .agent && payload.deliveryState == "failed"
                     ? AgentFailurePresentation.text(
                         stored: payload.text,
                         failureCode: payload.failureCode,
                         viewerOwnsAgent: payload.senderAccountId == ownAccountId,
-                        agentName: agentName
+                        agentName: agentName, ownerName: ownerName
                     )
                     : payload.text,
                 createdAt: Date(
