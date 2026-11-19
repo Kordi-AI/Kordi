@@ -1,8 +1,9 @@
 //! `GET gallery/:item_id/content`: the bytes of an item you see. The
 //! gallery check stands in for the attachment owner check; the bytes are
 //! served by the attachment `/content` code path. A Kordi document whose
-//! current text is stored (`cloud_document_contents`) serves that text, as
-//! the document routes read it. The answer tells a browser never to
+//! current text is stored (`cloud_document_contents`) serves that text as a
+//! reader outside the editor gets it, without the editor's block-id
+//! comments (see [`reader_source`]). The answer tells a browser never to
 //! render the bytes as a page: they are another person's file, and API
 //! routes also accept the web session cookie. Streamed files get that from
 //! the shared attachment streaming code; stored Markdown text gets it here.
@@ -20,6 +21,7 @@ use sqlx_core::query_as::query_as;
 use super::{item_not_found, member_room, visible_item};
 use crate::attachments::content::{never_render, stream_readable_object, StoredObject};
 use crate::common_ground::db_error;
+use crate::document_shares::block_ids::reader_source;
 use crate::{auth::routes::CloudSession, server::ServerState};
 
 type ObjectRow = (
@@ -59,7 +61,7 @@ pub(in crate::common_ground) async fn content(
     .await;
     match row {
         Ok(Some((_, _, _, _, Some(source)))) => {
-            let mut response = source.into_response();
+            let mut response = reader_source(&source).into_response();
             response.headers_mut().insert(
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("text/markdown; charset=utf-8"),

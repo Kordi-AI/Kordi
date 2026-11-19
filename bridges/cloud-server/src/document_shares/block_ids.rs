@@ -7,7 +7,8 @@
 //! type; Markdown parses that line as an HTML block, which is folded into
 //! the block before it). The block's id is then `k:7f3a9c2d` instead of its
 //! index id `b{index}`. Block sources and rendered HTML never contain these
-//! comments; the stored document source keeps them.
+//! comments; the stored document source keeps them. Readers outside the
+//! editor get that source through [`reader_source`].
 
 use std::collections::{HashMap, HashSet};
 
@@ -52,6 +53,21 @@ fn comment_spans(text: &str) -> Vec<(usize, usize, String)> {
 /// `text` without block-id comments. Lines that held one lose their
 /// trailing spaces too.
 pub(crate) fn remove_block_comments(text: &str) -> String {
+    strip_block_comments(text, false)
+}
+
+/// `text` as a reader outside the editor gets it: as
+/// [`remove_block_comments`] gives it, and without the lines that held
+/// nothing but block-id comments and whitespace, line break included. Text
+/// without a block-id comment comes back unchanged.
+pub(crate) fn reader_source(text: &str) -> String {
+    strip_block_comments(text, true)
+}
+
+/// `text` without block-id comments. Lines that held one lose their
+/// trailing spaces; with `drop_blank`, those left blank are dropped with
+/// their line break.
+fn strip_block_comments(text: &str, drop_blank: bool) -> String {
     if !text.contains("<!--") {
         return text.to_string();
     }
@@ -79,24 +95,31 @@ pub(crate) fn remove_block_comments(text: &str) -> String {
             .expect("index is on a char boundary");
         index += ch.len_utf8();
         if ch == '\n' {
-            flush_line(&mut out, &mut line, line_had_comment);
-            out.push('\n');
+            let kept = flush_line(&mut out, &mut line, line_had_comment, drop_blank);
+            if kept {
+                out.push('\n');
+            }
             line_had_comment = false;
         } else {
             line.push(ch);
         }
     }
-    flush_line(&mut out, &mut line, line_had_comment);
+    flush_line(&mut out, &mut line, line_had_comment, drop_blank);
     out
 }
 
-fn flush_line(out: &mut String, line: &mut String, trim: bool) {
-    if trim {
+/// Writes `line` to `out`, without trailing spaces when it held a block-id
+/// comment (`trim`). With `drop_blank`, such a line left blank is not
+/// written. Returns whether it was written.
+fn flush_line(out: &mut String, line: &mut String, trim: bool, drop_blank: bool) -> bool {
+    let kept = !(trim && drop_blank && line.trim().is_empty());
+    if kept && trim {
         out.push_str(line.trim_end_matches([' ', '\t']));
-    } else {
+    } else if kept {
         out.push_str(line);
     }
     line.clear();
+    kept
 }
 
 /// The block's stable id, if its last line ends with a block-id comment

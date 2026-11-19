@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use super::super::block_ids::{annotation_targets, is_stable_block_id, split_block_id};
+use super::super::block_ids::{
+    annotation_targets, is_stable_block_id, reader_source, remove_block_comments, split_block_id,
+};
 use super::super::model::DocumentBlock;
 use super::super::render::markdown_blocks;
 use super::super::validate::is_valid_block_id;
@@ -272,5 +274,94 @@ fn comment_lines_never_count_as_blocks() {
     assert_eq!(
         blocks("Para <!-- k:trailing -->\n<!-- k:ownline1 -->\n"),
         pairs(&[("k:trailing", "Para")])
+    );
+}
+
+#[test]
+fn reader_source_drops_own_line_comments_with_their_line() {
+    for (stamped, read) in [
+        ("Para\n<!-- k:aaaa1111 -->\n\nNext", "Para\n\nNext"),
+        (
+            "```rust\nfn main() {}\n```\n<!-- k:code0001 -->\n\nAfter.\n",
+            "```rust\nfn main() {}\n```\n\nAfter.\n",
+        ),
+        (
+            "- one\n\n- two\n<!-- k:list0001 -->\n\nAfter.\n",
+            "- one\n\n- two\n\nAfter.\n",
+        ),
+        (
+            "| a | b |\n|---|---|\n| 1 | 2 |\n<!-- k:table001 -->\n\nAfter.\n",
+            "| a | b |\n|---|---|\n| 1 | 2 |\n\nAfter.\n",
+        ),
+        (
+            "Para\n  <!-- k:aaaa1111 --> <!-- k:bbbb2222 -->\t\n\nNext\n",
+            "Para\n\nNext\n",
+        ),
+        (
+            "Para\r\n<!-- k:aaaa1111 -->\r\n\r\nNext\r\n",
+            "Para\r\n\r\nNext\r\n",
+        ),
+    ] {
+        assert_eq!(reader_source(stamped), read, "{stamped:?}");
+    }
+    assert_eq!(
+        remove_block_comments("Para\n<!-- k:aaaa1111 -->\n\nNext"),
+        "Para\n\n\nNext",
+        "block sources keep the line"
+    );
+}
+
+#[test]
+fn reader_source_trims_trailing_comments_and_keeps_other_comments() {
+    assert_eq!(
+        reader_source("# Title <!-- k:head0001 -->\n\nBody. <!-- k:body0001 -->  \n"),
+        "# Title\n\nBody.\n"
+    );
+    assert_eq!(
+        reader_source("<!-- note -->\n\nPara <!-- k:para0001 -->\n<!-- k:abc -->\n"),
+        "<!-- note -->\n\nPara\n<!-- k:abc -->\n",
+        "ordinary comments and too short ids stay"
+    );
+    assert_eq!(
+        reader_source("Para\n<!-- k:aaaa1111 --> <!-- note -->\n"),
+        "Para\n <!-- note -->\n"
+    );
+}
+
+#[test]
+fn reader_source_drops_a_comment_line_ending_the_text() {
+    assert_eq!(reader_source("Para\n<!-- k:aaaa1111 -->\n"), "Para\n");
+    assert_eq!(reader_source("Para\n<!-- k:aaaa1111 -->"), "Para\n");
+    assert_eq!(reader_source("<!-- k:aaaa1111 -->"), "");
+}
+
+#[test]
+fn reader_source_returns_text_without_block_ids_unchanged() {
+    for text in [
+        "",
+        "Plain text",
+        "# Title\n\nBody\n",
+        "Ends without a newline",
+        "Windows\r\nlines\r\n",
+        "<!-- note -->\n\nText <!-- k:abc --> <!-- k:has space -->  \n",
+        "Unclosed <!-- k:aaaa1111",
+    ] {
+        assert_eq!(reader_source(text), text, "{text:?}");
+    }
+}
+
+#[test]
+fn reader_source_reads_as_the_same_blocks() {
+    let stamped = "# Title <!-- k:title001 -->\n\nIntro.\n<!-- k:intro001 -->\n\n---\n<!-- k:rule0001 -->\n\nEnd.\n";
+    let read = reader_source(stamped);
+    assert_eq!(read, "# Title\n\nIntro.\n\n---\n\nEnd.\n");
+    assert_eq!(
+        blocks(&read),
+        pairs(&[
+            ("b0", "# Title"),
+            ("b1", "Intro."),
+            ("b2", "---"),
+            ("b3", "End.")
+        ])
     );
 }

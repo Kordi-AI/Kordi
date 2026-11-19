@@ -1,6 +1,7 @@
 //! Keeping gallery items in step with the sharer's document: the title and
 //! preview copied at share time are copied again when the document's text
-//! or renamed title changes, so a card shows what `content` serves.
+//! or renamed title changes, so a card shows what `content` serves: the
+//! stored text without the editor's block-id comments.
 
 use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
@@ -9,6 +10,7 @@ use uuid::Uuid;
 use super::artifacts::eligible;
 use super::copies::{copies, readable_text, reads_text};
 use super::hints::{notify, Change};
+use crate::document_shares::block_ids::reader_source;
 
 /// Copies the title and preview of every gallery item of `attachment_id`
 /// again, as a share would now, and tells the members of each room whose
@@ -53,11 +55,11 @@ async fn refresh(pool: &PgPool, attachment_id: &str) -> sqlx_core::Result<()> {
         return Ok(());
     };
     let text = if reads_text(&artifact) {
-        readable_text(source.as_bytes())
+        readable_text(source.as_bytes()).map(reader_source)
     } else {
         None
     };
-    let copies = copies(&artifact, text);
+    let copies = copies(&artifact, text.as_deref());
     let changed: Vec<(Uuid, Uuid, String)> = query_as(
         "UPDATE cloud_common_ground_room_gallery_items item
          SET title = $3, preview = $4

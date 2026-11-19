@@ -103,6 +103,7 @@ tests=(
   common_ground_join_request_tests::upgrade_from_201_adds_room_join_requests
   common_ground_group_invitation_tests::upgrade_from_204_adds_group_invitations
   common_ground_gallery_tests::upgrade_from_206_adds_the_room_gallery
+  common_ground_gallery_tests::upgrade_from_207_strips_block_ids_from_document_previews
 )
 index=0
 for test_name in "${tests[@]}"; do
