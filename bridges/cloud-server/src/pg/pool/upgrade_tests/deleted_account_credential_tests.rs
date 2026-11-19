@@ -4,8 +4,8 @@ use super::*;
 fn deleted_account_credentials_migration_is_registered() {
     let migration = EMBEDDED_MIGRATIONS
         .iter()
-        .find(|m| m.version == 208)
-        .expect("migration 208 is embedded");
+        .find(|m| m.version == 209)
+        .expect("migration 209 is embedded");
     assert_eq!(migration.description, "deleted account credentials");
     assert!(migration
         .sql
@@ -29,8 +29,8 @@ fn deleted_account_credentials_migration_is_registered() {
 
 #[tokio::test]
 #[ignore = "requires a dedicated PostgreSQL fixture; run scripts/test-cloud-migrations.sh"]
-async fn upgrade_from_207_adds_deleted_account_credentials() {
-    let pool = fixture(207).await;
+async fn upgrade_from_208_adds_deleted_account_credentials() {
+    let pool = fixture(208).await;
     let before: Option<String> = sqlx_core::query_scalar::query_scalar(
         "SELECT to_regclass('public.cloud_deleted_account_credentials')::text",
     )
@@ -82,7 +82,7 @@ async fn upgrade_from_207_adds_deleted_account_credentials() {
     // Running the released SQL again keeps the rows.
     let migration = EMBEDDED_MIGRATIONS
         .iter()
-        .find(|m| m.version == 208)
+        .find(|m| m.version == 209)
         .unwrap();
     let mut tx = pool.begin().await.unwrap();
     sqlx_core::raw_sql::raw_sql(migration.sql)

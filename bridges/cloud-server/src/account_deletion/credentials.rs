@@ -1,5 +1,5 @@
 //! Credentials of deleted accounts (`cloud_deleted_account_credentials`,
-//! migration 0208; docs/development/account-deletion.md, "For clients").
+//! migration 0209; docs/development/account-deletion.md, "For clients").
 //!
 //! A deleted account's sessions and tokens go with its row, so on their own
 //! they look exactly like a sign-out. The deletion transaction therefore

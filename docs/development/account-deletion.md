@@ -207,7 +207,7 @@ reconnecting client asks for a ticket first, and the ticket routes already
 answer `account_deleted`, so it never needs the socket to tell it.
 
 How the server knows: the deletion transaction lists, in
-`cloud_deleted_account_credentials` (migration 0208,
+`cloud_deleted_account_credentials` (migration 0209,
 [`account_deletion::credentials`](../../bridges/cloud-server/src/account_deletion/credentials.rs)),
 the SHA-256 of each of the account's credentials that still worked: unrevoked,
 unexpired session tokens on authorized devices (app bearer tokens, browser

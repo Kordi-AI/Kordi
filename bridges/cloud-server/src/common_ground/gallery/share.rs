@@ -21,6 +21,7 @@ use super::hints::{notify, Change};
 use super::MAX_ITEMS_PER_PERSON;
 use super::{load_items, member_room, own_count, room_closed, Filter, Room};
 use crate::common_ground::{db_error, err};
+use crate::document_shares::block_ids::reader_source;
 use crate::{auth::routes::CloudSession, server::ServerState};
 
 /// Artifacts one request may share.
@@ -29,8 +30,8 @@ const MAX_TOPIC_CHARS: usize = 80;
 
 /// The text of a text artifact up to the preview size (see
 /// [`reads_text`] and [`readable_text`]): its current Kordi document text
-/// when it has one, else its bytes. A failed read gives no text rather
-/// than failing the share.
+/// as readers get it ([`reader_source`]) when it has one, else its bytes.
+/// A failed read gives no text rather than failing the share.
 async fn read_text(state: &ServerState, artifact: &Artifact) -> Option<String> {
     if !reads_text(artifact) {
         return None;
@@ -42,7 +43,7 @@ async fn read_text(state: &ServerState, artifact: &Artifact) -> Option<String> {
             .await
             .ok()?;
     if let Some((source,)) = stored {
-        return readable_text(source.as_bytes()).map(str::to_string);
+        return readable_text(source.as_bytes()).map(reader_source);
     }
     let bytes = crate::attachments::fetch::fetch_attachment_bytes(
         state,
