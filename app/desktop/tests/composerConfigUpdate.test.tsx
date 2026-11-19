@@ -150,7 +150,7 @@ test('panel account, model, and thinking changes keep their route without modify
     return desktopState('panel-session', args.model.split('/').at(-1));
   } } });
   publishHostedProviderSnapshots([{ snapshotId: 'synthetic', provider: 'openai-codex', authChoice: 'cloud-login:panel',
-    label: 'Panel account', modelHint: 'panel-model', createdAt: '2026-01-01T00:00:00Z', revokedAt: null }]);
+    label: 'Panel account', modelHint: 'gpt-6-luna', createdAt: '2026-01-01T00:00:00Z', revokedAt: null }]);
   setLocalAccountChoices(['profile:local']);
   setLocalProviderIds(['openai-codex']);
   let actions!: ReturnType<typeof useComposerInputActions>;
@@ -171,8 +171,8 @@ test('panel account, model, and thinking changes keep their route without modify
       project: { activeProjectSessionId: 'project-session' }, runtime: { desktopChatState: state },
       draft: { composerSelections: main, setComposerSelections: setMain, setComposerDrafts: noChange,
         setOpenComposerSelector: noChange, chatComposerAttachments: [], setChatComposerAttachments: noChange,
-        chatModelOptions: [...models, { value: 'openai-codex/panel-model', label: 'panel-model', provider: 'openai', providerLabel: 'ChatGPT', thinkingLevels: ['off', 'low', 'high'] }],
-        preferredModelValueForProvider: () => 'openai-codex/panel-model', resolveComposerProviderId: () => 'openai' },
+        chatModelOptions: [...models, { value: 'openai-codex/gpt-6-luna', label: 'gpt-6-luna', provider: 'openai', providerLabel: 'ChatGPT', thinkingLevels: ['off', 'low', 'high'] }],
+        preferredModelValueForProvider: () => 'openai-codex/gpt-6-luna', resolveComposerProviderId: () => 'openai' },
       authNavigation: { handleSelectAuthChoice: async (_provider, choice) => { authenticated.push(choice); }, refreshDesktopChat: async () => {} },
       messageRuntime: { setDesktopChatState: setState, setDesktopChatError: error => assert.equal(error, null),
         publishCloudAgentRuntimeRouteChange: async input => { routes.set(input.sessionId, input); },
@@ -194,11 +194,11 @@ test('panel account, model, and thinking changes keep their route without modify
     await act(async () => { await actions.selectComposerProviderChoice('chat', {
       value: 'openai-codex::cloud-login:panel', providerId: 'openai-codex', label: 'Panel account',
     }, target()); });
-    assert.deepEqual(routes.get('panel-session'), { sessionId: 'panel-session', model: 'openai-codex/panel-model',
+    assert.deepEqual(routes.get('panel-session'), { sessionId: 'panel-session', model: 'openai-codex/gpt-6-luna',
       authProvider: 'openai-codex', authChoice: 'cloud-login:panel', thinking: 'off' });
     assert.deepEqual(authenticated, [], 'Hosted credentials stay on the server');
     assert.deepEqual(nativeRequests, [], 'A hosted selection does not update an unauthenticated native model');
-    assert.equal(panel.model, 'openai-codex/panel-model');
+    assert.equal(panel.model, 'openai-codex/gpt-6-luna');
     await act(async () => { await actions.selectComposerValue('chat', 'thinking', 'low', target()); });
     assert.equal(routes.get('panel-session')?.authChoice, 'cloud-login:panel');
     assert.equal(routes.get('panel-session')?.thinking, 'low');

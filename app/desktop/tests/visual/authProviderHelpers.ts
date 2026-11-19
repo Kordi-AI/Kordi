@@ -20,8 +20,8 @@ export const catalog = JSON.parse(readFileSync(
   new URL('../../../../shared/omp-catalog/omp-provider-catalog.json', import.meta.url),
   'utf8',
 )) as CatalogPayload;
-// The app lists ChatGPT models newest first with GPT-6.1 Sol as the default,
-// and Claude models with Sonnet 5.5 first and as the default.
+// The app lists ChatGPT models newest first with GPT-6.2 Sol as the default,
+// and only the four current Claude models, Sonnet 5.5 first as the default.
 export const ompProvider = (id: string) => {
   const entry = catalog.providers.find((provider) => provider.id === id);
   if (!entry) throw new Error(`The pinned OMP catalog has no ${id} provider.`);

@@ -97,6 +97,7 @@ async function mountFallback(options: { settleMs: number; apply?: (value: string
   for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { value, configurable: true });
   const root = createRoot(dom.window.document.getElementById('root')!);
   const calls: string[] = [];
+  const applyOptions: unknown[] = [];
   let rerender!: (tick: number) => void;
   let setEnabled!: (enabled: boolean) => void;
   let setSelection!: (selection: Selection) => void;
@@ -109,9 +110,10 @@ async function mountFallback(options: { settleMs: number; apply?: (value: string
     setSelection = setSelectionState;
     useRouteAccountFallback({
       ...base, selection, sessionId: 'session-1', enabled, settleMs: options.settleMs,
-      applyRoute: (route) => {
+      applyRoute: (route, selectionOptions) => {
         const value = `${route.providerOption?.value}|${route.model}`;
         calls.push(value);
+        applyOptions.push(selectionOptions);
         return options.apply?.(value);
       },
     });
@@ -121,6 +123,7 @@ async function mountFallback(options: { settleMs: number; apply?: (value: string
   const step = (change: () => void) => act(async () => { change(); });
   return {
     calls,
+    applyOptions,
     enable: (value: boolean) => step(() => setEnabled(value)),
     select: (value: Selection) => step(() => setSelection(value)),
     rerender: (tick: number) => step(() => rerender(tick)),
@@ -145,6 +148,7 @@ test('the hook applies the replacement once per session and account', async () =
     await h.rerender(2);
     await h.settle(10);
     assert.deepEqual(h.calls, [`${work.value}|openai-codex/gpt-6-sol`]);
+    assert.deepEqual(h.applyOptions, [{ origin: 'automatic' }], 'the owner did not pick it, so it saves silently');
     await h.enable(false);
     await h.enable(true);
     await h.settle(10);

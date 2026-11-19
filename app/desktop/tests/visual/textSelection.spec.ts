@@ -200,6 +200,18 @@ test('keyboard copy preserves a partial range', async ({ page }) => {
   await expect(page.getByLabel('Paste here to check the exact text you copied')).toHaveValue('com');
 });
 
+test('an agent reply delivered in ordered segments can be selected', async ({ page }) => {
+  const reply = page.locator('#root [data-live-turn-status="complete"]');
+  const answer = reply.locator('p', { hasText: 'This reply arrived in ordered segments.' });
+  await answer.scrollIntoViewIfNeeded();
+  await dragText(page, answer, 5, 40);
+
+  // The commentary written between tools is copyable once the work is opened.
+  await reply.getByRole('button', { name: /^(Finished|Worked)/ }).click();
+  const commentary = reply.locator('p', { hasText: 'Reading the sample notes before answering.' });
+  await dragText(page, commentary, 8, 24);
+});
+
 test('dark appearance retains precise selection in formatted text', async ({ page }) => {
   await page.getByRole('button', { name: 'Dark appearance' }).click();
   const surface = page.locator('[data-kordi-copy-surface="message"]').last();

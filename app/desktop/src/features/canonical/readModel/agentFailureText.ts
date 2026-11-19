@@ -17,7 +17,8 @@ function isRequesterFacingLine(message: FailedTurnMessage): boolean {
 
 /**
  * The error line of a failed agent turn for this viewer. Every member stores
- * the same reply; only the agent's owner sees why it failed.
+ * the same reply; the agent's owner sees why it failed, and other members read
+ * a short reason chosen from the failure code alone.
  */
 export function canonicalAgentTurnErrorText(input: {
   message: FailedTurnMessage;
@@ -26,6 +27,8 @@ export function canonicalAgentTurnErrorText(input: {
   legacyCollaborationFailure: boolean;
   viewerOwnsAgent: boolean;
   agentName: string | null | undefined;
+  /** The display name of the agent's owner, for other members' line. */
+  ownerName?: string | null;
 }): string {
   const sourceTransport = input.message.sourceTransport?.trim() ?? '';
   const stored = input.legacyCollaborationFailure
@@ -39,5 +42,6 @@ export function canonicalAgentTurnErrorText(input: {
     failureCode: input.failureCode,
     viewerOwnsAgent: input.viewerOwnsAgent,
     agentName: input.agentName,
+    ownerName: input.ownerName,
   });
 }

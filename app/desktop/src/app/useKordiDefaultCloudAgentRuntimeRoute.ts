@@ -8,6 +8,7 @@ import {
 import type { ComposerAuthOption, ComposerModelOption } from '@/kordi-app/components';
 import type { ComposerScope, DesktopAuthState } from '@/kordi-app/types';
 import type { DesktopChatMessageRoute } from '@/lib/desktop';
+import { isChatGptCatalogProvider } from '@/features/cloud/chatgptModelCatalog';
 import { DEVICE_ACTIVE_CHOICES, isAccountAuthChoice, isHostedOnlyAccountChoice } from '@/features/cloud/routeAccountChoice';
 import { registeredAccountChoices } from '@/features/cloud/hostedAccountRegistry';
 import { hostedAccountsState } from '@/features/cloud/hostedAccounts';
@@ -73,6 +74,32 @@ export function resolveDefaultCloudAgentRuntimeRoute({
 
   const authProviders = buildAuthDisplayProviders(desktopAuthState);
   const chatModel = selectedModel.trim();
+  // The route on a hosted account: the chosen model when the account serves
+  // it, else the provider's preferred model, else its default model. The
+  // composer groups OpenAI and ChatGPT together, but the hosted worker
+  // requires the account's actual provider namespace and a model it serves.
+  const hostedAccountRoute = (account: ComposerAuthOption): DesktopChatMessageRoute | null => {
+    const models = chatModelOptions.filter((option) => option.value.startsWith(`${account.providerId}/`));
+    const qualifiedModel = chatModel.includes('/') ? `${account.providerId}/${chatModel.slice(chatModel.indexOf('/') + 1)}` : null;
+    const preferredModel = preferredModelValueForProvider(account.providerId);
+    const model = models.find((option) => option.value === qualifiedModel)?.value
+      ?? models.find((option) => option.value === preferredModel)?.value
+      ?? models.find((option) => option.providerDefault)?.value
+      ?? models[0]?.value;
+    return model
+      ? { model, authProvider: account.providerId, authChoice: account.value, thinking: selectedThinking ?? null }
+      : null;
+  };
+  // In the browser, a composer with no model yet opens on a hosted account's
+  // default model: the account active for the session, else a ChatGPT or
+  // OpenAI account, else the first listed one.
+  if (browserApp && !chatModel) {
+    const hosted = authOptions.filter((option) => isHostedOnlyAccountChoice(option.value, registeredAccountChoices()));
+    const account = hosted.find((option) => option.active)
+      ?? hosted.find((option) => isChatGptCatalogProvider(option.providerId))
+      ?? hosted[0];
+    return account ? hostedAccountRoute(account) : null;
+  }
   const selectedProviderId = chatModel ? resolveComposerProviderId('chat', chatModel) : null;
   const normalizedSelectedProviderId =
     normalizeSelectedProviderId(selectedProviderId) ?? selectedProviderId;
@@ -91,18 +118,8 @@ export function resolveDefaultCloudAgentRuntimeRoute({
     const account = activeHostedAccount
       ?? hostedOptions.find((option) => option.providerId === modelProviderId)
       ?? hostedOptions[0];
-    if (!account || !chatModel.includes('/')) return null;
-    // The composer groups OpenAI and ChatGPT together, but the hosted worker
-    // requires the account's actual provider namespace and a model it serves.
-    const models = chatModelOptions.filter((option) => option.value.startsWith(`${account.providerId}/`));
-    const qualifiedModel = `${account.providerId}/${chatModel.slice(chatModel.indexOf('/') + 1)}`;
-    const preferredModel = preferredModelValueForProvider(account.providerId);
-    const model = models.find((option) => option.value === qualifiedModel)?.value
-      ?? models.find((option) => option.value === preferredModel)?.value
-      ?? models[0]?.value;
-    return model
-      ? { model, authProvider: account.providerId, authChoice: account.value, thinking: selectedThinking ?? null }
-      : null;
+    if (!account || (!chatModel.includes('/') && !browserApp)) return null;
+    return hostedAccountRoute(account);
   }
   // Browsers can select hosted accounts, never credentials stored on a Mac.
   if (browserApp) {

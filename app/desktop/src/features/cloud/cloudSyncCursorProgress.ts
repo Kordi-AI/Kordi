@@ -27,3 +27,13 @@ export function chatSyncCursorExpired(
   // The sync route answers 409 for nothing else.
   return status === 409;
 }
+
+/**
+ * True when the local mirror rejected a batch because an event names a
+ * conversation it does not hold: a session deleted on this device keeps
+ * receiving cursor events for its conversation. Nothing was committed, and
+ * only a bootstrap restores the row.
+ */
+export function chatSyncMirrorMissingConversation(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('CHAT_SYNC_UNKNOWN_CONVERSATION');
+}

@@ -120,6 +120,56 @@ printf '%s\n' '{"type":"error","schemaVersion":1,"runId":"run-1","attemptId":"at
 
 #[cfg(unix)]
 #[tokio::test]
+async fn a_usage_limit_names_its_reset_time() {
+    let script = r#"read request
+printf '%s\n' '{"type":"ready","schemaVersion":1}'
+printf '%s\n' '{"type":"error","schemaVersion":1,"runId":"run-1","attemptId":"attempt-1","sequence":1,"code":"provider_usage_limit","message":"The selected provider could not complete this request.","providerReason":"This request would exceed your account'"'"'s rate limit. Please try again later. (rate_limit_error)","limitResetsAt":1794870120000}'
+"#;
+    let error = run(script, &request()).await.err().unwrap();
+    assert_eq!(error.diagnostic_code(), "provider_usage_limit");
+    assert_eq!(
+        error.to_string(),
+        "This account reached its usage limit. It resets on Nov 16 at 23:02 UTC."
+    );
+    assert_eq!(
+        error.with_provider_reason(),
+        "This account reached its usage limit. It resets on Nov 16 at 23:02 UTC. Provider response: This request would exceed your account's rate limit. Please try again later. (rate_limit_error)"
+    );
+}
+
+#[test]
+fn only_a_usage_limit_keeps_a_plausible_reset_time() {
+    let frame = |code: &str, resets_at: i64| {
+        RuntimeError::from_worker_frame(code.into(), Some("Provider text".into()), Some(resets_at))
+    };
+    let throttled = frame("provider_http_429", 1_794_870_120_000);
+    assert_eq!(
+        throttled,
+        RuntimeError::Provider {
+            code: "provider_http_429".into(),
+            reason: "Provider text".into(),
+            resets_at_ms: None,
+        }
+    );
+    assert_eq!(
+        throttled.to_string(),
+        "The provider is busy or rate-limited. Try again shortly."
+    );
+    for implausible in [0, -1, 4_102_444_800_000] {
+        assert_eq!(
+            frame("provider_usage_limit", implausible).to_string(),
+            "This account reached its usage limit. Wait for it to reset or choose another model."
+        );
+    }
+    let message = RuntimeError::Worker("provider_usage_limit".into()).to_string();
+    assert!(
+        !message.contains("busy") && !message.contains("shortly"),
+        "{message}"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn a_reason_on_a_non_provider_code_is_ignored() {
     let script = r#"read request
 printf '%s\n' '{"type":"ready","schemaVersion":1}'
@@ -141,6 +191,7 @@ fn diagnostic_codes_are_fixed_identifiers() {
         RuntimeError::Provider {
             code: "provider_error".into(),
             reason: "Provider text".into(),
+            resets_at_ms: None,
         },
     ] {
         let code = error.diagnostic_code();

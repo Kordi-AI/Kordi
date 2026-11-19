@@ -291,6 +291,9 @@ pub(crate) enum WorkerOutput {
         /// The provider's raw error text; cleaned with `provider_reason` before use.
         #[serde(default, rename = "providerReason")]
         provider_reason: Option<String>,
+        /// When a usage limit resets, in epoch milliseconds.
+        #[serde(default, rename = "limitResetsAt")]
+        limit_resets_at: Option<i64>,
     },
 }
 

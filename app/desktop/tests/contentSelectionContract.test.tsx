@@ -78,6 +78,21 @@ test('message payloads opt in without making system notices selectable', () => {
   assert.doesNotMatch(noticeMarkup, /data-kordi-copy-surface/);
 });
 
+test('an agent reply delivered in ordered segments is a message copy surface', () => {
+  const answer = 'Segmented answer';
+  const markup = renderToStaticMarkup(createElement(MessageBubble, {
+    msg: {
+      id: 'msg:segmented-reply', role: 'owned-agent', sender: 'Agent', text: '', time: '10:44',
+      turn: {
+        id: 'turn:segmented-reply', sessionId: 'session', prompt: '', status: 'complete', message: '',
+        assistantText: answer, thinkingText: '', tools: [], completed: true, succeeded: true,
+        segments: [{ id: 'answer', kind: 'text', text: answer }],
+      },
+    },
+  }));
+  assert.match(markup, new RegExp(`data-kordi-copy-surface="message"[^>]*>(?:<[^>]+>)*${answer}`));
+});
+
 test('shared markdown is non-selectable by default and documents are scoped for Cmd+A', () => {
   const defaultMarkup = renderToStaticMarkup(createElement(MarkdownContent, { text: 'Interface copy' }));
   const documentMarkup = renderToStaticMarkup(createElement(MarkdownContent, {

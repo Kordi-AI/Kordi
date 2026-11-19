@@ -26,6 +26,7 @@ export async function runTurn(request: RunRequest, host: RuntimeHost, signal: Ab
   let providerFailed = false;
   let providerFailureCode = 'provider_error';
   let providerFailureReason: string | undefined;
+  let providerFailureResetsAt: number | undefined;
   const fail = (code: string, message: string) => {
     terminalError ??= new RuntimeError(code, message);
     if (session) void session.abort();
@@ -172,6 +173,7 @@ export async function runTurn(request: RunRequest, host: RuntimeHost, signal: Ab
             if (providerFailed) {
               providerFailureCode = providerErrorCode(event.message);
               providerFailureReason = providerReasonText(event.message.errorMessage);
+              providerFailureResetsAt = providerFailureCode === 'provider_usage_limit' ? usageLimitResetsAt(event.message.errorMessage) : undefined;
             }
             if (event.message.stopReason === 'aborted') fail('cancelled', 'Run cancelled.');
           }
@@ -201,7 +203,7 @@ export async function runTurn(request: RunRequest, host: RuntimeHost, signal: Ab
       await session.prompt(request.prompt.text, { images: request.prompt.images, expandPromptTemplates: false });
     }
     if (terminalError) throw terminalError;
-    if (providerFailed) throw new RuntimeError(providerFailureCode, 'The selected provider could not complete this request.', providerFailureReason);
+    if (providerFailed) throw new RuntimeError(providerFailureCode, 'The selected provider could not complete this request.', providerFailureReason, providerFailureResetsAt);
     const entries = sessionManager.getEntries();
     const newEntries = entries.slice(initialEntryCount);
     const messages = newEntries.filter((entry): entry is any => entry.type === 'message' && entry.message.role !== 'user').map(entry => toKordiMessage(entry.message));
@@ -241,6 +243,8 @@ export function providerErrorCode(error: { errorStatus?: number; errorMessage?: 
   if (/model.*(?:not found|not supported|does not exist|unavailable|not allowed)|unsupported.*model/i.test(message)) return 'provider_model_unavailable';
   if (/invalid.*(?:tool|schema)|(?:tool|schema).*invalid/i.test(message)) return 'provider_tool_schema';
   if (/unsupported.*(?:parameter|value)|unknown.*parameter|unrecognized.*parameter/i.test(message)) return 'provider_unsupported_parameter';
+  // Before the TLS and connection checks: a request ID in the body can contain their keywords.
+  if (isUsageLimit(error.errorStatus, message)) return 'provider_usage_limit';
   if (/certificate|TLS|SSL/i.test(message)) return 'provider_tls';
   if (/fetch failed|unable to connect|connection refused|network|ENOTFOUND|ECONN/i.test(message)) return 'provider_connection';
   if (Number.isInteger(error.errorStatus) && error.errorStatus! >= 400 && error.errorStatus! <= 599) return `provider_http_${error.errorStatus}`;
@@ -250,9 +254,65 @@ export function providerErrorCode(error: { errorStatus?: number; errorMessage?: 
   return 'provider_error';
 }
 
-/** The first line of a provider error, size-capped. The Kordi host removes credentials and IDs before display. */
+const USAGE_LIMIT_MIN_WAIT_MS = 5 * 60_000;
+const USAGE_LIMIT_MAX_WAIT_MS = 31 * 24 * 60 * 60_000;
+
+/**
+ * An account's usage limit, which waits for a reset, rather than a short
+ * throttle that a retry soon clears. Kept narrow: cloud runs retry throttles.
+ */
+function isUsageLimit(status: number | undefined, message: string) {
+  if (status !== undefined && ![429, 402, 403].includes(status)) return false;
+  // A per-minute or per-second cap is a throttle, whatever wait comes with it.
+  if (/\bper[- ]?(?:sec(?:ond)?|min(?:ute)?)\b|\b(?:rpm|tpm)\b/i.test(message)) return false;
+  // When the provider names a wait, its length decides.
+  const wait = providerRetryHintMs(message);
+  if (wait !== undefined && wait > 0) return wait >= USAGE_LIMIT_MIN_WAIT_MS;
+  return /usage.?limit|usage_limit_reached|out of (?:extra )?usage|\baccount(?:'s)?\b[^\n]{0,80}\brate.?limit/i.test(message);
+}
+
+/** The SDK's `retry-after-ms=<n>` hint on a provider error, in milliseconds. */
+export function providerRetryHintMs(errorMessage: unknown) {
+  if (typeof errorMessage !== 'string') return undefined;
+  const match = /\bretry-after-ms=(\d{1,12})\b/.exec(errorMessage);
+  return match ? Number(match[1]) : undefined;
+}
+
+/** When a usage limit resets, in epoch milliseconds, from the provider's retry hint. */
+export function usageLimitResetsAt(errorMessage: unknown, now = Date.now()) {
+  const wait = providerRetryHintMs(errorMessage);
+  return wait !== undefined && wait >= USAGE_LIMIT_MIN_WAIT_MS && wait <= USAGE_LIMIT_MAX_WAIT_MS ? Math.trunc(now + wait) : undefined;
+}
+
+/**
+ * The provider's own words, size-capped: the message of a JSON error body
+ * that starts on the first line, else the first line. The Kordi host removes
+ * credentials and IDs before display.
+ */
 export function providerReasonText(errorMessage: unknown) {
   if (typeof errorMessage !== 'string') return undefined;
-  const line = errorMessage.split(/\r?\n/u, 1)[0]?.trim().slice(0, 2000);
+  const text = (errorBodyMessage(errorMessage) ?? errorMessage).replace(/[ \t]*\bretry-after-ms=\d+\b/g, '');
+  const line = text.split(/\r?\n/u, 1)[0]?.trim().slice(0, 2000);
   return line || undefined;
+}
+
+/** A JSON error body's message with its error code, or else its short error type. The request ID is never kept. */
+function errorBodyMessage(text: string) {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  const lineEnd = text.search(/\r?\n/u);
+  // A body on a later line follows wording the SDK chose to put first.
+  if (start < 0 || end <= start || (lineEnd >= 0 && start > lineEnd)) return undefined;
+  let body: any;
+  try { body = JSON.parse(text.slice(start, end + 1)); } catch { return undefined; }
+  const error = body?.error;
+  const message = typeof error?.message === 'string' ? error.message
+    : typeof body?.message === 'string' ? body.message
+    : typeof error === 'string' ? error : '';
+  if (!message.trim()) return undefined;
+  // Hosts read codes such as `model_not_found` from this text.
+  const code = typeof error?.code === 'string' ? error.code : body?.code;
+  if (typeof code === 'string' && /^[A-Za-z0-9_.-]{1,60}$/.test(code)) return `${message.trim()} (code=${code})`;
+  const type = error?.type;
+  return typeof type === 'string' && /^[a-z_]{1,40}$/.test(type) ? `${message.trim()} (${type})` : message.trim();
 }

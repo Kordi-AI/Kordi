@@ -535,10 +535,10 @@ enum CloudAgentLifecycleProjector {
     }
 }
 
-/// The failure line one viewer sees for a failed agent reply. Every member
-/// receives the same reply, so only the agent's owner reads why it failed,
-/// with a link to the provider settings under Authentication. "Sign in"
-/// always means Kordi, so a provider failure never says it.
+/// The failure line one viewer sees for a failed agent reply. The owner reads
+/// why it failed, with a link to the provider settings under Authentication;
+/// other members read a short reason from the code alone, as on Mac and web.
+/// "Sign in" always means Kordi, so a provider failure never says it.
 enum AgentFailurePresentation {
     static let authenticationLink = "kordi://settings/authentication"
 
@@ -550,11 +550,30 @@ enum AgentFailurePresentation {
         return "\(name) couldn't reply."
     }
 
-    static func text(stored: String, failureCode: String?, viewerOwnsAgent: Bool, agentName: String?) -> String {
+    /// Another member's line, from the code alone: the owner's first name, or "The owner" when unknown.
+    static func memberText(failureCode: String?, ownerName: String?, agentName: String?) -> String {
+        let name = ownerName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let firstName = name.split(whereSeparator: { $0.isWhitespace }).first.map(String.init)
+        let owner = name.lowercased() == "you" ? "The owner" : firstName ?? "The owner"
+        switch failureCode?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "missing_provider_auth":
+            return "\(owner) hasn't connected a model yet."
+        case "provider_auth_rejected", "hosted_credentials_unavailable", "provider_sign_in_failed":
+            return "\(owner) needs to reconnect their model."
+        case "model_unavailable":
+            return "\(owner) needs to choose another model."
+        case "model_provider_error", "provider_call_failed":
+            return "The model service didn't respond. Try again."
+        default:
+            return couldNotReply(agentName)
+        }
+    }
+
+    static func text(stored: String, failureCode: String?, viewerOwnsAgent: Bool, agentName: String?, ownerName: String? = nil) -> String {
         let stored = stored.trimmingCharacters(in: .whitespacesAndNewlines)
         guard viewerOwnsAgent else {
             // KordiSpot's own line is already neutral.
-            return ([KordiSupportIdentity.displayName] + KordiSupportIdentity.legacyDisplayNames).contains { stored.hasPrefix("\($0) couldn") } ? stored : couldNotReply(agentName)
+            return ([KordiSupportIdentity.displayName] + KordiSupportIdentity.legacyDisplayNames).contains { stored.hasPrefix("\($0) couldn") } ? stored : memberText(failureCode: failureCode, ownerName: ownerName, agentName: agentName)
         }
         let code = failureCode?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? legacyCode(stored)
         let provider = providerName(stored) ?? "AI provider"
@@ -572,6 +591,7 @@ enum AgentFailurePresentation {
         case "sandbox_error":
             return "Kordi Cloud couldn't finish this reply in the sandbox. Try again."
         default:
+            // Also the Mac's two provider codes: the owner keeps the stored line.
             return stored.isEmpty ? couldNotReply(agentName) : stored
         }
     }
@@ -600,15 +620,16 @@ enum AgentFailurePresentation {
 
 extension CloudMessageCodec {
     /// The text a viewer sees for a message body; a failed agent reply shows
-    /// its reason only to the agent's owner.
-    static func viewerText(_ body: String, viewerOwnsAgent: Bool, agentName: String?) -> String {
+    /// its reason to the agent's owner and a short reason to other members.
+    static func viewerText(_ body: String, viewerOwnsAgent: Bool, agentName: String?, ownerName: String? = nil) -> String {
         // A reply that ended early keeps its partial answer.
         guard agentResponseDeliveryState(body) == .failed, agentReplyEnding(body) == nil else { return displayText(body) }
         return AgentFailurePresentation.text(
             stored: displayText(body),
             failureCode: agentFailureCode(body),
             viewerOwnsAgent: viewerOwnsAgent,
-            agentName: agentName
+            agentName: agentName,
+            ownerName: ownerName
         )
     }
 }

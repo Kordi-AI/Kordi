@@ -29,6 +29,7 @@ import { CLOUD_HOST_SENTINEL } from './cloudContactMapping';
 import { normalizeKordiId } from './kordiId';
 import { canonicalAvatarImageSource } from './canonicalAvatar';
 import { cloudAgentCanonicalIdentityId } from './cloudAgentIdentity';
+import { cloudAgentAvatarSeed } from './cloudAgentAvatar';
 export { cloudGroupAgentMentionHasResponse, cloudGroupAgentMentionResponseState, cloudGroupAgentMentionResponseStateFromRows, cloudGroupAgentMentionResponseStateFromSources } from './cloudGroupAgentResponseState';
 export type { CloudGroupAgentMentionResponseState } from './cloudGroupAgentResponseState';
 import { cloudGroupTransportParticipant, type CloudGroupActor, type CloudGroupParticipant } from './cloudGroupParticipantTypes';
@@ -263,7 +264,6 @@ function uniqueByAccount(
   }
   return [...byAccountId.values()];
 }
-
 
 export function cloudGroupUniqueParticipants(participants: CloudGroupParticipant[]): CloudGroupParticipant[] {
   return uniqueByAccount(participants);
@@ -548,7 +548,7 @@ export function cloudGroupNormalizeParticipant(participant: CloudGroupParticipan
     agentId: cleanText(participant.agentId) || `cloud-agent:${accountId}`,
     agentDisplayName: cleanText(participant.agentDisplayName) || 'Kordi',
     agentAvatarUrl: syncableCloudGroupAvatarUrl(participant.agentAvatarUrl),
-    agentAvatarSeed: cleanText(participant.agentAvatarSeed) || cleanText(participant.agentId) || `cloud-agent:${accountId}`,
+    agentAvatarSeed: cloudAgentAvatarSeed({ agentId: cleanText(participant.agentId), ownerAccountId: accountId, profileSeed: participant.agentAvatarSeed }),
     role: participant.role ?? 'person',
   };
 }
@@ -563,7 +563,7 @@ export function cloudGroupSelfParticipant(account: CloudAccount, role: CloudGrou
     agentId: account.defaultAgent?.agentId ?? `cloud-agent:${account.accountId}`,
     agentDisplayName: account.defaultAgent?.displayName ?? 'Kordi',
     agentAvatarUrl: syncableCloudGroupAvatarUrl(account.defaultAgent ? canonicalAvatarImageSource(account.defaultAgent.avatar) : null),
-    agentAvatarSeed: account.defaultAgent?.avatar.seed ?? `cloud-agent:${account.accountId}`,
+    agentAvatarSeed: cloudAgentAvatarSeed({ agentId: account.defaultAgent?.agentId, ownerAccountId: account.accountId, profileSeed: account.defaultAgent?.avatar.seed }),
     role,
   };
 }
@@ -580,7 +580,7 @@ export function cloudGroupParticipantFromContact(contact: Contact, role: CloudGr
     agentId: contact.targetCloudAgentId ?? `cloud-agent:${accountId}`,
     agentDisplayName: contact.targetCloudAgentName ?? 'Kordi',
     agentAvatarUrl: syncableCloudGroupAvatarUrl(contact.targetCloudAgentAvatarUrl),
-    agentAvatarSeed: contact.targetCloudAgentAvatarSeed ?? contact.targetCloudAgentId ?? `cloud-agent:${accountId}`,
+    agentAvatarSeed: cloudAgentAvatarSeed({ agentId: contact.targetCloudAgentId, ownerAccountId: accountId, profileSeed: contact.targetCloudAgentAvatarSeed }),
     role,
   };
 }
@@ -602,7 +602,7 @@ export function cloudGroupParticipantFromConversationParticipant(
     agentId: cleanText(participant.defaultAgentId) || `cloud-agent:${accountId}`,
     agentDisplayName: cleanText(participant.defaultAgentDisplayName) || 'Kordi',
     agentAvatarUrl: syncableCloudGroupAvatarUrl(participant.defaultAgentAvatarUrl),
-    agentAvatarSeed: cleanText(participant.defaultAgentAvatarSeed) || `cloud-agent:${accountId}`,
+    agentAvatarSeed: cloudAgentAvatarSeed({ agentId: participant.defaultAgentId, ownerAccountId: accountId, profileSeed: participant.defaultAgentAvatarSeed }),
     role: participant.role || 'person',
   };
 }
