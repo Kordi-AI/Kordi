@@ -1,5 +1,6 @@
 import type { ChatSyncConversation } from './chatSyncTypes';
 import { cloudGroupCatalogRow } from './cloudGroupCatalog';
+import { rememberCloudGroupMemberList } from './cloudGroupMemberLists';
 
 const CLOUD_GROUP_CATALOG_SYNC_EVENT = 'kordi-cloud-group-catalog-sync';
 type CatalogDetail = { accountId: string; conversations: ChatSyncConversation[] };
@@ -10,6 +11,8 @@ export function publishCloudGroupCatalog(
   conversations: ChatSyncConversation[],
 ): void {
   const groups = conversations.filter(conversation => conversation.kind === 'group');
+  // Every group row applied from now on counts members against the newest of these lists.
+  for (const conversation of groups) rememberCloudGroupMemberList(accountId, conversation);
   if (typeof window === 'undefined' || groups.length === 0) return;
   window.dispatchEvent(new CustomEvent<CatalogDetail>(CLOUD_GROUP_CATALOG_SYNC_EVENT, {
     detail: { accountId, conversations: groups },

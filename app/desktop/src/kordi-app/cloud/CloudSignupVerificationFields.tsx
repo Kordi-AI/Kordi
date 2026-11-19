@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
 
+/**
+ * The emailed-code and password field of the account settings and the dialogs
+ * opened from them, such as Delete account. Add `app-flat-input-error` while
+ * the field's error is shown.
+ */
+export const CLOUD_ACCOUNT_FIELD_CLASS = 'app-input-shell app-flat-input h-10 w-full min-w-0 rounded-[10px] px-3 text-[13px] font-normal text-white outline-none';
+
 export function CloudSignupVerificationFields({
   email, busy, resendSeconds, onResend, onChangeEmail, changeEmailLabel = 'Change email', children,
 }: {

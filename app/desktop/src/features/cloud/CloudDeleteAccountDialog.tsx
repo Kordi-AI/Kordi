@@ -8,7 +8,8 @@ import {
   AppDialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorLine } from '@/components/ui/ErrorLine';
-import { CloudSignupVerificationFields } from '@/kordi-app/cloud/CloudSignupVerificationFields';
+import { CLOUD_ACCOUNT_FIELD_CLASS, CloudSignupVerificationFields } from '@/kordi-app/cloud/CloudSignupVerificationFields';
+import { cn } from '@/lib/utils';
 import { useCloudSignupVerification } from '@/kordi-app/cloud/useCloudSignupVerification';
 
 import {
@@ -39,8 +40,9 @@ export type CloudDeleteAccountDialogProps = {
 };
 
 const CODE_PATTERN = /^\d{6}$/;
-const INPUT_CLASS = 'app-input-shell h-10 w-full rounded-[12px] px-3 text-[13px] text-[color:var(--app-transient-text)] outline-none';
-const LABEL_CLASS = 'text-[12px] font-medium text-[color:var(--app-transient-muted-text)]';
+// The label of the device rename dialog's field (`CloudDevicesPanelDialogs.tsx`).
+const LABEL_CLASS = 'text-[11px] font-medium text-[color:var(--app-transient-muted-text)]';
+// The destructive button of `DeviceLogoutDialog`.
 const DESTRUCTIVE_CLASS = 'rounded-full bg-rose-500 px-4 text-white hover:bg-rose-400';
 
 /** Profile › Delete account: the proof the server needs, then a final confirmation. */
@@ -175,7 +177,7 @@ export default function CloudDeleteAccountDialog({
                 setPassword(event.currentTarget.value);
                 if (error) setError(null);
               }}
-              className={INPUT_CLASS}
+              className={cn(CLOUD_ACCOUNT_FIELD_CLASS, error && 'app-flat-input-error')}
               aria-invalid={Boolean(error) || undefined}
               aria-describedby={error ? errorId : undefined}
             />
@@ -219,7 +221,7 @@ export default function CloudDeleteAccountDialog({
                 setVerificationCode(event.currentTarget.value.replace(/\D/g, '').slice(0, 6));
                 if (error) setError(null);
               }}
-              className={INPUT_CLASS}
+              className={cn(CLOUD_ACCOUNT_FIELD_CLASS, error && 'app-flat-input-error')}
               aria-invalid={Boolean(error) || undefined}
               aria-describedby={error ? errorId : undefined}
             />

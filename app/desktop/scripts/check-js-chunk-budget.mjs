@@ -140,7 +140,10 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // or a 4410 close, and the kept-chat fixes after a deletion (the list avatar, no presence or calls, a plain sender
 // avatar, member reconciliation and the owner taking over a group) add 15.2 kB (6069.4 kB measured locally), so it
 // moves to 6.072 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_072_000;
+// The neutral Deleted account avatar, keeping each group's newest member list for deletions that land together,
+// the flat account field in dialogs and the Sign out line without a platform on the web add 1.9 kB
+// (6071.3 kB measured locally), so it moves to 6.074 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_074_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -212,7 +215,9 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The same short reason for members adds 2.3 kB there too (6091.4 kB measured in the CI build), so it moves to 6.094 MB.
 // The same direct chats with deleted accounts add 5.3 kB there too (6095.9 kB measured locally), so it moves to 6.099 MB.
 // The same account deletion and kept-chat fixes add 16.8 kB there (6112.7 kB measured locally), so it moves to 6.116 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_116_000;
+// The same avatar, member list, field and Sign out fixes add 1.9 kB there (6114.7 kB measured locally), so it moves
+// to 6.118 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_118_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

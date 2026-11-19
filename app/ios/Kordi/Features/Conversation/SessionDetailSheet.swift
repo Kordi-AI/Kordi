@@ -306,6 +306,7 @@ struct SessionDetailView: View {
         ) {
             SessionHeroActions(
                 kind: currentConversation.kind,
+                items: SessionHeroAction.items(for: currentConversation),
                 tint: heroTint,
                 notificationsMuted: notificationsMuted,
                 isCallStarting: callCoordinator.isStartingCall,
@@ -588,6 +589,7 @@ struct SessionDetailView: View {
 private struct SessionHeroActions: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let kind: ConversationKind
+    let items: [SessionHeroAction]
     let tint: Color
     let notificationsMuted: Bool
     let isCallStarting: Bool
@@ -618,7 +620,7 @@ private struct SessionHeroActions: View {
 
     @ViewBuilder
     private var actionButtons: some View {
-        ForEach(actionItems) { item in
+        ForEach(items) { item in
             if item == .more {
                 Menu {
                     ForEach(moreActions) { action in
@@ -649,14 +651,6 @@ private struct SessionHeroActions: View {
                 )
                 .disabled(isCallStarting && (item == .call || item == .video))
             }
-        }
-    }
-
-    private var actionItems: [SessionHeroAction] {
-        switch kind {
-        case .person: [.call, .video, .mute, .chat]
-        case .group: [.video, .mute, .search, .more]
-        case .agent: [.chat, .mute, .search, .more]
         }
     }
 

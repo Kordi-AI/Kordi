@@ -127,6 +127,9 @@ struct MessageBubble: View, Equatable {
     let backgroundSessions: [BackgroundAgentSessionPresentation]
     let fullScreenVideoAttachmentID: String?
     let onOpenAuthorProfile: () -> Void
+    /// False for a sender with no profile, such as the Deleted account: its
+    /// avatar is a picture, not a button.
+    var opensAuthorProfile = true
     let onOpenMentionProfile: (String) -> Void
     let onRetry: () async -> Void
     let onSelect: () -> Void
@@ -213,6 +216,7 @@ struct MessageBubble: View, Equatable {
             && lhs.selfDisplayName == rhs.selfDisplayName
             && lhs.showsAvatarSlot == rhs.showsAvatarSlot
             && lhs.authorAvatar == rhs.authorAvatar
+            && lhs.opensAuthorProfile == rhs.opensAuthorProfile
             && lhs.ownAccountId == rhs.ownAccountId
             && lhs.automaticallyPresentsActions == rhs.automaticallyPresentsActions
             && lhs.backgroundSessions == rhs.backgroundSessions
@@ -224,25 +228,19 @@ struct MessageBubble: View, Equatable {
         HStack(alignment: isThreadLayout || usesBorderlessMediaSurface || message.author == .agent ? .top : .bottom, spacing: 8) {
             if isThreadLayout || (showsAvatarSlot && message.author != .me) {
                 if isThreadLayout ? !groupedWithPrevious || visibleReplySource != nil : showAvatar {
-                    Button(action: onOpenAuthorProfile) {
-                        Color.clear
-                            .frame(width: 44, height: 44)
-                            .overlay(alignment: isThreadLayout || usesBorderlessMediaSurface || message.author == .agent ? .top : .bottom) {
-                                IdentityAvatar(
-                                    name: authorAvatar.name,
-                                    imageSource: authorAvatar.source,
-                                    kind: message.author == .agent ? .agent : .person,
-                                    size: 28,
-                                    seed: authorAvatar.seed ?? authorAvatar.name
-                                )
-                            }
-                            .contentShape(Rectangle())
+                    Group {
+                        if opensAuthorProfile {
+                            Button(action: onOpenAuthorProfile) { authorAvatarSlot }
+                                .buttonStyle(.plain)
+                                .disabled(selectionMode)
+                                .accessibilityHidden(selectionMode)
+                                .accessibilityLabel("Open profile for \(authorAvatar.name)")
+                        } else {
+                            // The message itself names the sender; the picture offers nothing to do.
+                            authorAvatarSlot.accessibilityHidden(true)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(selectionMode)
                     .opacity(selectionMode ? 0 : 1)
-                    .accessibilityHidden(selectionMode)
-                    .accessibilityLabel("Open profile for \(authorAvatar.name)")
                     .padding(.bottom, 2)
                     .padding(.top, isThreadLayout && visibleReplySource != nil ? 32 : 0)
                 } else {
@@ -704,6 +702,21 @@ struct MessageBubble: View, Equatable {
             return 0
         }
         return 248
+    }
+
+    private var authorAvatarSlot: some View {
+        Color.clear
+            .frame(width: 44, height: 44)
+            .overlay(alignment: isThreadLayout || usesBorderlessMediaSurface || message.author == .agent ? .top : .bottom) {
+                IdentityAvatar(
+                    name: authorAvatar.name,
+                    imageSource: authorAvatar.source,
+                    kind: message.author == .agent ? .agent : .person,
+                    size: 28,
+                    seed: authorAvatar.seed ?? authorAvatar.name
+                )
+            }
+            .contentShape(Rectangle())
     }
 
     private var authorHeader: some View {

@@ -54,6 +54,13 @@ export function isSystemAccountId(accountId: string | null | undefined): boolean
 export const KORDI_DELETED_ACCOUNT_ID = 'acct_kordi_deleted';
 export const KORDI_DELETED_ACCOUNT_NAME = 'Deleted account';
 
+/** An avatar seed that draws the stand-in, or the agent it does not have: no person's face. */
+export function isDeletedAccountAvatarSeed(seed: string | null | undefined): boolean {
+  const value = seed?.trim() ?? '';
+  return value === KORDI_DELETED_ACCOUNT_ID || value === `human:${KORDI_DELETED_ACCOUNT_ID}`
+    || value === `cloud-agent:${KORDI_DELETED_ACCOUNT_ID}` || value === `default-agent-${KORDI_DELETED_ACCOUNT_ID}`;
+}
+
 /** A message from the stand-in, by its sender identity or avatar seed: it has no profile to open. */
 export function isDeletedAccountSender(message: { senderIdentityId?: string | null; senderAvatarSeed?: string | null }): boolean {
   const identityId = message.senderIdentityId?.trim() ?? '';

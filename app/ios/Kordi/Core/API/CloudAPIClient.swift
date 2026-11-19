@@ -3429,7 +3429,8 @@ private struct ServerError: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let nested = try container.decodeIfPresent(Nested.self, forKey: .error)
+        // OAuth-shaped bodies carry `error` as a string next to `errorCode`.
+        let nested = try? container.decodeIfPresent(Nested.self, forKey: .error)
         let topLevelErrorCode = try container.decodeIfPresent(String.self, forKey: .errorCode)
         let topLevelCode = try container.decodeIfPresent(String.self, forKey: .code)
         let topLevelMessage = try container.decodeIfPresent(String.self, forKey: .message)

@@ -33,6 +33,24 @@ final class ServerSessionEndClassificationTests: XCTestCase {
         XCTAssertEqual(ServerSessionEnd(ServerSessionEnd.accountDeleted.launchError), .accountDeleted)
         XCTAssertEqual(ServerSessionEnd(ServerSessionEnd.signedOut.launchError), .signedOut)
     }
+
+    /// Answers the app passes on unread, as the document editor does.
+    func testRawAnswersUseTheServersShapes() {
+        func end(_ status: Int, _ body: String) -> ServerSessionEnd? {
+            ServerSessionEnd(status: status, body: Data(body.utf8))
+        }
+        // Bearer routes, the collaboration ticket included.
+        XCTAssertEqual(end(401, #"{"errorCode":"account_deleted","message":"This account was deleted."}"#), .accountDeleted)
+        XCTAssertEqual(end(401, #"{"errorCode":"invalid_session","message":"Session is expired or revoked."}"#), .signedOut)
+        // The cookie path's shape, with `error` as a string.
+        XCTAssertEqual(end(401, #"{"error":"account_deleted","errorCode":"account_deleted","message":"This account was deleted."}"#), .accountDeleted)
+        XCTAssertEqual(end(401, #"{"error":{"code":"login_required","message":"Sign in."}}"#), .signedOut)
+        // Anything else.
+        XCTAssertNil(end(403, #"{"errorCode":"account_deleted"}"#))
+        XCTAssertNil(end(401, #"{"errorCode":"collab_forbidden"}"#))
+        XCTAssertNil(end(401, "<html>Sign in to Wi-Fi</html>"))
+        XCTAssertNil(end(200, #"{"ticket":"synthetic"}"#))
+    }
 }
 
 /// `CloudAPIClient` marks only errors it read from a server response.
@@ -60,6 +78,44 @@ final class ServerSessionEndClientTests: XCTestCase {
             XCTAssertEqual(apiError?.fromServer, true)
             XCTAssertEqual(ServerSessionEnd(error), .accountDeleted)
         }
+    }
+
+    func testOAuthShapedRefusalStillReadsTheErrorCode() async {
+        SessionEndStub.configure { _ in
+            .init(status: 401, body: #"{"error":"account_deleted","errorCode":"account_deleted","message":"This account was deleted."}"#)
+        }
+        do {
+            _ = try await client().me(token: "synthetic-session")
+            XCTFail("Expected a refusal")
+        } catch {
+            XCTAssertEqual((error as? CloudAPIError)?.code, "account_deleted")
+            XCTAssertEqual(ServerSessionEnd(error), .accountDeleted)
+        }
+    }
+
+    @MainActor
+    func testRefusedCollaborationTicketReachesTheSessionHandler() async throws {
+        let api = client()
+        var ends: [(ServerSessionEnd, String)] = []
+        let transport = CloudDocumentEditorTransport(
+            api: api,
+            tokenProvider: { "synthetic-session" },
+            sessionEnded: { ends.append(($0, $1)) }
+        )
+        let path = "/v1/cloud/documents/att_synthetic/collab/ticket"
+
+        SessionEndStub.configure { _ in .accountDeleted }
+        let deleted = try await transport.request(method: "POST", path: path, body: nil)
+        // The page still reads the answer.
+        XCTAssertEqual(deleted.status, 401)
+        XCTAssertEqual(ends.map(\.0), [.accountDeleted])
+        XCTAssertEqual(ends.map(\.1), ["synthetic-session"])
+
+        SessionEndStub.configure { _ in .invalidSession }
+        _ = try await transport.request(method: "POST", path: path, body: nil)
+        SessionEndStub.configure { _ in .init(status: 403, body: #"{"errorCode":"document_forbidden"}"#) }
+        _ = try await transport.request(method: "POST", path: path, body: nil)
+        XCTAssertEqual(ends.map(\.0), [.accountDeleted, .signedOut])
     }
 
     func testRefusalWithoutAServerErrorCodeIsNotMarked() async {
@@ -133,6 +189,16 @@ final class ServerSessionEndRefreshTests: XCTestCase {
         }
         let unauthorized = try await refresh(status: 401, body: marked[0])
         XCTAssertEqual(unauthorized, .accountDeleted)
+    }
+
+    /// The token route's answer as the server sends it (`account_deleted_grant_response`).
+    func testTheServersRefusalForADeletedAccountIsDeletion() async throws {
+        let body = #"{"error":"invalid_grant","error_description":"This account was deleted.","errorCode":"account_deleted","message":"This account was deleted."}"#
+        let result = try await refresh(status: 400, body: body)
+        XCTAssertEqual(result, .accountDeleted)
+        // A signed-out or revoked sign-in: both fields stay `invalid_grant`.
+        let revoked = try await refresh(status: 400, body: #"{"error":"invalid_grant","error_description":"Refresh token is invalid.","errorCode":"invalid_grant","message":"Refresh token is invalid."}"#)
+        XCTAssertEqual(revoked, .rejected)
     }
 
     func testEveryOtherRefusalBehavesAsBefore() async throws {
@@ -289,6 +355,74 @@ final class ServerSessionEndAppModelTests: XCTestCase {
         XCTAssertNil(model.errorMessage)
         XCTAssertNil(defaults.string(forKey: "organization.selected.\(accountId)"), "and still wipes")
         XCTAssertNil(model.endSession(.accountDeleted, token: token))
+    }
+
+    func testRefusedCollaborationTicketEndsTheSession() async throws {
+        try await seedSignedInData()
+        SessionEndStub.configure { path in path == "/v1/cloud/auth/me" ? .account : .unavailable }
+        let model = makeModel()
+        await model.start()
+        XCTAssertEqual(model.phase, .signedIn)
+
+        SessionEndStub.configure { path in
+            path.hasSuffix("/collab/ticket") ? .accountDeleted : path == "/v1/cloud/auth/me" ? .account : .unavailable
+        }
+        let transport = try XCTUnwrap(model.makeDocumentService().editorTransport())
+        _ = try await transport.request(method: "POST", path: "/v1/cloud/documents/att_synthetic/collab/ticket", body: nil)
+        try await eventually("the teardown finished") { model.phase == .signedOut && model.serverSessionEndTask == nil }
+
+        XCTAssertEqual(callTeardowns, 1)
+        XCTAssertNil(defaults.string(forKey: "organization.selected.\(accountId)"), "the account was wiped")
+    }
+
+    // MARK: Profiles
+
+    func testAProfileThatAnswered404IsNotRequestedAgain() async throws {
+        try await seedSignedInData()
+        let gone = "acct_dana"
+        SessionEndStub.configure { path in
+            switch path {
+            case "/v1/cloud/auth/me": .account
+            case "/v1/cloud/auth/capabilities": .init(status: 200, body: #"{"oauthProviders":[],"contactProfileVersion":1}"#)
+            case "/v1/cloud/contacts/\(gone)/profile": .init(status: 404, body: #"{"errorCode":"contact_not_found","message":"Not found."}"#)
+            default: .unavailable
+            }
+        }
+        let model = makeModel()
+        await model.start()
+        await model.refreshMemoryCapabilities()
+        let subject = ContactProfileSubject(accountId: gone, name: "Dana Sample")
+        func profileRequests() -> Int { SessionEndStub.paths.filter { $0 == "/v1/cloud/contacts/\(gone)/profile" }.count }
+
+        let sheet = model.makeContactProfileModel(for: subject)
+        await sheet.load()
+        XCTAssertEqual(profileRequests(), 1)
+        XCTAssertTrue(sheet.isFallback)
+        XCTAssertTrue(model.profilesAnsweredMissing.contains(gone))
+
+        // The open sheet reloads, and a new sheet opens: neither asks again.
+        await sheet.load()
+        let reopened = model.makeContactProfileModel(for: subject)
+        await reopened.load()
+        XCTAssertEqual(profileRequests(), 1)
+        XCTAssertTrue(reopened.isFallback)
+
+        // Someone who becomes a contact is asked again.
+        let account = try XCTUnwrap(model.account)
+        model.applyWorkspaceDirectory(account: account, contacts: [CloudContact(
+            accountId: gone, kordiId: nil, displayName: "Dana Sample", avatarUrl: nil, nodeId: nil,
+            createdAt: "2026-11-19T00:00:00Z"
+        )])
+        XCTAssertFalse(model.profilesAnsweredMissing.contains(gone))
+        await model.signOut()
+    }
+
+    func testOnlyTheServersOwn404CountsAsAMissingProfile() {
+        XCTAssertTrue(AppModel.profileAnsweredMissing(CloudAPIError(code: "contact_not_found", message: "", statusCode: 404, fromServer: true)))
+        XCTAssertTrue(AppModel.profileAnsweredMissing(CloudAPIError(code: "account_missing", message: "", statusCode: 410, fromServer: true)))
+        XCTAssertFalse(AppModel.profileAnsweredMissing(CloudAPIError(code: "contact_not_found", message: "", statusCode: 404)))
+        XCTAssertFalse(AppModel.profileAnsweredMissing(CloudAPIError(code: "server_error", message: "", statusCode: 503, fromServer: true)))
+        XCTAssertFalse(AppModel.profileAnsweredMissing(URLError(.notConnectedToInternet)))
     }
 
     // MARK: Launch

@@ -1624,6 +1624,7 @@ struct ConversationView: View {
                             conversations: model.conversations
                         )
                     },
+                    opensAuthorProfile: !MessageAuthorIdentity.isDeletedAccount(message, in: conversation),
                     onOpenMentionProfile: openMentionProfile,
                     onRetry: {
                         await model.retry(message, in: conversation)

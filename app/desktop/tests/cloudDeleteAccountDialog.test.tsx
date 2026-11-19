@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { act, createElement } from 'react';
 
@@ -10,6 +11,7 @@ import type {
   DeletedAccountSession,
 } from '../src/features/cloud/accountSecurityClient';
 import { __setSessionBackendForTests } from '../src/features/cloud/session';
+import { CLOUD_ACCOUNT_FIELD_CLASS } from '../src/kordi-app/cloud/CloudSignupVerificationFields';
 import { flushReactUpdates, installDom } from './helpers/transcriptAttachmentDom';
 
 const SUMMARY = "Your account, contacts, files, agents and memories are deleted. This can't be undone.";
@@ -314,4 +316,60 @@ test('the profile row loads the dialog on first use', async () => {
     __setSessionBackendForTests(null);
     installed.restore();
   }
+});
+
+/** The classes an input carries, sorted, to compare with a class string. */
+function classesOf(element: Element | null): string[] {
+  assert.ok(element, 'the field is shown');
+  return Array.from(element.classList).sort();
+}
+
+const SETTINGS_FIELD = CLOUD_ACCOUNT_FIELD_CLASS.split(' ').sort();
+
+test('the password and code fields are the account settings field, with its error state', async () => {
+  const passwordClient = fakeClient({
+    load: async () => overview({ password: true }),
+    deleteAccount: async () => { throw new CloudAuthError('invalid_current_password', 'The current password is incorrect.', 403); },
+  });
+  const passwordView = await renderDialog(passwordClient);
+  try {
+    assert.deepEqual(classesOf(passwordView.input('Current password')), SETTINGS_FIELD);
+    await passwordView.fill('Current password', 'wrong');
+    await passwordView.click('Delete account');
+    await passwordView.click('Delete');
+    assert.deepEqual(
+      classesOf(passwordView.input('Current password')),
+      [...SETTINGS_FIELD, 'app-flat-input-error'].sort(),
+    );
+  } finally {
+    await passwordView.cleanup();
+  }
+  const codeView = await renderDialog(fakeClient({}));
+  try {
+    await codeView.click('Email me a code');
+    assert.deepEqual(classesOf(codeView.input('Email code')), SETTINGS_FIELD);
+  } finally {
+    await codeView.cleanup();
+  }
+});
+
+test('the settings email row and the dialog share one field, styled flat in portaled dialogs too', () => {
+  const read = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
+  const dialog = read('features/cloud/CloudDeleteAccountDialog.tsx');
+  const emailRow = read('kordi-app/cloud/CloudAccountEmailRow.tsx');
+  for (const source of [dialog, emailRow]) {
+    assert.match(source, /className=\{cn\(CLOUD_ACCOUNT_FIELD_CLASS, error && 'app-flat-input-error'\)\}/);
+  }
+  // No one-off field styling is left in the dialog.
+  assert.doesNotMatch(dialog, /rounded-\[12px\]|--app-transient-text\)\] outline-none/);
+  // AppDialog portals to the body, outside `.kordi-app`; the flat field rules
+  // must reach it, or the field falls back to the filled transient input.
+  const css = read('styles/transient-surfaces.css');
+  for (const state of ['', ':hover', ':focus', '.app-flat-input-error', '::placeholder']) {
+    assert.ok(
+      css.includes(`:is(.kordi-app, body) .app-transient-surface .app-input-shell.app-flat-input${state}`),
+      `flat field rule ${state || '(base)'} covers body-portaled dialogs`,
+    );
+  }
+  assert.ok(!css.includes('\n.kordi-app .app-transient-surface .app-input-shell.app-flat-input'));
 });

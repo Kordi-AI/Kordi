@@ -26,8 +26,20 @@ enum ServerSessionEnd: Equatable, Sendable {
         }
     }
 
-    /// A realtime socket the server closed. The close code decides; the
-    /// reason (`account_deleted`) is informational.
+    /// A response the app hands on unread, such as the document editor's
+    /// collaboration ticket: the error code is read as `CloudAPIClient` reads
+    /// it (`error.code`, then `errorCode`, then `code`).
+    init?(status: Int, body: Data) {
+        guard status == 401,
+              let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else { return nil }
+        let nested = object["error"] as? [String: Any]
+        guard let code = (nested?["code"] as? String) ?? (object["errorCode"] as? String) ?? (object["code"] as? String)
+        else { return nil }
+        self.init(CloudAPIError(code: code, message: "", statusCode: status, fromServer: true))
+    }
+
+    /// A socket the server closed (chat realtime or document editing). The
+    /// close code decides; the reason (`account_deleted`) is informational.
     init?(realtimeCloseCode code: Int) {
         guard code == Self.accountDeletedCloseCode else { return nil }
         self = .accountDeleted

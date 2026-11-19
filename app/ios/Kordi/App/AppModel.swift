@@ -174,9 +174,14 @@ final class AppModel: ObservableObject {
             if oldValue?.accountId != account?.accountId {
                 resetDigestReads()
                 voiceTranscriptions.activate(accountId: account?.accountId)
+                profilesAnsweredMissing = []
             }
         }
     }
+    /// Accounts whose profile answered 404 for the signed-in account, such as
+    /// a deleted group member: their profile is not requested again. Someone
+    /// who becomes a contact leaves the set.
+    var profilesAnsweredMissing = Set<String>()
     @Published var rollingDigestSnapshot: RollingDigestResponse?
     @Published var digestCalendarSnapshot: DigestCalendarResponse?
     @Published var digestMutationState = DigestMutationState()
@@ -185,7 +190,12 @@ final class AppModel: ObservableObject {
     let digestCalendarRead = DigestReadCoordinator<DigestCalendarResponse>()
     let digestWarmup = DigestWarmupCoordinator()
     let digestCalendarSync = DigestCalendarSyncCoordinator()
-    @Published private(set) var contacts: [CloudContact] = []
+    @Published private(set) var contacts: [CloudContact] = [] {
+        didSet {
+            guard !profilesAnsweredMissing.isEmpty else { return }
+            profilesAnsweredMissing.subtract(Set(contacts.map(\.accountId)).subtracting(oldValue.map(\.accountId)))
+        }
+    }
     @Published private(set) var contactPresenceByAccountID: [String: CloudPresenceAccount] = [:]
     @Published private(set) var contactRequests: [CloudContactRequest] = []
     /// Pending invitations to groups started in Grounding rooms.
@@ -1279,7 +1289,15 @@ final class AppModel: ObservableObject {
         if previewMode { return PreviewUsageService() }
         return CloudUsageService(api: api) { [weak self] in self?.token }
     }
-    func makeDocumentService() -> any DocumentService { previewMode ? PreviewDocumentService() : CloudDocumentService(api: api) { [weak self] in self?.token } }
+    func makeDocumentService() -> any DocumentService {
+        if previewMode { return PreviewDocumentService() }
+        return CloudDocumentService(
+            api: api,
+            tokenProvider: { [weak self] in self?.token },
+            // A refused collaboration ticket or a 4410 close of the editing socket.
+            sessionEnded: { [weak self] end, token in _ = self?.endSession(end, token: token) }
+        )
+    }
 
     func markDeviceReviewSeen() { deviceReviewRequired = false }
 

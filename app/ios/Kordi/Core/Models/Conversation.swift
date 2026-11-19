@@ -259,9 +259,10 @@ enum ConversationAuthorProfileResolver {
     ) -> ConversationSummary? {
         guard message.author == .person,
               !KordiSystemIdentity.isSystemNotice(message),
-              message.messageKind != KordiSystemAgentIdentity.messageKind else { return nil }
-        // A deleted account has no profile to open.
-        if currentConversation.kind == .person { return currentConversation.peerAccountDeleted ? nil : currentConversation }
+              message.messageKind != KordiSystemAgentIdentity.messageKind,
+              // A deleted account has no profile to open.
+              !MessageAuthorIdentity.isDeletedAccount(message, in: currentConversation) else { return nil }
+        if currentConversation.kind == .person { return currentConversation }
         guard currentConversation.kind == .group else { return nil }
 
         let matches = currentConversation.groupParticipants.filter { participant in

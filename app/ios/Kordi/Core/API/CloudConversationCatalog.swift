@@ -282,9 +282,13 @@ enum CloudConversationCatalog {
             }
             let canonical = canonicalConversationsBySessionId[groupId]
             let participants = enrichedParticipants(
-                mergedParticipants(
-                    legacy: latestParticipants(in: sorted.map(\.1)),
-                    canonical: canonicalParticipantsBySessionId[groupId] ?? []
+                withoutDeletedAccounts(
+                    mergedParticipants(
+                        legacy: latestParticipants(in: sorted.map(\.1)),
+                        canonical: canonicalParticipantsBySessionId[groupId] ?? []
+                    ),
+                    conversation: canonical,
+                    viewerAccountId: account.accountId
                 ),
                 account: account,
                 contactsById: contactsById
@@ -957,6 +961,24 @@ enum CloudConversationCatalog {
                 joinedAt: participant.joinedAt
             )
         }
+    }
+
+    /// Older envelopes cached on this iPhone still list a member whose account
+    /// was deleted. A deleted account loses its member row, while anyone who
+    /// left keeps one (docs/development/account-deletion.md), so once the
+    /// conversation's member list is known (it lists the viewer) a participant
+    /// without a row is dropped. The stand-in speaks for deleted senders but
+    /// is never a member.
+    static func withoutDeletedAccounts(
+        _ participants: [CloudGroupParticipant],
+        conversation: CloudChatConversation?,
+        viewerAccountId: String
+    ) -> [CloudGroupParticipant] {
+        let people = participants.filter { !KordiDeletedAccount.isStandIn($0.accountId) }
+        guard let conversation,
+              conversation.members.contains(where: { $0.accountId == viewerAccountId }) else { return people }
+        let rows = Set(conversation.members.map(\.accountId))
+        return people.filter { rows.contains($0.accountId) }
     }
 
     private static func mergedParticipants(

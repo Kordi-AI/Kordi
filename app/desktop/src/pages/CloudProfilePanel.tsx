@@ -25,6 +25,7 @@ import {
   sanitizeKordiHandleInput,
 } from './cloudProfileDraft';
 import { CloudProfileAutoRows } from './CloudProfileAutoRows';
+import { signOutDescription } from './cloudProfileSessionCopy';
 import { KordiIdChangeConfirmDialog, KordiIdLockedDialog } from './CloudProfileKordiIdDialogs';
 import type { CloudProfileEditor } from './useCloudProfileEditor';
 
@@ -233,7 +234,7 @@ export function CloudProfilePanel({
         <SettingsSection title="Session">
           <SettingsRow
             title="Sign out"
-            description="Sign out of Kordi on this Mac."
+            description={signOutDescription()}
             className="app-cloud-account-settings-meta-row"
             control={(
               <Button

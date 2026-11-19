@@ -26,6 +26,18 @@ enum KordiDeletedAccount {
         accountId?.trimmingCharacters(in: .whitespacesAndNewlines) == Self.accountId
     }
 
+    /// The name the server stores for the stand-in (on its member row, on
+    /// scrubbed messages and as a quote's `senderLabel`), or this app's
+    /// own wording of it.
+    static func isDisplayName(_ name: String?) -> Bool {
+        guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return false }
+        return [serverDisplayName, displayName].contains {
+            name.compare($0, options: [.caseInsensitive]) == .orderedSame
+        }
+    }
+
+    static let serverDisplayName = "Deleted account"
+
     /// The deleted account a kept direct conversation was with, named by its
     /// session id, or nil for any other conversation. Everyone keeps a member
     /// row once in a conversation (active, left or removed); only a deleted

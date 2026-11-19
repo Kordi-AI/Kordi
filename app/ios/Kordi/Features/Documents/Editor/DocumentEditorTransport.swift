@@ -18,17 +18,28 @@ protocol DocumentEditorTransport: AnyObject {
     func socket(path: String, ticket: String) async throws -> any DocumentEditorSocket
 }
 
-/// The signed-in account's transport.
+/// The server ended the sign-in, for a request or socket that used `token`.
+typealias DocumentSessionEndHandler = @MainActor (_ end: ServerSessionEnd, _ token: String) -> Void
+
+/// The signed-in account's transport. The page reads every answer itself;
+/// a refused collaboration ticket or a socket closed because the account is
+/// gone also reaches the app's session handler.
 @MainActor
 final class CloudDocumentEditorTransport: DocumentEditorTransport {
     /// The server accepts frames up to 4 MiB.
     static let maximumMessageSize = 4 * 1024 * 1024
     private let api: CloudAPIClient
     private let tokenProvider: @MainActor () -> String?
+    private let sessionEnded: DocumentSessionEndHandler?
 
-    init(api: CloudAPIClient, tokenProvider: @escaping @MainActor () -> String?) {
+    init(
+        api: CloudAPIClient,
+        tokenProvider: @escaping @MainActor () -> String?,
+        sessionEnded: DocumentSessionEndHandler? = nil
+    ) {
         self.api = api
         self.tokenProvider = tokenProvider
+        self.sessionEnded = sessionEnded
     }
 
     private func token() throws -> String {
@@ -39,9 +50,12 @@ final class CloudDocumentEditorTransport: DocumentEditorTransport {
     }
 
     func request(method: String, path: String, body: Data?) async throws -> (status: Int, body: Data) {
-        let request = try await api.makeRequest(path: path, method: method, token: token(), query: [], body: body)
+        let token = try self.token()
+        let request = try await api.makeRequest(path: path, method: method, token: token, query: [], body: body)
         let (data, response) = try await api.transportData(for: request, fallback: "Could not reach Kordi Cloud.")
-        return ((response as? HTTPURLResponse)?.statusCode ?? 0, data)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if let end = ServerSessionEnd(status: status, body: data) { sessionEnded?(end, token) }
+        return (status, data)
     }
 
     /// A native socket sends no `Origin`, which is what the server binds a
@@ -60,15 +74,23 @@ final class CloudDocumentEditorTransport: DocumentEditorTransport {
         let task = URLSession.shared.webSocketTask(with: socketURL)
         task.maximumMessageSize = Self.maximumMessageSize
         task.resume()
-        return URLSessionDocumentEditorSocket(task: task)
+        // The ticket was issued for the token in use now.
+        let ticketToken = tokenProvider()
+        let handler = self.sessionEnded
+        return URLSessionDocumentEditorSocket(task: task) { end in
+            guard let ticketToken else { return }
+            handler?(end, ticketToken)
+        }
     }
 }
 
 final class URLSessionDocumentEditorSocket: DocumentEditorSocket {
     private let task: URLSessionWebSocketTask
+    private let sessionEnded: (@MainActor (ServerSessionEnd) -> Void)?
 
-    init(task: URLSessionWebSocketTask) {
+    init(task: URLSessionWebSocketTask, sessionEnded: (@MainActor (ServerSessionEnd) -> Void)? = nil) {
         self.task = task
+        self.sessionEnded = sessionEnded
     }
 
     var closeCode: Int {
@@ -80,12 +102,17 @@ final class URLSessionDocumentEditorSocket: DocumentEditorSocket {
     }
 
     func receive() async throws -> Data {
-        while true {
-            switch try await task.receive() {
-            case .data(let data): return data
-            case .string: continue
-            @unknown default: continue
+        do {
+            while true {
+                switch try await task.receive() {
+                case .data(let data): return data
+                case .string: continue
+                @unknown default: continue
+                }
             }
+        } catch {
+            if let end = ServerSessionEnd(realtimeCloseCode: closeCode) { await sessionEnded?(end) }
+            throw error
         }
     }
 

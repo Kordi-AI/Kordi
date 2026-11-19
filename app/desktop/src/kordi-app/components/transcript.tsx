@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { ArrowRightLeft, Check, CheckCircle2, ChevronUp, Clock3, Split, SquareArrowOutUpRight, Undo2 } from 'lucide-react';
 import { memo,useLayoutEffect,useRef,useState,type PointerEvent as ReactPointerEvent } from 'react';
 import type { EditFilePreview, Message, MessageAttachment, MessageSourceReference } from '../types';
-import { isDeletedAccountSender, isSystemAvatarUrl } from '@/features/systemAgent/systemAgentIdentity';
+import { isDeletedAccountSender, isSystemAvatarUrl, KORDI_DELETED_ACCOUNT_ID } from '@/features/systemAgent/systemAgentIdentity';
 import { AGENT_GROUP_NAME_CLASS,AgentHeaderMeta,AgentOwnerTag } from './AgentOwnerTag';
 import { IdentityAvatar,useLocalAgentAvatarSeed,useLocalProfileAvatarSeed,type IdentityAvatarKind } from './IdentityAvatar';
 import { ForwardedMessageContent } from './ForwardedMessageContent';
@@ -621,7 +621,7 @@ function MessageBubbleView({
   const avatarSeed = isOwnHumanMessage
     ? currentLocalProfileAvatarSeed
     : isAgentMessage ? agentMessageAvatarSeed(msg, currentLocalAgentAvatarSeed, avatarName)
-      : msg.senderAvatarSeed?.trim() || generatedAvatarSeedForLabel(avatarKind, avatarName);
+      : isDeletedAccountSender(msg) ? KORDI_DELETED_ACCOUNT_ID : msg.senderAvatarSeed?.trim() || generatedAvatarSeedForLabel(avatarKind, avatarName);
   const showInlineHumanSender = Boolean(!threadLayout && !hideHumanSenderForCompactDensity && !isAgentMessage && msg.showSenderMeta && msg.sender && !isGroupedWithPrevious);
   const showContactRequestAction = Boolean(
     isOwnHumanMessage

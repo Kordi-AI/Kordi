@@ -9,9 +9,12 @@ import { buildParticipantSpaces } from '../src/features/chat/participantSpaces';
 import { CloudCallContext } from '../src/features/cloud/cloudCallContextValue';
 import type { CloudCallsController } from '../src/features/cloud/cloudCallController';
 import { cloudCallTargetForConversation } from '../src/features/cloud/cloudCalls';
-import { HUMAN_CANONICAL_AVATAR_STYLE, generatedAvatarPreviewUrl } from '../src/features/cloud/canonicalAvatar';
+import { AGENT_CANONICAL_AVATAR_STYLE, HUMAN_CANONICAL_AVATAR_STYLE, generatedAvatarPreviewUrl } from '../src/features/cloud/canonicalAvatar';
 import { isDeletedAccountSender } from '../src/features/systemAgent/systemAgentIdentity';
+import { GroupAvatar } from '../src/kordi-app/components/GroupAvatar';
+import { IdentityAvatar } from '../src/kordi-app/components/IdentityAvatar';
 import { MessageBubble } from '../src/kordi-app/components/transcript';
+import { ChatDetailPanel } from '../src/pages/ChatDetailPanel';
 import type { CanonicalIdentity, CanonicalSessionMessage, Conversation, Message } from '../src/kordi-app/types';
 import { chatHeaderSubtitle } from '../src/pages/chatsPage.header';
 import { MainChatHeader } from '../src/pages/chatsPage.mainHeader';
@@ -19,8 +22,15 @@ import { WorkspaceSidebar } from '../src/pages/WorkspaceSidebar';
 import { GONE, keptChatViewModel, STAND_IN, VIEWER, viewerAccount } from './helpers/deletedAccountChatFixtures';
 import { baseSidebarProps } from './helpers/workspaceSidebarParticipantSpacesFixtures';
 
-const standInAvatarUrl = generatedAvatarPreviewUrl(HUMAN_CANONICAL_AVATAR_STYLE, STAND_IN);
 const openProfile = () => {};
+
+/** The neutral placeholder: a flat muted square with the generic person glyph, and no picture or request. */
+function assertStandInPlaceholder(markup: string) {
+  assert.match(markup, /aria-label="Deleted account avatar"[^>]*data-avatar-state="placeholder"/);
+  assert.match(markup, /lucide-user-round/);
+  assert.doesNotMatch(markup, new RegExp(`/avatars/[^"]*${STAND_IN}`), 'no avatar URL is built for the stand-in');
+  assert.doesNotMatch(markup, /<img/);
+}
 
 function inboundMessage(view: Conversation): Message {
   const message = view.messages.find((candidate) => !candidate.isOwnMessage && candidate.text === 'See you at the station');
@@ -44,8 +54,7 @@ function header(conversation: Conversation, subtitle: string | null) {
   })));
 }
 
-test('the chat list row draws the stand-in avatar, the same one the transcript shows', () => {
-  assert.ok(standInAvatarUrl);
+test('the chat list row and the transcript draw the stand-in as the neutral placeholder', () => {
   const view = keptChatViewModel();
   const [space] = buildParticipantSpaces([view]);
   assert.equal(space?.kind, 'direct-human');
@@ -57,13 +66,50 @@ test('the chat list row draws the stand-in avatar, the same one the transcript s
   const sidebar = renderToStaticMarkup(createElement(WorkspaceSidebar, baseSidebarProps({
     chatConversations: [view], participantSpaces: [space], contactParticipantSpaces: [space], activeConvId: view.id,
   }) as never));
-  assert.ok(sidebar.includes(standInAvatarUrl), 'the row loads the generated stand-in avatar');
-  assert.doesNotMatch(sidebar, /data-avatar-state="fallback"/);
+  const row = sidebar.slice(sidebar.indexOf('data-testid="participant-space-row"'));
+  assertStandInPlaceholder(row.slice(0, row.indexOf('</button>')));
   // The deleted id still keys the row, but never draws it.
-  assert.doesNotMatch(sidebar, new RegExp(`/avatars/[^"]*(?:${GONE}|cloud-agent)`));
+  assert.doesNotMatch(sidebar, new RegExp(`/avatars/[^"]*(?:${GONE}|${STAND_IN}|cloud-agent)`));
 
-  const bubble = renderToStaticMarkup(createElement(MessageBubble, { msg: inboundMessage(view) }));
-  assert.ok(bubble.includes(standInAvatarUrl));
+  assertStandInPlaceholder(renderToStaticMarkup(createElement(MessageBubble, { msg: inboundMessage(view) })));
+});
+
+test('the Info tab, group tiles and every stand-in seed draw the placeholder, while people keep their avatars', () => {
+  const view = keptChatViewModel();
+  const info = renderToStaticMarkup(createElement(ChatDetailPanel, {
+    isNativeShell: true, activeDetailTab: 'info', activeConv: view, activeConvHasSubtitle: false,
+    activeConversationUsesCollaboration: true, activeCollaborationAwaitingReply: false, isCollaborationSyncing: false,
+    artifacts: [], activeArtifactId: null, onSelectArtifact: () => {},
+  }));
+  assertStandInPlaceholder(info.slice(info.indexOf('aria-label="Deleted account avatar"') - 400));
+
+  // A picture the server still lists for the stand-in, and the agent it does not have, are ignored too.
+  for (const [kind, seed] of [['human', STAND_IN], ['human', `human:${STAND_IN}`], ['agent', `cloud-agent:${STAND_IN}`]] as const) {
+    assertStandInPlaceholder(renderToStaticMarkup(createElement(IdentityAvatar, {
+      kind, seed, name: 'Deleted account', imageUrl: `kordi-avatar://dicebear-rust-10.6.0-styles-10.5.0/lorelei/${STAND_IN}?version=1`,
+    })));
+  }
+
+  const leeUrl = generatedAvatarPreviewUrl(HUMAN_CANONICAL_AVATAR_STYLE, 'acct_lee');
+  const viewerUrl = generatedAvatarPreviewUrl(HUMAN_CANONICAL_AVATAR_STYLE, viewerAccount.avatar.seed);
+  assert.ok(leeUrl && viewerUrl);
+  const tile = renderToStaticMarkup(createElement(GroupAvatar, {
+    name: 'Weekend',
+    avatars: [
+      { kind: 'human', seed: 'acct_lee', imageUrl: null },
+      { kind: 'human', seed: viewerAccount.avatar.seed, isSelf: true, imageUrl: null },
+      { kind: 'human', seed: STAND_IN, imageUrl: null },
+    ],
+  }));
+  assert.ok(tile.includes(leeUrl), 'a person keeps their generated avatar');
+  assert.ok(tile.includes(viewerUrl), 'so does the viewer');
+  assert.match(tile, /data-avatar-state="placeholder"/);
+  assert.doesNotMatch(tile, new RegExp(`/avatars/[^"]*${STAND_IN}`));
+  const viewer = renderToStaticMarkup(createElement(IdentityAvatar, { kind: 'human', seed: viewerAccount.avatar.seed, isSelf: true, name: 'Rowan Sample' }));
+  assert.ok(viewer.includes(viewerUrl));
+  assert.doesNotMatch(viewer, /placeholder|lucide-user-round/);
+  const agent = renderToStaticMarkup(createElement(IdentityAvatar, { kind: 'agent', seed: 'cloud-agent:acct_lee', name: "Lee's Kordi" }));
+  assert.ok(agent.includes(generatedAvatarPreviewUrl(AGENT_CANONICAL_AVATAR_STYLE, 'default-agent-acct_lee') ?? 'missing'));
 });
 
 test('the stand-in never draws from the viewer, nor from the deleted account', () => {
@@ -113,6 +159,8 @@ function cloudIdentity(accountId: string, displayName: string): CanonicalIdentit
   return {
     id: `human:${accountId}`, kind: 'human', displayName, source: 'cloud', sourceHostId: 'cloud',
     sourceIdentityId: accountId, humanId: accountId, avatarKey: accountId, createdAtMs: 1, updatedAtMs: 1,
+    // A picture the server may still list next to an account; the stand-in never shows one.
+    profileImageUrl: `kordi-avatar://dicebear-rust-10.6.0-styles-10.5.0/lorelei/${accountId}?version=1`,
   };
 }
 
@@ -135,7 +183,7 @@ test('a Deleted account sender avatar is not a button, in a direct chat or a gro
   assert.ok(fromStandIn);
   assert.equal(isDeletedAccountSender(fromStandIn), true);
   const groupMarkup = renderToStaticMarkup(createElement(MessageBubble, { msg: fromStandIn, onOpenSenderProfile: openProfile }));
-  assert.match(groupMarkup, /Deleted account avatar/);
+  assertStandInPlaceholder(groupMarkup);
   assertInertAvatar(groupMarkup);
 
   // Anyone else's avatar still opens their profile.

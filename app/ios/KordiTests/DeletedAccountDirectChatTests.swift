@@ -357,6 +357,139 @@ final class DeletedAccountDirectChatTests: XCTestCase {
         XCTAssertEqual(restored.id, row.id)
         XCTAssertEqual(restored.sessionId, row.sessionId)
     }
+
+    // MARK: Calls
+
+    func testDetailsOfAKeptChatOfferNoCall() throws {
+        let row = try Fixture.keptRow()
+        let lee = ConversationSummary(
+            id: "person:\(Fixture.lee)", kind: .person, peerAccountId: Fixture.lee, agentId: nil,
+            ownerDisplayName: "Lee Example", displayName: "Lee Example", lastMessage: "",
+            lastActivityAt: .distantPast, unreadCount: 0, avatarSource: nil, agentActivity: nil,
+            sessionId: directPersonSessionId(Fixture.viewer, Fixture.lee)
+        )
+
+        XCTAssertEqual(SessionHeroAction.items(for: row), [.mute, .chat])
+        XCTAssertEqual(SessionHeroAction.items(for: lee), [.call, .video, .mute, .chat])
+    }
+
+    @MainActor
+    func testNoCallStartsInAKeptChat() async throws {
+        let row = try Fixture.keptRow()
+        let calls = KordiCallCoordinator()
+
+        await calls.start(conversation: row, kind: .voice)
+
+        XCTAssertNil(calls.activeCall)
+        XCTAssertFalse(calls.isStartingCall)
+        XCTAssertEqual(calls.phase, .failed("This account was deleted."))
+    }
+
+    // MARK: Sender
+
+    func testTheDeletedSenderIsAPictureNotAProfileButton() throws {
+        let row = try Fixture.keptRow()
+        let messages = CloudDirectMessageProjector.project(
+            Fixture.keptMessages, conversation: row, ownAccountId: Fixture.viewer
+        )
+        let incoming = try XCTUnwrap(messages.first { $0.id == "dana-1" })
+        let outgoing = try XCTUnwrap(messages.first { $0.id == "rowan-1" })
+
+        XCTAssertTrue(MessageAuthorIdentity.isDeletedAccount(incoming, in: row))
+        XCTAssertFalse(MessageAuthorIdentity.isDeletedAccount(outgoing, in: row))
+        XCTAssertEqual(
+            MessageAuthorIdentity.resolve(incoming, in: row, account: Fixture.account, mentionTargets: []),
+            MessageAuthorIdentity.deletedAccount
+        )
+    }
+
+    func testTheStandInSpeaksAsTheDeletedAccountInAGroup() {
+        func makeGroup(_ participants: [CloudGroupParticipant]) -> ConversationSummary {
+            ConversationSummary(
+                id: "group:session:group:space", kind: .group, peerAccountId: Fixture.lee, agentId: nil,
+                ownerDisplayName: "Planning", displayName: "Channel 1", lastMessage: "",
+                lastActivityAt: .distantPast, unreadCount: 0, avatarSource: "kordi-avatar://group",
+                agentActivity: nil, sessionId: "session:group:space", groupParticipants: participants
+            )
+        }
+        let members = [
+            CloudGroupParticipant(accountId: Fixture.viewer, displayName: "Rowan Sample", avatarUrl: nil, role: "member"),
+            CloudGroupParticipant(accountId: Fixture.lee, displayName: "Lee Example", avatarUrl: nil, role: "owner"),
+        ]
+        let group = makeGroup(members)
+        let scrubbed = ChatMessage(
+            id: "group-1", conversationId: group.id, author: .person, authorName: "Deleted account",
+            text: "Earlier plan", createdAt: Date(timeIntervalSince1970: 1), deliveryState: .read,
+            errorMessage: nil, requestMessageId: nil
+        )
+        let lee = ChatMessage(
+            id: "group-2", conversationId: group.id, author: .person, authorName: "Lee Example",
+            text: "Thanks", createdAt: Date(timeIntervalSince1970: 2), deliveryState: .read,
+            errorMessage: nil, requestMessageId: nil
+        )
+
+        XCTAssertTrue(MessageAuthorIdentity.isDeletedAccount(scrubbed, in: group))
+        XCTAssertFalse(MessageAuthorIdentity.isDeletedAccount(lee, in: group))
+        // Not the group's own name and picture.
+        XCTAssertEqual(
+            MessageAuthorIdentity.resolve(scrubbed, in: group, account: Fixture.account, mentionTargets: []),
+            MessageAuthorIdentity.deletedAccount
+        )
+        XCTAssertNil(ConversationAuthorProfileResolver.destination(
+            currentConversation: group, message: scrubbed, selfAccountID: Fixture.viewer, contacts: [], conversations: []
+        ))
+        // A message without an envelope names its sender by account.
+        XCTAssertEqual(KordiSystemIdentity.groupAuthorName(
+            messageKind: "text", fromAccountId: KordiDeletedAccount.accountId,
+            participantNames: [Fixture.lee: "Lee Example"], fallback: "Channel 1"
+        ), "Deleted account")
+
+        // A member who chose that name is still that member.
+        let namesake = makeGroup(members + [
+            CloudGroupParticipant(accountId: "acct_sky", displayName: "Deleted account", avatarUrl: nil, role: "member"),
+        ])
+        XCTAssertFalse(MessageAuthorIdentity.isDeletedAccount(scrubbed, in: namesake))
+    }
+
+    // MARK: Quotes
+
+    /// The server stores Deleted account as a quote's `senderLabel` and keeps
+    /// its `sourceSessionId`, so the quote names the stand-in, never a cached
+    /// contact name, and jumps within the same chat.
+    func testQuoteOfTheDeletedPersonShowsTheStoredLabelAndStaysInTheChat() throws {
+        let kept = try Fixture.decodeConversation(members: [Fixture.viewerRow(), Fixture.standInRow()], closed: true)
+        let source = MessageActionSource(
+            sourceSessionId: Fixture.sessionId,
+            sourceMessageId: "dana-1",
+            senderLabel: "Deleted account",
+            textPreview: "Hello",
+            attachmentCount: 0
+        )
+        let quoteBody = try CloudMessageCodec.encodeDirect(
+            text: "Agreed", agentId: nil, agentName: nil, ownerAccountId: nil, ownerName: nil,
+            messageAction: .quote(source)
+        )
+        let messages = Fixture.keptMessages + [
+            Fixture.wire("rowan-quote", from: Fixture.viewer, to: Fixture.gone, text: quoteBody, session: Fixture.sessionId, minute: 4),
+        ]
+        // A contact entry under the old name has not been removed yet.
+        let catalog = CloudConversationCatalog.build(
+            account: Fixture.account, contacts: [Fixture.contact(Fixture.gone, name: "Dana Sample")],
+            ownedAgents: [], sharedAgents: [], messagesByPeer: [Fixture.gone: messages], canonicalConversations: [kept]
+        )
+        let row = try XCTUnwrap(catalog.first { $0.peerAccountId == Fixture.gone })
+        let projected = CloudDirectMessageProjector.project(messages, conversation: row, ownAccountId: Fixture.viewer)
+        let quote = try XCTUnwrap(projected.first { $0.id == "rowan-quote" }?.messageAction)
+
+        XCTAssertEqual(quote.kind, "quote")
+        XCTAssertEqual(quote.source.senderLabel, "Deleted account")
+        XCTAssertEqual(MessageQuotePresentation.senderLabel(quote.source.senderLabel, selfDisplayName: "Rowan Sample"), "Deleted account")
+        XCTAssertEqual(quote.source.sourceSessionId, row.sessionId, "The reference names this chat.")
+        let quoted = try XCTUnwrap(MessageReferenceIndex(messages: projected).message(for: quote.source.sourceMessageId))
+        XCTAssertEqual(quoted.id, "dana-1")
+        XCTAssertEqual(quoted.authorName, "Deleted account")
+        XCTAssertFalse(projected.contains { $0.authorName == "Dana Sample" })
+    }
 }
 
 private enum DeletedDirectFixture {

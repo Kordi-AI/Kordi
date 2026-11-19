@@ -334,6 +334,11 @@ final class KordiCallCoordinator: NSObject, ObservableObject {
             phase = .failed("Calls are available in contact and group conversations.")
             return
         }
+        // No screen offers a call in a chat kept with a deleted account; refuse any other route too.
+        guard !conversation.peerAccountDeleted else {
+            phase = .failed(KordiDeletedAccount.closedLine)
+            return
+        }
         guard let model else {
             phase = .failed("Kordi is still preparing your account.")
             return
