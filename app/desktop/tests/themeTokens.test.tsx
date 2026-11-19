@@ -96,7 +96,7 @@ test('light cloud login and loading gates use the cool main-shell palette', () =
   assert.match(lightCloudTokenBlock, /--app-cloud-login-sunk-bg:\s*rgba\(226,\s*232,\s*240,\s*0\.52\);/);
   assert.match(lightCloudTokenBlock, /--app-cloud-login-input-bg:\s*rgba\(248,\s*251,\s*255,\s*0\.82\);/);
   assert.match(lightCloudTokenBlock, /--app-cloud-login-border:\s*rgba\(37,\s*99,\s*235,\s*0\.12\);/);
-  assert.match(lightCloudTokenBlock, /--app-cloud-login-divider:\s*rgba\(100,\s*116,\s*139,\s*0\.22\);/);
+  assert.match(lightCloudTokenBlock, /--app-cloud-login-inner-border:\s*rgba\(100,\s*116,\s*139,\s*0\.18\);/);
   assert.match(lightCloudBlock, /--app-cloud-login-page-bg:\s*linear-gradient\(180deg,\s*rgb\(248 250 252\) 0%,\s*rgb\(241 245 249\) 54%,\s*rgb\(226 232 240\) 100%\);/);
   assert.match(lightAccentsBlock, /oklch\(0\.70 0\.13 232 \/ 0\.12\)/);
   assert.match(lightAccentsBlock, /oklch\(0\.74 0\.11 190 \/ 0\.10\)/);

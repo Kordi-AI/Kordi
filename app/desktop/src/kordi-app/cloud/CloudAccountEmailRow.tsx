@@ -28,7 +28,7 @@ export type CloudAccountEmailRowProps = {
 };
 
 function errorText(caught: unknown, fallback: string): string {
-  if (caught instanceof CloudAuthError) return cloudLoginErrorMessage(caught, false);
+  if (caught instanceof CloudAuthError) return cloudLoginErrorMessage(caught);
   return caught instanceof Error && caught.message ? caught.message : fallback;
 }
 

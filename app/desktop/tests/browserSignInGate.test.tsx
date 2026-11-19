@@ -23,6 +23,7 @@ let baseUrlCounter = 0;
 
 function fakeSession({ probeStatus = 400, probeError = 'invalid_redirect_uri', tokenStatus = 200 } = {}) {
   const events: string[] = [];
+  let probeAnswer = { status: probeStatus, error: probeError };
   let probes = 0;
   const completed: AppSignInResult[] = [];
   let state = '';
@@ -44,7 +45,7 @@ function fakeSession({ probeStatus = 400, probeError = 'invalid_redirect_uri', t
     const url = String(input);
     if (url.includes('/authorize?')) {
       probes += 1;
-      return json(probeStatus, { error: probeError });
+      return json(probeAnswer.status, { error: probeAnswer.error });
     }
     if (url.endsWith('/token')) return tokenStatus === 200 ? json(200, TOKEN_BODY) : json(tokenStatus, { error: 'invalid_grant' });
     return json(404, {});
@@ -56,6 +57,8 @@ function fakeSession({ probeStatus = 400, probeError = 'invalid_redirect_uri', t
   return {
     session, events, completed, baseUrl, probes: () => probes,
     returnFromBrowser: (query: (state: string) => string) => returnFromBrowser(query(state)),
+    /** Changes what the server answers on the next availability check. */
+    answerProbe: (status: number, error: string) => { probeAnswer = { status, error }; },
   };
 }
 
@@ -84,6 +87,24 @@ function text(): string {
   return document.body.textContent ?? '';
 }
 
+/** The app never asks for an email or password itself; the browser page does. */
+function assertNoCredentialForm() {
+  const fields = document.querySelectorAll(
+    'input[type="email"], input[type="password"], input[autocomplete="email"], input[autocomplete="current-password"], input[autocomplete="new-password"]',
+  );
+  assert.equal(fields.length, 0, `credential field rendered; page: ${document.body.textContent}`);
+  assert.doesNotMatch(text(), /Password|Email/);
+}
+
+/** Log in and Sign up stay visible and enabled whatever the server reported. */
+function assertEntryPoints() {
+  for (const name of ['Log in', 'Sign up']) assert.equal(button(name).disabled, false, `${name} is enabled`);
+}
+
+function statusLine(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="status"]');
+}
+
 async function settle() {
   for (let index = 0; index < 5; index += 1) {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
@@ -96,12 +117,8 @@ function typeInto(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new window.Event('input', { bubbles: true }));
 }
 
-const render = (
-  root: Root,
-  browserSignIn?: CloudBrowserSignInSession,
-  onBrowserSignInChange?: (active: boolean) => void,
-) => act(async () => {
-  root.render(createElement(CloudSignInGate, { browserSignIn, onModeChange: () => {}, onBrowserSignInChange }));
+const render = (root: Root, browserSignIn?: CloudBrowserSignInSession) => act(async () => {
+  root.render(createElement(CloudSignInGate, { browserSignIn }));
 });
 
 test('the welcome screen opens the browser and finishes from the loopback redirect', async () => {
@@ -109,7 +126,8 @@ test('the welcome screen opens the browser and finishes from the loopback redire
     const fake = fakeSession();
     await render(root, fake.session);
     await settle();
-    assert.equal(document.querySelector('input[type="email"]'), null, 'no in-app email form');
+    assertNoCredentialForm();
+    assert.equal(statusLine(), null, 'an available server shows no error');
     assert.match(text(), /Welcome to Kordi/);
     button('Sign up');
     assert.doesNotMatch(text(), /Trouble logging in/);
@@ -198,7 +216,8 @@ test('an inconclusive availability check keeps browser sign-in and is asked agai
     const fake = fakeSession({ probeStatus: 429, probeError: 'rate_limited' });
     await render(root, fake.session);
     await settle();
-    assert.equal(document.querySelector('input[type="email"]'), null);
+    assertNoCredentialForm();
+    assert.equal(statusLine(), null, 'an inconclusive answer shows no error');
     assert.match(text(), /Welcome to Kordi/);
     const probes = fake.probes();
     await render(root, undefined);
@@ -209,34 +228,79 @@ test('an inconclusive availability check keeps browser sign-in and is asked agai
   });
 });
 
-test('older servers and runtimes without browser sign-in keep the in-app form', async () => {
+for (const [label, status, error] of [
+  ['without the endpoint', 404, 'not_found'],
+  ['without the endpoint method', 405, 'method_not_allowed'],
+  ['without this app client', 400, 'invalid_client'],
+] as const) {
+  test(`a server ${label} keeps the welcome screen with an error and Try again`, async () => {
+    await withDom(async (root) => {
+      const fake = fakeSession({ probeStatus: status, probeError: error });
+      await render(root, fake.session);
+      await settle();
+      assertNoCredentialForm();
+      assert.match(text(), /Welcome to Kordi/);
+      assertEntryPoints();
+      assert.match(statusLine()?.textContent ?? '', /^Sign-in is unavailable on this server\./);
+      const probes = fake.probes();
+
+      // Try again asks the server again and keeps the error while it still refuses.
+      await act(async () => { button('Try again').click(); });
+      await settle();
+      assert.equal(fake.probes(), probes + 1);
+      assertNoCredentialForm();
+      assert.match(statusLine()?.textContent ?? '', /Sign-in is unavailable on this server/);
+
+      // Once the server offers browser sign-in, Try again clears the error.
+      fake.answerProbe(400, 'invalid_redirect_uri');
+      await act(async () => { button('Try again').click(); });
+      await settle();
+      assert.equal(statusLine(), null);
+      assertEntryPoints();
+    });
+  });
+}
+
+test('Log in on a server without browser sign-in asks again and never opens a form', async () => {
   await withDom(async (root) => {
-    await render(root, fakeSession({ probeStatus: 404, probeError: 'not_found' }).session);
+    const fake = fakeSession({ probeStatus: 404, probeError: 'not_found' });
+    await render(root, fake.session);
     await settle();
-    assert.ok(document.querySelector('input[type="email"]'), 'a server without the endpoint shows the form');
+    const probes = fake.probes();
 
-    await render(root, fakeSession({ probeStatus: 400, probeError: 'invalid_client' }).session);
-    await settle();
-    assert.ok(document.querySelector('input[type="email"]'), 'a server without this client shows the form');
+    for (const name of ['Log in', 'Sign up']) {
+      await act(async () => { button(name).click(); });
+      await settle();
+      assertNoCredentialForm();
+      assert.deepEqual(fake.events, [], 'nothing opens in the browser');
+      assert.match(statusLine()?.textContent ?? '', /Sign-in is unavailable on this server/);
+      assertEntryPoints();
+    }
+    assert.equal(fake.probes(), probes + 2, 'each attempt asks the server again');
 
-    await render(root, undefined);
+    // When the server starts offering browser sign-in, Log in goes ahead.
+    fake.answerProbe(400, 'invalid_redirect_uri');
+    await act(async () => { button('Log in').click(); });
     await settle();
-    assert.ok(document.querySelector('input[type="email"]'), 'no native shell shows the form');
+    assert.deepEqual(fake.events, ['open /v1/cloud/auth/app/authorize']);
+    assert.match(text(), /Continue in your browser/);
   });
 });
 
-test('the gate reports whether browser sign-in or the in-app form is showing', async () => {
+test('a window that cannot run browser sign-in keeps the welcome screen with an error', async () => {
   await withDom(async (root) => {
-    const reports: boolean[] = [];
-    const report = (active: boolean) => { reports.push(active); };
-    await render(root, fakeSession().session, report);
+    await render(root, undefined);
     await settle();
-    assert.equal(reports.at(-1), true, 'browser sign-in keeps the compact window');
+    assertNoCredentialForm();
+    assert.match(text(), /Welcome to Kordi/);
+    assertEntryPoints();
+    assert.equal(statusLine()?.textContent, 'Sign-in is unavailable in this window.');
 
-    await render(root, fakeSession({ probeStatus: 404, probeError: 'not_found' }).session, report);
+    await act(async () => { button('Log in').click(); });
     await settle();
-    assert.ok(document.querySelector('input[type="email"]'));
-    assert.equal(reports.at(-1), false, 'the in-app form takes its own window size');
+    assertNoCredentialForm();
+    assert.equal(document.querySelector('[role="alert"]')?.textContent, 'Sign-in is unavailable in this window.');
+    assertEntryPoints();
   });
 });
 

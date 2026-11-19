@@ -132,7 +132,10 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // group members and contacts) adds 2.4 kB (6047.1 kB measured in the CI build), so it moves to 6.049 MB.
 // A short reason for other members when an agent can't reply (one fixed line per failure code and the Mac's
 // two provider failure codes) adds 2.3 kB (6049.5 kB measured with the CI build settings), so it moves to 6.052 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_052_000;
+// Removing the retired in-app sign-in form (its page, the password and provider sign-in calls, the provider
+// wait screen, the login window sizes and their styles) removes 25.6 kB (6023.3 kB measured locally), so it
+// moves to 6.027 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_027_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -202,7 +205,8 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The connector callback page and its hand-off to the starting tab add about 6 kB to the web app only
 // (6086.7 kB measured locally), so it moves to 6.090 MB.
 // The same short reason for members adds 2.3 kB there too (6091.4 kB measured in the CI build), so it moves to 6.094 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_094_000;
+// Removing the retired in-app sign-in form removes 16.4 kB there (6074.2 kB measured locally), so it moves to 6.078 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_078_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

@@ -100,16 +100,28 @@ test('verifying the account email sends the challenge fields and resolves on 204
 });
 
 test('account email errors have readable messages and verification state changes the account', () => {
-  assert.equal(cloudLoginErrorMessage(new CloudAuthError('email_already_verified', '', 409), false), 'This email is already verified.');
+  assert.equal(cloudLoginErrorMessage(new CloudAuthError('email_already_verified', '', 409)), 'This email is already verified.');
   assert.equal(
-    cloudLoginErrorMessage(new CloudAuthError('email_delivery_unavailable', '', 503), false),
+    cloudLoginErrorMessage(new CloudAuthError('email_delivery_unavailable', '', 503)),
     'Email verification is temporarily unavailable. Try again later.',
   );
-  assert.equal(cloudLoginErrorMessage(new CloudAuthError('email_missing', '', 400), false), 'This account has no email address to verify.');
+  assert.equal(cloudLoginErrorMessage(new CloudAuthError('email_missing', '', 400)), 'This account has no email address to verify.');
   const serverText = 'Email verification is temporarily unavailable. Try again later or continue with Google or GitHub.';
   for (const code of ['email_already_verified', 'email_delivery_unavailable', 'email_missing'] as const) {
-    assert.equal(cloudLoginErrorMessage(new CloudAuthError(code, serverText, 400), false), serverText);
+    assert.equal(cloudLoginErrorMessage(new CloudAuthError(code, serverText, 400)), serverText);
   }
+  assert.equal(
+    cloudLoginErrorMessage(new CloudAuthError('rate_limited', '', 429, 42)),
+    'Too many attempts. Try again in 42 seconds.',
+  );
+  assert.equal(
+    cloudLoginErrorMessage(new CloudAuthError('rate_limited', '', 429, 600)),
+    'Too many attempts. Try again in 10 minutes.',
+  );
+  assert.equal(
+    cloudLoginErrorMessage(new CloudAuthError('rate_limited', '', 429)),
+    'Too many attempts. Wait a moment, then try again.',
+  );
 
   assert.equal(cloudAccountsEqual(baseAccount, { ...baseAccount, primaryEmailVerified: true }), false);
 });

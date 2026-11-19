@@ -417,11 +417,6 @@
       "count": 1
     }
   },
-  "src/kordi-app/cloud/CloudLoginPage.tsx": {
-    "@typescript-eslint/no-misused-promises": {
-      "count": 1
-    }
-  },
   "src/kordi-app/components.tsx": {
     "react-refresh/only-export-components": {
       "count": 3

@@ -6,7 +6,6 @@ import {
   APP_WINDOW_DRAG_HEIGHT,
   APP_WINDOW_RESIZE_CORNER,
   APP_WINDOW_RESIZE_EDGE,
-  CLOUD_LOGIN_WINDOW_DRAG_STYLE,
   nativeWindowResizeDirection,
   shouldStartNativeWindowDrag,
 } from '../src/app/windowDrag';
@@ -162,7 +161,7 @@ test('desktop capabilities allow explicit Tauri move and directional resize call
   };
   const frameSource = readFileSync(new URL('../src/app/AppShellFrame.tsx', import.meta.url), 'utf8');
   const gateSource = readFileSync(new URL('../src/features/cloud/CloudGateShell.tsx', import.meta.url), 'utf8');
-  const loginSource = readFileSync(new URL('../src/kordi-app/cloud/CloudLoginPage.tsx', import.meta.url), 'utf8');
+  const signInSource = readFileSync(new URL('../src/kordi-app/cloud/CloudBrowserSignInPage.tsx', import.meta.url), 'utf8');
 
   assert.equal(capabilities.permissions?.includes('core:window:allow-start-dragging'), true);
   assert.equal(capabilities.permissions?.includes('core:window:allow-start-resize-dragging'), true);
@@ -178,6 +177,5 @@ test('desktop capabilities allow explicit Tauri move and directional resize call
     'the login gate must preserve the same resize-before-move priority',
   );
   assert.match(frameSource, /<NativeTitlebar/);
-  assert.match(loginSource, /style=\{CLOUD_LOGIN_WINDOW_DRAG_STYLE\}/);
-  assert.equal(CLOUD_LOGIN_WINDOW_DRAG_STYLE.top, `calc(var(--app-gate-crop-y, 0px) + ${APP_WINDOW_RESIZE_EDGE}px)`);
+  assert.match(signInSource, /style=\{GATE_DRAG_STYLE\} data-tauri-drag-region="true"/);
 });

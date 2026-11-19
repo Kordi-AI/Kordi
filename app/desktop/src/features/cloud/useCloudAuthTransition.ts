@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UseCloudSessionResult } from './useCloudSession';
-import type { CloudOAuthProvider } from './authClient';
-import { CloudOAuthCancelledError } from './cloudOAuthCancellation';
 
-export type CloudAuthTransition = 'signing-in' | 'signing-out' | 'social-signing-in';
+export type CloudAuthTransition = 'signing-out';
 export const CLOUD_AUTH_COVER_MS = 180;
 
 /** Let the cover paint before auth can replace the current page or resize it. */
@@ -11,8 +9,8 @@ export function waitForCloudAuthCover(): Promise<void> {
   const duration = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     ? 100 : CLOUD_AUTH_COVER_MS;
   return new Promise((resolve) => {
-    // WebKit may stop delivering rAF while the app is covered by an OAuth
-    // browser or native window animation. Painting must not gate auth forever.
+    // WebKit may stop delivering rAF while the app is covered by a browser
+    // or native window animation. Painting must not gate auth forever.
     let frame = 0;
     let paintedTimer: ReturnType<typeof setTimeout> | undefined;
     const finish = () => {
@@ -28,30 +26,27 @@ export function waitForCloudAuthCover(): Promise<void> {
   });
 }
 
-type AuthActions = Pick<UseCloudSessionResult, 'signIn' | 'signUp' | 'signInWithProvider' | 'signOut'>;
+type AuthActions = Pick<UseCloudSessionResult, 'signOut'>;
 
-export function useCloudAuthTransition({ signIn, signUp, signInWithProvider, signOut }: AuthActions) {
+/** Signs out behind the loading cover, so the workspace never unmounts in view. */
+export function useCloudAuthTransition({ signOut }: AuthActions) {
   const [activity, setActivity] = useState<CloudAuthTransition | null>(null);
-  const [socialProvider, setSocialProvider] = useState<CloudOAuthProvider | null>(null);
   const mounted = useRef(true);
   const pending = useRef<Promise<void> | null>(null);
-  const socialAbort = useRef<AbortController | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      socialAbort.current?.abort();
     };
   }, []);
-  const run = useCallback((next: CloudAuthTransition, action: () => Promise<void>, signal?: AbortSignal): Promise<void> => {
+  const leave = useCallback((): Promise<void> => {
     if (pending.current) return pending.current;
-    setActivity(next);
+    setActivity('signing-out');
     const operation = (async () => {
       try {
         await waitForCloudAuthCover();
         if (!mounted.current) return;
-        if (signal?.aborted) throw new CloudOAuthCancelledError();
-        await action();
+        await signOut();
       } finally {
         pending.current = null;
         if (mounted.current) setActivity(null);
@@ -59,35 +54,6 @@ export function useCloudAuthTransition({ signIn, signUp, signInWithProvider, sig
     })();
     pending.current = operation;
     return operation;
-  }, []);
-  const enter = useCallback<AuthActions['signIn']>(
-    (...args) => run('signing-in', () => signIn(...args)), [run, signIn],
-  );
-  const register = useCallback<AuthActions['signUp']>(
-    (...args) => run('signing-in', () => signUp(...args)), [run, signUp],
-  );
-  const social = useCallback<AuthActions['signInWithProvider']>(
-    (provider) => {
-      if (pending.current) return pending.current;
-      const controller = new AbortController();
-      socialAbort.current = controller;
-      setSocialProvider(provider);
-      return run(
-        'social-signing-in',
-        () => signInWithProvider(provider, controller.signal),
-        controller.signal,
-      ).finally(() => {
-        if (socialAbort.current === controller) socialAbort.current = null;
-        if (mounted.current) setSocialProvider(null);
-      });
-    },
-    [run, signInWithProvider],
-  );
-  const cancelSocialSignIn = useCallback(() => {
-    socialAbort.current?.abort();
-  }, []);
-  const leave = useCallback(() => run('signing-out', signOut), [run, signOut]);
-  return {
-    activity, socialProvider, signIn: enter, signUp: register, socialSignIn: social, cancelSocialSignIn, signOut: leave,
-  };
+  }, [signOut]);
+  return { activity, signOut: leave };
 }

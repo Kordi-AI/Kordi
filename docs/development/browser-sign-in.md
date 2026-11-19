@@ -463,12 +463,22 @@ creation. The code lives in `app/desktop/src/features/cloud/appSignIn/`.
   code; a refused code (expired or used) can be replaced by another. Cancel
   is disabled while a pasted code is exchanged; a sign-in that completes
   after Cancel is revoked.
-- Availability: before offering browser sign-in the app sends
-  `GET /v1/cloud/auth/app/authorize?client_id=<id>`. `invalid_redirect_uri`
-  means the server knows the client. A 404, a 405 or `invalid_client` shows
-  the in-app email form instead, so older servers keep working. Any other
+- Availability: the welcome screen sends
+  `GET /v1/cloud/auth/app/authorize?client_id=<id>` when it appears and
+  again before each Log in or Sign up. `invalid_redirect_uri` means the
+  server knows the client. A 404, a 405 or `invalid_client` means the server
+  does not offer browser sign-in for this app: the welcome screen stays and
+  shows "Sign-in is unavailable on this server." with Try again. Any other
   answer (a rate limit, a proxy or captive portal, an outage) keeps browser
-  sign-in and is not remembered, so the next launch asks again.
+  sign-in. Only `invalid_redirect_uri` is remembered for the rest of the
+  launch; after any other answer the next attempt asks again.
+- No sign-in form: the app never asks for an email or password itself.
+  Email and password, sign-up and provider sign-in happen on the browser
+  page. Log in and Sign up stay visible and enabled whatever the
+  availability check answers. A window that cannot run browser sign-in (no
+  native shell, or no API origin) shows the welcome screen with "Sign-in is
+  unavailable in this window." The web app has no sign-in screen; it sends
+  signed-out visitors to the site's `/login` page.
 - Tokens: the access token, refresh token, client ID and token endpoint are
   stored with the Cloud session in the OS keychain. The native shell
   refreshes five minutes before expiry under one process-wide lock
@@ -513,9 +523,10 @@ The iPhone app shows a welcome screen with Log in and Sign up. Both open
   checks the callback's scheme, host, path and its single `state` before the
   exchange. Because the session always receives the redirect, the iPhone app
   has no paste-code step.
-- Availability: the same probe and rules as the desktop app. The answer is
-  remembered for the rest of the launch only when it is settled
-  (`invalid_redirect_uri`, 404, 405 or `invalid_client`).
+- Availability: the same probe as the desktop app. A 404, a 405 or
+  `invalid_client` shows the in-app email form. The answer is remembered for
+  the rest of the launch only when it is settled (`invalid_redirect_uri`,
+  404, 405 or `invalid_client`).
 - Requests go through the app's Cloud transport, which connects loopback
   directly and works around a broken system proxy.
 - Tokens: the access token stays in the existing Keychain session item, and
@@ -551,8 +562,10 @@ The iPhone app shows a welcome screen with Log in and Sign up. Both open
   clearing its caches, before the new account's data loads.
 
 A server that sets `KORDI_AUTH_APP_CLIENTS` replaces the built-in list, so
-it must include `kordi-ios` (and `kordi-ios-beta` on development servers) or
-iPhone users fall back to the in-app form.
+it must include `kordi-desktop` (and `kordi-desktop-beta` on development
+servers) or the desktop app cannot sign in, and `kordi-ios` (and
+`kordi-ios-beta` on development servers) or iPhone users fall back to the
+in-app form.
 
 Follow-up: any app on the device can register a custom URL scheme. The next
 step is a claimed `https` universal-link redirect (an associated domain on

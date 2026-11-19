@@ -305,7 +305,7 @@ Do not patch around the guard. If a shared non-production environment is require
 
 ### OAuth login is unavailable
 
-Password sign-up and login work without third-party OAuth configuration. The desktop keeps the Google and GitHub entry points visible so transient capability discovery cannot downgrade a configured Kordi environment. On an intentionally password-only self-hosted server, use email and password; starting an unconfigured provider reports the server error through the normal login error surface.
+Password sign-up and login work without third-party OAuth configuration. The desktop app signs in through the sign-in pages the server serves (see [Browser sign-in for the apps](development/browser-sign-in.md)) and has no sign-in form of its own, so a local stack needs those pages: set `KORDI_DEBUG_WEB_PAGES_DIR` in `deploy/dev/.env`. When the server does not offer browser sign-in, the desktop welcome screen shows that sign-in is unavailable on this server, with Try again; capability discovery never hides or disables Log in and Sign up. On an intentionally password-only self-hosted server, use email and password on the sign-in page.
 
 Google or GitHub login requires separate developer-owned OAuth applications. Never copy the production client ID or secret. Configure these exact loopback callbacks:
 
