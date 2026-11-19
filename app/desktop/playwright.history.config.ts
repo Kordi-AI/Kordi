@@ -9,7 +9,12 @@ export default defineConfig({
   // each acknowledged by WebKit before the next. A loaded hosted runner can
   // spend more than the default 30 seconds on that work alone.
   timeout: 90_000,
-  reporter: 'line', use: { baseURL, reducedMotion: 'reduce' },
+  // A hosted runner occasionally loses the WebKit process during a wheel
+  // gesture. CI retries a failed test once; historyRetryReporter names each
+  // retried browser loss and fails the run when a retry passed after any other
+  // failure, so a retry cannot hide a scroll-stability regression.
+  retries: process.env.CI ? 1 : 0,
+  reporter: [['line'], ['./tests/visual/historyRetryReporter.ts']], use: { baseURL, reducedMotion: 'reduce' },
   projects: [
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
