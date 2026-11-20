@@ -2564,8 +2564,14 @@ actor CloudAPIClient {
         remember(conversation.withCursor(response.cursor))
     }
 
+    /// Keeps the newest snapshot of each conversation. Every membership change
+    /// bumps the conversation's version, and events can carry a snapshot
+    /// taken before a newer one this client already holds (two members
+    /// deleted at nearly the same moment): an older snapshot never brings a
+    /// member back.
     private func remember(_ conversation: CloudChatConversation) {
         activateAccount(conversation.preferences.accountId)
+        if let cached = chatConversationsById[conversation.id], cached.version > conversation.version { return }
         let conversation = conversation.keepingReadOutbox(from: chatConversationsById[conversation.id])
         let previousSessionId = chatConversationsById[conversation.id]?.legacySessionId?.nonEmpty
         if previousSessionId != conversation.legacySessionId?.nonEmpty,
@@ -2682,7 +2688,11 @@ actor CloudAPIClient {
     private func projectedEvents(from event: CloudChatEvent) throws -> [CloudSyncEvent] {
         var conversation = event.payload.conversation
             ?? event.conversationId.flatMap { chatConversationsById[$0] }
-        if let conversation { remember(conversation) }
+        if let incoming = conversation {
+            remember(incoming)
+            // Project against the newest snapshot, not an older one the event carried.
+            conversation = chatConversationsById[incoming.id] ?? incoming
+        }
         if ["message.deleted", "message.hidden"].contains(event.eventType),
            let messageId = event.entityId?.nonEmpty {
             chatMessagesById.removeValue(forKey: messageId)

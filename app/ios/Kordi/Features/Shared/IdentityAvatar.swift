@@ -13,8 +13,25 @@ struct IdentityAvatar: View {
     /// False leaves the person fallback as a plain fill, for avatars under an overlay.
     var showsInitials = true
 
+    /// The picture to load, if any. The Deleted account stand-in has none: no
+    /// remote image and no generated one.
+    var resolvedImageSource: String? { normalizedImageSource }
+
+    /// The Deleted account stand-in: one flat muted square for every deleted
+    /// account, with nothing drawn in it. A generated avatar could share its
+    /// colours with a real person's, the viewer's own included.
+    static func isDeletedAccount(name: String, seed: String?, kind: ConversationKind) -> Bool {
+        guard kind == .person else { return false }
+        if KordiDeletedAccount.isStandIn(seed) { return true }
+        // A quote of a message this iPhone has not loaded names only its sender.
+        let seed = seed?.nonEmpty
+        return (seed == nil || seed == name) && KordiDeletedAccount.isDisplayName(name)
+    }
+
+    var showsDeletedAccountPlaceholder: Bool { Self.isDeletedAccount(name: name, seed: seed, kind: kind) }
+
     private var normalizedImageSource: String? {
-        if isSystemAgent || isSystem { return nil }
+        if isSystemAgent || isSystem || showsDeletedAccountPlaceholder { return nil }
         if let source = AvatarImageLoader.normalizedSource(imageSource) { return source }
         guard kind != .group, !isKordiSupport, let seed = seed?.nonEmpty else { return nil }
         return CanonicalAvatarSystem.previewURL(
@@ -52,7 +69,10 @@ struct IdentityAvatar: View {
 
     @ViewBuilder
     private var fallback: some View {
-        if isSystem || isSystemAgent {
+        if showsDeletedAccountPlaceholder {
+            // The muted placeholder surface, with no glyph, initials or image.
+            Rectangle().fill(Color(uiColor: .secondarySystemFill))
+        } else if isSystem || isSystemAgent {
             KordiSystemAvatar()
         } else if isKordiSupport {
             KordiSupportAvatar()

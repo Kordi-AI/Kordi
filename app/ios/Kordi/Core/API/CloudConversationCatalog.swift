@@ -282,7 +282,7 @@ enum CloudConversationCatalog {
             }
             let canonical = canonicalConversationsBySessionId[groupId]
             let participants = enrichedParticipants(
-                withoutDeletedAccounts(
+                currentMembers(
                     mergedParticipants(
                         legacy: latestParticipants(in: sorted.map(\.1)),
                         canonical: canonicalParticipantsBySessionId[groupId] ?? []
@@ -963,22 +963,23 @@ enum CloudConversationCatalog {
         }
     }
 
-    /// Older envelopes cached on this iPhone still list a member whose account
-    /// was deleted. A deleted account loses its member row, while anyone who
-    /// left keeps one (docs/development/account-deletion.md), so once the
-    /// conversation's member list is known (it lists the viewer) a participant
-    /// without a row is dropped. The stand-in speaks for deleted senders but
-    /// is never a member.
-    static func withoutDeletedAccounts(
+    /// The conversation's newest member list decides who is a member. Every
+    /// message carries the participant list of its moment, so older envelopes
+    /// cached on this iPhone, or messages a deletion rewrote just before
+    /// another member's deletion, can still name someone who left or whose
+    /// account was deleted; they only fill in names and pictures. While the
+    /// list names the viewer as active, only its active members count. The
+    /// stand-in speaks for deleted senders but is never a member.
+    static func currentMembers(
         _ participants: [CloudGroupParticipant],
         conversation: CloudChatConversation?,
         viewerAccountId: String
     ) -> [CloudGroupParticipant] {
         let people = participants.filter { !KordiDeletedAccount.isStandIn($0.accountId) }
-        guard let conversation,
-              conversation.members.contains(where: { $0.accountId == viewerAccountId }) else { return people }
-        let rows = Set(conversation.members.map(\.accountId))
-        return people.filter { rows.contains($0.accountId) }
+        guard let conversation else { return people }
+        let active = Set(conversation.members.filter { $0.membershipState == "active" }.map(\.accountId))
+        guard active.contains(viewerAccountId) else { return people }
+        return people.filter { active.contains($0.accountId) }
     }
 
     private static func mergedParticipants(

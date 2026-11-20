@@ -2691,6 +2691,8 @@ struct ConversationView: View {
             }
             let senderId = message.author == .me ? model.account?.accountId
                 : snapshot.messages.first(where: { $0.id == message.id })?.senderAccountId
+            // The stand-in's member row may carry a generated picture; it is never drawn.
+            if KordiDeletedAccount.isStandIn(senderId) { return MessageAuthorIdentity.deletedAccount }
             let member = snapshot.participants?.first { $0.accountId == senderId }
             return ConversationAvatarIdentity(name: member?.displayName ?? message.authorName,
                 source: member?.avatarUrl ?? (message.author == .me ? model.account?.avatar.imageSource : nil),

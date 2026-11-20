@@ -76,6 +76,11 @@ enum MessageAuthorIdentity {
             return agent(message, participants: conversation.groupParticipants,
                          ownAccountId: account?.accountId, mentionTargets: mentionTargets)
         }
+        // Someone who left the group keeps the name their message carries; the
+        // group's own name and picture never stand in for a person.
+        if participant == nil, conversation.kind == .group {
+            return ConversationAvatarIdentity(name: message.authorName, source: nil, seed: message.authorName.nonEmpty)
+        }
         return ConversationAvatarIdentity(
             name: participant?.displayName.nonEmpty
                 ?? conversation.displayName.nonEmpty

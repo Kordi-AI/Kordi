@@ -56,6 +56,7 @@
 		12DF1537FF5C73FEE11B47E8 /* CloudMessageStateProjectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA243B6979BEEBADE478E33E /* CloudMessageStateProjectorTests.swift */; };
 		131F03926BC121406C9257D1 /* DocumentRenameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F17BBDC564A7E237E5E9672F /* DocumentRenameTests.swift */; };
 		15542F77BD47FB38853E0818 /* PhotoImageEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6A1B174CA85A5F4F5E0AC15 /* PhotoImageEditor.swift */; };
+		1554E207BC09ACFF2237CF3B /* DeletedAccountAvatarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E5342AD58355827B8A4D71D /* DeletedAccountAvatarTests.swift */; };
 		16130E0686D6373A72FC4A54 /* ProviderAuthentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD490ECA738742A1C27BD23C /* ProviderAuthentication.swift */; };
 		1615F812936995DDB070BF99 /* DigestCalendarSyncViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89DC1A9F8D59901D8FA12B91 /* DigestCalendarSyncViews.swift */; };
 		1839E6306FB9514F67853CB6 /* CommonGroundModel+GroupInvites.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D3F377735B8BEB67CF363F /* CommonGroundModel+GroupInvites.swift */; };
@@ -711,6 +712,7 @@
 		3D3832E4F40194B89E79AB6E /* ConnectorsSettingsLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorsSettingsLinkTests.swift; sourceTree = "<group>"; };
 		3D5D26C1845AB19D9120CB8D /* blob-emoji */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "blob-emoji"; path = "Kordi/Resources/blob-emoji"; sourceTree = SOURCE_ROOT; };
 		3E2DC6199D18F50DD5C5DBC4 /* MemorySettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemorySettingsModel.swift; sourceTree = "<group>"; };
+		3E5342AD58355827B8A4D71D /* DeletedAccountAvatarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletedAccountAvatarTests.swift; sourceTree = "<group>"; };
 		3EB18EB4C7CB33187DFB7840 /* CloudDirectMessageProjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDirectMessageProjector.swift; sourceTree = "<group>"; };
 		3FFB7CB588C7E30A7AA63D84 /* DocumentReaderRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReaderRequest.swift; sourceTree = "<group>"; };
 		4021DE92BF82560F7905E214 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
@@ -1714,6 +1716,7 @@
 				6F8CE113A5D004E972C7441D /* ConversationSendQueueTests.swift */,
 				7D46ABEB72814B88129564B0 /* ConversationTailScrollAnimatorTests.swift */,
 				328D64891C42264C1660455B /* ConversationTimelineVirtualizationTests.swift */,
+				3E5342AD58355827B8A4D71D /* DeletedAccountAvatarTests.swift */,
 				ACD34E630C705D38554FFEA5 /* DeletedAccountDirectChatTests.swift */,
 				7C4E5342F05346FB8F641BEA /* DeletedAccountGroupTests.swift */,
 				B61579460A0EA262925C48BE /* DigestCalendarSyncTests.swift */,
@@ -2321,6 +2324,7 @@
 				8CF43B6243E2D98104E0E4A5 /* ConversationSendQueueTests.swift in Sources */,
 				01946512753EF805FD46F6D7 /* ConversationTailScrollAnimatorTests.swift in Sources */,
 				126800B85342E36E4F5349FE /* ConversationTimelineVirtualizationTests.swift in Sources */,
+				1554E207BC09ACFF2237CF3B /* DeletedAccountAvatarTests.swift in Sources */,
 				392D897745FA122973751824 /* DeletedAccountDirectChatTests.swift in Sources */,
 				341C4AC5DADA5F1C1178D8F5 /* DeletedAccountGroupTests.swift in Sources */,
 				C3D167D9EDCF625D54E81B5D /* DigestCalendarSyncTests.swift in Sources */,
