@@ -10,6 +10,12 @@ import { loginHeading, loginSubtitle } from './cloudLoginMessages';
 // Signed-out screens for browser sign-in: the welcome screen, then a wait
 // screen while the user logs in or signs up in the system browser.
 
+/** A standing reason sign-in cannot start here, shown under Log in and Sign up. */
+export type CloudSignInNotice = {
+  message: string;
+  onRetry?: () => void;
+};
+
 // The frame fills the visible window, so no crop offset applies inside it.
 const GATE_DRAG_STYLE = {
   left: `${APP_WINDOW_RESIZE_EDGE}px`,
@@ -60,12 +66,12 @@ function GateFrame({ children }: { children: ReactNode }) {
   );
 }
 
-function WelcomeScreen({ signIn }: { signIn: BrowserSignInState }) {
+function WelcomeScreen({ signIn, notice }: { signIn: BrowserSignInState; notice: CloudSignInNotice | null }) {
   return (
     <main className="app-cloud-login-panel app-cloud-welcome" data-browser-sign-in="welcome">
       <KordiFlyingBird className="app-cloud-welcome-bird" cutout />
-      <h1 className="app-cloud-welcome-title">{loginHeading(false)}</h1>
-      <p className="app-cloud-welcome-subtitle">{loginSubtitle(false)}</p>
+      <h1 className="app-cloud-welcome-title">{loginHeading()}</h1>
+      <p className="app-cloud-welcome-subtitle">{loginSubtitle()}</p>
       <div className="app-cloud-welcome-actions">
         <button
           type="button"
@@ -82,7 +88,18 @@ function WelcomeScreen({ signIn }: { signIn: BrowserSignInState }) {
           Sign up
         </button>
       </div>
-      {signIn.error ? <ErrorLine align="center" className="mt-3">{signIn.error}</ErrorLine> : null}
+      {signIn.error ? (
+        <ErrorLine align="center" className="mt-3">{signIn.error}</ErrorLine>
+      ) : notice ? (
+        <ErrorLine
+          align="center"
+          className="mt-3"
+          role="status"
+          action={notice.onRetry ? { label: 'Try again', onClick: notice.onRetry } : null}
+        >
+          {notice.message}
+        </ErrorLine>
+      ) : null}
     </main>
   );
 }
@@ -155,10 +172,16 @@ function WaitingScreen({ signIn }: { signIn: BrowserSignInState }) {
   );
 }
 
-export function CloudBrowserSignInPage({ signIn }: { signIn: BrowserSignInState }) {
+export function CloudBrowserSignInPage({
+  signIn,
+  notice = null,
+}: {
+  signIn: BrowserSignInState;
+  notice?: CloudSignInNotice | null;
+}) {
   return (
     <GateFrame>
-      {signIn.phase === 'welcome' ? <WelcomeScreen signIn={signIn} /> : <WaitingScreen signIn={signIn} />}
+      {signIn.phase === 'welcome' ? <WelcomeScreen signIn={signIn} notice={notice} /> : <WaitingScreen signIn={signIn} />}
     </GateFrame>
   );
 }

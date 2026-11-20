@@ -196,7 +196,7 @@ The check verifies health, both providers, exact callback routing, and a one-use
 
 If the diagnostic reports a callback mismatch, correct the owning stack and provider registration before retrying. Refreshing an old callback URL cannot repair missing or already-consumed OAuth state. Do not move or copy OAuth state between databases.
 
-Kordi-controlled development and product servers must report both `google` and `github` from `/v1/cloud/auth/capabilities` before OAuth testing begins. The desktop login surface keeps both official entry points available even if capability discovery is delayed or temporarily fails; provider-start errors remain visible and actionable instead of degrading the page to password-only guidance.
+Kordi-controlled development and product servers must report both `google` and `github` from `/v1/cloud/auth/capabilities` before OAuth testing begins. The desktop app signs in through the browser sign-in page; its welcome screen never hides or disables Log in and Sign up because of capability discovery, and when sign-in cannot start it shows the error with Try again.
 
 The isolated backend also permits the native Beta handoff at `kordi-beta://oauth/callback`. That custom scheme is an app return target, not a provider callback, so it belongs in the server redirect-after allowlist and must not be entered in GitHub or Google provider consoles.
 

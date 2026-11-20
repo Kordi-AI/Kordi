@@ -121,8 +121,8 @@ pub(super) mod native {
 
     /// Gates hide the workspace pane backings, which only fit the main shell.
     /// The welcome window uses the lighter HUD material and keeps it active so
-    /// the blur stays while the browser has focus; other surfaces use the
-    /// configured sidebar material and follow the window's active state.
+    /// the blur stays while the browser has focus; the main window uses the
+    /// configured sidebar material and follows the window's active state.
     pub(in crate::auth_window) unsafe fn prepare_backdrop(
         parent: &AnyObject,
         surface: AuthWindowSurface,

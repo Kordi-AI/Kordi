@@ -1,4 +1,4 @@
-import type { CloudAuthCapabilities, CloudOAuthProvider } from './cloudAuthCapabilityTypes';
+import type { CloudAuthCapabilities } from './cloudAuthCapabilityTypes';
 export type { CloudAuthCapabilities, CloudOAuthProvider } from './cloudAuthCapabilityTypes';
 import { CloudPinClient } from './cloudPinClient';
 import { uploadCloudAvatarAsset } from './avatarAssetClient';
@@ -36,8 +36,7 @@ import type {
 import { CloudDeviceClient } from './cloudDeviceClient';
 import { CloudExpressiveMediaClient } from './cloudExpressiveMediaClient';
 import { CloudIdentityAuthClient } from './cloudIdentityAuthClient';
-import type { CloudSignupInput, CloudSignupCodeChallenge } from './signupEmailTypes';
-export type { CloudAccountEmailVerificationInput, CloudSignupInput, CloudSignupCodeChallenge } from './signupEmailTypes';
+export type { CloudAccountEmailVerificationInput, CloudSignupCodeChallenge } from './signupEmailTypes';
 import type {
   CloudAccount,
   CloudAppInvitation,
@@ -92,7 +91,6 @@ export type {
   CloudGroupInvitationClaim,CloudGroupInvitationCreateInput,CloudGroupInvitationPreview,CloudGroupInvitationSummary,
   CloudPendingGroupInvitation,CloudPendingGroupInvitationAcceptance,CloudPublicProfile
 } from './cloudIdentityTypes';
-export { parseCloudOAuthHashResult } from './cloudOAuthResult';
 export type { CloudSessionVisibility } from './cloudSessionListClient';
 export type { CloudSessionPin } from './cloudSessionPinTypes';
 export type { CloudPresenceAccount,CloudPresenceContactsResponse,CloudPresenceStatus } from './presence';
@@ -106,11 +104,6 @@ export type CloudSession = {
 export type CloudAuthResult = {
   account: CloudAccount;
   session: CloudSession;
-  avatarUploadWarning?: string;
-};
-
-export type CloudOAuthStartResponse = {
-  authUrl: string;
 };
 
 export type CloudProfileUpdateInput = import('./cloudIdentityTypes').CloudProfileFieldsInput & {
@@ -226,7 +219,6 @@ export class CloudAuthClient {
     this.identity = new CloudIdentityAuthClient(
       (path, init, fallbackMessage) => this.send(path, init, fallbackMessage),
       this.baseUrl,
-      deviceRegistration,
     );
     this.expressiveMedia = new CloudExpressiveMediaClient(
       (path, init, fallbackMessage) => this.send(path, init, fallbackMessage),
@@ -282,31 +274,14 @@ export class CloudAuthClient {
   }
 
   knownChatSessionIds(accountId: string): string[] { return this.chat.knownSessionIds(accountId); }
-  async signup(input: CloudSignupInput): Promise<CloudAuthResult> {
-    const result = await this.identity.signup(input);
-    this.activeAccountId = result.account.accountId;
-    return result;
-  }
   async capabilities(): Promise<CloudAuthCapabilities> {
     return this.identity.capabilities();
-  }
-
-  requestSignupCode(email: string): Promise<CloudSignupCodeChallenge> { return this.identity.requestSignupCode(email); }
-
-  async login(input: { email: string; password: string }): Promise<CloudAuthResult> {
-    const result = await this.identity.login(input);
-    this.activeAccountId = result.account.accountId;
-    return result;
   }
 
   async me(token: string): Promise<CloudAccount> {
     const account = await this.identity.me(token);
     this.activeAccountId = account.accountId;
     return account;
-  }
-
-  async startOAuth(provider: CloudOAuthProvider, redirectAfter: string): Promise<CloudOAuthStartResponse> {
-    return this.identity.startOAuth(provider, redirectAfter);
   }
 
   async uploadGroupAvatarAsset(token: string, dataUrl: string, accountId = this.activeAccountId): Promise<string> {

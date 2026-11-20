@@ -30,7 +30,7 @@ const APP_WINDOW_BACKGROUND: Record<ResolvedThemeMode, string> = {
 const FROSTED_GATE_WINDOW_BACKGROUND = '#00000000';
 
 // The shell's useKordiUiEffects also writes `theme-*` to <body>, but it only
-// runs after KordiAppShell mounts. Before that — on the cloud login gate and
+// runs after KordiAppShell mounts. Before that — on the sign-in gate and
 // the restoring-session splash — nothing else applies a theme class, so the
 // dark/light tokens never reach those screens. This hook syncs the body class
 // to the persisted theme preference; `auto` follows system while the
@@ -120,8 +120,8 @@ function useGateThemeClass(active: boolean, frosted = false) {
   return theme;
 }
 
-// Hosts whatever gate-time screen is showing (login form or restoring-session
-// splash) inside the same `kordi-app` root the main shell uses, so the
+// Hosts whatever gate-time screen is showing (the sign-in welcome screen or the
+// restoring-session splash) inside the same `kordi-app` root the main shell uses, so the
 // theme-tokens.css palette resolves. The wrapping hook installs the system
 // theme class on <body> until the shell takes over.
 export function CloudGateShell({

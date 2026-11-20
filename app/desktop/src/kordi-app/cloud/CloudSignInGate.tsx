@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   probeBrowserSignIn,
@@ -7,98 +7,94 @@ import {
 } from '@/features/cloud/appSignIn/appSignInClient';
 import type { CloudBrowserSignInSession } from '@/features/cloud/appSignIn/cloudBrowserSignInSession';
 import { useBrowserSignIn, type BrowserSignInState } from '@/features/cloud/appSignIn/useBrowserSignIn';
-import { applyCloudLoginWindowSize } from '@/features/cloud/loginWindow';
 
-import { CloudBrowserSignInPage } from './CloudBrowserSignInPage';
-import { CloudLoginPage, type CloudLoginPageProps } from './CloudLoginPage';
+import { CloudBrowserSignInPage, type CloudSignInNotice } from './CloudBrowserSignInPage';
 
-// Signed out: browser sign-in when the server offers it, otherwise the
-// in-app form, so older servers keep working.
+// Signed out, the app shows the welcome screen and signs in through the
+// system browser; it has no sign-in form of its own. When this window cannot
+// run browser sign-in, or the server reports it unavailable, the welcome
+// screen stays with an error line, and Log in and Sign up stay enabled so
+// the person can try again.
 
-const knownAvailability = new Map<string, Exclude<BrowserSignInAvailability, 'unknown'>>();
+const SIGN_IN_UNAVAILABLE_ON_SERVER = 'Sign-in is unavailable on this server.';
+const SIGN_IN_UNAVAILABLE_IN_WINDOW = 'Sign-in is unavailable in this window.';
+
+const knownAvailable = new Set<string>();
 
 function availabilityKey(session: CloudBrowserSignInSession): string {
   return `${session.config.baseUrl} ${session.config.clientId}`;
 }
 
+/**
+ * Whether the server offers browser sign-in for this app. Only `available`
+ * is remembered, so an unavailable or inconclusive answer is asked again on
+ * the next attempt. The answer never hides or disables Log in and Sign up.
+ */
 function useBrowserSignInAvailability(session: CloudBrowserSignInSession) {
   const key = availabilityKey(session);
   const [availability, setAvailability] = useState<BrowserSignInAvailability | 'checking'>(
-    () => knownAvailability.get(key) ?? 'checking',
+    () => (knownAvailable.has(key) ? 'available' : 'checking'),
   );
   const probeRef = useRef<Promise<BrowserSignInAvailability> | null>(null);
-  const probe = useCallback(() => {
-    const known = knownAvailability.get(key);
-    if (known) return Promise.resolve(known);
-    probeRef.current ??= probeBrowserSignIn(session.config).then((result) => {
-      probeRef.current = null;
-      if (result !== 'unknown') knownAvailability.set(key, result);
-      setAvailability(result);
-      return result;
-    });
+  const probe = useCallback((): Promise<BrowserSignInAvailability> => {
+    if (knownAvailable.has(key)) return Promise.resolve('available');
+    if (!probeRef.current) {
+      // Asking again clears a standing error until the answer arrives.
+      setAvailability((current) => (current === 'unavailable' ? 'checking' : current));
+      probeRef.current = probeBrowserSignIn(session.config).then((result) => {
+        probeRef.current = null;
+        if (result === 'available') knownAvailable.add(key);
+        setAvailability(result);
+        return result;
+      });
+    }
     return probeRef.current;
   }, [key, session.config]);
   useEffect(() => { void probe(); }, [probe]);
   return { availability, probe };
 }
 
-type BrowserSignInChange = (active: boolean) => void;
-
-function BrowserSignIn({
-  session,
-  probe,
-  onBrowserSignInChange,
-}: {
-  session: CloudBrowserSignInSession;
-  probe: () => Promise<BrowserSignInAvailability>;
-  onBrowserSignInChange?: BrowserSignInChange;
-}) {
+function BrowserSignIn({ session }: { session: CloudBrowserSignInSession }) {
   const signIn = useBrowserSignIn({ config: session.config, onSignedIn: session.complete });
-  // A host that sizes the window learns which surface is showing; standalone
-  // renders size the window themselves.
-  useEffect(() => {
-    if (onBrowserSignInChange) onBrowserSignInChange(true);
-    else void applyCloudLoginWindowSize('welcome').catch(() => undefined);
-  }, [onBrowserSignInChange]);
+  const { availability, probe } = useBrowserSignInAvailability(session);
   const { start } = signIn;
-  // Settle availability first so an older server falls back to the form.
+  // Each attempt settles availability first, so a server that starts
+  // offering browser sign-in is picked up without a relaunch.
   const startWhenAvailable = useCallback<BrowserSignInState['start']>(async (intent: BrowserSignInIntent) => {
     if ((await probe()) !== 'unavailable') await start(intent);
   }, [probe, start]);
-  return (
-    <CloudBrowserSignInPage
-      signIn={{ ...signIn, start: startWhenAvailable }}
-    />
-  );
+  const notice = useMemo<CloudSignInNotice | null>(() => (
+    availability === 'unavailable'
+      ? { message: SIGN_IN_UNAVAILABLE_ON_SERVER, onRetry: () => { void probe(); } }
+      : null
+  ), [availability, probe]);
+  return <CloudBrowserSignInPage signIn={{ ...signIn, start: startWhenAvailable }} notice={notice} />;
 }
 
-export function CloudSignInGate({
-  browserSignIn,
-  onBrowserSignInChange,
-  ...loginProps
-}: CloudLoginPageProps & {
-  browserSignIn?: CloudBrowserSignInSession;
-  /** Reports whether the browser sign-in screens (true) or the in-app form (false) show. */
-  onBrowserSignInChange?: BrowserSignInChange;
-}) {
-  if (!browserSignIn) return <CloudLoginPage {...loginProps} />;
-  return <BrowserSignInOrForm session={browserSignIn} loginProps={loginProps} onBrowserSignInChange={onBrowserSignInChange} />;
+const noop = () => {};
+const resolved = () => Promise.resolve();
+const WINDOW_NOTICE: CloudSignInNotice = { message: SIGN_IN_UNAVAILABLE_IN_WINDOW };
+
+/** A window that cannot run browser sign-in: a browser preview, or a build without an API origin. */
+function BrowserSignInUnavailable() {
+  const [error, setError] = useState<string | null>(null);
+  const signIn: BrowserSignInState = {
+    phase: 'welcome',
+    error,
+    codeError: null,
+    submittingCode: false,
+    // Log in and Sign up repeat the line as an alert.
+    start: () => {
+      setError(SIGN_IN_UNAVAILABLE_IN_WINDOW);
+      return Promise.resolve();
+    },
+    reopenBrowser: noop,
+    cancel: noop,
+    submitCode: resolved,
+  };
+  return <CloudBrowserSignInPage signIn={signIn} notice={WINDOW_NOTICE} />;
 }
 
-function BrowserSignInOrForm({
-  session,
-  loginProps,
-  onBrowserSignInChange,
-}: {
-  session: CloudBrowserSignInSession;
-  loginProps: CloudLoginPageProps;
-  onBrowserSignInChange?: BrowserSignInChange;
-}) {
-  const { availability, probe } = useBrowserSignInAvailability(session);
-  const unavailable = availability === 'unavailable';
-  useEffect(() => {
-    if (unavailable) onBrowserSignInChange?.(false);
-  }, [unavailable, onBrowserSignInChange]);
-  if (unavailable) return <CloudLoginPage {...loginProps} />;
-  return <BrowserSignIn session={session} probe={probe} onBrowserSignInChange={onBrowserSignInChange} />;
+export function CloudSignInGate({ browserSignIn }: { browserSignIn?: CloudBrowserSignInSession }) {
+  return browserSignIn ? <BrowserSignIn session={browserSignIn} /> : <BrowserSignInUnavailable />;
 }

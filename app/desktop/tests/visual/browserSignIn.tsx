@@ -8,7 +8,6 @@ import '../../src/index.css';
 // and pasted codes are refused, so every screen stays inspectable.
 const params = new URLSearchParams(location.search);
 localStorage.setItem('kordi.themeMode.v1', params.get('theme') === 'dark' ? 'dark' : 'light');
-localStorage.removeItem('kordi.cloud.loginMode');
 
 const driver: BrowserSignInDriver = {
   prepare: async () => ({ requestId: 'visual', redirectUrl: 'http://127.0.0.1:4321/auth/callback' }),
@@ -25,9 +24,6 @@ const fetchImpl = (async (input: RequestInfo | URL) => {
 createRoot(document.getElementById('root')!).render(
   <KordiAppRoot cloudSession={{
     status: 'signed-out', account: null,
-    signIn: () => Promise.reject(new Error('Test sign-in failed.')),
-    signUp: () => Promise.reject(new Error('Test signup failed.')),
-    signInWithProvider: () => Promise.reject(new Error('Test provider failed.')),
     browserSignIn: {
       config: {
         baseUrl: 'https://app.example.test', clientId: 'kordi-desktop', fetchImpl, driver,

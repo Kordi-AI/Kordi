@@ -1,6 +1,5 @@
-/* Browser sign-in wait screen (CloudStartingScreen while OAuth is pending,
-   and CloudBrowserSignInPage while the account sign-in page is open). */
-.app-cloud-starting-screen,
+/* Browser sign-in screens (CloudBrowserSignInPage): the welcome screen, and
+   the wait screen while the account sign-in page is open. */
 .app-cloud-browser-signin {
   --app-cloud-signin-ring-track: oklch(1 0 0 / 0.08);
   --app-cloud-signin-ring-arc: oklch(0.78 0.10 212);
@@ -13,7 +12,6 @@
   --app-cloud-signin-focus: var(--app-focus-border);
 }
 
-.kordi-app.theme-light .app-cloud-starting-screen,
 .kordi-app.theme-light .app-cloud-browser-signin {
   --app-cloud-signin-ring-track: rgba(100, 116, 139, 0.16);
   --app-cloud-signin-ring-arc: oklch(0.56 0.13 232);
@@ -23,24 +21,6 @@
   --app-cloud-signin-muted: rgb(100 116 139);
   --app-cloud-signin-action-text: rgb(51 65 85);
   --app-cloud-signin-focus: var(--app-focus-border);
-}
-
-.app-cloud-starting-titlebar {
-  position: absolute;
-  top: calc(var(--app-gate-crop-y, 0px) + 12px);
-  left: 0;
-  right: 0;
-  color: var(--app-cloud-signin-muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-align: center;
-  pointer-events: none;
-}
-
-.app-cloud-starting-screen-oauth .app-cloud-starting-content {
-  gap: 0;
-  animation: app-cloud-signin-enter 320ms var(--app-motion-ease) both;
 }
 
 .app-cloud-signin-badge {
@@ -79,28 +59,6 @@
   background: var(--app-cloud-signin-mark-bg);
   box-shadow: var(--app-cloud-signin-mark-shadow);
   color: var(--utility-foreground);
-}
-
-.app-cloud-signin-mark svg {
-  width: 22px;
-  height: 22px;
-}
-
-.app-cloud-signin-copy {
-  margin-top: 22px;
-}
-
-.app-cloud-starting-screen-oauth .app-cloud-starting-message {
-  font-size: 17px;
-  letter-spacing: -0.012em;
-  line-height: 1.35;
-}
-
-.app-cloud-signin-provider {
-  margin: 6px 0 0;
-  color: var(--app-cloud-signin-muted);
-  font-size: 13px;
-  line-height: 1.45;
 }
 
 .app-cloud-signin-actions {
@@ -153,10 +111,6 @@
   .app-cloud-signin-ring {
     animation-duration: 3s;
   }
-
-  .app-cloud-starting-screen-oauth .app-cloud-starting-content {
-    animation: none;
-  }
 }
 
 /* Browser sign-in welcome screen (CloudBrowserSignInPage). */
@@ -167,8 +121,7 @@
 /* The frame covers exactly the visible window: while the gate is up the web
  * view extends past every window edge. The top inset clears the title bar;
  * the larger bottom inset lifts the group just above center. */
-.app-cloud-browser-signin,
-.app-cloud-login-surface > .app-cloud-login-page.app-cloud-browser-signin {
+.app-cloud-browser-signin {
   position: fixed;
   top: var(--app-gate-crop-y, 0px);
   left: var(--app-gate-crop-x, 0px);
@@ -181,12 +134,6 @@
   padding: 52px 24px 76px;
   /* The window has a fixed size and the content fits, so it never scrolls. */
   overflow: hidden;
-}
-
-/* The old in-app form gives every panel a tall minimum height; the welcome
- * group is only as tall as its content so the frame can center it. */
-.app-cloud-login-panel.app-cloud-welcome {
-  min-height: 0;
 }
 
 .app-cloud-welcome {

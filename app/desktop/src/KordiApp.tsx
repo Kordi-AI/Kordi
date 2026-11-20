@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CloudStartingScreen } from '@/features/cloud/CloudStartingScreen';
-import { reopenCloudOAuthBrowser } from '@/features/cloud/cloudOAuthSignIn';
 
 import { AppShellFrame } from '@/app/AppShellFrame';
 import { useNativeViewport } from '@/app/useNativeViewport';
@@ -30,12 +29,10 @@ import {
   isEditableSelectionTarget,
   isSelectAllShortcut,
 } from '@/features/contentSelection';
-import { cloudAuthCapabilityDiscoveryEnabled } from '@/features/cloud/cloudAuthReleasePolicy';
 import { usePendingGroupInvitation } from '@/features/cloud/groupInvitationDeepLink';
 import { shouldShowCloudLoginGate, type CloudSessionStatus } from '@/features/cloud/sessionGate';
-import { isTauriRuntime, supportsFrostedGate, type CloudLoginMode } from '@/features/cloud/loginWindow';
+import { isTauriRuntime, supportsFrostedGate } from '@/features/cloud/loginWindow';
 import { CloudGateShell } from '@/features/cloud/CloudGateShell';
-import { readLoginModePreference } from '@/features/cloud/loginModePreference';
 import { useCloudWindowSurface } from '@/features/cloud/useCloudWindowSurface';
 import { useCloudSyncPresentation } from '@/features/cloud/useCloudSyncPresentation';
 import { useCloudAuthTransition } from '@/features/cloud/useCloudAuthTransition';
@@ -50,14 +47,10 @@ import { DocumentShareLinkHost } from '@/features/documents/DocumentShareLinkDia
 
 export { CloudStartingScreen } from '@/features/cloud/CloudStartingScreen';
 
-const SHOW_DEBUG_AUTH_DIAGNOSTICS = cloudAuthCapabilityDiscoveryEnabled();
-// A build-time constant, so the web build leaves out the in-app sign-in screens.
+// A build-time constant, so the web build leaves out the sign-in screens.
 const WEB_APP_BUILD = import.meta.env?.VITE_KORDI_WEB_APP === '1';
 
-type CloudSessionGateResult = Pick<
-  UseCloudSessionResult,
-  'status' | 'account' | 'signIn' | 'signUp' | 'signInWithProvider' | 'browserSignIn'
->;
+type CloudSessionGateResult = Pick<UseCloudSessionResult, 'status' | 'account' | 'browserSignIn'>;
 
 export type KordiAppRootProps = {
   /**
@@ -123,12 +116,9 @@ function CloudEditionRoot({
   const [siteSignIn] = useState(() => WEB_APP_BUILD && isBrowserAppRuntime());
   const liveSignOut = liveSession.signOut;
   const sessionSignOut = useMemo(() => (siteSignIn ? signOutToSite(liveSignOut) : liveSignOut), [liveSignOut, siteSignIn]);
-  const { activity, socialProvider, signIn, signUp, socialSignIn, cancelSocialSignIn, signOut } = useCloudAuthTransition({
-    ...session, signOut: sessionSignOut,
-  });
+  const { activity, signOut } = useCloudAuthTransition({ signOut: sessionSignOut });
   const presentedSession = useMemo(() => ({ ...liveSession, signOut }), [liveSession, signOut]);
   const status: CloudSessionStatus = cloudSessionStatusOverride ?? session.status;
-  const [loginMode, setLoginMode] = useState<CloudLoginMode>(() => readLoginModePreference() ?? 'login');
   const [sync, setSync] = useState<{ status: 'syncing' | 'error' | 'ready'; onRetry?: () => void }>({ status: 'syncing' });
   const [previousStatus, setPreviousStatus] = useState(status);
   const [loginPresented, setLoginPresented] = useState(false);
@@ -141,14 +131,10 @@ function CloudEditionRoot({
   // A session the browser could not reach stays here with Retry; the site
   // page could not load either.
   const siteRestoreFailed = siteSignIn && signedOut && liveSession.error?.code === 'network_error';
-  useBrowserSiteSignInRedirect(siteSignIn && signedOut && !siteRestoreFailed, loginMode === 'signup' ? 'register' : 'login');
-  // Browser sign-in uses the compact welcome window until the server turns
-  // out not to offer it; then the in-app form takes its own window size.
-  const [inAppForm, setInAppForm] = useState(false);
-  const handleBrowserSignInChange = useCallback((active: boolean) => setInAppForm(!active), []);
-  const welcome = signedOut && Boolean(session.browserSignIn) && !inAppForm;
-  const frosted = welcome && supportsFrostedGate();
-  const windowReady = useCloudWindowSurface(signedOut ? (welcome ? 'welcome' : loginMode) : status === 'authenticated' ? 'main' : null);
+  useBrowserSiteSignInRedirect(siteSignIn && signedOut && !siteRestoreFailed);
+  // Signed out, the window is always the compact welcome window.
+  const frosted = signedOut && supportsFrostedGate();
+  const windowReady = useCloudWindowSurface(signedOut ? 'welcome' : status === 'authenticated' ? 'main' : null);
   if (signedOut && windowReady && !loginPresented) setLoginPresented(true);
   const loginReady = (windowReady || loginPresented) && !activity;
   const gateActive = Boolean(activity) || status !== 'authenticated' || sync.status !== 'ready' || !windowReady;
@@ -168,21 +154,10 @@ function CloudEditionRoot({
           visible={siteSignIn || !(signedOut && loginReady)}
           status={siteRestoreFailed || (status === 'authenticated' && sync.status === 'error') ? 'error' : 'syncing'}
           onRetry={siteRestoreFailed ? reloadPage : sync.onRetry}
-          onCancelSignIn={signedOut && activity === 'social-signing-in' ? cancelSocialSignIn : undefined}
-          onReopenSignIn={reopenCloudOAuthBrowser} signInProvider={socialProvider ?? undefined}
         />
         {signedOut && !WEB_APP_BUILD && !siteSignIn ? (
           <div className="app-cloud-login-surface" data-ready={loginReady} inert={!loginReady}>
-            <CloudSignInGate browserSignIn={session.browserSignIn}
-              onBrowserSignInChange={handleBrowserSignInChange}
-              initialMode={loginMode}
-              onModeChange={setLoginMode}
-              onSignIn={signIn}
-              onSignUp={signUp}
-              onRequestSignupCode={liveSession.requestSignupCode}
-              onSocialSignIn={socialSignIn}
-              showDebugAuthDiagnostics={SHOW_DEBUG_AUTH_DIAGNOSTICS}
-            />
+            <CloudSignInGate browserSignIn={session.browserSignIn} />
           </div>
         ) : null}
       </CloudGateShell>

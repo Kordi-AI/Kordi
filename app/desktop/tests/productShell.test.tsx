@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { CloudStartingScreen, KordiAppRoot } from '../src/KordiApp';
 import { KORDI_THEME_MODE_STORAGE_KEY } from '../src/app/themePreference';
-import { CloudLoginPage } from '../src/kordi-app/cloud/CloudLoginPage';
+import { CloudSignInGate } from '../src/kordi-app/cloud/CloudSignInGate';
 import { KordiFlyingBird } from '../src/features/cloud/KordiFlyingBird';
 import { shouldShowCloudLoginGate } from '../src/features/cloud/sessionGate';
 import { readDesktopShellCss } from './helpers/readDesktopStyles';
@@ -69,7 +69,6 @@ import {
   applyCloudLoginWindowSize,
   applyKordiMainWindowSize,
   CLOUD_WELCOME_WINDOW_SIZE,
-  cloudLoginWindowSizeForMode,
   isTauriRuntime,
   supportsFrostedGate,
 } from '../src/features/cloud/loginWindow';
@@ -95,186 +94,16 @@ test('cloud login gate always uses Cloud product semantics', () => {
   assert.equal(shouldShowCloudLoginGate({ cloudSessionStatus: 'signed-out' }), true);
 });
 
-test('cloud login CSS hides the oversized native WebKit caps-lock indicator', () => {
-  const css = readDesktopShellCss();
-
-  assert.match(css, /\.app-cloud-login-input::-webkit-caps-lock-indicator/);
-  assert.match(css, /display:\s*none/);
-  assert.match(css, /width:\s*0/);
-});
-
-test('cloud login mode switch keeps the top edge stable and smooths signup sections', () => {
-  const css = readDesktopShellCss();
-  const source = readSource('src/kordi-app/cloud/CloudLoginPage.tsx');
-
-  assert.match(css, /\.app-cloud-login-panel \{\n  min-height: 548px;/);
-  assert.match(css, /\.app-cloud-login-signup-section \{[\s\S]*?grid-template-rows: 0fr/);
-  assert.match(css, /data-cloud-login-signup-section="open"\][\s\S]*?grid-template-rows: 1fr/);
-  assert.match(css, /transform: translate3d\(0, -4px, 0\)/);
-  assert.match(css, /prefers-reduced-motion: reduce/);
-  assert.doesNotMatch(css, /@keyframes app-cloud-login-signup-field-enter/);
-  assert.doesNotMatch(source, /key=\{`form-/);
-  assert.doesNotMatch(source, /key=\{`copy-/);
-});
-
-test('cloud login page centers a minimal Codex-style Kordi account view before model provider auth', () => {
-  const markup = renderToStaticMarkup(createElement(CloudLoginPage, {
-    onSocialSignIn: async () => {},
-  }));
-
-  // The painted brand mark no longer renders on the login surface.
-  assert.doesNotMatch(markup, /kordi-paint-mark/);
-  // Page surface is driven by theme tokens (light/dark follow the active
-  // `.kordi-app.theme-*` class) instead of a hard-coded paper colour.
-  assert.match(markup, /app-cloud-login-page/);
-  assert.doesNotMatch(markup, /bg-\[oklch\(0\.955_0\.026_82\)\]/);
-  assert.doesNotMatch(markup, /app-overlay/);
-  assert.match(markup, /place-items-center/);
-  assert.match(markup, /Welcome to Kordi/);
-  assert.match(markup, /data-cloud-login-mode-copy="login"/);
-  assert.match(markup, /data-cloud-login-mode-form="login"/);
-  assert.match(markup, /Sign up/);
-  assert.match(markup, /Email/);
-  assert.match(markup, /Password/);
-  assert.match(markup, /Continue/);
-  assert.match(markup, /Google/);
-  assert.match(markup, /GitHub/);
-  assert.doesNotMatch(markup, /data-provider="x"/);
-  assert.doesNotMatch(markup, /Kordi Cloud/);
-  assert.doesNotMatch(markup, /Log in to Kordi Cloud/);
-  assert.match(markup, /Continue with GitHub/);
-  assert.doesNotMatch(markup, /Your Kordi account comes first/);
-  assert.doesNotMatch(markup, /After account login/);
-  assert.doesNotMatch(markup, /Model provider credentials stay local by default/);
-  assert.doesNotMatch(markup, /bg-\[oklch\(0\.145_0\.01_250\)\]/);
-  assert.doesNotMatch(markup, /Connect one provider before your first chat/);
-});
-
-test('signup mode previews only the canonical Lorelei avatar', () => {
-  const markup = renderToStaticMarkup(createElement(CloudLoginPage, { initialMode: 'signup' }));
-
-  assert.match(markup, /Create account/);
-  assert.match(markup, /data-cloud-login-mode-copy="signup"/);
-  assert.match(markup, /data-cloud-login-mode-form="signup"/);
-  assert.match(markup, /Upload avatar/);
-  assert.match(markup, /\/v1\/avatars\/preview\/boring-marble-v1\/[a-z0-9]+\.png/);
-  assert.doesNotMatch(markup, /data-cloud-signup-avatar-placeholder/);
-  assert.doesNotMatch(markup, />KO<\/span>/);
-  assert.match(markup, /data-cloud-signup-avatar-upload="true"/);
-  assert.match(markup, /flex h-12 w-7 shrink-0 flex-col overflow-hidden rounded-full/);
-  assert.match(markup, /overflow-hidden rounded-full/);
-  assert.doesNotMatch(markup, /top-\[46px\]/);
-  assert.doesNotMatch(markup, /bottom-\[3px\] right-\[3px\]/);
-  assert.doesNotMatch(markup, />Upload<\/span>/);
-  assert.doesNotMatch(markup, />\+<\/span>/);
-  assert.doesNotMatch(markup, />Change<\/span>/);
-  assert.match(markup, /Random avatar/);
-  assert.match(markup, /data-cloud-signup-avatar-reroll="true"/);
-  assert.doesNotMatch(markup, /Change avatar style/);
-  assert.match(markup, /Display name/);
-  assert.match(markup, /Confirm Password/);
-  assert.doesNotMatch(markup, />Name</);
-  assert.match(markup, /Create account/);
-  assert.doesNotMatch(markup, /Kordi Cloud/);
-});
-
-test('signup mode renders the canonical DiceBear avatar', () => {
-  const markup = renderToStaticMarkup(createElement(CloudLoginPage, { initialMode: 'signup' }));
-
-  assert.doesNotMatch(markup, /shape-rendering="crispEdges"/);
-  assert.doesNotMatch(markup, /viewBox="0 0 64 64"/);
-  assert.doesNotMatch(markup, /linear-gradient\(135deg, oklch\(0\.72 0\.16 211\)/);
-  assert.doesNotMatch(markup, /linear-gradient\(135deg, oklch\(0\.66 0\.26 355\)/);
-  assert.match(markup, /\/v1\/avatars\/preview\/boring-marble-v1\//);
-});
-
-test('social buttons surface provider sign-in affordances', () => {
-  const markup = renderToStaticMarkup(createElement(CloudLoginPage, { onSocialSignIn: async () => {} }));
-  assert.match(markup, /title="Continue with Google"/);
-  assert.match(markup, /title="Continue with GitHub"/);
-  assert.doesNotMatch(markup, /title="Continue with X"/);
-  assert.match(markup, /aria-label="Continue with Google"/);
-  assert.match(markup, /aria-label="Continue with GitHub"/);
-  assert.doesNotMatch(markup, /aria-label="Continue with X"/);
-  assert.doesNotMatch(markup, /coming soon/i);
-  assert.match(markup, /aria-label="Sign in"/);
-});
-
-test('debug capability state cannot hide official social sign-in providers', () => {
-  const markup = renderToStaticMarkup(createElement(CloudLoginPage, {
-    onSocialSignIn: async () => {},
-    showDebugAuthDiagnostics: true,
-  }));
-  const googleButton = markup.match(/<button[^>]*data-provider="google"[^>]*>/)?.[0] ?? '';
-  const githubButton = markup.match(/<button[^>]*data-provider="github"[^>]*>/)?.[0] ?? '';
-
-  for (const button of [googleButton, githubButton]) {
-    assert.doesNotMatch(button, /disabled=""/);
-    assert.match(button, /data-provider-available="true"/);
-    assert.doesNotMatch(button, /cursor-not-allowed/);
-    assert.doesNotMatch(button, /grayscale/);
-  }
-  assert.doesNotMatch(markup, /Google and GitHub sign-in aren’t available on this server/);
-  assert.doesNotMatch(markup, /data-cloud-social-sign-in-unavailable/);
-  assert.match(markup, />or</);
-  assert.doesNotMatch(markup, /KORDI_OAUTH_GOOGLE_CLIENT_ID/);
-});
-
-test('packaged login does not expose server capability guidance', () => {
-  const markup = renderToStaticMarkup(createElement(CloudLoginPage, {
-    onSocialSignIn: async () => {},
-  }));
-
-  assert.doesNotMatch(markup, /Google and GitHub sign-in aren’t available on this server/);
-  assert.doesNotMatch(markup, /data-cloud-social-sign-in-unavailable/);
-});
-
-test('social buttons render icon marks and no provider text label', () => {
-  const markup = renderToStaticMarkup(createElement(CloudLoginPage));
-  // Buttons exist for each provider with their data attribute.
-  assert.match(markup, /data-provider="google"[\s\S]*?<svg/);
-  assert.match(markup, /data-provider="github"[\s\S]*?<svg/);
-  assert.doesNotMatch(markup, /data-provider="x"/);
-  // The Google brand fingerprint (a known fill colour from the canonical 4-color G).
-  assert.match(markup, /fill="#FBBC05"/);
-  // The visible provider names should NOT appear inside the social buttons themselves.
-  assert.doesNotMatch(markup, /<button[^>]*data-provider="google"[^>]*>[^<]*Google/);
-  assert.doesNotMatch(markup, /<button[^>]*data-provider="github"[^>]*>[^<]*GitHub/);
-});
-
-test('signup-mode submit button is the create-account variant', () => {
-  const markup = renderToStaticMarkup(createElement(CloudLoginPage, { initialMode: 'signup' }));
-  assert.match(markup, /aria-label="Create account"/);
-  assert.match(markup, />Create account<\/button>/);
-});
-
-test('signup submits the required preview seed without an upload path', () => {
-  const source = readSource('src/kordi-app/cloud/CloudLoginPage.tsx');
-
-  assert.match(source, /password\.length === 0 \|\| \(isSignup && !passwordMeetsSignupRule\(password\)\)/);
-  assert.doesNotMatch(source, /if \(!passwordMeetsSignupRule\(password\)\) return false/);
-  assert.doesNotMatch(source, /avatarPref|avatarUrl|Upload avatar/);
-  assert.match(source, /avatarSeed,/);
-  assert.doesNotMatch(source, /avatarStyle/);
-  assert.match(source, /function regenerateAvatar\(\)[\s\S]*setAvatarSeed\(newCanonicalAvatarSeed\(\)\)/);
-});
-
-test('login-mode tab pill announces aria-pressed for accessibility', () => {
-  const markup = renderToStaticMarkup(createElement(CloudLoginPage, { initialMode: 'login' }));
-  // Log in tab is pressed, Sign up is not.
-  assert.match(markup, /aria-pressed="true"[^>]*>Log in/);
-  assert.match(markup, /aria-pressed="false"[^>]*>Sign up/);
-});
-
-test('cloud window surfaces keep their compact and workspace dimensions', async () => {
-  assert.deepEqual(cloudLoginWindowSizeForMode('login'), { width: 760, height: 760, minWidth: 620, minHeight: 640 });
-  assert.deepEqual(cloudLoginWindowSizeForMode('signup'), { width: 760, height: 860, minWidth: 620, minHeight: 640 });
+test('cloud window surfaces are the compact welcome window and the workspace', async () => {
   assert.equal(isTauriRuntime({ __TAURI_INTERNALS__: {} } as typeof globalThis), true);
   assert.equal(isTauriRuntime({} as typeof globalThis), false);
   // Browser renders have no native IPC dependency.
-  await applyCloudLoginWindowSize('signup');
   await applyCloudLoginWindowSize('welcome');
   await applyKordiMainWindowSize();
+  // The native shell has no other signed-out window size.
+  const nativeWindow = readSource('src-tauri/src/auth_window.rs');
+  const surfaces = nativeWindow.match(/pub\(crate\) enum AuthWindowSurface \{([^}]*)\}/)?.[1] ?? '';
+  assert.deepEqual(surfaces.match(/^\s*[A-Z]\w*,/gm)?.map((line) => line.trim()), ['Welcome,', 'Main,']);
 });
 
 test('browser sign-in uses a compact frosted window on macOS only', () => {
@@ -300,7 +129,7 @@ test('browser sign-in uses a compact frosted window on macOS only', () => {
   const windowLayout = readSource('src-tauri/src/auth_window/layout.rs');
   assert.match(windowLayout, /let material: isize = if welcome \{ 13 \} else \{ 7 \};/, 'the welcome window uses the HUD material');
   // The frame is the visible window, clear of the title bar, with the group just above center.
-  assert.match(css, /\.app-cloud-login-surface > \.app-cloud-login-page\.app-cloud-browser-signin \{[^}]*position: fixed;[^}]*width: var\(--app-gate-window-width,[^}]*padding: 52px 24px 76px;/);
+  assert.match(css, /\.app-cloud-browser-signin \{[^}]*position: fixed;[^}]*width: var\(--app-gate-window-width,[^}]*padding: 52px 24px 76px;/);
   assert.match(css, /\.app-cloud-welcome-actions \{[^}]*max-width: 304px;/);
 });
 
@@ -336,21 +165,6 @@ test('cloud starting timeout provides an explicit retry action', () => {
   assert.match(markup, /button/);
 });
 
-test('pending social sign-in shows the provider with reopen and cancel actions', () => {
-  const markup = renderToStaticMarkup(createElement(CloudStartingScreen, {
-    onCancelSignIn: () => {},
-    onReopenSignIn: () => {},
-    signInProvider: 'github',
-  }));
-
-  assert.match(markup, /Continue in your browser/);
-  assert.match(markup, /Signing in with GitHub/);
-  assert.match(markup, />Reopen browser</);
-  assert.match(markup, />Cancel</);
-  assert.match(markup, /app-cloud-signin-ring/);
-  assert.doesNotMatch(markup, /app-cloud-starting-bird/);
-});
-
 test('cloud starting bird flaps flat, without glow, and stops for reduced motion', () => {
   const css = readDesktopShellCss();
   const wingBlock = cssBlock(css, '.app-kordi-flying-bird-wing');
@@ -367,9 +181,6 @@ test('session restore uses the same bird loading screen', () => {
     cloudSession: {
       status: 'loading',
       account: null,
-      signIn: async () => {},
-      signUp: async () => {},
-      signInWithProvider: async () => {},
     },
   }));
 
@@ -378,12 +189,15 @@ test('session restore uses the same bird loading screen', () => {
   assert.doesNotMatch(markup, /Restoring session/);
 });
 
-test('app root renders account login before the chat shell', () => {
+test('app root renders the sign-in welcome screen before the chat shell, never a credential form', () => {
   const markup = renderToStaticMarkup(createElement(KordiAppRoot, {
     cloudSessionStatus: 'signed-out',
   }));
 
   assert.match(markup, /Welcome to Kordi/);
+  assert.match(markup, />Log in</);
+  assert.match(markup, />Sign up</);
+  assert.doesNotMatch(markup, /<input|<form|type="password"|type="email"|Password|Continue with/);
   assert.doesNotMatch(markup, /Connect a model to start/);
   assert.doesNotMatch(markup, /Ask your agent/);
 });
@@ -403,9 +217,6 @@ test('cloud session restore gate applies stored dark theme on the kordi-app root
     cloudSession: {
       status: 'loading',
       account: null,
-      signIn: async () => {},
-      signUp: async () => {},
-      signInWithProvider: async () => {},
     },
   })));
 
@@ -441,7 +252,7 @@ test('cloud login gate reads persisted theme preference and native system theme 
 
 test('cloud login gate has a native drag fallback before the app shell mounts', () => {
   const shellSource = readSource('src/features/cloud/CloudGateShell.tsx');
-  const loginMarkup = renderToStaticMarkup(createElement(CloudLoginPage));
+  const loginMarkup = renderToStaticMarkup(createElement(CloudSignInGate));
 
   assert.match(shellSource, /shouldStartNativeWindowDrag/);
   assert.match(shellSource, /isTauriRuntime\(\)/);

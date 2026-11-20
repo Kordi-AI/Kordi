@@ -4,20 +4,9 @@ import { test } from 'node:test';
 import {
   CloudAuthClient,
   CloudAuthError,
-  parseCloudOAuthHashResult,
 } from '../src/features/cloud/authClient';
 
 type FetchCall = { url: string; init: RequestInit | undefined };
-
-const testDevice = {
-  displayName: 'Ada’s Mac',
-  platform: 'macos',
-  osVersion: '15.6',
-  appVersion: '0.0.1-beta.12',
-  approximateLocation: 'Riyadh, Saudi Arabia',
-  publicKey: 'test-public-key',
-  keyAlgorithm: 'p256' as const,
-};
 
 function recordingFetch(handler: (call: FetchCall) => Response | Promise<Response>) {
   const calls: FetchCall[] = [];
@@ -37,60 +26,18 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-
-test('signup surfaces an invalid canonical avatar seed', async () => {
+test('account requests surface the server error code on 401', async () => {
   const { fetchImpl } = recordingFetch(() =>
-    jsonResponse(400, { errorCode: 'invalid_avatar_seed', message: 'Generated avatar seed is invalid.' }),
-  );
-  const client = new CloudAuthClient({
-    baseUrl: 'http://srv',
-    fetchImpl,
-    deviceRegistration: async () => testDevice,
-  });
-
-  await assert.rejects(
-    () => client.signup({ verificationId: 'test_challenge', verificationCode: '123456', email: 'a@b.com', password: 'Correct-horse-7', avatarSeed: ':' }),
-    (caught: unknown) => {
-      assert.ok(caught instanceof CloudAuthError);
-      assert.equal((caught as CloudAuthError).code, 'invalid_avatar_seed');
-      assert.equal((caught as CloudAuthError).status, 400);
-      return true;
-    },
-  );
-});
-
-test('signup throws CloudAuthError with the server-supplied error code on 409', async () => {
-  const { fetchImpl } = recordingFetch(() =>
-    jsonResponse(409, { errorCode: 'email_in_use', message: 'Already in use.' }),
-  );
-  const client = new CloudAuthClient({
-    baseUrl: 'http://srv',
-    fetchImpl,
-    deviceRegistration: async () => testDevice,
-  });
-
-  await assert.rejects(
-    () => client.signup({ verificationId: 'test_challenge', verificationCode: '123456', email: 'a@b.com', password: 'Correct-horse-7', avatarSeed: 'signup_seed' }),
-    (caught: unknown) => {
-      assert.ok(caught instanceof CloudAuthError);
-      assert.equal((caught as CloudAuthError).code, 'email_in_use');
-      assert.equal((caught as CloudAuthError).status, 409);
-      return true;
-    },
-  );
-});
-
-test('login surfaces invalid_credentials on 401', async () => {
-  const { fetchImpl } = recordingFetch(() =>
-    jsonResponse(401, { errorCode: 'invalid_credentials', message: 'nope' }),
+    jsonResponse(401, { errorCode: 'invalid_session', message: 'nope' }),
   );
   const client = new CloudAuthClient({ baseUrl: 'http://srv', fetchImpl });
 
   await assert.rejects(
-    () => client.login({ email: 'a@b.com', password: 'wrong' }),
+    () => client.me('kordi_cs_expired'),
     (caught: unknown) => {
       assert.ok(caught instanceof CloudAuthError);
-      assert.equal((caught as CloudAuthError).code, 'invalid_credentials');
+      assert.equal((caught as CloudAuthError).code, 'invalid_session');
+      assert.equal((caught as CloudAuthError).status, 401);
       return true;
     },
   );
@@ -434,24 +381,6 @@ test('updateProfile patches cloud account profile fields', async () => {
   });
 });
 
-test('parseCloudOAuthHashResult decodes auth result fragments', () => {
-  const payload = {
-    account: {
-      accountId: 'acct_1',
-      displayName: 'Ada',
-      primaryEmail: 'ada@example.com',
-      avatarUrl: null,
-      nodeId: null,
-      passwordSet: false,
-    },
-    session: { token: 'kordi_cs_abc', expiresAt: '2099-01-01T00:00:00Z' },
-  };
-  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
-
-  assert.deepEqual(parseCloudOAuthHashResult(`#kordi_cloud_oauth=${encoded}`), payload);
-  assert.equal(parseCloudOAuthHashResult('#not_oauth=1'), null);
-});
-
 test('unknown server error codes degrade to "unknown"', async () => {
   const { fetchImpl } = recordingFetch(() =>
     jsonResponse(500, { errorCode: 'mystery_failure', message: 'something' }),
@@ -459,7 +388,7 @@ test('unknown server error codes degrade to "unknown"', async () => {
   const client = new CloudAuthClient({ baseUrl: 'http://srv', fetchImpl });
 
   await assert.rejects(
-    () => client.login({ email: 'a@b.com', password: 'Correct-horse-7' }),
+    () => client.me('kordi_cs_abc'),
     (caught: unknown) => {
       assert.ok(caught instanceof CloudAuthError);
       assert.equal((caught as CloudAuthError).code, 'unknown');
