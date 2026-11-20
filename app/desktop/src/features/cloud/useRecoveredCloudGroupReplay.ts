@@ -11,6 +11,7 @@ import { cloudSessionIdFromConversationId } from '@/features/collaboration/conve
 import { loadSession } from './session';
 import { subscribeCloudGroupCatalog } from './cloudGroupCatalogSync';
 import { cloudGroupCatalogRow } from './cloudGroupCatalog';
+import { removeDepartedCloudGroupParticipants } from './cloudGroupMemberReconciliation';
 import { isClosedConversation } from '@/features/chat/closedGroup';
 import type { ChatSyncConversation } from './chatSyncTypes';
 import { cloudMessageMetadataOnly } from './cloudMessageCache';
@@ -163,6 +164,15 @@ export function useRecoveredCloudGroupReplay({
           catalogGroupClosedAt: row.conversation.closed?.closed_at,
         });
         replayCallbacksRef.current.flushCanonicalState();
+      },
+      // A member who left, or a deleted account, leaves the group here without a reload.
+      reconcileMembers: async conversation => {
+        await removeDepartedCloudGroupParticipants({
+          conversation,
+          viewerAccountId: accountId,
+          getState: () => canonicalStateRef.current,
+          setState: setCanonicalState,
+        });
       },
       reportError: error => replayCallbacksRef.current.reportWarning(
         '[cloud-group] live catalog recovery failed', error,

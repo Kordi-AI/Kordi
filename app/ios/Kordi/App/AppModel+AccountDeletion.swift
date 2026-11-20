@@ -93,13 +93,15 @@ extension AppModel {
     }
 
     /// Deletes the account, then clears this iPhone without the logout call
-    /// (the server already ended every session).
+    /// (the server already ended every session). The teardown is the one a
+    /// deletion elsewhere runs (`AppModel+SessionEnd.swift`), so a sync pass
+    /// that hears `account_deleted` first does not run it twice.
     func deleteAccount(_ proof: AccountDeletionRequest, callCoordinator: KordiCallCoordinator) async throws {
         guard !isPreviewMode else { return }
         let (api, token, accountId) = try projectContext()
         try await api.deleteAccount(token: token, proof: proof)
-        await callCoordinator.prepareForAccountTeardown()
-        await signOut(accountDeleted: true)
-        AccountDeletionCleanup.wipe(accountId: accountId)
+        await finishAccountDeletion(token: token, accountId: accountId) {
+            await callCoordinator.prepareForAccountTeardown()
+        }
     }
 }

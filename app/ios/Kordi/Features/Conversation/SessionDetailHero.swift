@@ -66,7 +66,7 @@ struct SessionProfileHero<Actions: View>: View {
                 imageSource: conversation.avatarSource,
                 kind: conversation.kind,
                 size: avatarSize,
-                seed: conversation.agentId ?? conversation.peerAccountId
+                seed: conversation.peerAccountDeleted ? conversation.avatarSeed : conversation.agentId ?? conversation.peerAccountId
             )
         }
     }
@@ -122,6 +122,16 @@ enum SessionHeroAction: String, Identifiable {
     case more
 
     var id: Self { self }
+
+    /// The hero buttons for a chat. A chat kept with a deleted account
+    /// offers no call: nobody is left to answer.
+    static func items(for conversation: ConversationSummary) -> [SessionHeroAction] {
+        switch conversation.kind {
+        case .person: conversation.peerAccountDeleted ? [.mute, .chat] : [.call, .video, .mute, .chat]
+        case .group: [.video, .mute, .search, .more]
+        case .agent: [.chat, .mute, .search, .more]
+        }
+    }
 }
 
 enum SessionMoreAction: String, Identifiable {

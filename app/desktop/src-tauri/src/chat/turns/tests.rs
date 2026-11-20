@@ -381,3 +381,55 @@ fn streamed_text_starts_a_paragraph_after_a_tool_call_or_message_start() {
         "You have 50 notifications.\n\nPlease paste the Slack link."
     );
 }
+
+#[tokio::test]
+async fn a_deleted_account_stops_unfinished_turns_as_a_sign_out() {
+    fn handle(id: &str, completed: bool) -> super::super::DesktopChatTurnHandle {
+        super::super::DesktopChatTurnHandle {
+            snapshot: Arc::new(Mutex::new(DesktopChatTurnSnapshot {
+                id: id.into(),
+                session_id: id.into(),
+                prompt: String::new(),
+                status: if completed { "complete" } else { "running" }.into(),
+                message: String::new(),
+                assistant_text: String::new(),
+                thinking_text: String::new(),
+                segments: Vec::new(),
+                tools: vec![],
+                completed,
+                succeeded: completed,
+                started_at_ms: super::super::now_millis(),
+                completed_at_ms: None,
+                transcript_entry_id: None,
+                error: None,
+                retry_reason: None,
+                transcript_refresh_required: false,
+                background_follow_up: None,
+                stop_reason: None,
+            })),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            execution_lease_deadline: Arc::new(Mutex::new(None)),
+            lease_refusal: Default::default(),
+        }
+    }
+    let manager = DesktopChatManager::default();
+    let running = handle("running", false);
+    let finished = handle("finished", true);
+    {
+        let mut turns = manager.turns.lock().await;
+        turns.insert("running".into(), running.clone());
+        turns.insert("finished".into(), finished.clone());
+    }
+    let signed_out = DesktopTurnStopReason::of_kind("signed_out");
+    assert_eq!(
+        cancel_unfinished_turns(&manager, signed_out.clone()).await,
+        1
+    );
+    assert!(running.cancel.is_cancelled());
+    assert_eq!(
+        snapshot_turn(&running.snapshot).unwrap().stop_reason,
+        Some(signed_out)
+    );
+    assert!(!finished.cancel.is_cancelled());
+    assert_eq!(snapshot_turn(&finished.snapshot).unwrap().stop_reason, None);
+}

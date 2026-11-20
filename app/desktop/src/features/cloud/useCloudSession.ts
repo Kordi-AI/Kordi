@@ -21,6 +21,7 @@ import { useCloudBrowserSignInSession, useCloudSessionKeepAlive, type CloudBrows
 import { carryCloudAccountEmailVerification, cloudAccountsEqual } from './cloudAccountState';
 import { openCloudEventSocket } from './cloudEventSocket';
 import { endCloudSessionIfRejected } from './cloudSessionRejection';
+import { endDeletedCloudSession, isAccountDeletedError } from './cloudAccountDeletion';
 import {
   useCloudAccountEmailVerification,
   type CloudAccountEmailVerificationActions,
@@ -252,9 +253,9 @@ export function useCloudSession({
             reloadWindow: reloadForAccountStorageSwitch,
           });
         } catch (caught) {
-          if (caught instanceof CloudAuthError && caught.status === 401) {
-            await clearSession();
-          }
+          // A deleted account's data is erased before sign-in shows.
+          if (isAccountDeletedError(caught)) await endDeletedCloudSession({ token: stored.token });
+          else if (caught instanceof CloudAuthError && caught.status === 401) await clearSession();
           if (!cancelled && mountedRef.current) setSignedOut();
         }
       } catch {

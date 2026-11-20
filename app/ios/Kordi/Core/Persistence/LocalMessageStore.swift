@@ -36,6 +36,7 @@ final class CachedConversationRecord {
     var messageCount: Int?
     var forkedFromSessionId: String?
     var personalAgentId: String?
+    var peerAccountDeleted: Bool = false
 
     init(accountId: String, conversation: ConversationSummary) {
         id = scopedCacheRecordID(accountId: accountId, entityId: conversation.id)
@@ -64,6 +65,7 @@ final class CachedConversationRecord {
         messageCount = conversation.messageCount
         forkedFromSessionId = conversation.forkedFromSessionId
         personalAgentId = conversation.personalAgentId
+        peerAccountDeleted = conversation.peerAccountDeleted
         groupParticipantsJSON = try? String(
             data: JSONEncoder().encode(conversation.groupParticipants),
             encoding: .utf8
@@ -103,6 +105,7 @@ final class CachedConversationRecord {
             lastReadSequence: lastReadSequence
         )
         conversation.personalAgentId = personalAgentId
+        conversation.peerAccountDeleted = peerAccountDeleted
         return conversation
     }
 }
@@ -659,6 +662,21 @@ final class LocalMessageStore {
             conversationFingerprints[accountId] = nil
             messageFingerprints[accountId] = nil
             messageHasEarlier[accountId] = nil
+        } catch {
+            context.rollback()
+        }
+    }
+
+    /// Removes every account's cached conversations and messages.
+    func clearAll() {
+        do {
+            try context.fetch(FetchDescriptor<CachedConversationRecord>()).forEach(context.delete)
+            try context.fetch(FetchDescriptor<CachedMessageRecord>()).forEach(context.delete)
+            try context.fetch(FetchDescriptor<CachedMessagePageRecord>()).forEach(context.delete)
+            try context.save()
+            conversationFingerprints = [:]
+            messageFingerprints = [:]
+            messageHasEarlier = [:]
         } catch {
             context.rollback()
         }

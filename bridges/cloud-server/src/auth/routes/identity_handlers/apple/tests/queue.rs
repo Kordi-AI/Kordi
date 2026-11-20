@@ -39,9 +39,13 @@ async fn deleted_accounts_apple_tokens_are_retried_until_revoked_or_dropped() {
 
     // Apple was down during deletion, so the token is still stored.
     let mut tx = pool.begin().await.unwrap();
-    let deletion = crate::account_deletion::delete_in_transaction(&mut tx, &account_id)
-        .await
-        .unwrap();
+    let deletion = crate::account_deletion::delete_in_transaction(
+        &mut tx,
+        &account_id,
+        crate::account_deletion::DirectConversations::Empty,
+    )
+    .await
+    .unwrap();
     tx.commit().await.unwrap();
     assert_eq!(deletion.queued_apple_tokens, 1);
     assert!(stored_tokens(&pool, &account_id).await.is_empty());

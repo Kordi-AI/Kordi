@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 
 import { cloudLoginErrorMessage } from './cloudLoginMessages';
 import { CloudProfileFieldRow } from './CloudProfileFieldRow';
-import { CloudSignupVerificationFields } from './CloudSignupVerificationFields';
+import { CLOUD_ACCOUNT_FIELD_CLASS, CloudSignupVerificationFields } from './CloudSignupVerificationFields';
 import { useCloudSignupVerification } from './useCloudSignupVerification';
 
 export type CloudAccountEmailRowProps = {
@@ -155,10 +155,7 @@ export function CloudAccountEmailRow({
               setVerificationCode(event.currentTarget.value.replace(/\D/g, '').slice(0, 6));
               if (error) setError(null);
             }}
-            className={cn(
-              'app-input-shell app-flat-input h-10 w-full min-w-0 rounded-[10px] px-3 text-[13px] font-normal text-white outline-none',
-              error && 'app-flat-input-error',
-            )}
+            className={cn(CLOUD_ACCOUNT_FIELD_CLASS, error && 'app-flat-input-error')}
             aria-invalid={Boolean(error) || undefined}
             aria-describedby={error ? errorId : undefined}
           />

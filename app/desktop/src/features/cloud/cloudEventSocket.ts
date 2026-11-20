@@ -1,6 +1,7 @@
 import { cloudRealtimeWebSocketEnabled, cloudWebSocketUrl } from './cloudApiEnvironment';
 import { createReconnectLoop, type ReconnectLoopOptions } from './reconnectLoop';
 import { loadSession } from './session';
+import { endSessionIfAccountDeletedClose } from './cloudAccountDeletion';
 
 /** A parsed frame of the account event socket (`/v1/cloud/ws`). */
 export type CloudEventFrame = { subject: string; payload: unknown };
@@ -45,8 +46,10 @@ export function openCloudEventSocket(options: CloudEventSocketOptions): CloudEve
           options.onFrameError?.(error);
         }
       };
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (socket === ws) socket = null;
+        // 4410: the account was deleted; its session ends and the loop goes idle.
+        endSessionIfAccountDeletedClose(event, session.token);
         attempt.closed();
       };
       ws.onerror = () => ws.close();

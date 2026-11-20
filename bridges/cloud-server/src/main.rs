@@ -44,6 +44,24 @@ enum Commands {
         #[arg(long)]
         database_url: Option<String>,
     },
+    /// Delete a list of accounts. Everyone else keeps their history, direct
+    /// conversations with the deleted accounts included. Without --confirm
+    /// it is a dry run that changes nothing.
+    DeleteAccounts {
+        /// Postgres connection string. Falls back to the DATABASE_URL env var.
+        #[arg(long)]
+        database_url: Option<String>,
+        /// File with one account id or email per line; blank lines and `#`
+        /// comments are ignored.
+        #[arg(long)]
+        delete_file: std::path::PathBuf,
+        /// An account id or email to keep. Repeat for each account.
+        #[arg(long)]
+        keep: Vec<String>,
+        /// Delete for real. Without it, each deletion is rolled back.
+        #[arg(long)]
+        confirm: bool,
+    },
 }
 
 #[tokio::main]
@@ -101,6 +119,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             if summary.failed > 0 {
                 return Err("Avatar asset backfill completed with failures".into());
             }
+        }
+        Commands::DeleteAccounts {
+            database_url,
+            delete_file,
+            keep,
+            confirm,
+        } => {
+            use kordi_cloud_server::account_deletion::operator;
+            let database_url = database_url
+                .or_else(|| std::env::var("DATABASE_URL").ok())
+                .ok_or("DATABASE_URL is required (env var or --database-url flag)")?;
+            let delete = operator::parse_entries(&std::fs::read_to_string(&delete_file)?);
+            operator::command(operator::Command {
+                database_url,
+                delete,
+                keep: keep.iter().map(|entry| entry.trim().to_string()).collect(),
+                confirm,
+                nats_url: std::env::var("NATS_URL").ok().filter(|url| !url.is_empty()),
+            })
+            .await?;
         }
     }
     Ok(())

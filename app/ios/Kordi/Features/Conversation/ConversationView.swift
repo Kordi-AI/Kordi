@@ -867,12 +867,13 @@ struct ConversationView: View {
 
                 if selectedMessageIDs.isEmpty {
                     if model.isConversationClosed(conversation) {
+                        let notice = ClosedConversationNotice(conversation: conversation) {
+                            if case .group = model.closedChatDeleteTarget(for: conversation) { return true }
+                            return false
+                        }
                         ClosedConversationBar(
-                            groupClosed: {
-                                if case .group = model.closedChatDeleteTarget(for: conversation) { return true }
-                                return false
-                            }(),
-                            showsDelete: scopedThreadRootMessageID == nil
+                            notice: notice,
+                            showsDelete: scopedThreadRootMessageID == nil && notice.offersDelete
                         ) {
                             closedDeleteTarget = model.closedChatDeleteTarget(for: conversation)
                         }
@@ -1623,6 +1624,7 @@ struct ConversationView: View {
                             conversations: model.conversations
                         )
                     },
+                    opensAuthorProfile: !MessageAuthorIdentity.isDeletedAccount(message, in: conversation),
                     onOpenMentionProfile: openMentionProfile,
                     onRetry: {
                         await model.retry(message, in: conversation)
@@ -2321,7 +2323,8 @@ struct ConversationView: View {
 
     private func openMentionProfile(accountID: String) {
         if conversation.kind == .person, conversation.peerAccountId == accountID {
-            authorProfileConversation = conversation
+            // A deleted account has no profile to open.
+            if !conversation.peerAccountDeleted { authorProfileConversation = conversation }
             return
         }
         guard let participant = conversation.groupParticipants.first(where: {
@@ -2688,6 +2691,8 @@ struct ConversationView: View {
             }
             let senderId = message.author == .me ? model.account?.accountId
                 : snapshot.messages.first(where: { $0.id == message.id })?.senderAccountId
+            // The stand-in's member row may carry a generated picture; it is never drawn.
+            if KordiDeletedAccount.isStandIn(senderId) { return MessageAuthorIdentity.deletedAccount }
             let member = snapshot.participants?.first { $0.accountId == senderId }
             return ConversationAvatarIdentity(name: member?.displayName ?? message.authorName,
                 source: member?.avatarUrl ?? (message.author == .me ? model.account?.avatar.imageSource : nil),
@@ -2733,7 +2738,7 @@ struct ConversationView: View {
         .buttonStyle(.plain)
         .modifier(ConversationTitleSurface())
         .fixedSize(horizontal: true, vertical: false)
-        .accessibilityLabel("\(conversation.displayName), \(conversationHeaderStatus)")
+        .accessibilityLabel([conversation.displayName, conversationHeaderStatus].filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityHint("Opens conversation details")
         .accessibilityIdentifier("conversation-title")
     }
@@ -2773,6 +2778,9 @@ struct ConversationView: View {
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Agent is working")
+            } else if conversation.peerAccountDeleted {
+                // A deleted account has no presence to show.
+                EmptyView()
             } else if conversation.kind == .person, !conversation.representsKordiSupport {
                 ContactPresenceStatusText(
                     presence: model.contactPresenceByAccountID[conversation.peerAccountId]
@@ -2815,6 +2823,8 @@ struct ConversationView: View {
         case .person:
             if conversation.representsKordiSupport {
                 "Official Kordi support"
+            } else if conversation.peerAccountDeleted {
+                ""
             } else {
                 ContactPresencePresentation.label(
                     for: model.contactPresenceByAccountID[conversation.peerAccountId]
@@ -4170,7 +4180,7 @@ private struct EmptyConversation: View {
                     imageSource: conversation.avatarSource,
                     kind: conversation.kind,
                     size: 68,
-                    seed: conversation.agentId?.nonEmpty ?? conversation.peerAccountId.nonEmpty ?? conversation.sessionId
+                    seed: conversation.avatarSeed
                 )
             }
             VStack(spacing: 5) {
@@ -4300,16 +4310,44 @@ private struct NavigationMinimalBackButtonBridge: UIViewControllerRepresentable 
     }
 }
 
-/// Replaces the composer in a closed group or channel; the history stays readable.
-struct ClosedConversationBar: View {
+/// What replaces the composer of a closed chat.
+enum ClosedConversationNotice: Equatable {
     /// The whole group was closed, not only this channel.
-    var groupClosed = true
+    case group
+    case channel
+    /// A person chat kept after the other account was deleted: the server
+    /// closes a direct chat for no other reason.
+    case accountDeleted
+
+    init(conversation: ConversationSummary, groupClosed: () -> Bool) {
+        if conversation.kind == .person || conversation.peerAccountDeleted {
+            self = .accountDeleted
+        } else {
+            self = groupClosed() ? .group : .channel
+        }
+    }
+
+    var line: String {
+        switch self {
+        case .group: String(localized: "This group was closed")
+        case .channel: String(localized: "This channel was closed")
+        case .accountDeleted: KordiDeletedAccount.closedLine
+        }
+    }
+
+    /// A chat with a deleted account shows its line alone.
+    var offersDelete: Bool { self != .accountDeleted }
+}
+
+/// Replaces the composer in a closed chat; the history stays readable.
+struct ClosedConversationBar: View {
+    var notice = ClosedConversationNotice.group
     let showsDelete: Bool
     let onDelete: () -> Void
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(groupClosed ? "This group was closed" : "This channel was closed")
+            Text(notice.line)
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
             if showsDelete {

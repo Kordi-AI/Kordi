@@ -264,7 +264,7 @@ export class CloudAuthClient {
     }
     const body = await readJsonSafe(response);
     if (!response.ok) {
-      throw buildCloudAuthError(response.status, body, fallbackMessage, response.headers.get('retry-after'));
+      throw buildCloudAuthError(response.status, body, fallbackMessage, response.headers.get('retry-after'), init.headers);
     }
     return body as TResponse;
   }

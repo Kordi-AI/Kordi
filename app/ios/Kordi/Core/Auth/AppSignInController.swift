@@ -16,6 +16,9 @@ actor AppSignInSessionStore {
         case refreshed(AppSignInCredential)
         /// The server ended the sign-in. Sign out.
         case rejected
+        /// The server ended the sign-in because the account was deleted.
+        /// Sign out and wipe the account's data.
+        case accountDeleted
         /// No usable answer. Keep the session and try again later.
         case unavailable
     }
@@ -120,6 +123,8 @@ actor AppSignInSessionStore {
             return .refreshed(next)
         } catch AppSignInRefreshError.rejected {
             return credential()?.refreshToken == stored.refreshToken ? .rejected : .notBrowserSession
+        } catch AppSignInRefreshError.accountDeleted {
+            return credential()?.refreshToken == stored.refreshToken ? .accountDeleted : .notBrowserSession
         } catch {
             return .unavailable
         }
@@ -327,6 +332,12 @@ final class AppSignInController {
             guard !Task.isCancelled else { return }
             Task { @MainActor in await action() }
         }
+    }
+
+    /// Stops the scheduled refresh and keeps the stored sign-in.
+    func cancelScheduledRefresh() {
+        refreshTask?.cancel()
+        refreshTask = nil
     }
 
     /// Stops the schedule and removes the stored sign-in, for sign-out.

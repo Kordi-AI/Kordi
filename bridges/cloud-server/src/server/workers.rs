@@ -29,8 +29,9 @@ impl ServerState {
 /// report notices and retention, scheduled
 /// tasks, digests, the System agent, proactive and personal agents,
 /// Grounding nearby alerts and automatic card updates, plan-card
-/// projection, retention, terminal backfill, deleted-object cleanup, and
-/// the notification workers when notifications are configured.
+/// projection, retention, terminal backfill, deleted-object cleanup, the
+/// sweep of deleted accounts' expired credentials, and the notification
+/// workers when notifications are configured.
 pub(super) fn spawn_background_workers(
     state: &Arc<ServerState>,
     database_url: &str,
@@ -58,6 +59,7 @@ pub(super) fn spawn_background_workers(
     crate::cloud_agent_runtime::runs::terminal_backfill::spawn(state.db_pool().clone());
     crate::organizations::admission::spawn(state.clone());
     crate::account_deletion::objects::spawn(state.clone());
+    crate::account_deletion::credentials::spawn_sweep(state.db_pool().clone());
     crate::auth::oauth::apple::spawn_revocation_worker(state.clone());
     if let Some(notifications) = state.notifications() {
         notifications.spawn_message_notification_worker(state.db_pool().clone());

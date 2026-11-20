@@ -45,6 +45,9 @@ pub(super) enum CloseReason {
     /// The session or device was signed out, revoked, expired, or deleted,
     /// or the account is no longer admitted.
     SessionEnded,
+    /// The session ended because its account was deleted. The close frame
+    /// carries code 4410 and reason `account_deleted`.
+    AccountDeleted,
     /// A socket opened with a legacy device-only ticket reached its lifetime.
     LegacyTicketLifetime,
 }
@@ -66,6 +69,7 @@ impl CloseReason {
             Self::DatabaseUnavailable => "database_unavailable",
             Self::ServerError => "server_error",
             Self::SessionEnded => "session_ended",
+            Self::AccountDeleted => "account_deleted",
             Self::LegacyTicketLifetime => "legacy_ticket_lifetime",
         }
     }

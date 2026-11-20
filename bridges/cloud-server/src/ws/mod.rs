@@ -28,7 +28,8 @@
 //!
 //! Sign-out, device revocation, and account deletion close the socket at once
 //! through the session signal hub. A backstop recheck runs every ~30 s and
-//! tolerates a minute of database errors (see [`session_guard`]).
+//! tolerates a minute of database errors (see [`session_guard`], which also
+//! picks close code 4410 and `401 account_deleted` for a deleted account).
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -85,7 +86,7 @@ pub async fn ws_handler(
     let pool = state.db_pool();
     let session = match lookup_session(pool, q.token.as_deref().unwrap_or_default()).await {
         Ok(Some(row)) => row,
-        Ok(None) => return StatusCode::UNAUTHORIZED.into_response(),
+        Ok(None) => return session_guard::refused(&state, q.token.as_deref()).await,
         Err(err) => {
             eprintln!("[ws] lookup_session: {err}");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -271,14 +272,14 @@ async fn run_ws(
 
             event = device_control_sub.next() => {
                 if event.is_some() {
-                    let _ = sender.send(Message::Close(None)).await;
+                    let _ = sender.send(session_guard::closing(&state, &account_id).await).await;
                 }
                 break;
             },
 
             verdict = signals.recv() => match verdict {
                 SignalVerdict::Close => {
-                    let _ = sender.send(Message::Close(None)).await;
+                    let _ = sender.send(session_guard::closing(&state, &account_id).await).await;
                     break;
                 }
                 SignalVerdict::Recheck => guard.recheck_now(Instant::now()),
@@ -286,7 +287,7 @@ async fn run_ws(
 
             _ = tokio::time::sleep_until(guard.deadline()) => {
                 if guard.revalidate(&state, &connection).await == GatewayStep::Close {
-                    let _ = sender.send(Message::Close(None)).await;
+                    let _ = sender.send(session_guard::closing(&state, &account_id).await).await;
                     break;
                 }
             },
@@ -433,14 +434,14 @@ async fn idle_without_nats(
             },
             verdict = signals.recv() => match verdict {
                 SignalVerdict::Close => {
-                    let _ = socket.send(Message::Close(None)).await;
+                    let _ = socket.send(session_guard::closing(state, &connection.account_id).await).await;
                     break;
                 }
                 SignalVerdict::Recheck => guard.recheck_now(Instant::now()),
             },
             _ = tokio::time::sleep_until(guard.deadline()) => {
                 if guard.revalidate(state, connection).await == GatewayStep::Close {
-                    let _ = socket.send(Message::Close(None)).await;
+                    let _ = socket.send(session_guard::closing(state, &connection.account_id).await).await;
                     break;
                 }
             }

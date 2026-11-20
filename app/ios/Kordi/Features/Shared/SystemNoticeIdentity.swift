@@ -75,6 +75,8 @@ enum KordiSystemIdentity {
         fallback: String
     ) -> String {
         if isSystemNotice(kind: messageKind) || isServiceAccount(fromAccountId) { return displayName }
+        // The stand-in is a member who left, so no participant names it.
+        if KordiDeletedAccount.isStandIn(fromAccountId) { return KordiDeletedAccount.displayName }
         return participantNames[fromAccountId] ?? fallback
     }
 

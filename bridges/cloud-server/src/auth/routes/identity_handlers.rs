@@ -8,6 +8,8 @@ mod apple;
 mod completion;
 mod email_linking;
 #[cfg(test)]
+mod reregistration_tests;
+#[cfg(test)]
 mod verified_email_tests;
 pub(super) use apple::oauth_form_post_callback;
 #[cfg(test)]

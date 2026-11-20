@@ -148,6 +148,32 @@ pub(super) async fn cancel_turn_by_id(
     snapshot_turn(&turn.snapshot)
 }
 
+/// Stops every unfinished turn with `reason`, the way each turn is stopped
+/// one at a time. Returns how many turns were asked to stop.
+pub(crate) async fn cancel_unfinished_turns(
+    manager: &DesktopChatManager,
+    reason: DesktopTurnStopReason,
+) -> usize {
+    let unfinished: Vec<String> = manager
+        .turns
+        .lock()
+        .await
+        .iter()
+        .filter(|(_, turn)| snapshot_turn(&turn.snapshot).is_ok_and(|state| !state.completed))
+        .map(|(turn_id, _)| turn_id.clone())
+        .collect();
+    let mut stopped = 0;
+    for turn_id in unfinished {
+        if cancel_turn_by_id(manager, &turn_id, Some(reason.clone()))
+            .await
+            .is_ok()
+        {
+            stopped += 1;
+        }
+    }
+    stopped
+}
+
 #[tauri::command]
 pub async fn desktop_chat_renew_execution_lease(
     manager: tauri::State<'_, DesktopChatManager>,

@@ -189,6 +189,7 @@ async fn a_group_can_start_with_its_creator_and_return_to_one_member() {
         &mut transaction,
         &owner,
         &std::collections::HashSet::new(),
+        store::DirectConversations::Empty,
     )
     .await
     .expect("remove the last member");

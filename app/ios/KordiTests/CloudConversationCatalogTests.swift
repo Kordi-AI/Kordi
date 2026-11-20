@@ -527,11 +527,13 @@ final class CloudConversationCatalogTests: XCTestCase {
                 kind: "direct",
                 sessionId: sessionId,
                 latestSequence: 3,
-                lastReadSequence: 0
+                lastReadSequence: 0,
+                peerAccountIds: ["acct_maya"]
             )]
         )
 
         let conversation = try XCTUnwrap(catalog.first { $0.kind == .person })
+        XCTAssertFalse(conversation.peerAccountDeleted, "The contact's own chat, not a kept one.")
         XCTAssertEqual(conversation.unreadCount, 3)
         XCTAssertEqual(conversation.unreadMentionCount, 1)
         XCTAssertEqual(conversation.lastReadSequence, 0)
@@ -2199,9 +2201,27 @@ final class CloudConversationCatalogTests: XCTestCase {
         latestSequence: Int64,
         lastReadSequence: Int64,
         sharedTitle: String? = nil,
-        personalTitle: String? = nil
+        personalTitle: String? = nil,
+        peerAccountIds: [String] = []
     ) -> CloudChatConversation {
-        CloudChatConversation(
+        func member(_ accountId: String, name: String, role: String, lastRead: Int64) -> CloudChatMember {
+            CloudChatMember(
+                accountId: accountId,
+                displayName: name,
+                avatarUrl: nil,
+                defaultAgentId: nil,
+                defaultAgentDisplayName: nil,
+                defaultAgentAvatarUrl: nil,
+                role: role,
+                membershipState: "active",
+                version: 1,
+                lastDeliveredSequence: latestSequence,
+                lastReadSequence: lastRead,
+                joinedAt: "2026-08-08T10:00:00Z",
+                leftAt: nil
+            )
+        }
+        return CloudChatConversation(
             id: id,
             kind: kind,
             sharedTitle: sharedTitle,
@@ -2213,21 +2233,10 @@ final class CloudConversationCatalogTests: XCTestCase {
             latestMessageSequence: latestSequence,
             createdAt: "2026-08-08T10:00:00Z",
             updatedAt: "2026-08-08T10:01:00Z",
-            members: [CloudChatMember(
-                accountId: "acct_me",
-                displayName: "Alex",
-                avatarUrl: nil,
-                defaultAgentId: nil,
-                defaultAgentDisplayName: nil,
-                defaultAgentAvatarUrl: nil,
-                role: "owner",
-                membershipState: "active",
-                version: 1,
-                lastDeliveredSequence: latestSequence,
-                lastReadSequence: lastReadSequence,
-                joinedAt: "2026-08-08T10:00:00Z",
-                leftAt: nil
-            )],
+            // A direct conversation lists both people; one without the other's
+            // row is a conversation kept after that account was deleted.
+            members: [member("acct_me", name: "Alex", role: "owner", lastRead: lastReadSequence)]
+                + peerAccountIds.map { member($0, name: $0, role: "member", lastRead: latestSequence) },
             preferences: CloudChatPreferences(
                 conversationId: id,
                 accountId: "acct_me",

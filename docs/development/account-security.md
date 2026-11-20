@@ -5,7 +5,9 @@ accepts either an app's `Authorization: Bearer` session or the web session
 cookie (see [Browser sign-in](browser-sign-in.md#page-api-contract)). Cookie
 requests other than `GET` also need the exact public `Origin` and the
 `X-Kordi-CSRF-Token` header. An app's access token is never accepted as a
-cookie. Error bodies are `{"errorCode", "message"}`.
+cookie. Error bodies are `{"errorCode", "message"}`. A credential of a
+deleted account is answered `401 account_deleted` here as everywhere else;
+see [Account deletion](account-deletion.md#for-clients).
 
 All paths start with `/v1/cloud/account/security`.
 

@@ -242,7 +242,13 @@ Error bodies are `{"errorCode", "message"}`.
    clears the cookies.
 
 A `401 login_required` from step 6 or 7 means the session ended: show the log-in
-form again and keep the query.
+form again and keep the query. Any request may instead answer `401
+account_deleted` when the cookie belonged to an account that was deleted;
+the page then erases the account's local data and shows the log-in form
+without the old query ([Account deletion](account-deletion.md#for-clients)).
+Deleting the account through `POST /v1/cloud/account/security/delete` with
+the cookie clears both cookies in its `204`, so the page does not call
+log-out afterwards.
 
 ## Endpoints
 
@@ -354,6 +360,14 @@ Success:
 
 Code exchanges are limited to 30 per account and 10 per account and app per
 10 minutes. A limited exchange leaves the code unused.
+
+A refresh token of an account that was deleted while the token still worked
+is refused with `400`, `"error": "invalid_grant"` and `"errorCode":
+"account_deleted"` (also `error_description` and `message` "This account was
+deleted."); every other refused refresh has `errorCode` equal to `error`.
+Read the reason from `errorCode`, never from the description. The access
+tokens of such an account answer `401 account_deleted` on every route. See
+[Account deletion](account-deletion.md#for-clients).
 
 A refresh may be retried: presenting a rotated refresh token again within 60
 seconds of its rotation, while its successor is unused, returns the same
@@ -486,7 +500,12 @@ creation. The code lives in `app/desktop/src/features/cloud/appSignIn/`.
   a rotated refresh token twice. The refresh writes its result only while
   the stored session is still the one it refreshed, and sign-in and
   sign-out take the same write lock, so a sign-out or account switch during
-  a refresh is never overwritten. A refused refresh signs the app out.
+  a refresh is never overwritten. A refused refresh signs the app out; a
+  refusal with `errorCode: "account_deleted"`, an `account_deleted` answer
+  from any request, or a WebSocket close with code `4410` also erases the
+  account's local data ([Account deletion](account-deletion.md#for-clients)).
+  On `invalid_session` the app tries one refresh first and signs out,
+  keeping local data, only if that refresh is refused too.
 - Native callers (scheduled tasks, account memory, connector and digest
   tools, agent exchange, hosted provider auth) keep the account, not the
   access token: each request or turn reads the stored session and refreshes
@@ -540,7 +559,14 @@ The iPhone app shows a welcome screen with Log in and Sign up. Both open
   grace is 60 seconds). Its result is written only while the stored sign-in is
   still the one it refreshed, so a sign-out during a refresh wins and the new
   tokens are revoked. A refused refresh (`invalid_grant` or `invalid_client`)
-  signs out; anything else keeps the session and retries.
+  signs out; anything else keeps the session and retries. A browser sign-in
+  answered `invalid_session` tries one token refresh before it signs out.
+- Deleted account: `account_deleted` from any request or refresh (read from
+  `errorCode`, `error_code`, `reason` or `error`, never `error_description`)
+  or a WebSocket close with code `4410` ends every retry loop, wipes the
+  account's local data and shows the sign-in screen. A plain
+  `invalid_session` or `login_required` signs out without wiping. See
+  [Account deletion](account-deletion.md#for-clients).
 - Session identity: work started under an earlier access token of the same
   sign-in stays current after a refresh, so in-flight requests are not
   dropped. A refresh reconnects realtime with the new token.
