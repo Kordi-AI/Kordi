@@ -7,12 +7,19 @@
 //! [`crate::chat_sync::store::remove_account_from_conversations`] describes,
 //! then the account row, which cascades to its uploads, avatars, memories,
 //! connectors, agents, devices, sessions, contacts and organizations. Object
-//! keys are queued in the same transaction. [`after_commit`] logs every
-//! device out, tells contacts, and starts deleting the queued objects.
+//! keys are queued in the same transaction, and so are the hashes of the
+//! account's live credentials ([`credentials`]), so a client presenting one
+//! later is told `account_deleted`. [`delete_and_record`] adds the audit
+//! event. [`after_commit`] logs every device out, tells contacts, and
+//! starts deleting the queued objects.
+//!
+//! The self-serve route and the operator command ([`operator`]) both run
+//! these steps; only the operator keeps direct conversations.
 
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use chrono::Utc;
 use sqlx_core::query::query;
 use sqlx_core::query_as::query_as;
 use sqlx_core::transaction::Transaction;
@@ -20,9 +27,16 @@ use sqlx_postgres::Postgres;
 
 use crate::avatars::assets::AVATAR_VARIANT_SIZES;
 use crate::chat_sync::store::ConversationRemoval;
+pub use crate::chat_sync::store::DirectConversations;
 use crate::server::ServerState;
 
+pub mod credentials;
 pub mod objects;
+pub mod operator;
+#[cfg(test)]
+pub(crate) mod reregistration_fixture;
+#[cfg(test)]
+mod tests;
 
 /// What a deletion removed, and who must hear about it after commit.
 #[derive(Debug, Default)]
@@ -33,6 +47,8 @@ pub struct Deletion {
     pub queued_objects: usize,
     /// Apple tokens left for the revocation retry queue.
     pub queued_apple_tokens: u64,
+    /// Live credentials listed as deleted ([`credentials`]).
+    pub credentials: credentials::Recorded,
 }
 
 impl Deletion {
@@ -43,6 +59,7 @@ impl Deletion {
             "contacts": self.contacts.len(),
             "conversationsDeleted": self.conversations.deleted,
             "directConversationsEmptied": self.conversations.direct,
+            "directConversationsKept": self.conversations.direct_kept,
             "conversationsKept": self.conversations.kept,
             "groupsTransferred": self.conversations.transferred,
             "objectsQueued": self.queued_objects,
@@ -85,11 +102,38 @@ pub async fn prepare(state: &ServerState, account_id: &str) {
     crate::auth::oauth::apple::revoke_apple_tokens_for_account(state, account_id).await;
 }
 
+/// [`delete_in_transaction`], then the `account.deleted` audit event with
+/// the counts and how the deletion was authorized (`proof`). The record
+/// names no account, device, name or email. The caller holds the account
+/// row lock, commits, then calls [`after_commit`].
+pub async fn delete_and_record(
+    tx: &mut Transaction<'_, Postgres>,
+    account_id: &str,
+    direct_conversations: DirectConversations,
+    proof: &str,
+) -> Result<Deletion, sqlx_core::Error> {
+    let deletion = delete_in_transaction(tx, account_id, direct_conversations).await?;
+    let mut metadata = deletion.audit_metadata();
+    metadata["proof"] = serde_json::Value::from(proof);
+    query(
+        "INSERT INTO cloud_audit_events \
+         (event_id, account_id, device_id, event_type, metadata_json, created_at) \
+         VALUES ($1, NULL, NULL, 'account.deleted', $2, $3)",
+    )
+    .bind(format!("evt_{}", uuid::Uuid::new_v4().simple()))
+    .bind(metadata.to_string())
+    .bind(Utc::now().to_rfc3339())
+    .execute(&mut **tx)
+    .await?;
+    Ok(deletion)
+}
+
 /// Deletes `account_id` in `tx`. The caller holds the account row lock and
 /// commits.
 pub async fn delete_in_transaction(
     tx: &mut Transaction<'_, Postgres>,
     account_id: &str,
+    direct_conversations: DirectConversations,
 ) -> Result<Deletion, sqlx_core::Error> {
     let devices: Vec<String> =
         query_as::<_, (String,)>("SELECT device_id FROM cloud_devices WHERE account_id = $1")
@@ -127,6 +171,7 @@ pub async fn delete_in_transaction(
         tx,
         account_id,
         &removed_attachments,
+        direct_conversations,
     )
     .await
     .map_err(store_error)?;
@@ -143,6 +188,8 @@ pub async fn delete_in_transaction(
     let queued_objects = objects::queue(tx, &keys).await?;
     let queued_apple_tokens =
         crate::auth::oauth::apple::revocations::queue_unrevoked(tx, account_id).await?;
+    // Before the credentials go with the account row.
+    let credentials = credentials::record_in_transaction(tx, account_id).await?;
 
     let deleted = query("DELETE FROM cloud_accounts WHERE account_id = $1")
         .bind(account_id)
@@ -157,6 +204,7 @@ pub async fn delete_in_transaction(
         conversations,
         queued_objects,
         queued_apple_tokens,
+        credentials,
     })
 }
 
@@ -222,17 +270,20 @@ async fn release_shared_rows(
     .bind(account_id)
     .execute(&mut **tx)
     .await?;
-    // A waitlist request under any of the account's emails.
-    query(
-        "DELETE FROM cloud_access_waitlist WHERE lower(email) IN ( \
-           SELECT lower(primary_email) FROM cloud_accounts \
-           WHERE account_id = $1 AND primary_email IS NOT NULL \
-           UNION SELECT lower(email) FROM cloud_account_identities \
-           WHERE account_id = $1 AND email IS NOT NULL)",
-    )
-    .bind(account_id)
-    .execute(&mut **tx)
-    .await?;
+    // A waitlist request and pending sign-up codes under any of the
+    // account's emails.
+    for table in ["cloud_access_waitlist", "cloud_signup_email_codes"] {
+        query(&format!(
+            "DELETE FROM {table} WHERE lower(email) IN ( \
+               SELECT lower(primary_email) FROM cloud_accounts \
+               WHERE account_id = $1 AND primary_email IS NOT NULL \
+               UNION SELECT lower(email) FROM cloud_account_identities \
+               WHERE account_id = $1 AND email IS NOT NULL)"
+        ))
+        .bind(account_id)
+        .execute(&mut **tx)
+        .await?;
+    }
     for sql in [
         "DELETE FROM cloud_agent_omp_state WHERE owner_account_id = $1",
         "DELETE FROM cloud_connector_audit WHERE account_id = $1",
@@ -244,17 +295,22 @@ async fn release_shared_rows(
     Ok(())
 }
 
+/// After commit, in the background: [`finish`].
+pub fn after_commit(state: Arc<ServerState>, account_id: String, deletion: Deletion) {
+    tokio::spawn(async move { finish(&state, &account_id, &deletion).await });
+}
+
 /// After commit: every device is logged out and its live connections close,
 /// contacts' devices drop the contact, and queued objects start deleting.
-pub fn after_commit(state: Arc<ServerState>, account_id: String, deletion: Deletion) {
-    tokio::spawn(async move {
-        let events = state.events();
-        for device_id in &deletion.devices {
-            events.publish_device_revoked(device_id).await;
-        }
-        for peer in &deletion.contacts {
-            events.publish_contact_removed(&account_id, peer).await;
-        }
-        objects::drain(&state).await;
-    });
+/// Without an event bus or object store the matching step does nothing;
+/// queued objects then wait for the server's deletion worker.
+pub async fn finish(state: &ServerState, account_id: &str, deletion: &Deletion) {
+    let events = state.events();
+    for device_id in &deletion.devices {
+        events.publish_device_revoked(device_id).await;
+    }
+    for peer in &deletion.contacts {
+        events.publish_contact_removed(account_id, peer).await;
+    }
+    objects::drain(state).await;
 }

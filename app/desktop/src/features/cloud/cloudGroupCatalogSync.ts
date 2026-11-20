@@ -1,5 +1,6 @@
 import type { ChatSyncConversation } from './chatSyncTypes';
 import { cloudGroupCatalogRow } from './cloudGroupCatalog';
+import { rememberCloudGroupMemberList } from './cloudGroupMemberLists';
 
 const CLOUD_GROUP_CATALOG_SYNC_EVENT = 'kordi-cloud-group-catalog-sync';
 type CatalogDetail = { accountId: string; conversations: ChatSyncConversation[] };
@@ -10,6 +11,8 @@ export function publishCloudGroupCatalog(
   conversations: ChatSyncConversation[],
 ): void {
   const groups = conversations.filter(conversation => conversation.kind === 'group');
+  // Every group row applied from now on counts members against the newest of these lists.
+  for (const conversation of groups) rememberCloudGroupMemberList(accountId, conversation);
   if (typeof window === 'undefined' || groups.length === 0) return;
   window.dispatchEvent(new CustomEvent<CatalogDetail>(CLOUD_GROUP_CATALOG_SYNC_EVENT, {
     detail: { accountId, conversations: groups },
@@ -36,6 +39,7 @@ export function subscribeCloudGroupCatalog({
   isSessionClosed = () => false,
   rememberConversations,
   applyRow,
+  reconcileMembers,
   reportError,
 }: {
   accountId: string;
@@ -44,10 +48,14 @@ export function subscribeCloudGroupCatalog({
   isSessionClosed?: (sessionId: string) => boolean;
   rememberConversations: (conversations: ChatSyncConversation[]) => void;
   applyRow: (row: NonNullable<ReturnType<typeof cloudGroupCatalogRow>>) => Promise<void>;
+  /** Brings an existing session's members in line with the conversation's newest member list. */
+  reconcileMembers?: (conversation: ChatSyncConversation) => Promise<void>;
   reportError: (error: unknown) => void;
 }): () => void {
   let active = true;
   let pending = Promise.resolve();
+  // One member reconciliation per conversation version; a batch repeats a snapshot per message.
+  const reconciledVersionById = new Map<string, number>();
   const listener = (event: Event) => {
     const detail = (event as CustomEvent<CatalogDetail>).detail;
     if (detail.accountId !== accountId) return;
@@ -57,9 +65,14 @@ export function subscribeCloudGroupCatalog({
       for (const conversation of detail.conversations) {
         if (!active) return;
         const row = cloudGroupCatalogRow(conversation, accountId);
-        if (!row || !cloudGroupCatalogRowNeedsApply(row, hasSession, isSessionClosed)) continue;
+        if (!row) continue;
         try {
-          await applyRow(row);
+          if (cloudGroupCatalogRowNeedsApply(row, hasSession, isSessionClosed)) await applyRow(row);
+          if (reconcileMembers && active && hasSession(row.envelope.groupId)
+            && conversation.version > (reconciledVersionById.get(conversation.id) ?? -Infinity)) {
+            reconciledVersionById.set(conversation.id, conversation.version);
+            await reconcileMembers(conversation);
+          }
         } catch (error) {
           if (active) reportError(error);
         }

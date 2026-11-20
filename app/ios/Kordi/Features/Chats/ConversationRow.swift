@@ -77,7 +77,7 @@ struct ConversationRow: View {
                     imageSource: conversation.avatarSource,
                     kind: conversation.kind,
                     size: avatarSize,
-                    seed: conversation.agentId?.nonEmpty ?? conversation.peerAccountId.nonEmpty ?? conversation.sessionId
+                    seed: conversation.avatarSeed
                 )
             }
         }

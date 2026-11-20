@@ -83,7 +83,7 @@ private struct AuthorProfileDestinationModifier: ViewModifier {
             }
             .onChange(of: item) { _, destination in
                 guard let destination, destination.kind == .person else { return }
-                subject = model.contactProfileSubject(for: destination)
+                if !destination.peerAccountDeleted { subject = model.contactProfileSubject(for: destination) }
                 item = nil
             }
             .contactProfileSheet(subject: $subject, currentConversationID: source.id)
@@ -137,8 +137,10 @@ struct ConversationDetailsPage: View {
     let conversation: ConversationSummary
     var onBack: (() -> Void)? = nil
 
+    /// A chat kept with a deleted account has no profile to load: it shows the plain details page.
     static func showsContactProfile(for conversation: ConversationSummary) -> Bool {
         conversation.kind == .person && !conversation.representsKordiSupport && !conversation.isAgentLaunchTemplate
+            && !conversation.peerAccountDeleted
     }
 
     var body: some View {

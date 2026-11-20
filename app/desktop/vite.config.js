@@ -77,6 +77,8 @@ export function desktopViteConfig({ command, mode }, environment) {
               { name: 'agent-factory', test: /[\\/]src[\\/]kordi-app[\\/]agents[\\/]/, maxSize: 650_000 },
               // The contact profile's Common ground section and match model, kept out of the cloud chunk.
               { name: 'contact-common-ground', minSize: 0, test: /[\\/]src[\\/]kordi-app[\\/]contacts[\\/](?:ContactCommonGround\.tsx|contactMatch\.ts)$/ },
+              // The Delete account dialog, its proof rules and its client load when the dialog first opens.
+              { name: 'delete-account', minSize: 0, test: /[\\/]src[\\/]features[\\/]cloud[\\/](?:CloudDeleteAccountDialog\.tsx|accountDeletionProof\.ts|accountSecurityClient\.ts)$/ },
               // Split before the 700 kB chunk budget, as agent-factory is.
               { name: 'cloud-features', test: /[\\/]src[\\/]features[\\/]cloud[\\/]/, maxSize: 650_000 },
               // Session export stays out, so its dynamic import keeps it in its own lazy chunk.

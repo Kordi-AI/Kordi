@@ -1,5 +1,6 @@
 import { createContext, useCallback, useMemo, useState } from 'react';
 
+import { isDeletedAccountConversation } from '@/features/chat/closedGroup';
 import { cloudApiBaseUrl, defaultCloudAuthClient } from '@/features/cloud/authClient';
 import { useCloudAuthCapabilitiesState } from '@/features/cloud/cloudAuthCapabilities';
 import { contactProfileVersionFromCapabilities, fetchContactProfile } from '@/features/cloud/contactProfileClient';
@@ -124,7 +125,8 @@ export function useChatSenderProfiles({
     participant,
     anchorRect,
   ) => {
-    if (participant.kind !== 'human' || participant.role === 'self') return;
+    // A deleted account has no profile to open.
+    if (participant.kind !== 'human' || participant.role === 'self' || isDeletedAccountConversation(conversation)) return;
     setStoredState({
       pageConversationId: activeConversation.id,
       target: { participant, conversation, anchorRect },

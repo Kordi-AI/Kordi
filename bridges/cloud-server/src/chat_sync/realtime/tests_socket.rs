@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
+use sqlx_core::query::query;
 use sqlx_core::query_as::query_as;
 use sqlx_postgres::PgPool;
 use tokio::net::TcpStream;
@@ -249,6 +250,51 @@ async fn an_oversized_event_logs_frame_too_large_and_keeps_its_wire_reason() {
     assert_eq!(record.events_sent, 1);
 }
 
+/// The code and reason of the close frame that ends `socket`, if the server
+/// sent one.
+async fn close_frame(socket: &mut Socket) -> Option<(u16, String)> {
+    loop {
+        match tokio::time::timeout(PROMPT, socket.next())
+            .await
+            .expect("the server closes the socket")
+        {
+            Some(Ok(Message::Close(frame))) => {
+                return frame.map(|frame| (u16::from(frame.code), frame.reason.to_string()))
+            }
+            Some(Ok(_)) => {}
+            None | Some(Err(_)) => return None,
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_deleted_account_closes_with_4410_and_logs_account_deleted() {
+    let Some(harness) = harness().await else {
+        return;
+    };
+    let (mut socket, connection_id) = open(&harness, 0).await;
+    query("DELETE FROM cloud_accounts WHERE account_id = $1")
+        .bind(&harness.account_id)
+        .execute(&harness.pool)
+        .await
+        .unwrap();
+    // The database signal of the deletion, as the listener delivers it.
+    harness.state.session_signals().publish(SessionSignal {
+        account_id: harness.account_id.clone(),
+        device_id: Some(harness.device_id.clone()),
+        token_id: None,
+        kind: SignalKind::Revoked,
+    });
+    assert_eq!(
+        close_frame(&mut socket).await,
+        Some((4410, "account_deleted".to_string()))
+    );
+    assert_eq!(
+        closed(connection_id).await.reason,
+        CloseReason::AccountDeleted
+    );
+}
+
 #[tokio::test]
 async fn a_revocation_signal_logs_session_ended() {
     let Some(harness) = harness().await else {
@@ -261,11 +307,8 @@ async fn a_revocation_signal_logs_session_ended() {
         token_id: Some(harness.token_id.clone()),
         kind: SignalKind::Revoked,
     });
-    let ended = tokio::time::timeout(PROMPT, socket.next()).await.unwrap();
-    assert!(matches!(
-        ended,
-        None | Some(Ok(Message::Close(_))) | Some(Err(_))
-    ));
+    // A sign-out keeps its close without a code.
+    assert_eq!(close_frame(&mut socket).await, None);
     assert_eq!(
         closed(connection_id).await.reason,
         CloseReason::SessionEnded

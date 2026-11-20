@@ -121,6 +121,22 @@ fn login_required() -> Box<Response> {
     )
 }
 
+/// `401 account_deleted` when the rejected cookie session belonged to a
+/// deleted account, otherwise `401 login_required`.
+async fn rejected_cookie(pool: &PgPool, token: &str) -> Box<Response> {
+    use crate::account_deletion::credentials::{
+        was_deleted, CredentialKind, ACCOUNT_DELETED, ACCOUNT_DELETED_MESSAGE,
+    };
+    if was_deleted(pool, CredentialKind::Session, token).await {
+        return web_error(
+            StatusCode::UNAUTHORIZED,
+            ACCOUNT_DELETED,
+            ACCOUNT_DELETED_MESSAGE,
+        );
+    }
+    login_required()
+}
+
 /// The web session behind a cookie, without CSRF checks. For reads only.
 async fn cookie_session(
     state: &ServerState,
@@ -139,7 +155,7 @@ async fn cookie_session(
     };
     let row = match lookup_session(pool, &token).await {
         Ok(Some(row)) => row,
-        Ok(None) => return Err(login_required()),
+        Ok(None) => return Err(rejected_cookie(pool, &token).await),
         Err(_) => return Err(server_error()),
     };
     if !web_account_matches(headers, &row.account_id) {

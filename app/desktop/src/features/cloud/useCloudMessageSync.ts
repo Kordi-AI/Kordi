@@ -13,6 +13,7 @@ import { cloudCachedSessionTitles } from './cloudCachedSessionTitles';
 import { cloudMessageFromChatSync } from './authClient';
 import type { CloudMessage } from './authClient';
 import { publishCloudGroupCatalog } from './cloudGroupCatalogSync';
+import { publishCloudDeletedDirectConversations } from './cloudDeletedDirectCatalog';
 import { chatEventsRequireDirectoryBootstrap, publishCloudDeviceEvents } from './cloudDeviceEvents';
 import { cloudMessageMetadataOnly } from './cloudMessageCache';
 import { compareCloudMessages } from './cloudMessageMerge';
@@ -185,6 +186,9 @@ export function useCloudMessageSync({
             if (response.chat.bootstrap || response.chat.conversations.length > 0
               || response.chat.messages.length > 0 || response.chat.events.length > 0) historyRepairRef.current.invalidate();
             publishCloudGroupCatalog(account.accountId, response.chat.conversations);
+            publishCloudDeletedDirectConversations(account.accountId, response.chat.conversations, {
+              complete: response.chat.bootstrap, events: response.chat.events,
+            });
             publishCloudDeviceEvents(response.chat.events, account.accountId, session.deviceId, response.events);
             for (const event of response.events) if (event.eventType === 'message.deleted' && event.messageId) deletedMessageIds.add(event.messageId);
             directoryBootstrapPending ||= chatEventsRequireDirectoryBootstrap(response.chat.events);
@@ -304,6 +308,7 @@ export function useCloudMessageSync({
     const conversationById = new Map(
       local.conversations.map((conversation) => [conversation.id, conversation]),
     );
+    publishCloudDeletedDirectConversations(account.accountId, local.conversations, { complete: true });
     const hydratedMessages: Record<string, CloudMessage[]> = {};
     for (const snapshot of local.messages) {
       const conversation = conversationById.get(snapshot.conversation_id);

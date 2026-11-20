@@ -8,6 +8,7 @@ import { cloudAgentId } from './cloudAgentIdentity';
 import { CLOUD_HOST_SENTINEL } from './cloudContactMapping';
 import type { CloudGroupParticipant } from './cloudGroupMessages';
 import { normalizeKordiId } from './kordiId';
+import { KORDI_DELETED_ACCOUNT_ID } from '@/features/systemAgent/systemAgentIdentity';
 
 export function cloudGroupIdentityRequest(
   participant: CloudGroupParticipant,
@@ -16,6 +17,8 @@ export function cloudGroupIdentityRequest(
 ): UpsertCanonicalIdentityRequest {
   const isSelf = participant.accountId === account.accountId;
   const id = `human:${participant.accountId}`;
+  // The stand-in keeps its own seed and no picture, so it is always drawn as the neutral placeholder.
+  const standIn = participant.accountId === KORDI_DELETED_ACCOUNT_ID;
   return {
     id,
     kind: 'human',
@@ -25,8 +28,8 @@ export function cloudGroupIdentityRequest(
     sourceIdentityId: isSelf ? null : participant.accountId,
     humanId: participant.accountId,
     agentId: null,
-    avatarKey: cloudAvatarSeedForAccount(participant.accountId, participant.avatarUrl),
-    profileImageUrl: cloudAvatarImageUrl(participant.avatarUrl),
+    avatarKey: standIn ? KORDI_DELETED_ACCOUNT_ID : cloudAvatarSeedForAccount(participant.accountId, participant.avatarUrl),
+    profileImageUrl: standIn ? null : cloudAvatarImageUrl(participant.avatarUrl),
     metadata: {
       accountId: participant.accountId,
       kordiId: normalizeKordiId(participant.kordiId),

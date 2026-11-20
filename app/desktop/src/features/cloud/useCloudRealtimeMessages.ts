@@ -22,6 +22,7 @@ import {
   loadSession,
 } from './session';
 import { createReconnectLoop } from './reconnectLoop';
+import { endSessionIfAccountDeletedClose } from './cloudAccountDeletion';
 import { loadChatSyncCursor } from '@/lib/desktopChatSync';
 
 type SyncCloudCollaborationDiff =
@@ -238,7 +239,9 @@ export function useCloudRealtimeMessages({
             );
           }
         };
-        socket.onclose = () => {
+        socket.onclose = (event) => {
+          // 4410: the account was deleted; its session ends and the loop goes idle.
+          endSessionIfAccountDeletedClose(event, session.token);
           if (ws !== socket) return;
           setRealtimeConnected(false);
           ws = null;

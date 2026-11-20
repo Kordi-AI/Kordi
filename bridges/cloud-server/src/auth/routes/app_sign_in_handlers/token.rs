@@ -375,7 +375,15 @@ async fn refresh(state: &ServerState, client_id: &str, request: &TokenRequest) -
             }
             token_response(issued, None)
         }
-        Ok(RefreshOutcome::Invalid) => invalid_grant("The refresh token is invalid or expired."),
+        Ok(RefreshOutcome::Invalid) => {
+            use crate::account_deletion::credentials::{
+                account_deleted_grant_response, was_deleted, CredentialKind,
+            };
+            if was_deleted(pool, CredentialKind::Refresh, refresh_token).await {
+                return account_deleted_grant_response();
+            }
+            invalid_grant("The refresh token is invalid or expired.")
+        }
         Ok(RefreshOutcome::ReuseDetected { account_id }) => {
             let _ = write_audit(
                 pool,

@@ -6,7 +6,9 @@
 //! A backstop read repairs a dropped notification or listener restart.
 //!
 //! Sign-out, device revocation, and account deletion reach the socket as a
-//! session signal and close it at once. A jittered ~30 s recheck backs that
+//! session signal and close it at once. A socket closed because its account
+//! is gone gets close code 4410 with reason `account_deleted`; every other
+//! close is unchanged. A jittered ~30 s recheck backs that
 //! up, the socket closes at its session's known expiry, and short database
 //! outages delay work instead of closing sockets.
 //!
@@ -266,10 +268,7 @@ async fn serve_socket(
                     let applied = delivery.last_applied_seq;
                     match persist_device_ack(pool, account_id, &ticket.device_id, applied).await {
                         Ok(true) => {}
-                        Ok(false) => {
-                            send_close(&mut sender).await;
-                            return CloseReason::SessionEnded;
-                        }
+                        Ok(false) => return close_session_ended(&mut sender, pool, account_id).await,
                         // The ack is monotonic, so the next heartbeat stores it.
                         Err(error) => eprintln!("[chat-realtime] persist device ack: {error}"),
                     }
@@ -312,8 +311,7 @@ async fn serve_socket(
             }
             verdict = signals.recv() => match verdict {
                 SignalVerdict::Close => {
-                    send_close(&mut sender).await;
-                    return CloseReason::SessionEnded;
+                    return close_session_ended(&mut sender, pool, account_id).await;
                 }
                 SignalVerdict::Recheck => {
                     guard.recheck_within(Instant::now(), Duration::ZERO);
@@ -329,6 +327,9 @@ async fn serve_socket(
                     guard.record(Instant::now(), check)
                 };
                 if let GuardStep::Close(reason) = step {
+                    if reason == CloseReason::SessionEnded {
+                        return close_session_ended(&mut sender, pool, account_id).await;
+                    }
                     send_close(&mut sender).await;
                     return reason;
                 }
@@ -358,4 +359,21 @@ async fn serve_socket(
             }
         }
     }
+}
+
+/// Closes a socket whose session ended. When the account itself is gone the
+/// close frame carries code 4410 and reason `account_deleted`, so the client
+/// erases the account's local data; otherwise the close is unchanged.
+async fn close_session_ended(
+    sender: &mut SplitSink<WebSocket, Message>,
+    pool: &sqlx_postgres::PgPool,
+    account_id: &str,
+) -> CloseReason {
+    use crate::account_deletion::credentials::{account_deleted_close_frame, account_is_gone};
+    if account_is_gone(pool, account_id).await {
+        let _ = send_message(sender, Message::Close(Some(account_deleted_close_frame()))).await;
+        return CloseReason::AccountDeleted;
+    }
+    send_close(sender).await;
+    CloseReason::SessionEnded
 }

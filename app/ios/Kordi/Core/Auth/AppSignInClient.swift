@@ -90,6 +90,8 @@ struct AppSignInGrant: Sendable {
 enum AppSignInRefreshError: Error, Equatable {
     /// The server refused the refresh token: the sign-in ended.
     case rejected
+    /// The server refused the refresh token because the account was deleted.
+    case accountDeleted
     /// No answer, or an answer that says nothing about the sign-in. Try again later.
     case unavailable
 }
@@ -230,7 +232,9 @@ struct AppSignInClient: Sendable {
         }
         guard (200..<300).contains(status) else {
             let error = errorCode(in: body)
-            let refused = (status == 400 || status == 401) && (error == "invalid_grant" || error == "invalid_client")
+            let refusal = status == 400 || status == 401
+            if refusal, marksAccountDeleted(body) { throw AppSignInRefreshError.accountDeleted }
+            let refused = refusal && (error == "invalid_grant" || error == "invalid_client")
             throw refused ? AppSignInRefreshError.rejected : AppSignInRefreshError.unavailable
         }
         guard let tokens = try? JSONDecoder().decode(TokenResponse.self, from: body),
@@ -281,6 +285,16 @@ struct AppSignInClient: Sendable {
     static func errorCode(in body: Data) -> String? {
         guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else { return nil }
         return (object["error"] as? String) ?? (object["errorCode"] as? String)
+    }
+
+    /// A refused refresh for a deleted account keeps its OAuth `error` and
+    /// names `account_deleted` in one of these fields. Free text such as
+    /// `error_description` never counts.
+    static let accountDeletedMarkerFields = ["errorCode", "error_code", "reason", "error"]
+
+    static func marksAccountDeleted(_ body: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else { return false }
+        return accountDeletedMarkerFields.contains { object[$0] as? String == ServerSessionEnd.accountDeletedCode }
     }
 
     static func exchangeError(status: Int, body: Data) -> CloudAPIError {

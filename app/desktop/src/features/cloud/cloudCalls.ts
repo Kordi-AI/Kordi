@@ -5,6 +5,8 @@ import type {
 } from './authClient';
 import { cloudOperationUuid } from './chatSyncMapping';
 import type { ChatSyncConversation } from './chatSyncTypes';
+import { isDeletedAccountConversation } from '@/features/chat/closedGroup';
+import { KORDI_DELETED_ACCOUNT_ID } from '@/features/systemAgent/systemAgentIdentity';
 import type { Conversation } from '@/kordi-app/types';
 
 export type CloudCallKind = 'voice' | 'video' | 'meeting';
@@ -149,7 +151,7 @@ function canonicalHumanAccountIds(conversation: Conversation): string[] {
   return [...new Set((conversation.canonicalParticipants ?? [])
     .filter((participant) => participant.kind === 'human')
     .map((participant) => participant.humanId?.trim() ?? '')
-    .filter((accountId) => accountId.startsWith('acct_')))];
+    .filter((accountId) => accountId.startsWith('acct_') && accountId !== KORDI_DELETED_ACCOUNT_ID))];
 }
 
 function isGroupConversation(conversation: Conversation, humanAccountIds: string[]): boolean {
@@ -164,6 +166,8 @@ export function cloudCallTargetForConversation(
   conversation: Conversation,
 ): CloudCallTarget | null {
   if (!account?.accountId || conversation.transientDraft || conversation.forkedFromSessionId) return null;
+  // Nobody answers a chat kept with a deleted account: no calls and no presence.
+  if (isDeletedAccountConversation(conversation)) return null;
   const sessionId = stableSessionId(conversation);
   if (!sessionId || conversation.supportTicketEnabled) return null;
   const humanAccountIds = canonicalHumanAccountIds(conversation);

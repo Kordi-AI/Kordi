@@ -8,6 +8,7 @@ import {
   canonicalStateWithClosedSessions,
   GROUP_CLOSED_SEND_FAILURE,
   isGroupClosedError,
+  PEER_ACCOUNT_DELETED_LINE,
 } from '@/features/chat/closedGroup';
 
 import {
@@ -73,7 +74,8 @@ export function terminalCollaborationSendFailure({
   updateOptimisticState: (current: DesktopCollaborationState | null) => DesktopCollaborationState | null;
 } | null {
   if (shouldKeepCollaborationSendPending(error)) return null;
-  const detail = collaborationSendFailureDetail(error, fallback);
+  // Only direct chats send here, and the server closes a direct chat only when the other account was deleted.
+  const detail = isGroupClosedError(error) ? PEER_ACCOUNT_DELETED_LINE : collaborationSendFailureDetail(error, fallback);
   return {
     detail,
     updateOptimisticState: (current) => (

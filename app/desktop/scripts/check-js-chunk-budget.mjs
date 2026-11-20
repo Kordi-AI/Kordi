@@ -132,7 +132,18 @@ const MAX_JS_CHUNK_BYTES = Number.parseInt(process.env.KORDI_MAX_JS_CHUNK_BYTES 
 // group members and contacts) adds 2.4 kB (6047.1 kB measured in the CI build), so it moves to 6.049 MB.
 // A short reason for other members when an agent can't reply (one fixed line per failure code and the Mac's
 // two provider failure codes) adds 2.3 kB (6049.5 kB measured with the CI build settings), so it moves to 6.052 MB.
-const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_052_000;
+// Keeping direct chats with deleted accounts (finding them in chat sync and dropping them on removal, the read-only
+// chat row, its one composer line and the deleted-account refusal wording) adds 5.3 kB (6054.2 kB measured locally),
+// so it moves to 6.057 MB.
+// Deleting an account from Profile (the Delete account row, and its dialog, proof step and account security client
+// in an 8.2 kB chunk loaded when the dialog first opens), erasing a deleted account's local data on `account_deleted`
+// or a 4410 close, and the kept-chat fixes after a deletion (the list avatar, no presence or calls, a plain sender
+// avatar, member reconciliation and the owner taking over a group) add 15.2 kB (6069.4 kB measured locally), so it
+// moves to 6.072 MB.
+// The neutral Deleted account avatar, keeping each group's newest member list for deletions that land together,
+// the flat account field in dialogs and the Sign out line without a platform on the web add 1.9 kB
+// (6071.3 kB measured locally), so it moves to 6.074 MB.
+const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIST_BYTES ?? '', 10) || 6_074_000;
 // The separate browser target adds cookie transport, IndexedDB projections and
 // URL navigation. Its bounded allowance does not change desktop packaging.
 // AI consent, blocking and per-person permissions add 12 kB to the browser target too.
@@ -202,7 +213,11 @@ const MAX_DESKTOP_DIST_BYTES = Number.parseInt(process.env.KORDI_MAX_DESKTOP_DIS
 // The connector callback page and its hand-off to the starting tab add about 6 kB to the web app only
 // (6086.7 kB measured locally), so it moves to 6.090 MB.
 // The same short reason for members adds 2.3 kB there too (6091.4 kB measured in the CI build), so it moves to 6.094 MB.
-const MAX_WEB_APP_DIST_BYTES = 6_094_000;
+// The same direct chats with deleted accounts add 5.3 kB there too (6095.9 kB measured locally), so it moves to 6.099 MB.
+// The same account deletion and kept-chat fixes add 16.8 kB there (6112.7 kB measured locally), so it moves to 6.116 MB.
+// The same avatar, member list, field and Sign out fixes add 1.9 kB there (6114.7 kB measured locally), so it moves
+// to 6.118 MB.
+const MAX_WEB_APP_DIST_BYTES = 6_118_000;
 // Offline picker artwork replaces hundreds of runtime image requests. Give
 // these four known atlases a separate cap without relaxing the app/code budget.
 const MAX_NOTO_THUMBNAIL_BYTES = 2_600_000;

@@ -99,12 +99,23 @@ actor CloudWireCache {
         try? FileManager.default.removeItem(at: url)
     }
 
+    /// Removes every account's snapshot.
+    func clearAll() {
+        guard let directory,
+              let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.lastPathComponent.hasPrefix(Self.snapshotPrefix) && file.pathExtension == "json" {
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+
+    private static let snapshotPrefix = "messages-"
+
     private func snapshotURL(accountId: String) -> URL? {
         let safeAccountId = accountId.unicodeScalars.map { scalar in
             CharacterSet.alphanumerics.contains(scalar) || scalar == "_" || scalar == "-"
                 ? String(scalar)
                 : "_"
         }.joined()
-        return directory?.appendingPathComponent("messages-\(safeAccountId).json")
+        return directory?.appendingPathComponent("\(Self.snapshotPrefix)\(safeAccountId).json")
     }
 }

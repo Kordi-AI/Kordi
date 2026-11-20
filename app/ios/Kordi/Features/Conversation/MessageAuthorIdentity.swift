@@ -8,6 +8,33 @@ struct ConversationAvatarIdentity: Hashable {
 
 /// The name, picture, and avatar seed shown beside a timeline message.
 enum MessageAuthorIdentity {
+    /// The stand-in's name and generated avatar, the same for every deleted account.
+    static let deletedAccount = ConversationAvatarIdentity(
+        name: KordiDeletedAccount.displayName,
+        source: nil,
+        seed: KordiDeletedAccount.accountId
+    )
+
+    /// A message the Deleted account stand-in speaks for: the other side of a
+    /// chat kept with a deleted account, or a group message the server moved
+    /// to the stand-in. Its sender has no profile to open.
+    static func isDeletedAccount(_ message: ChatMessage, in conversation: ConversationSummary) -> Bool {
+        guard message.author == .person, !KordiSystemIdentity.isSystemNotice(message) else { return false }
+        switch conversation.kind {
+        case .person:
+            return conversation.peerAccountDeleted
+        case .group:
+            guard KordiDeletedAccount.isDisplayName(message.authorName) else { return false }
+            // A member who chose that name is still that member.
+            return !conversation.groupParticipants.contains {
+                !KordiDeletedAccount.isStandIn($0.accountId)
+                    && $0.displayName.localizedCaseInsensitiveCompare(message.authorName) == .orderedSame
+            }
+        case .agent:
+            return false
+        }
+    }
+
     static func resolve(
         _ message: ChatMessage,
         in conversation: ConversationSummary,
@@ -31,6 +58,7 @@ enum MessageAuthorIdentity {
             return KordiSystemAgentIdentity.avatar
         }
         if KordiSystemIdentity.isSystemNotice(message) { return KordiSystemIdentity.avatar }
+        if isDeletedAccount(message, in: conversation) { return deletedAccount }
 
         // In an agent session the conversation is the agent itself; anywhere
         // else the conversation title and picture belong to someone else.
@@ -48,12 +76,17 @@ enum MessageAuthorIdentity {
             return agent(message, participants: conversation.groupParticipants,
                          ownAccountId: account?.accountId, mentionTargets: mentionTargets)
         }
+        // Someone who left the group keeps the name their message carries; the
+        // group's own name and picture never stand in for a person.
+        if participant == nil, conversation.kind == .group {
+            return ConversationAvatarIdentity(name: message.authorName, source: nil, seed: message.authorName.nonEmpty)
+        }
         return ConversationAvatarIdentity(
             name: participant?.displayName.nonEmpty
                 ?? conversation.displayName.nonEmpty
                 ?? message.authorName,
             source: participant?.avatarUrl?.nonEmpty ?? conversation.avatarSource?.nonEmpty,
-            seed: participant?.accountId.nonEmpty ?? conversation.peerAccountId.nonEmpty
+            seed: participant?.accountId.nonEmpty ?? conversation.peerAvatarSeed
         )
     }
 

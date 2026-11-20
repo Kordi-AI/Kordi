@@ -68,7 +68,7 @@ struct NewChatView: View {
 
     private var contacts: [ConversationSummary] {
         model.conversations
-            .filter { $0.kind == .person && (searchText.isEmpty || matchesSearch($0)) }
+            .filter { $0.isPickablePerson && (searchText.isEmpty || matchesSearch($0)) }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 

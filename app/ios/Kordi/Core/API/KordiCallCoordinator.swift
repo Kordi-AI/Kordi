@@ -301,6 +301,7 @@ final class KordiCallCoordinator: NSObject, ObservableObject {
 
     func configure(model: AppModel) {
         self.model = model
+        model.prepareCallsForAccountTeardown = { [weak self] in await self?.prepareForAccountTeardown() }
         if let pendingVoIPToken {
             Task { await model.registerVoIPPushToken(pendingVoIPToken) }
         }
@@ -331,6 +332,11 @@ final class KordiCallCoordinator: NSObject, ObservableObject {
         }
         guard conversation.kind != .agent else {
             phase = .failed("Calls are available in contact and group conversations.")
+            return
+        }
+        // No screen offers a call in a chat kept with a deleted account; refuse any other route too.
+        guard !conversation.peerAccountDeleted else {
+            phase = .failed(KordiDeletedAccount.closedLine)
             return
         }
         guard let model else {

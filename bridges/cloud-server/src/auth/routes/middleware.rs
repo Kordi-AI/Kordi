@@ -90,11 +90,20 @@ async fn session_middleware(
             }
             response
         }
-        Ok(None) => err(
-            "invalid_session",
-            "Session is expired or revoked.",
-            StatusCode::UNAUTHORIZED,
-        ),
+        // Only rejected tokens pay for this lookup.
+        Ok(None) => {
+            use crate::account_deletion::credentials::{
+                account_deleted_response, was_deleted, CredentialKind,
+            };
+            if was_deleted(pool, CredentialKind::Session, &token).await {
+                return account_deleted_response();
+            }
+            err(
+                "invalid_session",
+                "Session is expired or revoked.",
+                StatusCode::UNAUTHORIZED,
+            )
+        }
         Err(_) => err(
             "server_error",
             "Could not validate session.",

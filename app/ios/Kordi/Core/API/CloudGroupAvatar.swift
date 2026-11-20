@@ -108,14 +108,23 @@ enum GroupClosedState {
     static let sendFailureMessage = "This group was closed."
 
     /// Session ids of the closed conversations, keyed as the chat list keys sessions.
+    /// A direct conversation kept after the other account was deleted counts
+    /// from its new member list on, before its close arrives.
     static func closedSessionIds(in conversations: [CloudChatConversation]) -> Set<String> {
         Set(conversations.compactMap { conversation in
-            conversation.closed == nil ? nil : conversation.legacySessionId?.nonEmpty ?? conversation.id
+            conversation.closed == nil && !KordiDeletedAccount.isKeptDirect(conversation)
+                ? nil : conversation.legacySessionId?.nonEmpty ?? conversation.id
         })
     }
 
     static func isClosedError(_ error: Error) -> Bool {
         (error as? CloudAPIError)?.code == errorCode
+    }
+
+    /// What a refused write says: the closed group's line, or the deleted
+    /// account's line for a kept direct conversation (`KordiDeletedAccount.refusal`).
+    static func refusalMessage(for error: CloudAPIError) -> String {
+        error.message == KordiDeletedAccount.closedLine ? error.message : sendFailureMessage
     }
 }
 

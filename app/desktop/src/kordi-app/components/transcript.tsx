@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { ArrowRightLeft, Check, CheckCircle2, ChevronUp, Clock3, Split, SquareArrowOutUpRight, Undo2 } from 'lucide-react';
 import { memo,useLayoutEffect,useRef,useState,type PointerEvent as ReactPointerEvent } from 'react';
 import type { EditFilePreview, Message, MessageAttachment, MessageSourceReference } from '../types';
-import { isSystemAvatarUrl } from '@/features/systemAgent/systemAgentIdentity';
+import { isDeletedAccountSender, isSystemAvatarUrl, KORDI_DELETED_ACCOUNT_ID } from '@/features/systemAgent/systemAgentIdentity';
 import { AGENT_GROUP_NAME_CLASS,AgentHeaderMeta,AgentOwnerTag } from './AgentOwnerTag';
 import { IdentityAvatar,useLocalAgentAvatarSeed,useLocalProfileAvatarSeed,type IdentityAvatarKind } from './IdentityAvatar';
 import { ForwardedMessageContent } from './ForwardedMessageContent';
@@ -621,7 +621,7 @@ function MessageBubbleView({
   const avatarSeed = isOwnHumanMessage
     ? currentLocalProfileAvatarSeed
     : isAgentMessage ? agentMessageAvatarSeed(msg, currentLocalAgentAvatarSeed, avatarName)
-      : msg.senderAvatarSeed?.trim() || generatedAvatarSeedForLabel(avatarKind, avatarName);
+      : isDeletedAccountSender(msg) ? KORDI_DELETED_ACCOUNT_ID : msg.senderAvatarSeed?.trim() || generatedAvatarSeedForLabel(avatarKind, avatarName);
   const showInlineHumanSender = Boolean(!threadLayout && !hideHumanSenderForCompactDensity && !isAgentMessage && msg.showSenderMeta && msg.sender && !isGroupedWithPrevious);
   const showContactRequestAction = Boolean(
     isOwnHumanMessage
@@ -632,7 +632,7 @@ function MessageBubbleView({
   const imageGroupAvatar = hasGroupedImageAttachments || hasDetachedImageGroup;
   const footerDetail = showContactRequestAction ? undefined : msg.detail; const agentAvatarColumn = isAgentMessage && !threadLayout; const smallAvatar = threadLayout || useHumanCompactDensity || agentAvatarColumn; const showAvatar = imageGroupAvatar || (threadLayout ? !isGroupedWithPrevious || Boolean(msg.sourceMessage) : agentAvatarColumn ? !continuesAgentRun : !isGroupedWithNext);
   const agentHeaderBesideAvatar = agentAvatarColumn && showHeaderMeta && !groupChatAgentAvatar;
-  const canOpenSenderProfile = Boolean(isPeerHumanMessage && onOpenSenderProfile && !selectionMode && !isSystemAvatarUrl(msg.senderProfileImageUrl)); const isForwardedMessage = msg.messageAction?.kind === 'forward';
+  const canOpenSenderProfile = Boolean(isPeerHumanMessage && onOpenSenderProfile && !selectionMode && !isSystemAvatarUrl(msg.senderProfileImageUrl) && !isDeletedAccountSender(msg)); const isForwardedMessage = msg.messageAction?.kind === 'forward';
   const standaloneEmojiItem = isForwardedMessage ? null : standaloneEmojiItemForMessage(msg, { isHuman: showCompactFooter, showsSender: showInlineHumanSender, footerDetail });
   const bubbleAttachmentPreview = hasBubbleAttachments ? <AttachmentPreview msg={msg} scope={hasDetachedImageGroup ? 'non-images' : 'all'} imageGallery={imageGallery} imageDeliveryStatus={hasOnlyBorderlessMediaAttachments && isOwnHumanMessage ? bubbleDeliveryStatus : null} /> : null;
   const planCardContent = msg.facilitatorCard || msg.groupJoinRequest || msg.planCard ? <TranscriptCardContent message={msg} /> : null;

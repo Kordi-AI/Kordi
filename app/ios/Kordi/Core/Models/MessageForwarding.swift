@@ -55,7 +55,8 @@ enum MessageForwardCatalog {
         let contactsByID = Dictionary(contacts.map { ($0.accountId, $0) }, uniquingKeysWith: { first, _ in first })
         var seen = Set<String>()
         return (conversations + contactConversations).compactMap { conversation in
-            guard !conversation.representsKordiSupport,
+            // A chat with a deleted account is read-only, so it is no destination.
+            guard !conversation.representsKordiSupport, !conversation.peerAccountDeleted,
                   !conversation.isLocalDraft, !conversation.isAgentLaunchTemplate,
                   conversation.subsessionId == nil,
                   !conversation.sessionId.isEmpty,
