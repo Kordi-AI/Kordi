@@ -1,3 +1,3 @@
 import { defineConfig } from '@playwright/test';
-import history from './playwright.history.config';
-export default defineConfig({ ...history, testMatch: 'reactPerformanceRetention.spec.ts' });
+import { sharedConfig } from './playwright.history.config';
+export default defineConfig({ ...sharedConfig, testMatch: 'reactPerformanceRetention.spec.ts' });
