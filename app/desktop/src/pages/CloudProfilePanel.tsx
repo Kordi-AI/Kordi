@@ -8,6 +8,7 @@ import { EditableIdentityAvatar } from '@/kordi-app/components/EditableIdentityA
 import { CloudAccountEmailRow } from '@/kordi-app/cloud/CloudAccountEmailRow';
 import { CloudProfileFieldRow } from '@/kordi-app/cloud/CloudProfileFieldRow';
 import { openOrganizationJoinDialog } from '@/features/organizations/organizationJoinPrompt';
+import { CloudDeleteAccountRow } from '@/features/cloud/CloudDeleteAccountRow';
 import type {
   CloudAccount,
   CloudAccountEmailVerificationInput,
@@ -24,6 +25,7 @@ import {
   sanitizeKordiHandleInput,
 } from './cloudProfileDraft';
 import { CloudProfileAutoRows } from './CloudProfileAutoRows';
+import { signOutDescription } from './cloudProfileSessionCopy';
 import { KordiIdChangeConfirmDialog, KordiIdLockedDialog } from './CloudProfileKordiIdDialogs';
 import type { CloudProfileEditor } from './useCloudProfileEditor';
 
@@ -232,7 +234,7 @@ export function CloudProfilePanel({
         <SettingsSection title="Session">
           <SettingsRow
             title="Sign out"
-            description="Sign out of Kordi on this Mac."
+            description={signOutDescription()}
             className="app-cloud-account-settings-meta-row"
             control={(
               <Button
@@ -246,6 +248,7 @@ export function CloudProfilePanel({
               </Button>
             )}
           />
+          <CloudDeleteAccountRow />
         </SettingsSection>
       ) : null}
       {kordiIdDialog === 'confirm' ? (

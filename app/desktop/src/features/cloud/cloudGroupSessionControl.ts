@@ -31,6 +31,8 @@ import {
 } from './cloudGroupSessionPolicy';
 import { cloudGroupAgentAvatarsByAccount, cloudGroupParticipantWithAgentAvatar } from './cloudGroupIdentity';
 import { compareCloudGroupParticipants } from './cloudGroupParticipantTypes';
+import { isKnownMissingCloudProfile, isMissingCloudProfileError, rememberMissingCloudProfile } from './cloudMissingProfiles';
+import { cloudGroupCreatorHandover, cloudGroupRowMayCount, latestCloudGroupMemberList, pruneCloudGroupRowMembers } from './cloudGroupMemberLists';
 import { loadSession } from './session';
 import type {
   CloudGroupCanonicalRuntime,
@@ -148,7 +150,10 @@ export async function applyCloudGroupSessionControl({
   const profileAccountIds = [...new Set(
     rawParticipants.map((participant) => participant.accountId.trim()).filter(Boolean),
   )];
-  const missingProfileAccountIds = profileAccountIds.filter((accountId) => !profileCache.has(accountId));
+  // Profiles load only for members (never the stand-in), and an account that answered "no account" is not asked again.
+  const listedMembers = latestCloudGroupMemberList(account.accountId, envelope.groupId);
+  const missingProfileAccountIds = profileAccountIds.filter((accountId) => !profileCache.has(accountId)
+    && cloudGroupRowMayCount(listedMembers, account.accountId, accountId) && !isKnownMissingCloudProfile(account.accountId, accountId));
   if (!useCatalogProfiles && missingProfileAccountIds.length > 0) {
     const session = await loadSession();
     if (session?.token) {
@@ -167,8 +172,9 @@ export async function applyCloudGroupSessionControl({
               }
             : await client.getProfile(session.token, accountId);
           profileCache.set(accountId, profile);
-        } catch {
+        } catch (error) {
           // Group sync must still work if a profile lookup races account/session refresh.
+          if (isMissingCloudProfileError(error)) rememberMissingCloudProfile(account.accountId, accountId);
         }
       }));
     }
@@ -199,6 +205,11 @@ export async function applyCloudGroupSessionControl({
     nextState = stateOps.upsertIdentity(nextState, identity);
     canonical.setState((current) => stateOps.upsertIdentity(current, identity));
   }
+  // Senders who left, and the stand-in that speaks for deleted people, keep their identities but are
+  // no members; the newest member list here decides, so an older row adds no one back.
+  const latestMembers = latestCloudGroupMemberList(account.accountId, envelope.groupId);
+  pruneCloudGroupRowMembers(latestMembers, account.accountId, participantByAccount);
+  const memberIdentityId = (accountId: string) => (participantByAccount.has(accountId) ? identityIdByAccount.get(accountId) : undefined);
   if (!nextState) return null;
 
   const groupSpaceId = envelope.groupSpaceId?.trim() || envelope.groupId;
@@ -259,12 +270,17 @@ export async function applyCloudGroupSessionControl({
         ? groupRootMetadata.groupCreatorIdentityId
         : groupRootSession?.createdByIdentityId || envelopeSession?.createdByIdentityId || null,
   );
-  const createdByIdentityId = storedCreatorIdentityId
-    || identityIdByAccount.get(envelope.createdByAccountId)
-    || identityIdByAccount.get(envelope.actor.accountId)
+  // Catalog rows and synced messages carry the server's creator and roles.
+  const { storedCreatorGone, ownerAccountId } = cloudGroupCreatorHandover({
+    storedCreatorIdentityId, envelope, latest: latestMembers, isMember: (accountId) => participantByAccount.has(accountId),
+    fromServer: envelope.kind === 'group-message' || cloudMessage.messageId.startsWith('catalog:'),
+  });
+  const createdByIdentityId = (storedCreatorGone ? '' : storedCreatorIdentityId) || memberIdentityId(ownerAccountId)
+    || memberIdentityId(envelope.createdByAccountId)
+    || memberIdentityId(envelope.actor.accountId)
     || localHumanIdentityId;
   const participantIdentityIds = [...identityIdByAccount.entries()]
-    .filter(([, identityId]) => identityId !== createdByIdentityId)
+    .filter(([accountId, identityId]) => identityId !== createdByIdentityId && participantByAccount.has(accountId))
     .map(([, identityId]) => identityId);
   const incomingGroupTitle = normalizedCatalogGroupTitle
     ?? (shouldApplyCloudGroupTitleUpdate(envelope) ? envelope.groupTitle : null);

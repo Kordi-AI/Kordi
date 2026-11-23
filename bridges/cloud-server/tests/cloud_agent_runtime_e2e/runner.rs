@@ -358,6 +358,100 @@ async fn runner_lease_reports_missing_provider_auth_and_fail_marks_run_failed() 
 }
 
 #[tokio::test]
+async fn a_failed_run_shares_only_the_neutral_line_and_code_with_another_member() {
+    let Some(pool) = try_pool().await else { return };
+    std::env::set_var("KORDI_CLOUD_RUNNER_TOKEN", "runner-test-token");
+    let state = Arc::new(signup_email_fixture::state(pool.clone()));
+    let router = test_router(state);
+    let owner = signup(&router, "runner-member-reason-owner", "Owner").await;
+    let requester = signup(&router, "runner-member-reason-requester", "Requester").await;
+    accept_contacts(&router, &requester, &owner).await;
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(post_with_token("/v1/cloud/presence/offline", &owner.token))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let claim = router
+        .clone()
+        .oneshot(post_json_with_token(
+            "/v1/cloud/agent-runs/claim",
+            &requester.token,
+            claim_body(&owner, &requester, "msg_runner_member_reason"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(claim.status(), StatusCode::OK);
+    let expected_run_id = read_json(claim).await["runId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    cancel_other_queued_runs(&pool, &expected_run_id).await;
+    let lease = router
+        .clone()
+        .oneshot(post_json_with_runner_token(
+            "/v1/cloud/agent-runs/lease",
+            "runner-test-token",
+            json!({ "runnerId": "runner-member-reason" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(lease.status(), StatusCode::OK);
+    let run_id = read_json(lease).await["run"]["runId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(run_id, expected_run_id);
+
+    let raw_error = "Cloud fallback model loop failed: provider error: 503 from \
+        https://api.example-provider.test/v1/responses for model example-model-9 \
+        (account acct_secret123, snapshot snap_abc)";
+    let failed = router
+        .clone()
+        .oneshot(post_json_with_runner_token(
+            &format!("/v1/cloud/agent-runs/{run_id}/fail"),
+            "runner-test-token",
+            json!({
+                "runnerId": "runner-member-reason",
+                "errorCode": "model_provider_error",
+                "message": raw_error
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(failed.status(), StatusCode::OK);
+    let failed_body = read_json(failed).await;
+    assert_eq!(failed_body["run"]["status"], "failed");
+    let response_message_id = failed_body["run"]["responseMessageId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let stored = message_body(&pool, &response_message_id).await;
+    let encoded = stored.trim_start_matches("kordi-cloud-agent-response:");
+    let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(encoded)
+        .unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(&decoded).unwrap();
+    assert_eq!(envelope["text"], "The agent couldn't reply.");
+    assert_eq!(envelope["failureCode"], "model_provider_error");
+    assert_eq!(envelope["deliveryState"], "failed");
+    let decoded_text = String::from_utf8(decoded).unwrap();
+    for secret in [
+        "example-provider",
+        "example-model-9",
+        "acct_secret123",
+        "snap_abc",
+        "503",
+    ] {
+        assert!(!stored.contains(secret), "stored row leaks {secret}");
+        assert!(!decoded_text.contains(secret), "envelope leaks {secret}");
+    }
+}
+
+#[tokio::test]
 async fn runner_endpoints_reject_user_tokens_and_bad_runner_tokens() {
     let Some(pool) = try_pool().await else { return };
     std::env::set_var("KORDI_CLOUD_RUNNER_TOKEN", "runner-test-token");

@@ -39,6 +39,8 @@ import type {
   CloudMessageIndex,
 } from './cloudMessageIndex';
 import { patchCloudCollaborationUnreadCounts } from './cloudUnreadReconciliation';
+import { useCloudDeletedDirectConversations } from './cloudDeletedDirectCatalog';
+import { buildCloudDeletedDirectChats, withCloudDeletedDirectChats } from './cloudDeletedDirectState';
 
 export function localOwnedAgentSessionsForCloudHiding(
   sessions: CanonicalSessionState['sessions'],
@@ -244,6 +246,7 @@ export function useCloudCollaborationReadModel({
   unreadCountsBySessionId: Readonly<Record<string, number>> | null;
   readInboundMessageIdsByPeer: Record<string, Set<string>>;
 }) {
+  const deletedDirectConversations = useCloudDeletedDirectConversations(account?.accountId);
   const baseCloudCollaborationState = useMemo(() => {
     if (!account) return null;
     const currentOverride = cloudCollaborationPreviousStateForContext(
@@ -284,21 +287,30 @@ export function useCloudCollaborationReadModel({
       }
       return next;
     })();
-    const generated = buildCloudDesktopCollaborationState({
+    const readCursorsBySessionId = cloudGroupReadCursorsBySessionId(canonicalState);
+    const generated = withCloudDeletedDirectChats(buildCloudDesktopCollaborationState({
       account,
       contacts,
       messagesByPeer: visibleMessagesByPeer,
       messageIndex,
       readInboundMessageIdsByPeer,
-      readCursorsBySessionId:
-        cloudGroupReadCursorsBySessionId(canonicalState),
+      readCursorsBySessionId,
       localAgentTurnsByRequestId,
       localAgentRuntimeRoute: null,
       localAgentLabel,
       cloudSessionTitlesById,
       hiddenCloudSessionIds,
       suppressUnscopedSelfAgentConversation,
-    });
+    }), buildCloudDeletedDirectChats({
+      account,
+      entries: deletedDirectConversations,
+      messagesByPeer: visibleMessagesByPeer,
+      messageIndex,
+      readInboundMessageIdsByPeer,
+      readCursorsBySessionId,
+      localAgentTurnsByRequestId,
+      hiddenSessionIds: hiddenCloudSessionIds,
+    }));
     const reconciled = unreadCountsBySessionId
       ? patchCloudCollaborationUnreadCounts(
           generated,
@@ -314,6 +326,7 @@ export function useCloudCollaborationReadModel({
     accountContextKey,
     canonicalState,
     contacts,
+    deletedDirectConversations,
     deletedSessionIds,
     localAgentTurnsByRequestId,
     localAgentLabel,

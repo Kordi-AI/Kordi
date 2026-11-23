@@ -484,3 +484,7 @@ mod unread_tests;
 #[cfg(test)]
 #[path = "chat_sync/deletion_tests.rs"]
 mod deletion_tests;
+
+#[cfg(test)]
+#[path = "chat_sync/unknown_conversation_tests.rs"]
+mod unknown_conversation_tests;

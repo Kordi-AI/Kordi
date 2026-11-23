@@ -1,15 +1,16 @@
-//! Card builds: gather the sources the owner turned on, redact them, and
-//! queue one background run on the Kordi-operated key. The run's reply
-//! becomes the card when it completes.
+//! Card builds: gather the sources the owner turned on and the profile's
+//! focus line, redact them, and queue one background run on the
+//! Kordi-operated key. The run's reply becomes the card when it completes.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 mod documents;
 mod gather;
 mod links;
 mod related;
 
-pub(super) use gather::{event_item, item, memory_item, provider_label};
+pub(super) use gather::{event_item, focus_item, item, memory_item, provider_label};
 #[cfg(test)]
 pub(super) use gather::{link_entries_for_tests, link_url_for_tests, request_for_tests};
 #[cfg(test)]
@@ -24,7 +25,7 @@ use sqlx_postgres::PgPool;
 use super::profiles::SourcePicks;
 use super::prompt::{self, Gathered};
 use super::runs::{self, NewRun, CARD_PREFIX};
-use super::{card, db_error, err, limited, profiles, BUILD_LIMIT};
+use super::{card, db_error, err, limited, profiles, BUILD_ACCOUNT_LIMIT, BUILD_LIMIT};
 use crate::auth::rate_limit::{CloudRateLimiter, RateLimitDecision};
 use crate::memory_store::ProfileTarget;
 use crate::organizations::requests::RequestOrganization;
@@ -90,6 +91,12 @@ pub(super) async fn start(
         Ok(_) => {}
         Err(error) => return db_error(error),
     }
+    // The focus line is the owner's own words. It goes last, so no other
+    // item's index moves, and it is not a source the owner picks (`used`).
+    let focus = existing
+        .as_ref()
+        .and_then(|p| focus_item(p.focus.as_deref()));
+    evidence.extend(focus);
     if evidence.is_empty() {
         return err(
             "common_ground_no_sources",
@@ -97,10 +104,9 @@ pub(super) async fn start(
             StatusCode::BAD_REQUEST,
         );
     }
-    if let RateLimitDecision::Limited { retry_after } = rate_limiter
-        .observe_account_limit(BUILD_LIMIT, account)
-        .await
-    {
+    // The work profile an account without one gets below counts as "new".
+    let profile_key = existing.as_ref().map_or("new", |p| p.profile_id.as_str());
+    if let Some(retry_after) = build_limited(&rate_limiter, account, profile_key).await {
         return limited(retry_after);
     }
     // Pages are read only for a build that may start, after the rate limit.
@@ -223,6 +229,34 @@ pub(super) async fn start(
         Ok(Start::InProgress) => in_progress(),
         Err(error) => db_error(error),
     }
+}
+
+/// Charges one build start to the profile's budget and then to the
+/// account's ceiling, and returns the wait when either refuses. A spent
+/// ceiling refuses before the profile's budget is charged.
+async fn build_limited(
+    limiter: &CloudRateLimiter,
+    account: &str,
+    profile_key: &str,
+) -> Option<Duration> {
+    let profile_subject = format!("{account}:{profile_key}");
+    if let RateLimitDecision::Limited { retry_after } = limiter
+        .peek_account_limit(BUILD_ACCOUNT_LIMIT, account)
+        .await
+    {
+        return Some(retry_after);
+    }
+    for (limit, subject) in [
+        (BUILD_LIMIT, profile_subject.as_str()),
+        (BUILD_ACCOUNT_LIMIT, account),
+    ] {
+        if let RateLimitDecision::Limited { retry_after } =
+            limiter.observe_account_limit(limit, subject).await
+        {
+            return Some(retry_after);
+        }
+    }
+    None
 }
 
 fn in_progress() -> Response {

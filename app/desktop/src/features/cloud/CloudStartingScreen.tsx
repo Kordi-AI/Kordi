@@ -1,79 +1,25 @@
-import type { ComponentType } from 'react';
-import { GitHubMark, GoogleMark } from '@/kordi-app/cloud/CloudLoginMarks';
-import type { CloudOAuthProvider } from './authClient';
 import { KordiFlyingBird } from './KordiFlyingBird';
-
-const SIGN_IN_PROVIDERS: Record<CloudOAuthProvider, { label: string; Mark: ComponentType }> = {
-  google: { label: 'Google', Mark: GoogleMark },
-  github: { label: 'GitHub', Mark: GitHubMark },
-};
 
 export function CloudStartingScreen({
   status = 'syncing',
   onRetry,
-  onCancelSignIn,
-  onReopenSignIn,
-  signInProvider,
   visible = true,
 }: {
   visible?: boolean;
   status?: 'syncing' | 'error';
   onRetry?: () => void;
-  onCancelSignIn?: () => void;
-  onReopenSignIn?: () => void;
-  signInProvider?: CloudOAuthProvider;
 }) {
-  const waitingForBrowser = status === 'syncing' && Boolean(onCancelSignIn) && visible;
-  const provider = signInProvider ? SIGN_IN_PROVIDERS[signInProvider] : null;
   return (
     <div
-      className={`app-cloud-starting-screen ${status === 'error' ? 'app-cloud-starting-screen-error' : ''} ${onCancelSignIn ? 'app-cloud-starting-screen-oauth' : ''}`}
+      className={`app-cloud-starting-screen ${status === 'error' ? 'app-cloud-starting-screen-error' : ''}`}
       data-visible={visible}
       aria-hidden={!visible}
       aria-live="polite"
-      aria-busy={visible && status === 'syncing' && !onCancelSignIn}
-      aria-label={status === 'error'
-        ? 'Cloud sync timed out'
-        : onCancelSignIn
-          ? 'Waiting for browser sign-in'
-          : 'Preparing Kordi Cloud'}
+      aria-busy={visible && status === 'syncing'}
+      aria-label={status === 'error' ? 'Cloud sync timed out' : 'Preparing Kordi Cloud'}
     >
-      {waitingForBrowser ? (
-        <div className="app-cloud-starting-titlebar" aria-hidden="true">Kordi</div>
-      ) : null}
       <div className="app-cloud-starting-content">
-        {waitingForBrowser ? (
-          <>
-            <div className="app-cloud-signin-badge" aria-hidden="true">
-              <span className="app-cloud-signin-ring-track" />
-              <span className="app-cloud-signin-ring" />
-              {provider ? <span className="app-cloud-signin-mark"><provider.Mark /></span> : null}
-            </div>
-            <div className="app-cloud-signin-copy">
-              <p className="app-cloud-starting-message">Continue in your browser</p>
-              {provider ? <p className="app-cloud-signin-provider">Signing in with {provider.label}</p> : null}
-            </div>
-            <div className="app-cloud-signin-actions">
-              {onReopenSignIn ? (
-                <>
-                  <button type="button" className="app-cloud-signin-action" onClick={onReopenSignIn}>
-                    Reopen browser
-                  </button>
-                  <span className="app-cloud-signin-separator" aria-hidden="true" />
-                </>
-              ) : null}
-              <button
-                type="button"
-                className="app-cloud-signin-action app-cloud-signin-action-quiet"
-                onClick={onCancelSignIn}
-              >
-                Cancel
-              </button>
-            </div>
-          </>
-        ) : (
-          <KordiFlyingBird className="app-cloud-starting-bird" />
-        )}
+        <KordiFlyingBird className="app-cloud-starting-bird" />
         {status === 'error' && onRetry ? (
           <button
             type="button"

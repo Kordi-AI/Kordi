@@ -1,7 +1,7 @@
 import { BellOff, ChevronDown, MoreHorizontal, Paperclip, Pin, Plus } from 'lucide-react';
 
 import { attachmentPreviewUrl } from '@/features/chat/attachmentMediaGallery';
-import { isClosedConversation, isClosedParticipantSpace } from '@/features/chat/closedGroup';
+import { isClosedConversation, isClosedParticipantSpace, isDeletedAccountConversation } from '@/features/chat/closedGroup';
 import { isBlankParticipantSpaceSession } from '@/features/chat/participantSpaces';
 import { cn } from '@/lib/utils';
 import type { ChatSidebarRow } from '@/pages/sidebar/chatSidebarRows';
@@ -56,7 +56,9 @@ function ParticipantSpaceSessionRow({
     activeConvId === session.id || activeConvId === session.canonicalSessionId;
   const sessionRowTimeLabel =
     session.updatedAtLabel ?? conversation.updatedAtLabel ?? '--:--';
-  const closed = isClosedConversation(conversation);
+  // A chat kept with a deleted account stays a normal row: its last message, no dimming.
+  const readOnly = isClosedConversation(conversation);
+  const closed = readOnly && !isDeletedAccountConversation(conversation);
   const sessionPreview = closed
     ? 'Closed'
     : participantSpaceSessionPreviewText(session.preview) || 'No messages yet';
@@ -84,7 +86,7 @@ function ParticipantSpaceSessionRow({
           event.clientX,
           event.clientY,
           {
-            canRename: !closed && participantSpaceCanRenameSessions(space),
+            canRename: !readOnly && participantSpaceCanRenameSessions(space),
             archived: model.showArchived,
             pinned: model.pinnedSessionIds.has(preferenceSessionId),
             muted: model.mutedSessionIds.has(preferenceSessionId),
@@ -262,6 +264,7 @@ function ParticipantSpaceRow({
               event.clientX,
               event.clientY,
               {
+                canRename: !isClosedConversation(latestSession.conversation),
                 archived: model.showArchived,
                 pinned: model.pinnedSessionIds.has(participantSpaceSessionPreferenceId(latestSession)),
                 muted: model.mutedSessionIds.has(participantSpaceSessionPreferenceId(latestSession)),

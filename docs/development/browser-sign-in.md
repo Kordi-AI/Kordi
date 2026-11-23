@@ -242,7 +242,13 @@ Error bodies are `{"errorCode", "message"}`.
    clears the cookies.
 
 A `401 login_required` from step 6 or 7 means the session ended: show the log-in
-form again and keep the query.
+form again and keep the query. Any request may instead answer `401
+account_deleted` when the cookie belonged to an account that was deleted;
+the page then erases the account's local data and shows the log-in form
+without the old query ([Account deletion](account-deletion.md#for-clients)).
+Deleting the account through `POST /v1/cloud/account/security/delete` with
+the cookie clears both cookies in its `204`, so the page does not call
+log-out afterwards.
 
 ## Endpoints
 
@@ -355,6 +361,14 @@ Success:
 Code exchanges are limited to 30 per account and 10 per account and app per
 10 minutes. A limited exchange leaves the code unused.
 
+A refresh token of an account that was deleted while the token still worked
+is refused with `400`, `"error": "invalid_grant"` and `"errorCode":
+"account_deleted"` (also `error_description` and `message` "This account was
+deleted."); every other refused refresh has `errorCode` equal to `error`.
+Read the reason from `errorCode`, never from the description. The access
+tokens of such an account answer `401 account_deleted` on every route. See
+[Account deletion](account-deletion.md#for-clients).
+
 A refresh may be retried: presenting a rotated refresh token again within 60
 seconds of its rotation, while its successor is unused, returns the same
 successor pair (same refresh token, same access token) instead of revoking
@@ -463,12 +477,22 @@ creation. The code lives in `app/desktop/src/features/cloud/appSignIn/`.
   code; a refused code (expired or used) can be replaced by another. Cancel
   is disabled while a pasted code is exchanged; a sign-in that completes
   after Cancel is revoked.
-- Availability: before offering browser sign-in the app sends
-  `GET /v1/cloud/auth/app/authorize?client_id=<id>`. `invalid_redirect_uri`
-  means the server knows the client. A 404, a 405 or `invalid_client` shows
-  the in-app email form instead, so older servers keep working. Any other
+- Availability: the welcome screen sends
+  `GET /v1/cloud/auth/app/authorize?client_id=<id>` when it appears and
+  again before each Log in or Sign up. `invalid_redirect_uri` means the
+  server knows the client. A 404, a 405 or `invalid_client` means the server
+  does not offer browser sign-in for this app: the welcome screen stays and
+  shows "Sign-in is unavailable on this server." with Try again. Any other
   answer (a rate limit, a proxy or captive portal, an outage) keeps browser
-  sign-in and is not remembered, so the next launch asks again.
+  sign-in. Only `invalid_redirect_uri` is remembered for the rest of the
+  launch; after any other answer the next attempt asks again.
+- No sign-in form: the app never asks for an email or password itself.
+  Email and password, sign-up and provider sign-in happen on the browser
+  page. Log in and Sign up stay visible and enabled whatever the
+  availability check answers. A window that cannot run browser sign-in (no
+  native shell, or no API origin) shows the welcome screen with "Sign-in is
+  unavailable in this window." The web app has no sign-in screen; it sends
+  signed-out visitors to the site's `/login` page.
 - Tokens: the access token, refresh token, client ID and token endpoint are
   stored with the Cloud session in the OS keychain. The native shell
   refreshes five minutes before expiry under one process-wide lock
@@ -476,7 +500,12 @@ creation. The code lives in `app/desktop/src/features/cloud/appSignIn/`.
   a rotated refresh token twice. The refresh writes its result only while
   the stored session is still the one it refreshed, and sign-in and
   sign-out take the same write lock, so a sign-out or account switch during
-  a refresh is never overwritten. A refused refresh signs the app out.
+  a refresh is never overwritten. A refused refresh signs the app out; a
+  refusal with `errorCode: "account_deleted"`, an `account_deleted` answer
+  from any request, or a WebSocket close with code `4410` also erases the
+  account's local data ([Account deletion](account-deletion.md#for-clients)).
+  On `invalid_session` the app tries one refresh first and signs out,
+  keeping local data, only if that refresh is refused too.
 - Native callers (scheduled tasks, account memory, connector and digest
   tools, agent exchange, hosted provider auth) keep the account, not the
   access token: each request or turn reads the stored session and refreshes
@@ -513,9 +542,10 @@ The iPhone app shows a welcome screen with Log in and Sign up. Both open
   checks the callback's scheme, host, path and its single `state` before the
   exchange. Because the session always receives the redirect, the iPhone app
   has no paste-code step.
-- Availability: the same probe and rules as the desktop app. The answer is
-  remembered for the rest of the launch only when it is settled
-  (`invalid_redirect_uri`, 404, 405 or `invalid_client`).
+- Availability: the same probe as the desktop app. A 404, a 405 or
+  `invalid_client` shows the in-app email form. The answer is remembered for
+  the rest of the launch only when it is settled (`invalid_redirect_uri`,
+  404, 405 or `invalid_client`).
 - Requests go through the app's Cloud transport, which connects loopback
   directly and works around a broken system proxy.
 - Tokens: the access token stays in the existing Keychain session item, and
@@ -529,7 +559,14 @@ The iPhone app shows a welcome screen with Log in and Sign up. Both open
   grace is 60 seconds). Its result is written only while the stored sign-in is
   still the one it refreshed, so a sign-out during a refresh wins and the new
   tokens are revoked. A refused refresh (`invalid_grant` or `invalid_client`)
-  signs out; anything else keeps the session and retries.
+  signs out; anything else keeps the session and retries. A browser sign-in
+  answered `invalid_session` tries one token refresh before it signs out.
+- Deleted account: `account_deleted` from any request or refresh (read from
+  `errorCode`, `error_code`, `reason` or `error`, never `error_description`)
+  or a WebSocket close with code `4410` ends every retry loop, wipes the
+  account's local data and shows the sign-in screen. A plain
+  `invalid_session` or `login_required` signs out without wiping. See
+  [Account deletion](account-deletion.md#for-clients).
 - Session identity: work started under an earlier access token of the same
   sign-in stays current after a refresh, so in-flight requests are not
   dropped. A refresh reconnects realtime with the new token.
@@ -551,8 +588,10 @@ The iPhone app shows a welcome screen with Log in and Sign up. Both open
   clearing its caches, before the new account's data loads.
 
 A server that sets `KORDI_AUTH_APP_CLIENTS` replaces the built-in list, so
-it must include `kordi-ios` (and `kordi-ios-beta` on development servers) or
-iPhone users fall back to the in-app form.
+it must include `kordi-desktop` (and `kordi-desktop-beta` on development
+servers) or the desktop app cannot sign in, and `kordi-ios` (and
+`kordi-ios-beta` on development servers) or iPhone users fall back to the
+in-app form.
 
 Follow-up: any app on the device can register a custom URL scheme. The next
 step is a claimed `https` universal-link redirect (an associated domain on

@@ -18,6 +18,26 @@ use crate::auth::session::session_is_active;
 use crate::chat_sync::realtime::retry::{jittered, Backoff};
 use crate::server::ServerState;
 
+/// The close message for a socket whose session ended: code 4410 with
+/// reason `account_deleted` when the account is gone, otherwise no code.
+pub(super) async fn closing(state: &ServerState, account_id: &str) -> axum::extract::ws::Message {
+    crate::account_deletion::credentials::session_ended_close(state.db_pool(), account_id).await
+}
+
+/// The answer to an upgrade whose token matches no live session: `401
+/// account_deleted` for a deleted account's token, otherwise a bare `401`.
+pub(super) async fn refused(state: &ServerState, token: Option<&str>) -> axum::response::Response {
+    use crate::account_deletion::credentials::{
+        account_deleted_response, was_deleted, CredentialKind,
+    };
+    use axum::response::IntoResponse;
+    let token = token.unwrap_or_default();
+    if was_deleted(state.db_pool(), CredentialKind::Session, token).await {
+        return account_deleted_response();
+    }
+    axum::http::StatusCode::UNAUTHORIZED.into_response()
+}
+
 /// The backstop recheck interval; each socket jitters it by ±20 %.
 pub(super) const GATEWAY_RECHECK_INTERVAL: Duration = Duration::from_secs(30);
 /// How long checks may keep failing before the socket closes.

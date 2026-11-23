@@ -49,6 +49,25 @@ export function isSystemAccountId(accountId: string | null | undefined): boolean
   return accountId?.trim() === KORDI_SYSTEM_ACCOUNT_ID;
 }
 
+/** The server-managed stand-in for every deleted person (docs/development/account-deletion.md). Kept
+ * messages of a deleted person come from it; it is only ever a member who left, never a contact. */
+export const KORDI_DELETED_ACCOUNT_ID = 'acct_kordi_deleted';
+export const KORDI_DELETED_ACCOUNT_NAME = 'Deleted account';
+
+/** An avatar seed that draws the stand-in, or the agent it does not have: no person's face. */
+export function isDeletedAccountAvatarSeed(seed: string | null | undefined): boolean {
+  const value = seed?.trim() ?? '';
+  return value === KORDI_DELETED_ACCOUNT_ID || value === `human:${KORDI_DELETED_ACCOUNT_ID}`
+    || value === `cloud-agent:${KORDI_DELETED_ACCOUNT_ID}` || value === `default-agent-${KORDI_DELETED_ACCOUNT_ID}`;
+}
+
+/** A message from the stand-in, by its sender identity or avatar seed: it has no profile to open. */
+export function isDeletedAccountSender(message: { senderIdentityId?: string | null; senderAvatarSeed?: string | null }): boolean {
+  const identityId = message.senderIdentityId?.trim() ?? '';
+  return identityId === KORDI_DELETED_ACCOUNT_ID || identityId === `human:${KORDI_DELETED_ACCOUNT_ID}`
+    || message.senderAvatarSeed?.trim() === KORDI_DELETED_ACCOUNT_ID;
+}
+
 /** The System agent or the system account: server-managed members a client never lists or removes. */
 export function isBuiltInAccountId(accountId: string | null | undefined): boolean {
   return isSystemAgentAccountId(accountId) || isSystemAccountId(accountId);

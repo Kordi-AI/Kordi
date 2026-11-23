@@ -6,6 +6,7 @@ import {
   type CloudGroupSessionTitleSnapshot,
 } from './cloudGroupMessages';
 import type { CloudGroupSessionRuntime } from './cloudGroupControlContext';
+import { KORDI_DELETED_ACCOUNT_ID } from '@/features/systemAgent/systemAgentIdentity';
 
 export function cloudGroupSessionPreparationSignature(
   envelope: CloudGroupControlEnvelope,
@@ -75,12 +76,14 @@ export function resolveCloudGroupAdminSnapshot(input: {
   const advertisedAdminIdentityIds = cloudGroupAdminAccountIds(input.envelope)
     .map((accountId) => input.identityIdByAccount.get(accountId) ?? '')
     .filter(Boolean);
+  // The stand-in for a deleted account is never an admin, whatever a stored list still says.
+  const standIn = new Set([`human:${KORDI_DELETED_ACCOUNT_ID}`, input.identityIdByAccount.get(KORDI_DELETED_ACCOUNT_ID)]);
   return {
     applies,
     adminIdentityIds: [...new Set([
       input.createdByIdentityId,
       ...(applies ? advertisedAdminIdentityIds : input.existingAdminIdentityIds),
-    ].filter(Boolean))],
+    ].filter((identityId) => Boolean(identityId) && !standIn.has(identityId)))],
   };
 }
 

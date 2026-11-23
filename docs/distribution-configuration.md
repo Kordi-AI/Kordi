@@ -76,7 +76,7 @@ This change does not migrate accounts, sessions or data, implement Research admi
 
 Each ops repository now selects production or staging explicitly. Staging profiles require separate identities and an explicit approved-tester admission policy. App Staging and Research Staging have separate Xcode schemes/configurations; Beta remains unchanged. The staging updater has no inherited production key or feed.
 
-The `authentication.loginPage` titles and subtitles are compiled into the shared desktop and iOS login renderers. The public output never includes OAuth bindings or tester lists. Shared components still implement Google, GitHub and email/password flows; edition branding is selected through the existing ops-owned primary icon assets. An ops value cannot add executable login UI or a new trusted OAuth provider.
+The `authentication.loginPage` titles and subtitles are compiled into the desktop welcome screen and the iOS sign-in screens. The public output never includes OAuth bindings or tester lists. Ops values do not select the sign-in methods (Google, GitHub, email and password); edition branding is selected through the existing ops-owned primary icon assets. An ops value cannot add executable login UI or a new trusted OAuth provider.
 
 The four `authentication.oauthBindings` fields refer to independently registered Google/GitHub client IDs and secrets. The configured service launcher resolves them only from the selected instance's bindings and refuses missing values; it never inherits ambient production OAuth credentials. Registration callbacks use the selected backend origin. Native return callbacks use the selected app scheme. Provider credential setup and live provider-to-app verification remain rollout steps.
 

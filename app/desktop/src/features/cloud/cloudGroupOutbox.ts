@@ -12,8 +12,8 @@ export type { CloudGroupOutboxAttachmentSource } from './cloudGroupOutboxAttachm
 export const CLOUD_GROUP_CANONICAL_RECONCILE_DELAY_MS = 1_000;
 
 const CLOUD_GROUP_OUTBOX_VERSION = 1 as const;
-const CLOUD_GROUP_OUTBOX_DATABASE = 'kordi-cloud-group-outbox-v1';
-const CLOUD_GROUP_OUTBOX_STORE = 'outboxByAccount';
+export const CLOUD_GROUP_OUTBOX_DATABASE = 'kordi-cloud-group-outbox-v1';
+export const CLOUD_GROUP_OUTBOX_STORE = 'outboxByAccount';
 const CLOUD_GROUP_OUTBOX_LOCAL_STORAGE_PREFIX = 'kordi.cloud.groupOutbox.v1:';
 const MAX_COMPLETED_MESSAGE_IDS = 1_000;
 

@@ -103,6 +103,8 @@ tests=(
   common_ground_join_request_tests::upgrade_from_201_adds_room_join_requests
   common_ground_group_invitation_tests::upgrade_from_204_adds_group_invitations
   common_ground_gallery_tests::upgrade_from_206_adds_the_room_gallery
+  common_ground_gallery_tests::upgrade_from_207_strips_block_ids_from_document_previews
+  deleted_account_credential_tests::upgrade_from_208_adds_deleted_account_credentials
 )
 index=0
 for test_name in "${tests[@]}"; do
@@ -178,6 +180,16 @@ KORDI_SIM_TEST_DATABASE_URL="$(migration_database_url kordi_migration_test_simul
 # Admission integration tests must run against disposable data, never skip silently.
 DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
   cargo test -p kordi-cloud-server --lib auth::routes::identity_handlers::completion::tests -- --ignored --test-threads=1
+
+# Account deletion (docs/development/account-deletion.md): what is kept and
+# removed, the `account_deleted` answers and 4410 closes for a deleted
+# account's credentials and sockets, and signing up again afterwards.
+DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
+  cargo test -p kordi-cloud-server --lib -- account_deletion:: \
+    chat_sync::realtime::tests_socket ws::tests_socket --test-threads=1
+DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \
+  cargo test -p kordi-cloud-server --lib -- auth::routes::account_security_handlers:: \
+    auth::routes::identity_handlers::reregistration_tests --ignored --test-threads=1
 
 # Browser sign-in (authorization code with PKCE) needs disposable data too.
 DATABASE_URL="$(migration_database_url kordi_migration_test_runtime)" \

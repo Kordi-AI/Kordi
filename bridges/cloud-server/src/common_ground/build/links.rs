@@ -142,7 +142,8 @@ where
 }
 
 /// True when every source is a link and none of them could be read, so a
-/// build would have nothing to work from.
+/// build would have nothing to work from. The profile's focus line has no
+/// link, so a build with one always has something to read.
 pub(super) fn nothing_read(evidence: &[Gathered], unread: &[UnreadLink]) -> bool {
     !evidence.is_empty()
         && evidence.iter().all(|item| {

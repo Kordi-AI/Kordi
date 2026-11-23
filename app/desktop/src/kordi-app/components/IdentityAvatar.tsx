@@ -8,6 +8,7 @@ import {
   generatedAvatarPreviewUrl,
 } from '@/features/cloud/canonicalAvatar';
 import { cloudDefaultAgentAvatarSeed } from '@/features/canonical/avatarIdentity';
+import { isDeletedAccountAvatarSeed, KORDI_DELETED_ACCOUNT_NAME } from '@/features/systemAgent/systemAgentIdentity';
 import {
   DEFAULT_LOCAL_AGENT_AVATAR_SEED,
   getLocalAgentAvatar,
@@ -135,10 +136,14 @@ export function getIdentityAvatarKey(kind: IdentityAvatarKind, seed: string, ava
 export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, avatarKey, className, cornerRadius = '17%', generatedClassName, presenceStatus, presenceLabel }: IdentityAvatarProps) {
   const activeLocalProfileIdentity = useActiveLocalProfileIdentity();
   const localAgentAvatar = useLocalAgentAvatar();
+  // The stand-in for a deleted account is no person: it is drawn as the flat neutral placeholder
+  // with nothing inside, never as a generated or uploaded picture that could match someone's, and
+  // nothing is fetched for it. Its accessible name is "Deleted account".
+  const standIn = !isSelf && isDeletedAccountAvatarSeed(seed);
   // An account's default agent id draws that agent's server default avatar; local overrides stay keyed by the given seed.
   const defaultAgentSeed = kind === 'agent' ? cloudDefaultAgentAvatarSeed(seed) : null;
   // Every seed that names the user's own agent renders the account's agent avatar.
-  const isOwnAgent = kind === 'agent' && !isSelf && isLocalAgentAvatarSeed(defaultAgentSeed ?? seed, localAgentAvatar);
+  const isOwnAgent = kind === 'agent' && !isSelf && !standIn && isLocalAgentAvatarSeed(defaultAgentSeed ?? seed, localAgentAvatar);
   const { fallbackLabel, normalizedSeed, resolvedImageUrl: identityImageUrl } = resolveIdentityAvatarPresentation({
     kind,
     seed: isOwnAgent ? localAgentAvatar.seed : seed,
@@ -150,7 +155,7 @@ export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, ava
   const resolvedAvatarKey = getIdentityAvatarKey(kind, normalizedSeed, isSelf ? null : avatarKey);
   const localOverride = useAvatarOverride(resolvedAvatarKey);
   const ownAgentImageUrl = isOwnAgent ? localAgentAvatar.imageUrl : null;
-  const generatedImageUrl = !identityImageUrl && !localOverride && !ownAgentImageUrl
+  const generatedImageUrl = !standIn && !identityImageUrl && !localOverride && !ownAgentImageUrl
     ? generatedAvatarPreviewUrl(
         kind === 'agent'
           ? AGENT_CANONICAL_AVATAR_STYLE
@@ -159,7 +164,7 @@ export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, ava
       )
     : null;
   // The account snapshot is the source of truth for the user's own agent; row props can be stale.
-  const originalImageUrl = canonicalAvatarImageUrl(isOwnAgent
+  const originalImageUrl = standIn ? null : canonicalAvatarImageUrl(isOwnAgent
     ? ownAgentImageUrl || identityImageUrl || localOverride
     : identityImageUrl || localOverride || ownAgentImageUrl)
     || generatedImageUrl;
@@ -183,7 +188,9 @@ export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, ava
     ? lastReadyAvatar.imageUrl
     : null;
   const visibleImageUrl = displayImageUrl || retainedImageUrl;
-  const avatarState = displayImageUrl
+  const avatarState = standIn
+    ? 'placeholder'
+    : displayImageUrl
     ? 'ready'
     : retainedImageUrl
       ? 'stale'
@@ -192,7 +199,9 @@ export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, ava
       : needsNativeProxy && remoteAvatar.status === 'failed'
         ? 'failed'
         : 'fallback';
-  const label = name?.trim() ? `${name} avatar` : `${kind === 'agent' ? 'Agent' : 'Human'} avatar`;
+  const label = standIn
+    ? KORDI_DELETED_ACCOUNT_NAME
+    : name?.trim() ? `${name} avatar` : `${kind === 'agent' ? 'Agent' : 'Human'} avatar`;
 
   const normalizedPresenceStatus = presenceStatus?.trim().toLowerCase() === 'online' ? 'online' : presenceStatus ? 'offline' : null;
   const resolvedPresenceLabel = presenceLabel?.trim()
@@ -203,12 +212,15 @@ export function IdentityAvatar({ kind, seed, isSelf = false, name, imageUrl, ava
       <Avatar
         className="h-full w-full rounded-[17%] bg-transparent"
         style={{ borderRadius: cornerRadius }}
+        role={standIn ? 'img' : undefined}
         aria-label={label}
         aria-description={resolvedPresenceLabel ?? undefined}
         data-avatar-kind={kind}
         data-avatar-state={avatarState}
       >
-        {visibleImageUrl ? null : isRemoteImagePending ? (
+        {standIn ? (
+          <span className="block h-full w-full bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
+        ) : visibleImageUrl ? null : isRemoteImagePending ? (
           <span
             className="block h-full w-full bg-slate-300/55 dark:bg-slate-700/55"
             aria-hidden="true"

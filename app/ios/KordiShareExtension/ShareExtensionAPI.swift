@@ -27,6 +27,9 @@ struct ShareExtensionAPIClient {
         )
         return response.conversations.compactMap { conversation in
             guard ["direct", "group", "ai"].contains(conversation.kind) else { return nil }
+            // The server closes a direct conversation only when the other
+            // account was deleted; it is read-only, so nothing can be shared there.
+            guard conversation.kind != "direct" || conversation.closed == nil else { return nil }
             let otherMembers = conversation.members.filter {
                 $0.membershipState == "active" && $0.accountID != credential.accountID
             }
@@ -193,11 +196,21 @@ private struct Conversation: Decodable {
     let updatedAt: String
     let members: [Member]
     let preferences: Preferences
+    let closed: Closed?
 
     enum CodingKeys: String, CodingKey {
-        case id, kind, members, preferences
+        case id, kind, members, preferences, closed
         case sharedTitle = "shared_title"
         case updatedAt = "updated_at"
+    }
+}
+
+/// Present once a conversation was closed; nothing new is written there.
+private struct Closed: Decodable {
+    let closedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case closedAt = "closed_at"
     }
 }
 

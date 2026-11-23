@@ -167,7 +167,12 @@ enum GroupSpaceCatalog {
         let ordered = participants.sorted {
             $0.accountId.compare($1.accountId, options: [.caseInsensitive, .diacriticInsensitive, .numeric], locale: Locale(identifier: "en")) == .orderedAscending
         }
-        let anchor = creatorAccountId?.nonEmpty ?? ordered.first?.accountId
+        // Once the creator's account is deleted the server names the stand-in
+        // as creator, and the group's owner takes the creator's place.
+        let creator = KordiDeletedAccount.isStandIn(creatorAccountId)
+            ? ordered.first { $0.role?.lowercased() == "owner" }?.accountId
+            : creatorAccountId?.nonEmpty
+        let anchor = creator ?? ordered.first?.accountId
         let peers = ordered.filter { $0.accountId != anchor }
         let candidates = peers.isEmpty ? ordered : peers
         var seen = Set<String>()

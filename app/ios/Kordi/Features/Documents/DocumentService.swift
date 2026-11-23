@@ -33,10 +33,16 @@ extension DocumentService {
 final class CloudDocumentService: DocumentService {
     private let api: CloudAPIClient
     private let tokenProvider: @MainActor () -> String?
+    private let sessionEnded: DocumentSessionEndHandler?
 
-    init(api: CloudAPIClient, tokenProvider: @escaping @MainActor () -> String?) {
+    init(
+        api: CloudAPIClient,
+        tokenProvider: @escaping @MainActor () -> String?,
+        sessionEnded: DocumentSessionEndHandler? = nil
+    ) {
         self.api = api
         self.tokenProvider = tokenProvider
+        self.sessionEnded = sessionEnded
     }
 
     private func token() throws -> String {
@@ -115,7 +121,7 @@ final class CloudDocumentService: DocumentService {
     }
 
     func editorTransport() -> (any DocumentEditorTransport)? {
-        CloudDocumentEditorTransport(api: api, tokenProvider: tokenProvider)
+        CloudDocumentEditorTransport(api: api, tokenProvider: tokenProvider, sessionEnded: sessionEnded)
     }
 }
 

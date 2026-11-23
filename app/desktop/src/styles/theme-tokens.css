@@ -134,20 +134,9 @@
   --app-cloud-login-raised-bg: rgba(255, 255, 255, 0.05);
   --app-cloud-login-sunk-bg: rgba(255, 255, 255, 0.025);
   --app-cloud-login-input-bg: rgba(255, 255, 255, 0.04);
-  --app-cloud-login-input-focus-bg: rgba(255, 255, 255, 0.07);
   --app-cloud-login-border: rgba(255, 255, 255, 0.1);
   --app-cloud-login-inner-border: rgba(255, 255, 255, 0.08);
-  --app-cloud-login-divider: rgba(255, 255, 255, 0.12);
-  --app-cloud-login-focus-border: var(--app-focus-border);
-  --app-cloud-login-focus-ring: var(--app-focus-border);
-  --app-cloud-login-focus-ring-visible: var(--app-focus-border);
-  --app-cloud-login-hint-border: oklch(0.78 0.14 75 / 0.72);
-  --app-cloud-login-hint-ring: oklch(0.78 0.14 75 / 0.18);
-  --app-cloud-login-hint-text: oklch(0.78 0.11 75);
   --app-cloud-login-danger-border: color-mix(in oklab, var(--app-error-text) 55%, transparent);
-  --app-cloud-login-danger-border-strong: color-mix(in oklab, var(--app-error-text) 78%, transparent);
-  --app-cloud-login-danger-ring: color-mix(in oklab, var(--app-error-text) 20%, transparent);
-  --app-cloud-login-danger-text: var(--app-error-text);
 }
 
 .kordi-app.theme-light {
@@ -278,20 +267,9 @@
   --app-cloud-login-raised-bg: rgba(255, 255, 255, 0.72);
   --app-cloud-login-sunk-bg: rgba(226, 232, 240, 0.52);
   --app-cloud-login-input-bg: rgba(248, 251, 255, 0.82);
-  --app-cloud-login-input-focus-bg: rgba(255, 255, 255, 0.88);
   --app-cloud-login-border: rgba(37, 99, 235, 0.12);
   --app-cloud-login-inner-border: rgba(100, 116, 139, 0.18);
-  --app-cloud-login-divider: rgba(100, 116, 139, 0.22);
-  --app-cloud-login-focus-border: var(--app-focus-border);
-  --app-cloud-login-focus-ring: var(--app-focus-border);
-  --app-cloud-login-focus-ring-visible: var(--app-focus-border);
-  --app-cloud-login-hint-border: rgba(14, 165, 233, 0.36);
-  --app-cloud-login-hint-ring: rgba(14, 165, 233, 0.12);
-  --app-cloud-login-hint-text: rgb(71 85 105);
   --app-cloud-login-danger-border: color-mix(in oklab, var(--app-error-text) 55%, transparent);
-  --app-cloud-login-danger-border-strong: color-mix(in oklab, var(--app-error-text) 78%, transparent);
-  --app-cloud-login-danger-ring: color-mix(in oklab, var(--app-error-text) 14%, transparent);
-  --app-cloud-login-danger-text: var(--app-error-text);
 }
 
 /* Transient surfaces intentionally live on both the app root and body.

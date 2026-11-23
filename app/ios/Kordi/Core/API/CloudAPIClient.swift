@@ -10,6 +10,10 @@ struct CloudAPIError: LocalizedError, Equatable {
     var reason: String? = nil
     /// The server's `Retry-After` delay in seconds, when it sent one.
     var retryAfterSeconds: Int? = nil
+    /// Set only for an error read from a Kordi Cloud HTTP response. Errors
+    /// the app makes up itself and transport failures leave it false, so
+    /// they can never end the session (`ServerSessionEnd`).
+    var fromServer = false
 
     var errorDescription: String? { message }
 }
@@ -437,6 +441,13 @@ actor CloudAPIClient {
             resetChatCache()
         }
         activeAccountId = accountId
+    }
+
+    /// Drops the account and its chat state without the logout request, for
+    /// a session the server already ended.
+    func forgetActiveAccount() {
+        activeAccountId = nil
+        resetChatCache()
     }
 
     private func resetChatCache() {
@@ -2553,8 +2564,14 @@ actor CloudAPIClient {
         remember(conversation.withCursor(response.cursor))
     }
 
+    /// Keeps the newest snapshot of each conversation. Every membership change
+    /// bumps the conversation's version, and events can carry a snapshot
+    /// taken before a newer one this client already holds (two members
+    /// deleted at nearly the same moment): an older snapshot never brings a
+    /// member back.
     private func remember(_ conversation: CloudChatConversation) {
         activateAccount(conversation.preferences.accountId)
+        if let cached = chatConversationsById[conversation.id], cached.version > conversation.version { return }
         let conversation = conversation.keepingReadOutbox(from: chatConversationsById[conversation.id])
         let previousSessionId = chatConversationsById[conversation.id]?.legacySessionId?.nonEmpty
         if previousSessionId != conversation.legacySessionId?.nonEmpty,
@@ -2586,9 +2603,16 @@ actor CloudAPIClient {
             $0.accountId != viewerAccountId && $0.membershipState == "active"
                 && !KordiSystemIdentity.isServiceAccount($0.accountId)
         }
-        let peerAccountId = message.senderAccountId != viewerAccountId
+        // A kept direct conversation stays the chat with the deleted account its
+        // session id names, and the stand-in speaks for that account, so both
+        // sides' messages stay keyed by the same peer.
+        let deletedPeer = KordiDeletedAccount.peerAccountId(in: conversation, viewerAccountId: viewerAccountId)
+        let senderAccountId = deletedPeer.map {
+            KordiDeletedAccount.isStandIn(message.senderAccountId) ? $0 : message.senderAccountId
+        } ?? message.senderAccountId
+        let peerAccountId = deletedPeer ?? (message.senderAccountId != viewerAccountId
             ? message.senderAccountId
-            : otherMembers.first?.accountId ?? viewerAccountId
+            : otherMembers.first?.accountId ?? viewerAccountId)
         let readByAccountIds = otherMembers
             .filter { $0.lastReadSequence >= message.conversationSequence }
             .map(\.accountId)
@@ -2603,7 +2627,7 @@ actor CloudAPIClient {
         return CloudMessageDTO(
             messageId: message.id,
             clientMessageId: message.clientMessageId,
-            fromAccountId: message.senderAccountId,
+            fromAccountId: senderAccountId,
             toAccountId: outgoing ? peerAccountId : viewerAccountId,
             body: message.deletedAt == nil ? message.content.body : "",
             createdAt: createdAt,
@@ -2664,7 +2688,11 @@ actor CloudAPIClient {
     private func projectedEvents(from event: CloudChatEvent) throws -> [CloudSyncEvent] {
         var conversation = event.payload.conversation
             ?? event.conversationId.flatMap { chatConversationsById[$0] }
-        if let conversation { remember(conversation) }
+        if let incoming = conversation {
+            remember(incoming)
+            // Project against the newest snapshot, not an older one the event carried.
+            conversation = chatConversationsById[incoming.id] ?? incoming
+        }
         if ["message.deleted", "message.hidden"].contains(event.eventType),
            let messageId = event.entityId?.nonEmpty {
             chatMessagesById.removeValue(forKey: messageId)
@@ -3122,7 +3150,19 @@ actor CloudAPIClient {
         fallback: String
     ) async throws {
         let request = try makeRequest(path: path, method: method, token: token, query: query, body: bodyData)
-        _ = try await validatedData(for: request, fallback: fallback)
+        do {
+            _ = try await validatedData(for: request, fallback: fallback)
+        } catch let error as CloudAPIError {
+            throw keptDirectRefusal(error, path: path)
+        }
+    }
+
+    /// A refused write to a direct conversation kept after the other account
+    /// was deleted says so, instead of the closed group's wording.
+    private func keptDirectRefusal(_ error: CloudAPIError, path: String) -> CloudAPIError {
+        guard error.code == GroupClosedState.errorCode,
+              let conversationId = KordiDeletedAccount.conversationId(inRequestPath: path) else { return error }
+        return KordiDeletedAccount.refusal(error, in: chatConversationsById[conversationId])
     }
 
     private func perform<Response: Decodable>(
@@ -3142,7 +3182,7 @@ actor CloudAPIClient {
                 throw CloudAPIError(code: "invalid_response", message: "Kordi Cloud returned an unexpected response.", statusCode: 0)
             }
         } catch let error as CloudAPIError {
-            throw error
+            throw keptDirectRefusal(error, path: path)
         } catch {
             if CloudTransportErrorPolicy.isCancellation(error) {
                 throw CancellationError()
@@ -3193,7 +3233,8 @@ actor CloudAPIClient {
                 reason: server?.reason,
                 retryAfterSeconds: http.value(forHTTPHeaderField: "Retry-After")
                     .flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-                    .flatMap { $0 >= 0 ? $0 : nil }
+                    .flatMap { $0 >= 0 ? $0 : nil },
+                fromServer: server?.errorCode != nil
             )
         }
     }
@@ -3398,7 +3439,8 @@ private struct ServerError: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let nested = try container.decodeIfPresent(Nested.self, forKey: .error)
+        // OAuth-shaped bodies carry `error` as a string next to `errorCode`.
+        let nested = try? container.decodeIfPresent(Nested.self, forKey: .error)
         let topLevelErrorCode = try container.decodeIfPresent(String.self, forKey: .errorCode)
         let topLevelCode = try container.decodeIfPresent(String.self, forKey: .code)
         let topLevelMessage = try container.decodeIfPresent(String.self, forKey: .message)

@@ -19,6 +19,7 @@ mod delete_account_records;
 mod email_change;
 mod password;
 mod providers;
+mod reregistration;
 mod sessions;
 
 pub(super) const BASE: &str = "/v1/cloud/account/security";

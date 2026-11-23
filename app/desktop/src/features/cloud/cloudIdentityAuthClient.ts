@@ -1,19 +1,12 @@
 import type {
   CloudAccount,
   CloudAuthCapabilities,
-  CloudAuthResult,
-  CloudOAuthProvider,
-  CloudOAuthStartResponse,
   CloudProfileUpdateInput,
-  CloudSignupCodeChallenge,
-  CloudSignupInput,
 } from './authClient';
 import { CloudAuthError } from './cloudAuthError';
 import { isProductionCloudOrigin } from './cloudApiEnvironment';
-import type { CloudDeviceRegistration } from './deviceIdentity';
 import { referenceBackedAvatarMutation } from './avatarAssetClient';
-import { isBrowserAppRuntime, browserSessionAccountId } from '@web/auth/browserAppRuntime';
-import { browserAuthResult } from '@web/auth/browserSessionBackend';
+import { browserSessionAccountId } from '@web/auth/browserAppRuntime';
 
 type CloudIdentityRequest = <TResponse>(
   path: string,
@@ -25,47 +18,7 @@ export class CloudIdentityAuthClient {
   constructor(
     private readonly request: CloudIdentityRequest,
     private readonly baseUrl: string,
-    private readonly deviceRegistration: () => Promise<CloudDeviceRegistration>,
   ) {}
-
-  async signup(input: CloudSignupInput): Promise<CloudAuthResult> {
-    const device = await this.deviceRegistration();
-    const pendingAvatar = input.avatarMutation?.action === 'upload'
-      && input.avatarMutation.uploadedAsset?.startsWith('data:image/')
-      ? input.avatarMutation
-      : null;
-    const response = await this.request<CloudAuthResult>(
-      isBrowserAppRuntime() ? '/v1/cloud/auth/web/signup' : '/v1/cloud/auth/signup',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...input, ...(pendingAvatar ? { avatarMutation: undefined } : {}), device }),
-      },
-      'Could not create account.',
-    );
-    const result = isBrowserAppRuntime() ? browserAuthResult(response) : response;
-    if (!pendingAvatar?.uploadedAsset) return result;
-    try {
-      const avatarMutation = await referenceBackedAvatarMutation({
-        request: this.request,
-        token: result.session.token,
-        entityType: 'human',
-        entityId: result.account.accountId,
-        mutation: { ...pendingAvatar, expectedVersion: result.account.avatar.version },
-      });
-      const account = await this.updateProfile(
-        result.session.token,
-        { avatarMutation },
-        result.account.accountId,
-      );
-      return { ...result, account };
-    } catch {
-      return {
-        ...result,
-        avatarUploadWarning: 'Account created, but the avatar could not be uploaded. Retry from Profile.',
-      };
-    }
-  }
 
   async capabilities(): Promise<CloudAuthCapabilities> {
     try {
@@ -89,28 +42,6 @@ export class CloudIdentityAuthClient {
     }
   }
 
-  requestSignupCode(email: string): Promise<CloudSignupCodeChallenge> {
-    return this.request<CloudSignupCodeChallenge>(
-      '/v1/cloud/auth/signup/code',
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email }) },
-      'Could not send verification code.',
-    );
-  }
-
-  async login(input: { email: string; password: string }): Promise<CloudAuthResult> {
-    const device = await this.deviceRegistration();
-    const result = await this.request<CloudAuthResult>(
-      isBrowserAppRuntime() ? '/v1/cloud/auth/web/login' : '/v1/cloud/auth/login',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...input, device }),
-      },
-      'Could not sign in.',
-    );
-    return isBrowserAppRuntime() ? browserAuthResult(result) : result;
-  }
-
   me(token: string): Promise<CloudAccount> {
     return this.request<CloudAccount>(
       '/v1/cloud/auth/me',
@@ -119,28 +50,6 @@ export class CloudIdentityAuthClient {
         headers: { authorization: `Bearer ${token}` },
       },
       'Could not load account.',
-    );
-  }
-
-  async startOAuth(
-    provider: CloudOAuthProvider,
-    redirectAfter: string,
-  ): Promise<CloudOAuthStartResponse> {
-    const device = await this.deviceRegistration();
-    const params = new URLSearchParams({
-      redirectAfter,
-      deviceName: device.displayName,
-      devicePlatform: device.platform,
-      deviceOsVersion: device.osVersion,
-      deviceAppVersion: device.appVersion,
-      deviceApproximateLocation: device.approximateLocation,
-      devicePublicKey: device.publicKey,
-      deviceKeyAlgorithm: device.keyAlgorithm,
-    });
-    return this.request<CloudOAuthStartResponse>(
-      `/v1/cloud/auth/oauth/${encodeURIComponent(provider)}/start?${params.toString()}`,
-      { method: 'GET' },
-      'Could not start social sign-in.',
     );
   }
 

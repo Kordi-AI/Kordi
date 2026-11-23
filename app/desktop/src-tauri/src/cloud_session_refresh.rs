@@ -41,11 +41,14 @@ struct TokenResponse {
 #[derive(Deserialize)]
 struct TokenError {
     error: Option<String>,
+    #[serde(rename = "errorCode")]
+    error_code: Option<String>,
 }
 
 /// Returns the refreshed session. Errors are stable codes:
 /// `not_signed_in`, `not_refreshable`, `invalid_grant` (sign in again),
-/// `rate_limited`, `network_error`, `refresh_failed`.
+/// `account_deleted` (the account no longer exists), `rate_limited`,
+/// `network_error`, `refresh_failed`.
 #[tauri::command]
 pub async fn cloud_session_refresh(previous_token: String) -> Result<CloudSessionEntry, String> {
     let _guard = REFRESH_LOCK.lock().await;
@@ -182,10 +185,15 @@ pub(crate) fn refreshed_entry(
     now: chrono::DateTime<chrono::Utc>,
 ) -> Result<CloudSessionEntry, String> {
     if !(200..300).contains(&status) {
-        let error = serde_json::from_slice::<TokenError>(body)
-            .ok()
-            .and_then(|parsed| parsed.error);
-        return Err(match (status, error.as_deref()) {
+        let parsed = serde_json::from_slice::<TokenError>(body).ok();
+        let error = parsed.as_ref().and_then(|parsed| parsed.error.as_deref());
+        let error_code = parsed
+            .as_ref()
+            .and_then(|parsed| parsed.error_code.as_deref());
+        return Err(match (status, error) {
+            (400 | 401, Some("invalid_grant")) if error_code == Some("account_deleted") => {
+                "account_deleted"
+            }
             (400 | 401, Some("invalid_grant" | "invalid_client")) => "invalid_grant",
             (429, _) => "rate_limited",
             _ => "refresh_failed",
@@ -269,6 +277,11 @@ mod tests {
         assert_eq!(
             refreshed_entry(&entry(), 400, grant, now).unwrap_err(),
             "invalid_grant"
+        );
+        let deleted = br#"{"error":"invalid_grant","errorCode":"account_deleted"}"#;
+        assert_eq!(
+            refreshed_entry(&entry(), 400, deleted, now).unwrap_err(),
+            "account_deleted"
         );
         assert_eq!(
             refreshed_entry(&entry(), 429, b"{}", now).unwrap_err(),

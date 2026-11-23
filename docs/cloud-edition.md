@@ -57,7 +57,7 @@ pnpm dev:cloud:multi -- --users user1,user2,user3
 
 ## Social login and profiles
 
-Kordi supports email/password plus OAuth sign-in for configured providers. The desktop login page calls `/v1/cloud/auth/oauth/:provider/start` and opens the provider in the user's default browser. In the native shell, Kordi uses a short-lived localhost loopback callback so the provider does not render inside the compact app webview; the browser callback hands the account session back to the desktop app.
+Kordi supports email/password plus OAuth sign-in for configured providers. The desktop app signs in through the system browser: its welcome screen opens the account sign-in page, which offers email and password and the configured providers, and the browser returns a one-time code to a short-lived loopback listener in the native shell. The desktop app has no sign-in form of its own. See [Browser sign-in for the apps](development/browser-sign-in.md).
 
 Email registration requires a six-digit code delivered to the supplied inbox before an account or session is created. See [Email verification for password signup](signup-email-verification.md) for the API flow, mail configuration, and rollout requirements.
 

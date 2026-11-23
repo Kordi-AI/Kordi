@@ -66,7 +66,7 @@ impl CardBuild {
             icon: None,
             sources: None,
         };
-        let gathered: Vec<Gathered> = evidence
+        let mut gathered: Vec<Gathered> = evidence
             .iter()
             .map(|item| {
                 super::build::item(
@@ -78,6 +78,8 @@ impl CardBuild {
                 )
             })
             .collect();
+        // A real build reads the focus line last, as the owner's own words.
+        gathered.extend(super::build::focus_item(focus));
         Self {
             system_prompt: prompt::system_prompt(&profile),
             user_prompt: prompt::user_prompt(today, &profile, &gathered),

@@ -2,6 +2,7 @@ import { WebsocketProvider } from 'y-websocket';
 import type { Awareness } from 'y-protocols/awareness';
 import * as Y from 'yjs';
 
+import { ACCOUNT_DELETED_CLOSE_CODE, signalAccountDeleted } from '@/features/cloud/accountDeletedSignal';
 import type { SourceBlock } from '../documentBlockSource';
 import type { DocumentShareApi } from '../documentShareApi';
 import type { DocumentResponse } from '../documentShareTypes';
@@ -203,7 +204,9 @@ export class DocumentRoom {
     if (this.dirtySinceSnapshot && this.isSnapshotWriter()) this.scheduleSnapshot();
   };
 
-  private readonly onClose = () => {
+  private readonly onClose = (event?: { code?: number } | null) => {
+    // 4410: the signed-in account was deleted; the app ends its session.
+    if (event?.code === ACCOUNT_DELETED_CLOSE_CODE) void signalAccountDeleted({});
     // The ticket was single-use: never let the provider reconnect with it.
     if (this.provider) this.provider.shouldConnect = false;
     const wasWriter = this.isSnapshotWriter();

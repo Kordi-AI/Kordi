@@ -12,6 +12,8 @@ private final class RealtimeTicketProbe {
     var holds = false
     var isReady = true
     var error: Error = CloudAPIError(code: "network_error", message: "Offline", statusCode: 0)
+    /// Every session end the link reported.
+    var ends: [ServerSessionEnd] = []
     private var held: CheckedContinuation<Void, Never>?
     var isHolding: Bool { held != nil }
 
@@ -37,7 +39,8 @@ private final class RealtimeTicketProbe {
             ticket: { try await self.ticket() },
             connected: {},
             event: { _ in },
-            resyncRequired: { _ in }
+            resyncRequired: { _ in },
+            sessionEnded: { self.ends.append($0) }
         )
     }
 }
@@ -120,6 +123,56 @@ final class CloudRealtimeLinkTests: XCTestCase {
 
         run.cancel()
         await run.value
+    }
+
+    func testDeletedAccountTicketStopsTheLinkAfterOneReport() async {
+        let sleeper = ReconnectTestSleeper()
+        let link = CloudRealtimeLink(policy: RealtimeReconnectPolicy(random: { 1 }), sleep: sleeper.sleep)
+        let probe = RealtimeTicketProbe()
+        probe.error = CloudAPIError(code: "account_deleted", message: "Deleted", statusCode: 401, fromServer: true)
+        let run = Task { @MainActor in await link.run(probe.session) }
+
+        // The link returns by itself: no retry is scheduled.
+        await run.value
+        XCTAssertEqual(probe.ends, [.accountDeleted])
+        XCTAssertEqual(probe.attempts, 1)
+        XCTAssertTrue(sleeper.requested.isEmpty)
+    }
+
+    func testSignedOutTicketIsReportedAndBacksOffUntilTheModelActs() async {
+        let sleeper = ReconnectTestSleeper()
+        let link = CloudRealtimeLink(policy: RealtimeReconnectPolicy(random: { 1 }), sleep: sleeper.sleep)
+        let probe = RealtimeTicketProbe()
+        probe.error = CloudAPIError(code: "invalid_session", message: "Expired", statusCode: 401, fromServer: true)
+        let run = Task { @MainActor in await link.run(probe.session) }
+
+        await reconnectEventually("the refused ticket was reported and the link waits") {
+            probe.ends == [.signedOut] && sleeper.pending == [.seconds(1)]
+        }
+        run.cancel()
+        await run.value
+        XCTAssertEqual(probe.attempts, 1)
+    }
+
+    func testTheAppsOwnSessionErrorsAreNotReported() async {
+        let sleeper = ReconnectTestSleeper()
+        let link = CloudRealtimeLink(policy: RealtimeReconnectPolicy(random: { 1 }), sleep: sleeper.sleep)
+        let probe = RealtimeTicketProbe()
+        // Made up locally (no server answer), as KordiCallCoordinator does.
+        probe.error = CloudAPIError(code: "invalid_session", message: "Preparing", statusCode: 401)
+        let run = Task { @MainActor in await link.run(probe.session) }
+
+        await reconnectEventually("the failed attempt waits") { sleeper.pending == [.seconds(1)] }
+        XCTAssertTrue(probe.ends.isEmpty)
+        run.cancel()
+        await run.value
+    }
+
+    func testOnlyTheAccountDeletedCloseCodeEndsTheSession() {
+        XCTAssertEqual(ServerSessionEnd(realtimeCloseCode: 4410), .accountDeleted)
+        for code in [0, 1000, 1001, 1006, 1011, 4401, 4409, 4411] {
+            XCTAssertNil(ServerSessionEnd(realtimeCloseCode: code), "\(code)")
+        }
     }
 
     func testNoAttemptStartsBeforeTheSyncLoopHoldsACursor() async {

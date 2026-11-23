@@ -1,21 +1,11 @@
 import { INTERFACE_ZOOM_EVENT, readAppliedInterfaceZoom } from '@/app/interfaceZoom';
 import { createWindowSizeCoordinator } from './windowSizeCoordinator';
 
-export type CloudLoginMode = 'login' | 'signup';
-
-/** Signed-out window surfaces: the compact browser sign-in window or the in-app form. */
-export type CloudGateSurface = CloudLoginMode | 'welcome';
+/** The signed-out window surface: the compact browser sign-in window. */
+export type CloudGateSurface = 'welcome';
 
 /** The compact browser sign-in window, with the native material behind it on macOS. */
 export const CLOUD_WELCOME_WINDOW_SIZE = { width: 440, height: 480 } as const;
-
-export const CLOUD_LOGIN_WINDOW_SIZE = {
-  width: 760,
-  loginHeight: 760,
-  signupHeight: 860,
-  minWidth: 620,
-  minHeight: 640,
-} as const;
 
 export const KORDI_MAIN_WINDOW_SIZE = {
   width: 1480,
@@ -23,15 +13,6 @@ export const KORDI_MAIN_WINDOW_SIZE = {
   minWidth: 1192,
   minHeight: 760,
 } as const;
-
-export function cloudLoginWindowSizeForMode(mode: CloudLoginMode) {
-  return {
-    width: CLOUD_LOGIN_WINDOW_SIZE.width,
-    height: mode === 'signup' ? CLOUD_LOGIN_WINDOW_SIZE.signupHeight : CLOUD_LOGIN_WINDOW_SIZE.loginHeight,
-    minWidth: CLOUD_LOGIN_WINDOW_SIZE.minWidth,
-    minHeight: CLOUD_LOGIN_WINDOW_SIZE.minHeight,
-  };
-}
 
 export function isTauriRuntime(runtime: (typeof globalThis & { __TAURI_INTERNALS__?: unknown }) = globalThis) {
   return Boolean(runtime.__TAURI_INTERNALS__);

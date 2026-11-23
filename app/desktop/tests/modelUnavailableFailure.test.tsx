@@ -69,7 +69,7 @@ test('a model the provider refuses on this Mac is shared as model_unavailable', 
   assert.doesNotMatch(NOTICE, /sign in|try again/i);
 });
 
-test('only the owner reads that the model is unavailable', () => {
+test('only the owner reads the model detail; members read the short reason', () => {
   for (const [content, transport] of [
     // A Mac run keeps only the neutral line and the code.
     [{ error: "Pebble couldn't reply.", failureCode: 'model_unavailable' }, 'cloud-group-agent'],
@@ -82,7 +82,7 @@ test('only the owner reads that the model is unavailable', () => {
     assert.doesNotMatch(owner.markup, /Sign in|Try again|app-error-line-action/i, transport);
 
     const member = render(failedReply(content, transport), MEMBER);
-    assert.equal(member.mapped.turn?.error, "Pebble couldn't reply.", transport);
-    assert.doesNotMatch(member.markup, /model|account|provider/i, transport);
+    assert.equal(member.mapped.turn?.error, 'The owner needs to choose another model.', transport);
+    assert.doesNotMatch(member.markup, /account|provider|isn&#x27;t available/i, transport);
   }
 });

@@ -71,6 +71,14 @@ export function browserSiteSignInUrl(href: string, options: BrowserSiteSignInOpt
 const initialOAuthErrorCode = typeof window === 'undefined' ? null : browserOAuthErrorCode(window.location.hash);
 let signOutRequested = false;
 
+/**
+ * The session ended for good, such as when its account was deleted: the
+ * redirect that follows lands on the site sign-in without a return path.
+ */
+export function signOutWithoutReturn() {
+  signOutRequested = true;
+}
+
 /** Wraps sign-out so the redirect that follows lands on the site without a return path. */
 export function signOutToSite(signOut: () => Promise<void>): () => Promise<void> {
   return async () => {
@@ -84,14 +92,19 @@ export function signOutToSite(signOut: () => Promise<void>): () => Promise<void>
   };
 }
 
+/** Where a signed-out page goes now: without a return path after a sign-out. */
+export function browserSiteSignInRedirectUrl(href: string, page: BrowserSitePage = 'login'): string {
+  return browserSiteSignInUrl(href, {
+    page,
+    signedOut: signOutRequested,
+    oauthErrorCode: signOutRequested ? null : initialOAuthErrorCode,
+  });
+}
+
 /** While active, replaces this page with the site's sign-in page. */
 export function useBrowserSiteSignInRedirect(active: boolean, page: BrowserSitePage = 'login') {
   useEffect(() => {
     if (!active) return;
-    window.location.replace(browserSiteSignInUrl(window.location.href, {
-      page,
-      signedOut: signOutRequested,
-      oauthErrorCode: signOutRequested ? null : initialOAuthErrorCode,
-    }));
+    window.location.replace(browserSiteSignInRedirectUrl(window.location.href, page));
   }, [active, page]);
 }

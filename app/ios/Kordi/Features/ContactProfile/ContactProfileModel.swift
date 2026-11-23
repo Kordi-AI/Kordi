@@ -328,6 +328,8 @@ enum ContactProfileAvailability {
 
 extension AppModel {
     func makeContactProfileModel(for subject: ContactProfileSubject) -> ContactProfileModel {
+        // A deleted account and its stand-in have no profile to request.
+        if isDeletedAccount(subject.accountId) { return ContactProfileModel(loader: nil) }
         if isPreviewMode {
             let profile = ContactProfilePreviewData.profile(for: subject)
             return ContactProfileModel { profile }
@@ -336,11 +338,24 @@ extension AppModel {
             return ContactProfileModel(loader: nil)
         }
         let accountId = subject.accountId
+        if profilesAnsweredMissing.contains(accountId) { return ContactProfileModel(loader: nil) }
         return ContactProfileModel(
             loader: { [weak self] in
                 guard let self else { throw CancellationError() }
+                // A sheet that stays open reloads; a 404 is not asked again.
+                guard !self.profilesAnsweredMissing.contains(accountId) else {
+                    throw CloudAPIError(code: "contact_not_found", message: "", statusCode: 404)
+                }
                 let (api, token, viewerAccountId) = try self.digestContext()
-                let profile = try await api.fetchContactProfile(token: token, accountId: accountId)
+                let profile: CloudContactProfile
+                do {
+                    profile = try await api.fetchContactProfile(token: token, accountId: accountId)
+                } catch {
+                    if AppModel.profileAnsweredMissing(error), self.account?.accountId == viewerAccountId {
+                        self.profilesAnsweredMissing.insert(accountId)
+                    }
+                    throw error
+                }
                 let (_, currentToken, currentViewerAccountId) = try self.digestContext()
                 guard currentToken == token, currentViewerAccountId == viewerAccountId else {
                     throw CancellationError()
@@ -360,6 +375,19 @@ extension AppModel {
                 await self.refreshWorkspace(showSyncActivity: false)
             }
         )
+    }
+
+    /// The server's own 404 or `account_missing`, never a made-up or network error.
+    nonisolated static func profileAnsweredMissing(_ error: Error) -> Bool {
+        guard let error = error as? CloudAPIError, error.fromServer else { return false }
+        return error.statusCode == 404 || error.code == "account_missing"
+    }
+
+    /// The Deleted account stand-in, or an account deleted while this one kept its chat.
+    func isDeletedAccount(_ accountId: String) -> Bool {
+        KordiDeletedAccount.isStandIn(accountId) || (conversations + archivedConversations).contains {
+            $0.peerAccountDeleted && $0.peerAccountId == accountId
+        }
     }
 
     /// The direct chat with an account, existing or new.

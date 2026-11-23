@@ -1,5 +1,3 @@
-import type { CanonicalAvatarMutation } from './canonicalAvatar';
-
 export type CloudSignupCodeChallenge = {
   verificationId: string;
   expiresAt: string;
@@ -9,14 +7,4 @@ export type CloudSignupCodeChallenge = {
 export type CloudAccountEmailVerificationInput = {
   verificationId: string;
   verificationCode: string;
-};
-
-export type CloudSignupInput = {
-  email: string;
-  password: string;
-  verificationId: string;
-  verificationCode: string;
-  displayName?: string;
-  avatarSeed: string;
-  avatarMutation?: CanonicalAvatarMutation;
 };

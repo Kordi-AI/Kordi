@@ -1,5 +1,6 @@
 //! What a card build reads: the sources the owner turned on, redacted, in
-//! the order the model sees them.
+//! the order the model sees them, and the profile's focus line
+//! ([`focus_item`]), which the build adds last.
 
 use chrono::{Duration, Utc};
 use serde::Deserialize;
@@ -23,6 +24,8 @@ const MAX_AGENT_TEXT_CHARS: usize = 2000;
 /// Total agent file text one request may carry, before redaction.
 const MAX_AGENT_TOTAL_CHARS: usize = 60_000;
 const AGENTS_SOURCE: &str = "Agents on this Mac";
+/// The source of text the owner wrote themselves.
+const OWN_WORDS_SOURCE: &str = "Your words";
 /// Connector events from about the last six months.
 const CONNECTOR_DAYS: i64 = 183;
 
@@ -190,6 +193,20 @@ pub(in crate::common_ground) fn memory_item(text: &str, updated_at: &str) -> Gat
     )
 }
 
+/// The profile's focus line as the owner's own words, so a profile with a
+/// focus has evidence even when no source is on. `None` without a focus.
+pub(in crate::common_ground) fn focus_item(focus: Option<&str>) -> Option<Gathered> {
+    let focus = focus.map(str::trim).filter(|focus| !focus.is_empty())?;
+    let today = Utc::now().to_rfc3339();
+    Some(item(
+        OWN_WORDS_SOURCE,
+        "Profile focus",
+        Some(today),
+        None,
+        focus,
+    ))
+}
+
 /// One connector event as evidence.
 pub(in crate::common_ground) fn event_item(
     event: &crate::connectors::digest_input::ConnectorEventSummary,
@@ -297,7 +314,11 @@ pub(in crate::common_ground) async fn gather(
     let entries = link_entries(&request.links);
     for entry in &entries {
         let url = link_url(entry);
-        let source = if url.is_some() { "Link" } else { "Your words" };
+        let source = if url.is_some() {
+            "Link"
+        } else {
+            OWN_WORDS_SOURCE
+        };
         // The link itself is the reference; its text is what the model reads.
         let mut gathered = item(source, entry, Some(today.clone()), url.clone(), entry);
         if let Some(url) = url {

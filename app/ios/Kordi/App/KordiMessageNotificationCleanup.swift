@@ -28,6 +28,19 @@ struct SystemMessageNotificationStore: KordiMessageNotificationStore {
     }
 }
 
+/// What a signed-out account leaves in Notification Center. Kordi shows one
+/// account at a time, so at sign-out every delivered notification (messages,
+/// calls, Nearby alerts, reminders) and every scheduled one is the account's.
+enum AccountNotificationCleanup {
+    @MainActor
+    static func removeAll() async {
+        let center = UNUserNotificationCenter.current()
+        center.removeAllPendingNotificationRequests()
+        center.removeAllDeliveredNotifications()
+        try? await center.setBadgeCount(0)
+    }
+}
+
 struct KordiMessageNotificationReadState {
     let lastReadSequence: Int64
     let threadReadCursors: [String: Int64]

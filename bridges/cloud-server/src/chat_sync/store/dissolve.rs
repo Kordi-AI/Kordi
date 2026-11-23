@@ -121,7 +121,9 @@ pub async fn dissolve_group_channel(
     Ok(outcome)
 }
 
-async fn close_conversations(
+/// Closes `conversations` as `account_id`. Account deletion also closes a
+/// direct conversation it keeps, with the Deleted account stand-in as closer.
+pub(super) async fn close_conversations(
     transaction: &mut Transaction<'_, Postgres>,
     conversations: &[(Uuid, Option<String>)],
     account_id: &str,

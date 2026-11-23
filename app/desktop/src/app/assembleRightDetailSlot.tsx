@@ -4,7 +4,7 @@ import { Brain, CheckCircle2, FolderOpen, Info, Layers3 } from 'lucide-react';
 
 import { ChatDetailPanel } from '@/pages/ChatDetailPanel';
 import { CloudChatPersonInfo } from '@/features/cloud/CloudChatPersonInfo';
-import { cloudDirectChatPeerAccountId } from '@/features/cloud/cloudDirectChatPeer';
+import { cloudPersonInfoPeerAccountId } from '@/features/cloud/cloudDirectChatPeer';
 import { DocumentReaderHostContext, documentReaderHostForConversation } from '@/features/documents/documentReaderHost';
 import { ProjectDetailPanel } from '@/pages/ProjectDetailPanel';
 import { RightDetailRail } from '@/pages/RightDetailRail';
@@ -47,7 +47,7 @@ export function assembleRightDetailSlot(args: RightDetailShellArgs) {
   const detailTabs = allDetailTabs;
   const account = args.cloudSession?.account ?? null;
   const personPeerAccountId = account && args.activeConversationUsesCollaboration && isChatNavigation(args.activeNav)
-    ? cloudDirectChatPeerAccountId(args.activeConv, account.accountId)
+    ? cloudPersonInfoPeerAccountId(args.activeConv, account.accountId)
     : null;
   const renderPersonInfo = account && personPeerAccountId
     ? (legacy: React.ReactNode, openProfile: ChatSenderProfileOpener | null) => (

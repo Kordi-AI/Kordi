@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { markHelpWelcome } from '@/features/onboarding/helpProgress';
-import { isBrowserAppRuntime } from '@web/auth/browserAppRuntime';
 import { browserSessionRestoreError, consumeBrowserSignInError, signOutCloudSession } from './cloudSessionLifecycle';
 
 import {
@@ -13,21 +11,17 @@ import {
   CloudAuthError,
   cloudApiBaseUrl,
   defaultCloudAuthClient,
-  parseCloudOAuthHashResult,
   type CloudAccount,
   type CloudAuthResult,
   type CloudOAuthProvider,
   type CloudProfileUpdateInput,
-  type CloudSignupCodeChallenge,
-  type CloudSignupInput,
 } from './authClient';
 import type { AppSignInResult } from './appSignIn/appSignInClient';
 import { useCloudBrowserSignInSession, useCloudSessionKeepAlive, type CloudBrowserSignInSession } from './appSignIn/cloudBrowserSignInSession';
 import { carryCloudAccountEmailVerification, cloudAccountsEqual } from './cloudAccountState';
 import { openCloudEventSocket } from './cloudEventSocket';
 import { endCloudSessionIfRejected } from './cloudSessionRejection';
-import { isCloudOAuthCancelled } from './cloudOAuthCancellation';
-import { startCloudOAuthSignIn } from './cloudOAuthSignIn';
+import { endDeletedCloudSession, isAccountDeletedError } from './cloudAccountDeletion';
 import {
   useCloudAccountEmailVerification,
   type CloudAccountEmailVerificationActions,
@@ -54,10 +48,6 @@ export type UseCloudSessionResult = CloudAccountEmailVerificationActions & {
   oauthProviders: CloudOAuthProvider[];
   /** Memory route version the server advertises; null when it offers none. */
   memoryVersion?: number | null;
-  signIn(email: string, password: string): Promise<void>;
-  requestSignupCode(this: void, email: string): Promise<CloudSignupCodeChallenge>;
-  signUp(input: CloudSignupInput): Promise<void>;
-  signInWithProvider(provider: CloudOAuthProvider, signal?: AbortSignal): Promise<void>;
   /** Present when this runtime can sign in through the system browser. */
   browserSignIn?: CloudBrowserSignInSession;
   updateProfile(input: CloudProfileUpdateInput): Promise<CloudAccount>;
@@ -239,25 +229,6 @@ export function useCloudSession({
         if (consumeBrowserSignInError((error) => {
           if (!cancelled && mountedRef.current) { setSignedOut(); setError(error); }
         })) return;
-        const oauthResult = typeof window !== 'undefined' && !isBrowserAppRuntime()
-          ? parseCloudOAuthHashResult(window.location.hash) : null;
-        if (oauthResult) {
-          const completed = await completeCloudAuthResult({
-            result: oauthResult,
-            currentAccountId: accountIdRef.current,
-            saveSession,
-            setAuthenticated: (next) => {
-              if (!cancelled && mountedRef.current) setAuthenticated(next);
-            },
-            reloadWindow: reloadForAccountStorageSwitch,
-          });
-          if (typeof window !== 'undefined') {
-            const cleanUrl = `${window.location.pathname}${window.location.search}`;
-            window.history.replaceState(null, document.title, cleanUrl || '/');
-          }
-          if (!completed) return;
-          return;
-        }
 
         const stored = await loadSession();
         if (!stored) {
@@ -282,9 +253,9 @@ export function useCloudSession({
             reloadWindow: reloadForAccountStorageSwitch,
           });
         } catch (caught) {
-          if (caught instanceof CloudAuthError && caught.status === 401) {
-            await clearSession();
-          }
+          // A deleted account's data is erased before sign-in shows.
+          if (isAccountDeletedError(caught)) await endDeletedCloudSession({ token: stored.token });
+          else if (caught instanceof CloudAuthError && caught.status === 401) await clearSession();
           if (!cancelled && mountedRef.current) setSignedOut();
         }
       } catch {
@@ -303,101 +274,6 @@ export function useCloudSession({
       mountedRef.current = false;
     };
   }, [authClient, enabled, reloadForAccountStorageSwitch, setAuthenticated, setSignedOut]);
-
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      try {
-        const result = await authClient.login({ email, password });
-        await completeCloudAuthResult({
-          result,
-          currentAccountId: accountIdRef.current,
-          saveSession,
-          setAuthenticated,
-          reloadWindow: reloadForAccountStorageSwitch,
-        });
-      } catch (caught) {
-        if (caught instanceof CloudAuthError) {
-          setError(caught);
-          throw caught;
-        }
-        const wrapped = new CloudAuthError(
-          'unknown',
-          caught instanceof Error ? caught.message : 'Sign-in failed.',
-          0,
-        );
-        setError(wrapped);
-        throw wrapped;
-      }
-    },
-    [authClient, reloadForAccountStorageSwitch, setAuthenticated],
-  );
-
-  const signUp = useCallback<UseCloudSessionResult['signUp']>(
-    async ({ email, password, verificationId, verificationCode, displayName, avatarSeed, avatarMutation }) => {
-      try {
-        const result = await authClient.signup({ email, password, verificationId, verificationCode, displayName, avatarSeed, avatarMutation });
-        markHelpWelcome(result.account.accountId, cloudApiBaseUrl());
-        await completeCloudAuthResult({
-          result,
-          currentAccountId: accountIdRef.current,
-          saveSession,
-          setAuthenticated,
-          reloadWindow: reloadForAccountStorageSwitch,
-        });
-        if (result.avatarUploadWarning) {
-          setError(new CloudAuthError('unknown', result.avatarUploadWarning, 0));
-        }
-      } catch (caught) {
-        if (caught instanceof CloudAuthError) {
-          setError(caught);
-          throw caught;
-        }
-        const wrapped = new CloudAuthError(
-          'unknown',
-          caught instanceof Error ? caught.message : 'Signup failed.',
-          0,
-        );
-        setError(wrapped);
-        throw wrapped;
-      }
-    },
-    [authClient, reloadForAccountStorageSwitch, setAuthenticated],
-  );
-
-  const requestSignupCode = useCallback(
-    (email: string) => authClient.requestSignupCode(email), [authClient],
-  );
-
-  const signInWithProvider = useCallback(
-    async (provider: CloudOAuthProvider, signal?: AbortSignal) => {
-      try {
-        const oauthResult = await startCloudOAuthSignIn(authClient, provider, signal);
-        if (oauthResult) {
-          await completeCloudAuthResult({
-            result: oauthResult,
-            currentAccountId: accountIdRef.current,
-            saveSession,
-            setAuthenticated,
-            reloadWindow: reloadForAccountStorageSwitch,
-          });
-        }
-      } catch (caught) {
-        if (isCloudOAuthCancelled(caught)) throw caught;
-        if (caught instanceof CloudAuthError) {
-          setError(caught);
-          throw caught;
-        }
-        const wrapped = new CloudAuthError(
-          'unknown',
-          caught instanceof Error ? caught.message : 'OAuth sign-in failed.',
-          0,
-        );
-        setError(wrapped);
-        throw wrapped;
-      }
-    },
-    [authClient, reloadForAccountStorageSwitch, setAuthenticated],
-  );
 
   const updateProfile = useCallback(
     async (input: CloudProfileUpdateInput) => {
@@ -458,10 +334,6 @@ export function useCloudSession({
     error,
     oauthProviders,
     memoryVersion,
-    signIn,
-    signUp,
-    requestSignupCode,
-    signInWithProvider,
     browserSignIn,
     updateProfile,
     ...accountEmailVerification,

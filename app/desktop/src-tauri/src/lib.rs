@@ -158,6 +158,7 @@ pub fn run() {
             window_lifecycle::focus_main_window_on_deep_link(app.handle());
             let is_cloud_edition = is_cloud_edition_app(app);
             configure_cloud_app_data_dir(app, is_cloud_edition);
+            cloud_account_paths::remove_marked_account_storage();
             activate_stored_cloud_account_data_dir(is_cloud_edition);
             if let Err(err) = chat::allow_attachment_asset_scope(app) {
                 eprintln!("[kordi] Unable to allow attachment preview assets: {err}");
@@ -404,6 +405,7 @@ pub fn run() {
             skill_library::desktop_skill_community_install,
             cloud_account_paths::cloud_account_storage_activate,
             cloud_account_paths::cloud_account_storage_current,
+            cloud_account_paths::cloud_account_storage_mark_for_removal,
             cloud_account_paths::cloud_account_storage_root,
             cloud_oauth_loopback::cloud_oauth_loopback_prepare,
             cloud_oauth_loopback::cloud_oauth_loopback_wait,

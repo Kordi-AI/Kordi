@@ -91,17 +91,17 @@ test('the owner sees the provider name when this Mac kept the raw error', () => 
   assert.doesNotMatch(markup, /Sign in|OAuth/);
 });
 
-test('another member sees only that the agent could not reply', () => {
-  for (const content of [
-    { error: "Pebble couldn't reply.", failureCode: 'provider_auth_rejected' },
-    { error: "Pebble couldn't reply.", failureCode: 'missing_provider_auth' },
-    { error: "Pebble couldn't reply.", failureCode: 'model_unavailable' },
-    { error: 'Network request failed: upstream refused a private host', failureCode: 'failed' },
-  ]) {
+test('another member reads a short reason from the code, never the stored reason', () => {
+  for (const [content, line] of [
+    [{ error: "Pebble couldn't reply.", failureCode: 'provider_auth_rejected' }, 'The owner needs to reconnect their model.'],
+    [{ error: "Pebble couldn't reply.", failureCode: 'missing_provider_auth' }, "The owner hasn't connected a model yet."],
+    [{ error: "Pebble couldn't reply.", failureCode: 'model_unavailable' }, 'The owner needs to choose another model.'],
+    [{ error: 'Network request failed: upstream refused a private host', failureCode: 'failed' }, "Pebble couldn't reply."],
+  ] as const) {
     const { mapped, markup } = render(failedReply(content), MEMBER);
     assert.equal(mapped.role, 'external-agent');
-    assert.equal(mapped.turn?.error, "Pebble couldn't reply.");
-    assert.doesNotMatch(markup, /provider|connection|model|account|upstream|app-error-line-action/i, JSON.stringify(content));
+    assert.equal(mapped.turn?.error, line);
+    assert.doesNotMatch(markup, /provider|connection|account|upstream|app-error-line-action/i, JSON.stringify(content));
   }
 });
 

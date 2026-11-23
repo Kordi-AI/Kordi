@@ -1,5 +1,6 @@
 import type { DesktopCollaborationConversation, DesktopCollaborationHost } from '@/kordi-app/types';
 import { COLLABORATION_PROCESSING_PLACEHOLDER_MAX_AGE_MS } from './collaborationProcessingState';
+import { withDeletedAccountPresentation } from './deletedAccountPresentation';
 import { mapCollaborationConversationToViewModel } from './transcript';
 
 /** Reuse unchanged chat projections across sends in other conversations. */
@@ -31,7 +32,10 @@ export function createCollaborationConversationMapper() {
       && previous.nativeShell === nativeShell && nowMs >= previous.computedAt && nowMs < previous.expiresAt) {
       return previous.value;
     }
-    const value = mapCollaborationConversationToViewModel(conversation, host, localAgentLabel, nowMs);
+    const value = withDeletedAccountPresentation(
+      mapCollaborationConversationToViewModel(conversation, host, localAgentLabel, nowMs),
+      conversation,
+    );
     // Pending replies are time-sensitive. Recompute at the first possible expiry,
     // including after a clock adjustment, even when no new message has arrived.
     let expiresAt = Number.POSITIVE_INFINITY;

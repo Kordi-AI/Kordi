@@ -1,6 +1,7 @@
 //! `POST /v1/cloud/account/security/delete`: delete the signed-in account
 //! (docs/development/account-deletion.md). Needs the same proof as other
-//! security changes. Answers `204`; every session of the account ends.
+//! security changes. Answers `204`; every session of the account ends, and a
+//! web page's session cookies are cleared.
 
 use super::proof::{check_proof, consume_proof, Proof, ProofRequest};
 use super::*;
@@ -9,6 +10,7 @@ pub(super) async fn delete_account(
     State(state): State<Arc<ServerState>>,
     Extension(session): Extension<CloudSession>,
     Extension(rate_limiter): Extension<Arc<CloudRateLimiter>>,
+    headers: HeaderMap,
     Json(request): Json<ProofRequest>,
 ) -> Response {
     let caller = Caller {
@@ -60,33 +62,40 @@ pub(super) async fn delete_account(
     if let Err(response) = require_unchanged(&mut tx, &session.account_id, &account).await {
         return *response;
     }
-    let deletion =
-        match crate::account_deletion::delete_in_transaction(&mut tx, &session.account_id).await {
-            Ok(deletion) => deletion,
-            Err(error) => {
-                eprintln!("[account-deletion] Could not delete an account: {error}");
-                return *server_error();
-            }
-        };
     let proof_kind = match proof {
         Proof::Password => "password",
         Proof::EmailCode { .. } => "email_code",
         Proof::RecentSignIn => "recent_sign_in",
     };
-    let mut metadata = deletion.audit_metadata();
-    metadata["proof"] = serde_json::Value::from(proof_kind);
-    // The record keeps counts only: no account, device, name or email.
-    if write_audit_in_transaction(&mut tx, "account.deleted", metadata)
-        .await
-        .is_err()
+    // A person deleting their own account empties their direct
+    // conversations; the audit record keeps counts only.
+    let deletion = match crate::account_deletion::delete_and_record(
+        &mut tx,
+        &session.account_id,
+        crate::account_deletion::DirectConversations::Empty,
+        proof_kind,
+    )
+    .await
     {
-        return *server_error();
-    }
+        Ok(deletion) => deletion,
+        Err(error) => {
+            eprintln!("[account-deletion] Could not delete an account: {error}");
+            return *server_error();
+        }
+    };
     if tx.commit().await.is_err() {
         return *server_error();
     }
     crate::account_deletion::after_commit(state.clone(), session.account_id.clone(), deletion);
-    StatusCode::NO_CONTENT.into_response()
+    let deleted = StatusCode::NO_CONTENT.into_response();
+    // A web page authenticated by its cookie loses the cookie with the
+    // account; an app's bearer request has no cookie to clear.
+    let cookie_caller = !headers.contains_key(axum::http::header::AUTHORIZATION)
+        && super::super::web_session_handlers::cookie_value(&headers, WEB_SESSION_COOKIE).is_some();
+    if cookie_caller {
+        return super::super::web_session_handlers::with_cookies(deleted, None);
+    }
+    deleted
 }
 
 /// Locks the account and refuses when its password or email changed since
@@ -104,24 +113,5 @@ async fn require_unchanged(
             StatusCode::CONFLICT,
         ));
     }
-    Ok(())
-}
-
-async fn write_audit_in_transaction(
-    tx: &mut sqlx_core::transaction::Transaction<'_, sqlx_postgres::Postgres>,
-    event_type: &str,
-    metadata: serde_json::Value,
-) -> Result<(), sqlx_core::Error> {
-    query(
-        "INSERT INTO cloud_audit_events \
-         (event_id, account_id, device_id, event_type, metadata_json, created_at) \
-         VALUES ($1, NULL, NULL, $2, $3, $4)",
-    )
-    .bind(format!("evt_{}", uuid::Uuid::new_v4().simple()))
-    .bind(event_type)
-    .bind(metadata.to_string())
-    .bind(Utc::now().to_rfc3339())
-    .execute(&mut **tx)
-    .await?;
     Ok(())
 }

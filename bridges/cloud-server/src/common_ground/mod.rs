@@ -73,9 +73,18 @@ pub const COMMON_GROUND_VERSION: u32 = 3;
 pub(super) const ROOM_OPEN_SQL: &str =
     "room.closed_at IS NULL AND room.last_join_at > now() - interval '24 hours'";
 
+/// Card build starts per profile, counted under `<account>:<profile id>` (or
+/// `<account>:new` before the account has a profile), so building every
+/// profile once still leaves each profile its retries.
 pub(super) const BUILD_LIMIT: AccountActionLimit = AccountActionLimit {
     action: "common-ground-card-build",
     limit: 6,
+    window: Duration::from_secs(60 * 60),
+};
+/// Card build starts per account: the full budgets of all five profiles.
+pub(super) const BUILD_ACCOUNT_LIMIT: AccountActionLimit = AccountActionLimit {
+    action: "common-ground-card-build-account",
+    limit: 30,
     window: Duration::from_secs(60 * 60),
 };
 /// Matching runs queued per account; polling a room's results while a run

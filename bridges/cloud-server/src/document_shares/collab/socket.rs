@@ -2,7 +2,8 @@
 //!
 //! Binary frames only, carrying y-protocols messages exactly as `y-websocket`
 //! sends them: sync (0) and awareness (1), plus awareness queries (3). Close
-//! codes: 4401 bad or used ticket, 4403 access revoked, 4409 unsupported
+//! codes: 4401 bad or used ticket, 4403 access revoked, 4410 the account was
+//! deleted (reason `account_deleted`), 4409 unsupported
 //! message, 1011 server error, 1013 try again: the client fell too far
 //! behind, or the room was discarded because a change could not be stored
 //! (the client reconnects and sends its changes again).
@@ -148,7 +149,10 @@ async fn run(mut socket: WebSocket, state: Arc<ServerState>, ticket: ConsumedTic
     );
     match check_access(&state, &ticket).await {
         Access::Allowed => {}
-        Access::Denied => return close(socket, CLOSE_FORBIDDEN, "forbidden").await,
+        Access::Denied => {
+            let (code, reason) = forbidden_or_deleted(&state, &ticket).await;
+            return close(socket, code, reason).await;
+        }
         Access::Unavailable => return close(socket, CLOSE_SERVER_ERROR, "unavailable").await,
     }
     let registry = state.document_rooms();
@@ -172,7 +176,25 @@ async fn run(mut socket: WebSocket, state: Arc<ServerState>, ticket: ConsumedTic
     .await;
     registry.leave(&room, conn, &clients).await;
     if let Some((code, reason)) = close_code {
+        let (code, reason) = if code == CLOSE_FORBIDDEN {
+            forbidden_or_deleted(&state, &ticket).await
+        } else {
+            (code, reason)
+        };
         close(socket, code, reason).await;
+    }
+}
+
+/// The close for a socket whose access ended: 4410 `account_deleted` when
+/// the ticket's account is gone, otherwise 4403 as before.
+async fn forbidden_or_deleted(state: &ServerState, ticket: &ConsumedTicket) -> (u16, &'static str) {
+    use crate::account_deletion::credentials::{
+        account_is_gone, ACCOUNT_DELETED, ACCOUNT_DELETED_CLOSE_CODE,
+    };
+    if account_is_gone(state.db_pool(), &ticket.account_id).await {
+        (ACCOUNT_DELETED_CLOSE_CODE, ACCOUNT_DELETED)
+    } else {
+        (CLOSE_FORBIDDEN, "forbidden")
     }
 }
 
