@@ -73,9 +73,11 @@ test('assertions quoting a crash or a wheel timeout still fail on a passing retr
 
 test('a failed expectation with a custom crash-like header still fails', () => {
   const failure = attempt(0, 'failed', 'Error: page.waitForTimeout: Page crashed');
-  failure.steps.push({ category: 'test.step', steps: [
-    { category: 'expect', error: failure.errors[0], steps: [] },
-  ] } as TestStep);
+  const expectation: TestStep = {
+    category: 'expect', title: 'Expect equality', titlePath: () => ['Expect equality'],
+    startTime: new Date(0), duration: 1, error: failure.errors[0], steps: [], attachments: [], annotations: [],
+  };
+  failure.steps.push({ ...expectation, category: 'test.step', error: undefined, steps: [expectation] });
   assert.equal(excusedRetryReason(failure), undefined);
 });
 

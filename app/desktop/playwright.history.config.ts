@@ -13,7 +13,7 @@ export const sharedConfig = defineConfig({
   // each acknowledged by WebKit before the next. A loaded hosted runner can
   // spend more than the default 30 seconds on that work alone.
   timeout: 90_000,
-  reporter: 'line', use: { baseURL, reducedMotion: 'reduce' },
+  reporter: 'line', use: { baseURL, contextOptions: { reducedMotion: 'reduce' } },
   projects: [webkit, chromium],
   webServer: {
     command: `pnpm exec vite --host 127.0.0.1 --port ${port} --strictPort`,
