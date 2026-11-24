@@ -1,0 +1,16 @@
+{
+  "name": "@kordi-community/alignment-compass",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A deterministic D&D-inspired alignment lens for Kordi tools, skills and agents",
+  "license": "MIT",
+  "kordi": {
+    "extensions": ["./extensions"],
+    "skills": ["./skills"],
+    "prompts": ["./prompts"]
+  },
+  "scripts": {
+    "test": "node --test test/*.test.cjs",
+    "test:stress": "node --test test/stress.test.cjs"
+  }
+}
