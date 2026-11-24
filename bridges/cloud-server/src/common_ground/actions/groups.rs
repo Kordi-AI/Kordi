@@ -90,20 +90,6 @@ pub(in crate::common_ground) async fn start_group(
         return bad_request("Pick between 1 and 50 people.");
     }
     let ids: Vec<String> = ids.into_iter().collect();
-    let in_room: Result<(i64,), _> = query_as(
-        "SELECT COUNT(*) FROM cloud_common_ground_room_members
-         WHERE room_id = $1 AND account_id = ANY($2) AND account_id <> $3 AND left_at IS NULL",
-    )
-    .bind(room_id)
-    .bind(&ids)
-    .bind(viewer)
-    .fetch_one(pool)
-    .await;
-    match in_room {
-        Ok((count,)) if count == ids.len() as i64 => {}
-        Ok(_) => return bad_request("Pick people in this room."),
-        Err(error) => return db_error(error),
-    }
     match crate::safety::blocks::any_blocked(pool, viewer, &ids).await {
         Ok(false) => {}
         Ok(true) => {
@@ -150,6 +136,20 @@ pub(in crate::common_ground) async fn start_group(
             Ok(None) => {}
             Err(error) => return db_error(error),
         }
+    }
+    let in_room: Result<(i64,), _> = query_as(
+        "SELECT COUNT(*) FROM cloud_common_ground_room_members
+         WHERE room_id = $1 AND account_id = ANY($2) AND account_id <> $3 AND left_at IS NULL",
+    )
+    .bind(room_id)
+    .bind(&ids)
+    .bind(viewer)
+    .fetch_one(&mut *tx)
+    .await;
+    match in_room {
+        Ok((count,)) if count == ids.len() as i64 => {}
+        Ok(_) => return bad_request("Pick people in this room."),
+        Err(error) => return db_error(error),
     }
     if let RateLimitDecision::Limited { retry_after } = rate_limiter
         .observe_account_limit(GROUP_LIMIT, viewer)

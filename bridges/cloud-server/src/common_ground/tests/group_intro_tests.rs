@@ -414,7 +414,7 @@ async fn concurrent_topic_starts_and_retry_open_one_group_with_one_welcome() {
         send(&app, "POST", &path, priya_token, Some(second)),
     );
     assert!(matches!((a.0, b.0), (201, 200) | (200, 201)), "{a:?} {b:?}");
-    let (status, retry) = send(&app, "POST", &path, alex_token, Some(first)).await;
+    let (status, retry) = send(&app, "POST", &path, alex_token, Some(first.clone())).await;
     assert_eq!(status, 200, "{retry}");
     for field in ["conversationId", "groupSpaceId", "name", "topic"] {
         assert_eq!(a.1["group"][field], b.1["group"][field]);
@@ -468,4 +468,18 @@ async fn concurrent_topic_starts_and_retry_open_one_group_with_one_welcome() {
     )
     .await;
     assert_ne!(conversation(&different), conversation(&retry));
+
+    // Leaving the room does not undo the group. A lost-response retry still opens it.
+    let (left, _) = send(
+        &app,
+        "POST",
+        &format!("/v1/cloud/common-ground/rooms/{code}/leave"),
+        priya_token,
+        None,
+    )
+    .await;
+    assert_eq!(left, 204);
+    let (status, reopened) = send(&app, "POST", &path, alex_token, Some(first)).await;
+    assert_eq!(status, 200, "{reopened}");
+    assert_eq!(conversation(&reopened), conversation(&retry));
 }
