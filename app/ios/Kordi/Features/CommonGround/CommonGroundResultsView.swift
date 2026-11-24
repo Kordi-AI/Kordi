@@ -149,7 +149,9 @@ struct CommonGroundResultsView: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
-                if !closed {
+                if let group = group(for: suggestion) {
+                    topicGroupAction(group)
+                } else if !closed {
                     Button("Start group") { draft = CommonGroundGroupDraft(theme: suggestion, me: model.me.accountId) }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
@@ -315,7 +317,9 @@ struct CommonGroundResultsView: View {
                 }
                 Spacer(minLength: 8)
                 CommonGroundStack(people: topic.people, size: 28)
-                if !closed {
+                if let group = group(for: topic) {
+                    topicGroupAction(group)
+                } else if !closed {
                     Button("Start") { draft = CommonGroundGroupDraft(theme: topic, me: model.me.accountId) }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -325,6 +329,22 @@ struct CommonGroundResultsView: View {
             .padding(.horizontal, SessionDetailMetrics.rowHorizontalInset)
             .padding(.vertical, 8)
             .frame(minHeight: SessionDetailMetrics.rowMinHeight)
+        }
+    }
+
+    private func group(for theme: CommonGroundTheme) -> CommonGroundGroup? {
+        let topic = theme.label.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return results?.groups.first { $0.topic == topic }
+    }
+
+    @ViewBuilder private func topicGroupAction(_ group: CommonGroundGroup) -> some View {
+        if !group.joined, !closed, let invitation = results?.invitations.first(where: { $0.groupSpaceId == group.groupSpaceId }) {
+            Button("Join") { Task { await join(invitation) } }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.busy == "invite:\(invitation.invitationRef)")
+        } else {
+            groupAction(group)
         }
     }
 

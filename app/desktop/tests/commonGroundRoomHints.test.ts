@@ -322,3 +322,29 @@ test('a closed room never polls for rows that keep their estimate', async () => 
   assert.equal(await store.poll(), null);
   assert.equal(calls.filter((call) => call.url.endsWith('/rooms/4821/results')).length, 0);
 });
+
+test('a room update makes Suggested and Topics open the group another person started', async () => {
+  const topic = { label: 'Agent memory', people: [person('me'), person('a')] };
+  const before = { ...results(['a']), suggestion: topic, topics: [topic] };
+  const group = { groupSpaceId: 'g1', conversationId: 'c1', name: 'Reading group', topic: topic.label, joined: true, memberCount: 2 };
+  const { calls, client } = mockServer({
+    'GET rooms/4821': { status: 200, body: room('4821') },
+    'POST rooms/4821/results': { status: 200, body: { ...before, groups: [group] } },
+  });
+  const store = storeAt(client, { name: 'results', code: '4821' }, { results: { '4821': before } });
+  assert.match(screenMarkup(store), />Start group</);
+  await receiveRoomHints(store, roomHint('4821'));
+  const opened: string[] = [];
+  const groupHost = { ...host, openGroup: (id: string) => { opened.push(id); } };
+  await mount(createElement(ResultsScreen, { code: '4821', state: store.getSnapshot(), store, host: groupHost }), async (root) => {
+    const suggested = [...root.querySelectorAll('section')].find((section) => section.querySelector('h2')?.textContent === 'Suggested');
+    assert.ok(suggested);
+    await click(buttonNamed(suggested, 'Open'));
+    await click(buttonNamed(root, 'Topics'));
+    const topics = root.querySelector('[data-help-target="grounding-room-people"]');
+    assert.ok(topics);
+    await click(buttonNamed(topics, 'Open'));
+  });
+  assert.deepEqual(opened, ['g1', 'g1']);
+  assert.ok(!calls.some((call) => call.url.endsWith('/group')));
+});

@@ -397,3 +397,89 @@ async fn joining_posts_a_line_and_groups_show_their_members() {
     assert_eq!(row["members"][0]["accountId"], alex.as_str());
     assert_eq!(row["members"][2]["accountId"], sam.as_str());
 }
+
+#[tokio::test]
+async fn concurrent_topic_starts_and_retry_open_one_group_with_one_welcome() {
+    let Some(pool) = super::db_fixture::pool().await else {
+        return;
+    };
+    let (app, code, people) = people_in_a_room(&pool, &["Alex", "Priya", "Sam"]).await;
+    let (alex, alex_token) = &people[0];
+    let (priya, priya_token) = &people[1];
+    let path = format!("/v1/cloud/common-ground/rooms/{code}/group");
+    let first = json!({"name":"Alex's choice", "topic":"Agent memory", "memberIds":[priya]});
+    let second = json!({"name":"Priya's choice", "topic":"Agent   memory", "memberIds":[alex]});
+    let (a, b) = tokio::join!(
+        send(&app, "POST", &path, alex_token, Some(first.clone())),
+        send(&app, "POST", &path, priya_token, Some(second)),
+    );
+    assert!(matches!((a.0, b.0), (201, 200) | (200, 201)), "{a:?} {b:?}");
+    let (status, retry) = send(&app, "POST", &path, alex_token, Some(first.clone())).await;
+    assert_eq!(status, 200, "{retry}");
+    for field in ["conversationId", "groupSpaceId", "name", "topic"] {
+        assert_eq!(a.1["group"][field], b.1["group"][field]);
+        assert_eq!(a.1["group"][field], retry["group"][field]);
+    }
+    for token in [alex_token, priya_token] {
+        let room = results(&app, &code, token).await;
+        let groups = room["groups"].as_array().unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0]["joined"], true);
+        assert_eq!(groups[0]["memberCount"], 2);
+        assert_eq!(room["invitations"], json!([]));
+    }
+    let (intros,): (i64,) = query_as(
+        "SELECT COUNT(*) FROM cloud_common_ground_group_intros WHERE conversation_id = $1",
+    )
+    .bind(conversation(&retry))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(intros, 1);
+    let (run, _, _) = claim_intro(&pool, &retry).await;
+    complete(&pool, &run, RUNNER, "Welcome to the memory group.")
+        .await
+        .unwrap();
+    let messages = system_agent_messages(&pool, conversation(&retry)).await;
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|text| text.contains("Welcome to the memory group."))
+            .count(),
+        1,
+        "{messages:?}"
+    );
+
+    // Sharing the topic label cannot give a room member access to an uninvited group.
+    let (denied, _) = send(
+        &app,
+        "POST",
+        &path,
+        &people[2].1,
+        Some(json!({"topic":"Agent memory", "memberIds":[alex]})),
+    )
+    .await;
+    assert_eq!(denied, 409);
+    let different = start(
+        &app,
+        &code,
+        alex_token,
+        json!({"topic":"Retrieval", "memberIds":[priya]}),
+    )
+    .await;
+    assert_ne!(conversation(&different), conversation(&retry));
+
+    // Leaving the room does not undo the group. A lost-response retry still opens it.
+    let (left, _) = send(
+        &app,
+        "POST",
+        &format!("/v1/cloud/common-ground/rooms/{code}/leave"),
+        priya_token,
+        None,
+    )
+    .await;
+    assert_eq!(left, 204);
+    let (status, reopened) = send(&app, "POST", &path, alex_token, Some(first)).await;
+    assert_eq!(status, 200, "{reopened}");
+    assert_eq!(conversation(&reopened), conversation(&retry));
+}

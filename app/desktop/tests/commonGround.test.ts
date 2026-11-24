@@ -343,6 +343,9 @@ test('a topic group request carries the topic and the group keeps it', async () 
   assert.equal(created?.group.groupSpaceId, 'g1');
   assert.deepEqual(calls.at(-1)?.body, { name: 'Retrieval', memberIds: ['b'], topic: 'Retrieval' });
   assert.equal(store.getSnapshot().results['4821'].groups?.at(-1)?.topic, 'Retrieval');
+  const reopened = await store.createGroup('4821', 'Custom name', ['b'], 'Retrieval');
+  assert.equal(reopened?.group.conversationId, created?.group.conversationId);
+  assert.deepEqual(store.getSnapshot().results['4821'].groups?.map((group) => group.groupSpaceId), ['g0', 'g1']);
 });
 
 test('Start from a topic row names the group after the topic and selects its people', () => {

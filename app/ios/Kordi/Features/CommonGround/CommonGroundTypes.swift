@@ -378,7 +378,7 @@ struct CommonGroundGroup: Decodable, Hashable, Identifiable {
     let groupSpaceId: String
     let conversationId: String?
     let name: String
-    let memberCount: Int
+    var memberCount: Int
     let createdBy: CommonGroundPerson?
     var joined: Bool
     /// The shared topic the group was started from.

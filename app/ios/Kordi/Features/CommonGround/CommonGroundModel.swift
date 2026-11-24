@@ -493,8 +493,7 @@ final class CommonGroundModel: ObservableObject {
         var group = created.group
         group.joined = true
         if group.topic == nil { group.topic = topic }
-        results[code]?.groups.removeAll { $0.groupSpaceId == group.groupSpaceId }
-        results[code]?.groups.append(group)
+        rememberJoinedGroup(group, code: code, memberCount: group.memberCount)
         return created
     }
 
@@ -506,10 +505,19 @@ final class CommonGroundModel: ObservableObject {
             groupSpaceId: joined.groupSpaceId, conversationId: joined.conversationId,
             name: joined.name ?? "", memberCount: 0, joined: true
         )
-        results[code]?.invitations.removeAll { $0.invitationRef == invitationRef }
-        results[code]?.groups.removeAll { $0.groupSpaceId == group.groupSpaceId }
-        results[code]?.groups.append(group)
-        rooms[code]?.invitations.removeAll { $0.invitationRef == invitationRef }
+        rememberJoinedGroup(group, code: code)
         return joined
+    }
+
+    private func rememberJoinedGroup(_ group: CommonGroundGroup, code: String, memberCount: Int? = nil) {
+        if let index = results[code]?.groups.firstIndex(where: { $0.groupSpaceId == group.groupSpaceId }) {
+            results[code]?.groups[index].joined = true
+            if let topic = group.topic { results[code]?.groups[index].topic = topic }
+            if let memberCount { results[code]?.groups[index].memberCount = memberCount }
+        } else {
+            results[code]?.groups.append(group)
+        }
+        results[code]?.invitations.removeAll { $0.groupSpaceId == group.groupSpaceId }
+        rooms[code]?.invitations.removeAll { $0.groupSpaceId == group.groupSpaceId }
     }
 }
