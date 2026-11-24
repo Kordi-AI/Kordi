@@ -42,15 +42,28 @@ pub(in crate::common_ground) async fn join(
         Ok(None) => return rooms::room_not_found(),
         Err(error) => return db_error(error),
     };
+    join_room_invitation(&state, &session, room_id, &code, &invitation_ref).await
+}
+
+pub(super) async fn join_room_invitation(
+    state: &Arc<ServerState>,
+    session: &CloudSession,
+    room_id: Uuid,
+    code: &str,
+    invitation_ref: &str,
+) -> Response {
+    let pool = state.db_pool();
+    let viewer = session.account_id.as_str();
     let row: Result<Option<InvitationRow>, _> = query_as(
         "SELECT invite.group_space_id, invite.group_invitation_id, room_group.conversation_id,
                 room_group.name, invite.accepted_at IS NOT NULL
          FROM cloud_common_ground_room_invitations invite
          JOIN cloud_common_ground_room_groups room_group
            ON room_group.group_space_id = invite.group_space_id
-         WHERE invite.invitation_ref = $1 AND invite.room_id = $2 AND invite.invitee_account_id = $3",
+         WHERE invite.invitation_ref = $1 AND invite.room_id = $2 AND invite.invitee_account_id = $3
+           AND invite.declined_at IS NULL",
     )
-    .bind(&invitation_ref)
+    .bind(invitation_ref)
     .bind(room_id)
     .bind(viewer)
     .fetch_optional(pool)
@@ -91,10 +104,10 @@ pub(in crate::common_ground) async fn join(
             "UPDATE cloud_common_ground_room_invitations SET accepted_at = now()
              WHERE invitation_ref = $1 AND accepted_at IS NULL",
         )
-        .bind(&invitation_ref)
+        .bind(invitation_ref)
         .execute(&mut *tx)
         .await?;
-        rooms::notify_members(&mut tx, room_id, &code).await?;
+        rooms::notify_members(&mut tx, room_id, code).await?;
         tx.commit().await
     }
     .await;
@@ -102,7 +115,7 @@ pub(in crate::common_ground) async fn join(
         return db_error(error);
     }
     if response.status == "joined" {
-        audit_join(&state, &session, &group_invitation_id, &group_space_id).await;
+        audit_join(state, session, &group_invitation_id, &group_space_id).await;
         // A group started before System posted notices has only the System
         // agent.
         let posted = match crate::system_account::join(pool, conversation_id).await {

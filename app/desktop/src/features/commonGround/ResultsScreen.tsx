@@ -128,8 +128,22 @@ export function ResultsScreen({ code, state, store, host, initialTab }: { code: 
   const members = room?.members ?? [];
   const everyone = [host.self, ...members];
   const suggestion = results.suggestion;
-  const canGroup = state.support.group;
-  const startGroup = (theme: { label: string; people: CgPerson[] }) => setStarting(topicGroupDraft(theme, selfId));
+  const topicAction = (theme: { label: string; people: CgPerson[] }, suggested = false) => {
+    const topic = theme.label.trim().replace(/\s+/g, ' ');
+    const group = results.groups?.find((entry) => entry.topic === topic);
+    if (group) {
+      const invitation = state.support.invitations && results.invitations?.find((entry) => entry.groupSpaceId === group.groupSpaceId);
+      if (!group.joined && invitation) {
+        return <CgButton onClick={() => void store.joinInvitation(code, invitation.invitationRef).then((id) => { if (id) host.openGroup(id); })}>Join</CgButton>;
+      }
+      return <GroupTrailing code={code} group={group} state={state} store={store} host={host} closed={closed} />;
+    }
+    return state.support.group ? (
+      <CgButton onClick={() => setStarting(topicGroupDraft(theme, selfId))} label={suggested ? undefined : `Start a group for ${theme.label}`}>
+        {suggested ? 'Start group' : 'Start'}
+      </CgButton>
+    ) : null;
+  };
   const line = `${peopleCount(everyone.length)} · ${results.topics.length} shared topics`;
   const profileId = results.profileId ?? room?.profileId ?? undefined;
   const unmatched = arriving(results, members, selfId, closed);
@@ -170,7 +184,7 @@ export function ResultsScreen({ code, state, store, host, initialTab }: { code: 
               lead={<CgAvatarGrid people={suggestion.people} size={36} />}
               title={suggestion.label}
               sub={names(suggestion.people, selfId)}
-              trailing={canGroup ? <CgButton onClick={() => startGroup(suggestion)}>Start group</CgButton> : null}
+              trailing={topicAction(suggestion, true)}
             />
           </CgGroup>
         </CgSection>
@@ -218,7 +232,7 @@ export function ResultsScreen({ code, state, store, host, initialTab }: { code: 
                 trailing={(
                   <span className="cg-row-actions">
                     <CgAvatarGrid people={theme.people} size={30} />
-                    {canGroup ? <CgButton onClick={() => startGroup(theme)} label={`Start a group for ${theme.label}`}>Start</CgButton> : null}
+                    {topicAction(theme)}
                   </span>
                 )}
               />

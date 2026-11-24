@@ -1,6 +1,8 @@
 //! Start group: a group chat from a room, with the creator's contacts added
 //! and everyone else invited.
 
+mod topic;
+
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -12,7 +14,9 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sqlx_core::transaction::Transaction;
 use sqlx_core::{query::query, query_as::query_as};
+use sqlx_postgres::Postgres;
 use uuid::Uuid;
 
 use super::people_by_id;
@@ -130,6 +134,23 @@ pub(in crate::common_ground) async fn start_group(
         .into_iter()
         .find(|n| !n.is_empty())
         .unwrap_or_else(|| DEFAULT_NAME.to_string());
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(error) => return db_error(error),
+    };
+    if let Some(topic) = topic.as_deref() {
+        match topic::lock_and_find(&mut tx, room_id, topic, viewer).await {
+            Ok(Some(group)) => {
+                // Release the creation lock before redeeming an existing invitation.
+                if let Err(error) = tx.commit().await {
+                    return db_error(error);
+                }
+                return group.open(&state, &session, room_id, &code, topic).await;
+            }
+            Ok(None) => {}
+            Err(error) => return db_error(error),
+        }
+    }
     if let RateLimitDecision::Limited { retry_after } = rate_limiter
         .observe_account_limit(GROUP_LIMIT, viewer)
         .await
@@ -145,7 +166,7 @@ pub(in crate::common_ground) async fn start_group(
         topic: topic.as_deref(),
         ids: &ids,
     };
-    let created = match create(pool, group).await {
+    let created = match create(tx, group).await {
         Ok(created) => created,
         Err(response) => return *response,
     };
@@ -230,7 +251,7 @@ struct NewGroup<'a> {
 /// Creates the group, its invitation and the room's records in one
 /// transaction.
 async fn create(
-    pool: &sqlx_postgres::PgPool,
+    mut tx: Transaction<'_, Postgres>,
     group: NewGroup<'_>,
 ) -> Result<Created, Box<Response>> {
     let NewGroup {
@@ -241,7 +262,6 @@ async fn create(
         topic,
         ids,
     } = group;
-    let mut tx = pool.begin().await.map_err(failed)?;
     let contacts: Vec<(String,)> = query_as(
         "SELECT peer_account_id FROM cloud_contacts
          WHERE account_id = $1 AND peer_account_id = ANY($2)",
