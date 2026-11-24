@@ -3,7 +3,7 @@
 
 import { commonGroundErrorCode, commonGroundErrorMessage, isRouteMissing, type CommonGroundClient } from './client';
 import type { CgScreen, CgState } from './store';
-import type { CgCreateRoomInput, CgRoom, CgRoomPreview, CgRoomSummary } from './types';
+import type { CgCreateRoomInput, CgGroup, CgRoom, CgRoomPreview, CgRoomSummary } from './types';
 
 /** The parts of the store these operations use. */
 export type CgRoomStoreHost = {
@@ -75,4 +75,20 @@ export async function createRoom(host: CgRoomStoreHost, input: CgCreateRoomInput
   } finally {
     if (host.getSnapshot().busy === 'create') host.set({ busy: null });
   }
+}
+
+export function rememberJoinedGroup(host: CgRoomStoreHost, code: string, group: Omit<CgGroup, 'memberCount'> & { memberCount?: number }) {
+  const state = host.getSnapshot();
+  const results = state.results[code];
+  if (!results) return;
+  const groups = [...(results.groups ?? [])];
+  const index = groups.findIndex((entry) => entry.groupSpaceId === group.groupSpaceId);
+  if (index === -1) {
+    groups.push({ ...group, memberCount: group.memberCount ?? 0, joined: true });
+  } else {
+    const previous = groups[index];
+    groups[index] = { ...previous, topic: group.topic ?? previous.topic, memberCount: group.memberCount ?? previous.memberCount, joined: true };
+  }
+  const invitations = results.invitations?.filter((entry) => entry.groupSpaceId !== group.groupSpaceId);
+  host.set({ results: { ...state.results, [code]: { ...results, groups, invitations } } });
 }

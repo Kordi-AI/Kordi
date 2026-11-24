@@ -17,7 +17,7 @@ import * as profileOps from './storeProfiles';
 import * as roomOps from './storeRooms';
 import { pollTop, reconcileRooms, refreshScreen } from './storeRefresh';
 import type {
-  CgBuildRequest, CgCardLook, CgCreateRoomInput, CgGroup, CgInviteGroup, CgJoinInput, CgMatch, CgMeetInput, CgOwnerView, CgPerson, CgPersonCard, CgPersonGroups, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry,
+  CgBuildRequest, CgCardLook, CgCreateRoomInput, CgInviteGroup, CgJoinInput, CgMatch, CgMeetInput, CgOwnerView, CgPerson, CgPersonCard, CgPersonGroups, CgProfile, CgProfileInput, CgProfilePatch, CgRecentEntry,
   CgGalleryScreen, CgGalleryState, CgNearbyScreen, CgRelationship, CgResults, CgRoom, CgRoomSummary, CgTopicLists,
 } from './types';
 
@@ -390,26 +390,11 @@ export class CommonGroundStore {
     this.open({ name: 'results', code });
   }
 
-  private rememberJoinedGroup(code: string, group: Omit<CgGroup, 'memberCount'> & { memberCount?: number }) {
-    const results = this.state.results[code];
-    if (!results) return;
-    const groups = [...(results.groups ?? [])];
-    const index = groups.findIndex((entry) => entry.groupSpaceId === group.groupSpaceId);
-    if (index === -1) {
-      groups.push({ ...group, memberCount: group.memberCount ?? 0, joined: true });
-    } else {
-      const previous = groups[index];
-      groups[index] = { ...previous, topic: group.topic ?? previous.topic, memberCount: group.memberCount ?? previous.memberCount, joined: true };
-    }
-    const invitations = results.invitations?.filter((entry) => entry.groupSpaceId !== group.groupSpaceId);
-    this.set({ results: { ...this.state.results, [code]: { ...results, groups, invitations } } });
-  }
-
   async createGroup(code: string, name: string, memberIds: string[], topic?: string) {
     try {
       this.set({ busy: 'group', notice: null });
       const created = await this.client.createGroup(code, name, memberIds, topic);
-      this.rememberJoinedGroup(code, { ...created.group, topic: created.group.topic ?? topic ?? null });
+      roomOps.rememberJoinedGroup(this, code, { ...created.group, topic: created.group.topic ?? topic ?? null });
       return created;
     } catch (error) {
       if (!this.unsupported(error, 'group')) this.set({ notice: commonGroundErrorMessage(error) });
@@ -429,7 +414,7 @@ export class CommonGroundStore {
   async joinInvitation(code: string, ref: string): Promise<string | null> {
     try {
       const joined = await this.client.joinInvitation(code, ref);
-      this.rememberJoinedGroup(code, joined);
+      roomOps.rememberJoinedGroup(this, code, joined);
       return joined.groupSpaceId;
     } catch (error) {
       if (!this.unsupported(error, 'invitations')) this.set({ notice: commonGroundErrorMessage(error) });
