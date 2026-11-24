@@ -1,0 +1,11 @@
+{
+  "name": "kordi-example-dnd-alignment",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Original, entertainment-only fictional-character alignment extension for Kordi",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": { "node": ">=22" },
+  "kordi": { "extensions": ["extensions/index.cjs"] },
+  "scripts": { "test": "node --test test/*.test.cjs" }
+}
